@@ -69,6 +69,9 @@ public class NavigationController {
     /**
      * Navigates to the previous navigation.
      *
+     * Note: this may go back more than a single navigation entry, see {@link
+     * isNavigationEntrySkippable} for more details.
+     *
      * @throws IndexOutOfBoundsException If {@link #canGoBack} returns false.
      */
     public void goBack() throws IndexOutOfBoundsException {
@@ -102,6 +105,9 @@ public class NavigationController {
 
     /**
      * Returns true if there is a navigation before the current one.
+     *
+     * Note: this may return false even if the current index is not 0, see {@link
+     * isNavigationEntrySkippable} for more details.
      *
      * @return Whether there is a navigation before the current one.
      */
@@ -212,16 +218,11 @@ public class NavigationController {
     @NonNull
     public Uri getNavigationEntryDisplayUri(int index) throws IndexOutOfBoundsException {
         ThreadCheck.ensureOnUiThread();
+        checkNavigationIndex(index);
         try {
             return Uri.parse(mNavigationController.getNavigationEntryDisplayUri(index));
         } catch (RemoteException e) {
             throw new APICallException(e);
-        }
-    }
-
-    private void checkNavigationIndex(int index) throws IndexOutOfBoundsException {
-        if (index < 0 || index >= getNavigationListSize()) {
-            throw new IndexOutOfBoundsException();
         }
     }
 
@@ -246,6 +247,28 @@ public class NavigationController {
         }
     }
 
+    /**
+     * Returns whether this entry will be skipped on a call to {@link goBack} or {@link goForward}.
+     * This will be true for certain navigations, such as certain client side redirects and
+     * history.pushState navigations done without user interaction.
+     *
+     * @throws IndexOutOfBoundsException If index is not between 0 and {@link
+     *         getNavigationListCurrentIndex}.
+     * @since 85
+     */
+    public boolean isNavigationEntrySkippable(int index) throws IndexOutOfBoundsException {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 85) {
+            throw new UnsupportedOperationException();
+        }
+        checkNavigationIndex(index);
+        try {
+            return mNavigationController.isNavigationEntrySkippable(index);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     public void registerNavigationCallback(@NonNull NavigationCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.addObserver(callback);
@@ -254,6 +277,12 @@ public class NavigationController {
     public void unregisterNavigationCallback(@NonNull NavigationCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.removeObserver(callback);
+    }
+
+    private void checkNavigationIndex(int index) throws IndexOutOfBoundsException {
+        if (index < 0 || index >= getNavigationListSize()) {
+            throw new IndexOutOfBoundsException();
+        }
     }
 
     private final class NavigationControllerClientImpl extends INavigationControllerClient.Stub {
@@ -324,6 +353,14 @@ public class NavigationController {
             StrictModeWorkaround.apply();
             for (NavigationCallback callback : mCallbacks) {
                 callback.onFirstContentfulPaint();
+            }
+        }
+
+        @Override
+        public void onOldPageNoLongerRendered(String uri) {
+            StrictModeWorkaround.apply();
+            for (NavigationCallback callback : mCallbacks) {
+                callback.onOldPageNoLongerRendered(Uri.parse(uri));
             }
         }
     }

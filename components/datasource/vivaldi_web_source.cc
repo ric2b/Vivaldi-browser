@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/strcat.h"
 #include "chrome/common/url_constants.h"
 #include "net/url_request/url_request.h"

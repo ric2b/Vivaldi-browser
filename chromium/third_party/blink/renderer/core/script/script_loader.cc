@@ -75,8 +75,7 @@
 namespace blink {
 
 ScriptLoader::ScriptLoader(ScriptElementBase* element,
-                           bool parser_inserted,
-                           bool already_started)
+                           const CreateElementFlags flags)
     : element_(element),
       will_be_parser_executed_(false),
       will_execute_when_document_finished_parsing_(false),
@@ -88,14 +87,21 @@ ScriptLoader::ScriptLoader(ScriptElementBase* element,
   // TODO(hiroshige): Cloning is implemented together with
   // {HTML,SVG}ScriptElement::cloneElementWithoutAttributesAndChildren().
   // Clean up these later.
-  if (already_started)
+  if (flags.WasAlreadyStarted())
     already_started_ = true;
 
-  if (parser_inserted) {
-    // <spec href="https://html.spec.whatwg.org/C/#parser-inserted">... It is
+  if (flags.IsCreatedByParser()) {
+    // <spec href="https://html.spec.whatwg.org/C/#parser-inserted">script
+    // elements with non-null parser documents are known as
+    // "parser-inserted".</spec>
+    // For more information on why this is not implemented in terms of a
+    // non-null parser document, see the documentation in the header file.
+    parser_inserted_ = true;
+
+    // <spec href="https://html.spec.whatwg.org/C/#parser-document">... It is
     // set by the HTML parser and the XML parser on script elements they insert
     // ...</spec>
-    parser_inserted_ = true;
+    parser_document_ = flags.ParserDocument();
 
     // <spec href="https://html.spec.whatwg.org/C/#non-blocking">... It is unset
     // by the HTML parser and the XML parser on script elements they insert.
@@ -106,8 +112,9 @@ ScriptLoader::ScriptLoader(ScriptElementBase* element,
 
 ScriptLoader::~ScriptLoader() {}
 
-void ScriptLoader::Trace(Visitor* visitor) {
+void ScriptLoader::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
+  visitor->Trace(parser_document_);
   visitor->Trace(pending_script_);
   visitor->Trace(prepared_pending_script_);
   visitor->Trace(resource_keep_alive_);
@@ -254,7 +261,7 @@ network::mojom::CredentialsMode ScriptLoader::ModuleScriptCredentialsMode(
 bool ShouldBlockSyncScriptForFeaturePolicy(const ScriptElementBase* element,
                                            mojom::ScriptType script_type,
                                            bool parser_inserted) {
-  if (element->GetDocument().IsFeatureEnabled(
+  if (element->GetExecutionContext()->IsFeatureEnabled(
           mojom::blink::FeaturePolicyFeature::kSyncScript)) {
     return false;
   }
@@ -339,9 +346,9 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
   // <spec step="10">If the element is flagged as "parser-inserted", but the
   // element's node document is not the Document of the parser that created the
   // element, then return.</spec>
-  //
-  // FIXME: If script is parser inserted, verify it's still in the original
-  // document.
+  if (parser_inserted_ && parser_document_ != &element_->GetDocument()) {
+    return false;
+  }
 
   // <spec step="11">If scripting is disabled for the script element, then
   // return. The script is not executed.</spec>
@@ -350,14 +357,8 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
   // is disabled for a node if there is no such browsing context, or if
   // scripting is disabled in that browsing context.</spec>
   Document& element_document = element_->GetDocument();
-  // TODO(timothygu): Investigate if we could switch from ExecutingFrame() to
-  // ExecutingWindow().
-  if (!element_document.ExecutingFrame())
-    return false;
-
-  LocalDOMWindow* context_window =
-      To<LocalDOMWindow>(element_->GetExecutionContext());
-  if (!context_window->GetFrame())
+  LocalDOMWindow* context_window = element_document.ExecutingWindow();
+  if (!context_window)
     return false;
   if (!context_window->CanExecuteScripts(kAboutToExecuteScript))
     return false;
@@ -842,6 +843,8 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
     // script is ready, execute the script block and then remove the element
     // from the set of scripts that will execute as soon as possible.</spec>
     pending_script_ = TakePendingScript(ScriptSchedulingType::kAsync);
+    // This is for the UKM count of async scripts in a document.
+    context_window->document()->IncrementAsyncScriptCount();
     // TODO(hiroshige): Here the context document is used as "node document"
     // while Step 14 uses |elementDocument| as "node document". Fix this.
     context_window->document()->GetScriptRunner()->QueueScriptForExecution(

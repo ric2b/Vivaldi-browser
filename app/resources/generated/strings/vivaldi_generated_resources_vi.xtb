@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="1017280919048282932">&amp;Thêm vào từ điển</translation>
+<translation id="1029317248976101138">Thu phóng</translation>
 <translation id="1031362278801463162">Đang tải chế độ xem trước</translation>
 <translation id="1047431265488717055">Sao chép &amp;Văn bản Liên kết</translation>
 <translation id="1049795001945932310">&amp;Thiết lập ngôn ngữ</translation>
@@ -37,7 +38,6 @@
 <translation id="1603914832182249871">(Ẩn danh)</translation>
 <translation id="1620510694547887537">Máy ảnh</translation>
 <translation id="1627276047960621195">Phần mô tả Tệp</translation>
-<translation id="1635033183663317347">Do người giám hộ của bạn cài đặt.</translation>
 <translation id="1682548588986054654">Cửa sổ Riêng tư Mới</translation>
 <translation id="1698122934742150150">Chỉ phiên ẩn danh hiện tại</translation>
 <translation id="1706625117072057435">Mức thu phóng</translation>
@@ -54,6 +54,7 @@
 <translation id="1886996562706621347">Cho phép các trang web yêu cầu trở thành trình xử lý mặc định cho giao thức (được đề xuất)</translation>
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Dùng số để chỉ định số lượng bản cần in (1 đến <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Xóa Tất cả</translation>
 <translation id="1994173015038366702">URL trang web</translation>
 <translation id="2019718679933488176">&amp;Mở Âm thanh trong Tab Mới</translation>
@@ -92,6 +93,7 @@
 <translation id="2470702053775288986">Tiện ích không được hỗ trợ đã bị tắt</translation>
 <translation id="2476578072172137802">Thiết lập Trang web</translation>
 <translation id="2482878487686419369">Thông báo</translation>
+<translation id="2498539833203011245">Thu nhỏ</translation>
 <translation id="2509495747794740764">Số tỷ lệ phải là một số giữa 10 và 200.</translation>
 <translation id="253557089021624350">Số lượng duy trì kết nối</translation>
 <translation id="2546283357679194313">Cookie và dữ liệu trang web</translation>
@@ -128,6 +130,7 @@
 <translation id="3080207940057008665">Một chương trình khác trên máy tính của bạn đã thêm một chủ đề có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="3084548735795614657">Thả để cài đặt</translation>
 <translation id="3122464029669770682">CPU</translation>
+<translation id="3124111068741548686">Tài nguyên NGƯỜI DÙNG</translation>
 <translation id="3127156390846601284">Thao tác này sẽ xóa mọi dữ liệu được lưu trữ trên thiết bị của bạn cho tất cả trang web hiển thị. Bạn có muốn tiếp tục không?</translation>
 <translation id="3129173833825111527">Lề trái</translation>
 <translation id="3144647712221361880">Mở liên kết bằng tài khoản</translation>
@@ -166,7 +169,6 @@
 <translation id="3678156199662914018">Tiện ích: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Yêu cầu Chia sẻ Màn hình <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Dá&amp;n và Truy cập <ph name="URL" /></translation>
-<translation id="3725367690636977613">trang</translation>
 <translation id="3727187387656390258">Kiểm tra của sổ bật lên</translation>
 <translation id="3744111561329211289">Đồng bộ hóa dưới nền</translation>
 <translation id="3760460896538743390">Kiểm tra Trang &amp;Nền</translation>
@@ -194,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Chấp nhận cho nhóm</translation>
-<translation id="4091434297613116013">trang giấy</translation>
 <translation id="4096508467498758490">Vô hiệu hóa tiện ích chế độ nhà phát triển</translation>
 <translation id="4100839878934973028">Một chương trình khác trên máy tính của bạn đã thêm một ứng dụng có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="4109898769411476438">Đóng Trình duyệt Trước khi Nhập</translation>
@@ -326,6 +327,7 @@
 <translation id="6295158916970320988">Tất cả các trang web</translation>
 <translation id="6295855836753816081">Đang lưu...</translation>
 <translation id="6308937455967653460">Lưu liên &amp;kết dưới dạng...</translation>
+<translation id="6315493146179903667">Đưa Tất cả lên Trước</translation>
 <translation id="6326855256003666642">Số lượng Duy trì kết nối</translation>
 <translation id="6374469231428023295">Thử Lại</translation>
 <translation id="6385543213911723544">Trang web có thể lưu và đọc dữ liệu cookie</translation>
@@ -388,8 +390,10 @@
 <translation id="7684212569183643648">Được cài đặt bởi Quản trị viên Của bạn</translation>
 <translation id="7685049629764448582">Bộ nhớ dành cho JavaScript</translation>
 <translation id="7701040980221191251">Không</translation>
+<translation id="7701869757853594372">Tài nguyên NGƯỜI DÙNG</translation>
 <translation id="7704305437604973648">Tác vụ</translation>
 <translation id="7710568461918838723">&amp;Truyền...</translation>
+<translation id="7750228210027921155">Ảnh trong Ảnh</translation>
 <translation id="7751260505918304024">Hiển thị tất cả</translation>
 <translation id="7760004034676677601">Đây có phải là trang khởi động bạn muốn không?</translation>
 <translation id="7771452384635174008">Bố cục</translation>
@@ -425,8 +429,8 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8071432093239591881">In dưới dạng hình ảnh</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Quản lý tiện ích</translation>
-<translation id="8180239481735238521">trang</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Đang tải xuống}other{Đang tải xuống}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1{Đang tải xuống}other{Đang tải xuống}}</translation>
 <translation id="8230134520748321204">Bạn có muốn lưu mật khẩu cho <ph name="ORIGIN" /> không?</translation>
 <translation id="8261378640211443080">Tiện ích này không được liệt kê trong <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> và có thể đã được thêm mà bạn không biết.</translation>
 <translation id="8270242299912238708">Tài liệu PDF</translation>
@@ -457,7 +461,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8798099450830957504">Mặc định</translation>
 <translation id="8800004011501252845">Hiển thị điểm đến cho</translation>
 <translation id="8808478386290700967">Cửa hàng Trực tuyến</translation>
-<translation id="8813811964357448561">trang giấy</translation>
 <translation id="8823514049557262177">Sao chép &amp;văn bản liên kết</translation>
 <translation id="8823704566850948458">Đề xuất mật khẩu...</translation>
 <translation id="8859174528519900719">Khung phụ: <ph name="SUBFRAME_SITE" /></translation>
@@ -474,6 +477,7 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="9027459031423301635">Mở Liên kết trong &amp;Tab Mới</translation>
 <translation id="9056810968620647706">Không có kết quả phù hợp nào được tìm thấy.</translation>
 <translation id="9137916601698928395">Mở liên kết bằng tài khoản <ph name="USER" /></translation>
+<translation id="916607977885256133">Ảnh trong Ảnh</translation>
 <translation id="9170848237812810038">H&amp;oàn tác</translation>
 <translation id="9215293857209265904">Đã thêm "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="9218430445555521422">Đặt làm mặc định</translation>

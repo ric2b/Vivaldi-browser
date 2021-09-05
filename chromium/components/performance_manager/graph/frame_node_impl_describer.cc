@@ -83,7 +83,7 @@ base::Value FrameNodeImplDescriber::DescribeFrameNodeData(
   // Frame node properties.
   ret.SetIntKey("frame_tree_node_id", impl->frame_tree_node_id_);
   ret.SetIntKey("render_frame_id", impl->render_frame_id_);
-  ret.SetStringKey("dev_tools_token", impl->dev_tools_token_.ToString());
+  ret.SetStringKey("frame_token", impl->frame_token_.value().ToString());
   ret.SetIntKey("browsing_instance_id", impl->browsing_instance_id_);
   ret.SetIntKey("site_instance_id", impl->site_instance_id_);
   ret.SetStringKey("lifecycle_state",
@@ -95,6 +95,7 @@ base::Value FrameNodeImplDescriber::DescribeFrameNodeData(
   ret.SetBoolKey("is_current", impl->is_current_.value());
   ret.SetKey("priority",
              PriorityAndReasonToValue(impl->priority_and_reason_.value()));
+  ret.SetBoolKey("is_audible", impl->is_audible_.value());
 
   return ret;
 }

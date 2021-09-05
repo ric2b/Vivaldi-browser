@@ -12,10 +12,8 @@
 #include <zircon/processargs.h>
 #include <utility>
 
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/strings/strcat.h"
-#include "fuchsia/base/release_channel.h"
+#include "base/fuchsia/process_context.h"
 
 namespace cr_fuchsia {
 
@@ -24,9 +22,8 @@ fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
         component_controller_request,
     const base::CommandLine& command_line) {
   fuchsia::sys::LaunchInfo launch_info;
-  launch_info.url = base::StrCat({"fuchsia-pkg://fuchsia.com/web_engine",
-                                  BUILDFLAG(FUCHSIA_RELEASE_CHANNEL_SUFFIX),
-                                  "#meta/context_provider.cmx"});
+  launch_info.url =
+      "fuchsia-pkg://fuchsia.com/web_engine#meta/context_provider.cmx";
   launch_info.arguments = command_line.argv();
 
   // Clone stderr from the current process to WebEngine and ask it to
@@ -43,8 +40,7 @@ fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
       web_engine_services_dir.NewRequest().TakeChannel();
 
   fuchsia::sys::LauncherPtr launcher;
-  base::fuchsia::ComponentContextForCurrentProcess()->svc()->Connect(
-      launcher.NewRequest());
+  base::ComponentContextForProcess()->svc()->Connect(launcher.NewRequest());
   launcher->CreateComponent(std::move(launch_info),
                             std::move(component_controller_request));
 

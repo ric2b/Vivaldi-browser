@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.support.test.annotation.UiThreadTest;
-import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -65,7 +66,7 @@ public class TabModelSelectorTabModelObserverTest {
     @UiThreadTest
     @SmallTest
     public void testUninitializedSelector() throws TimeoutException {
-        mSelector = new TabModelSelectorBase(null, false) {
+        mSelector = new TabModelSelectorBase(null, EmptyTabModelFilter::new, false) {
             @Override
             public Tab openNewTab(LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent,
                     boolean incognito) {

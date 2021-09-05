@@ -32,11 +32,14 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
                         const Mailbox& mailbox) override;
 #if defined(OS_FUCHSIA)
   void RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
-                                      zx::channel token) override;
+                                      zx::channel token,
+                                      gfx::BufferFormat format,
+                                      gfx::BufferUsage usage) override;
   void ReleaseSysmemBufferCollection(gfx::SysmemBufferCollectionId id) override;
 #endif  // defined(OS_FUCHSIA)
   SyncToken GenUnverifiedSyncToken() override;
   SyncToken GenVerifiedSyncToken() override;
+  void WaitSyncToken(const gpu::SyncToken& sync_token) override;
   void Flush() override;
   scoped_refptr<gfx::NativePixmap> GetNativePixmap(
       const Mailbox& mailbox) override;
@@ -62,6 +65,7 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
   void DestroySharedImage(const SyncToken& sync_token,
                           const Mailbox& mailbox) override;
   uint32_t UsageForMailbox(const Mailbox& mailbox) override;
+  void NotifyMailboxAdded(const Mailbox& mailbox, uint32_t usage) override;
 
  private:
   Mailbox AddMailbox(const Mailbox& mailbox);

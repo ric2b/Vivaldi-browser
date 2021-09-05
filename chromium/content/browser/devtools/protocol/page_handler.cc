@@ -158,24 +158,12 @@ void GetMetadataFromFrame(const media::VideoFrame& frame,
                           double* page_scale_factor,
                           gfx::Vector2dF* root_scroll_offset,
                           double* top_controls_visible_height) {
-  // Get metadata from |frame| and ensure that no metadata is missing.
-  bool success = true;
-  double root_scroll_offset_x, root_scroll_offset_y;
-  success &= frame.metadata()->GetDouble(
-      media::VideoFrameMetadata::DEVICE_SCALE_FACTOR, device_scale_factor);
-  success &= frame.metadata()->GetDouble(
-      media::VideoFrameMetadata::PAGE_SCALE_FACTOR, page_scale_factor);
-  success &= frame.metadata()->GetDouble(
-      media::VideoFrameMetadata::ROOT_SCROLL_OFFSET_X, &root_scroll_offset_x);
-  success &= frame.metadata()->GetDouble(
-      media::VideoFrameMetadata::ROOT_SCROLL_OFFSET_Y, &root_scroll_offset_y);
-  success &= frame.metadata()->GetDouble(
-      media::VideoFrameMetadata::TOP_CONTROLS_VISIBLE_HEIGHT,
-      top_controls_visible_height);
-  DCHECK(success);
-
-  root_scroll_offset->set_x(root_scroll_offset_x);
-  root_scroll_offset->set_y(root_scroll_offset_y);
+  // Get metadata from |frame|. This will CHECK if metadata is missing.
+  *device_scale_factor = *frame.metadata()->device_scale_factor;
+  *page_scale_factor = *frame.metadata()->page_scale_factor;
+  root_scroll_offset->set_x(*frame.metadata()->root_scroll_offset_x);
+  root_scroll_offset->set_y(*frame.metadata()->root_scroll_offset_y);
+  *top_controls_visible_height = *frame.metadata()->top_controls_visible_height;
 }
 
 }  // namespace
@@ -338,8 +326,6 @@ void PageHandler::DidCloseJavaScriptDialog(bool success,
 
 Response PageHandler::Enable() {
   enabled_ = true;
-  if (GetWebContents() && GetWebContents()->ShowingInterstitialPage())
-    frontend_->InterstitialShown();
   return Response::FallThrough();
 }
 
@@ -510,7 +496,7 @@ void PageHandler::Navigate(const std::string& url,
   params.referrer = Referrer(GURL(referrer.fromMaybe("")), policy);
   params.transition_type = type;
   params.frame_tree_node_id = frame_tree_node->frame_tree_node_id();
-  frame_tree_node->navigator()->GetController()->LoadURLWithParams(params);
+  frame_tree_node->navigator().GetController()->LoadURLWithParams(params);
 
   base::UnguessableToken frame_token = frame_tree_node->devtools_frame_token();
   auto navigate_callback = navigate_callbacks_.find(frame_token);
@@ -892,8 +878,7 @@ Response PageHandler::StartScreencast(Maybe<std::string> format,
   if (frame_metadata_) {
     InnerSwapCompositorFrame();
   } else {
-    widget_host->Send(
-        new WidgetMsg_ForceRedraw(widget_host->GetRoutingID(), 0));
+    widget_host->RequestForceRedraw(0);
   }
   return Response::FallThrough();
 }

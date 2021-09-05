@@ -1901,7 +1901,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
       }
 
       // Ignore spaces after a list marker.
-      if (child->IsListMarkerIncludingNGOutside())
+      if (child->IsBoxListMarkerIncludingNG())
         strip_front_spaces = true;
     } else {
       min_logical_width = std::max(min_logical_width, inline_min);
@@ -2385,12 +2385,8 @@ bool LayoutBlockFlow::GeneratesLineBoxesForInlineChild(LayoutObject* inline_obj)
 }
 
 void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
-  LayoutUnit end_padding = HasOverflowClip() ? PaddingEnd() : LayoutUnit();
-  // FIXME: Need to find another way to do this, since scrollbars could show
-  // when we don't want them to.
-  if (HasOverflowClip() && !end_padding && GetNode() &&
-      IsRootEditableElement(*GetNode()) && StyleRef().IsLeftToRightDirection())
-    end_padding = LayoutUnit(1);
+  DCHECK(!NeedsLayout());
+  DCHECK(!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
 
   if (const NGPaintFragment* paint_fragment = PaintFragment()) {
     for (const NGPaintFragment* child : paint_fragment->Children()) {
@@ -2454,12 +2450,46 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
 }
 
 void LayoutBlockFlow::AddLayoutOverflowFromInlineChildren() {
+  DCHECK(!LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+
   LayoutUnit end_padding = HasOverflowClip() ? PaddingEnd() : LayoutUnit();
   // FIXME: Need to find another way to do this, since scrollbars could show
   // when we don't want them to.
+  // The test[1] verifies this.
+  // [1] editing/input/editable-container-with-word-wrap-normal.html
   if (HasOverflowClip() && !end_padding && GetNode() &&
-      IsRootEditableElement(*GetNode()) && StyleRef().IsLeftToRightDirection())
+      IsRootEditableElement(*GetNode()) &&
+      StyleRef().IsLeftToRightDirection()) {
+    if (const NGPhysicalBoxFragment* fragment = CurrentFragment()) {
+      if (const NGFragmentItems* items = fragment->Items()) {
+        for (NGInlineCursor cursor(*items); cursor;
+             cursor.MoveToNextSkippingChildren()) {
+          if (!cursor.Current().IsLineBox())
+            continue;
+          const NGFragmentItem& child = *cursor.CurrentItem();
+          LogicalRect logical_rect =
+              fragment->ConvertChildToLogical(child.RectInContainerBlock());
+          logical_rect.size.inline_size += 1;
+          AddLayoutOverflow(
+              fragment->ConvertChildToPhysical(logical_rect).ToLayoutRect());
+        }
+        return;
+      }
+      // Note: Paint fragment for this block isn't set yet.
+      for (const NGLink& child : fragment->Children()) {
+        if (!child->IsLineBox())
+          continue;
+        LogicalRect logical_rect = fragment->ConvertChildToLogical(
+            PhysicalRect(child.Offset(), child->Size()));
+        logical_rect.size.inline_size += 1;
+        AddLayoutOverflow(
+            fragment->ConvertChildToPhysical(logical_rect).ToLayoutRect());
+      }
+      return;
+    }
     end_padding = LayoutUnit(1);
+  }
+
   for (RootInlineBox* curr = FirstRootBox(); curr; curr = curr->NextRootBox())
     AddLayoutOverflow(curr->PaddedLayoutOverflowRect(end_padding));
 }
@@ -2772,8 +2802,12 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
         // Mark all descendants of the first line if first-line style.
         for (NGInlineCursor descendants = first_line.CursorForDescendants();
              descendants; descendants.MoveToNext()) {
-          LayoutObject* layout_object =
-              descendants.Current()->GetMutableLayoutObject();
+          const NGFragmentItem* item = descendants.Current().Item();
+          if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
+            descendants.MoveToNextSkippingChildren();
+            continue;
+          }
+          LayoutObject* layout_object = item->GetMutableLayoutObject();
           DCHECK(layout_object);
           layout_object->StyleRef().ClearCachedPseudoElementStyles();
           layout_object->SetShouldDoFullPaintInvalidation();

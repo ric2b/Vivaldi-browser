@@ -7,9 +7,13 @@
 #include <X11/Xlib-xcb.h>
 #include <xcb/xcb.h>
 #include <xcb/xcbext.h>
+#include <xcb/xproto.h>
 
+#include <algorithm>
+#include <memory>
 #include <type_traits>
 
+#include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/memory/free_deleter.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,8 +26,10 @@
 #include "ui/events/x/events_x_utils.h"
 #include "ui/events/x/x11_event_translation.h"
 #include "ui/events/x/x11_window_event_manager.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
+#include "ui/gfx/x/xproto.h"
 
 #if defined(USE_GLIB)
 #include "ui/events/platform/x11/x11_event_watcher_glib.h"
@@ -38,27 +44,6 @@
 namespace ui {
 
 namespace {
-
-// On the wire, sequence IDs are 16 bits.  In xcb, they're usually extended to
-// 32 and sometimes 64 bits.  In Xlib, they're extended to unsigned long, which
-// may be 32 or 64 bits depending on the platform.  This function is intended to
-// prevent bugs caused by comparing two differently sized sequences.  Also
-// handles rollover.  To use, compare the result of this function with 0.  For
-// example, to compare seq1 <= seq2, use CompareSequenceIds(seq1, seq2) <= 0.
-template <typename T, typename U>
-auto CompareSequenceIds(T t, U u) {
-  static_assert(std::is_unsigned<T>::value, "");
-  static_assert(std::is_unsigned<U>::value, "");
-  // Cast to the smaller of the two types so that comparisons will always work.
-  // If we casted to the larger type, then the smaller type will be zero-padded
-  // and may incorrectly compare less than the other value.
-  using SmallerType =
-      typename std::conditional<sizeof(T) <= sizeof(U), T, U>::type;
-  SmallerType t0 = static_cast<SmallerType>(t);
-  SmallerType u0 = static_cast<SmallerType>(u);
-  using SignedType = typename std::make_signed<SmallerType>::type;
-  return static_cast<SignedType>(t0 - u0);
-}
 
 bool InitializeXkb(XDisplay* display) {
   if (!display)
@@ -83,29 +68,31 @@ bool InitializeXkb(XDisplay* display) {
   return true;
 }
 
-Time ExtractTimeFromXEvent(const XEvent& xevent) {
+Time ExtractTimeFromXEvent(const x11::Event& x11_event) {
+  const XEvent& xevent = x11_event.xlib_event();
+
   switch (xevent.type) {
-    case KeyPress:
-    case KeyRelease:
+    case x11::KeyEvent::Press:
+    case x11::KeyEvent::Release:
       return xevent.xkey.time;
-    case ButtonPress:
-    case ButtonRelease:
+    case x11::ButtonEvent::Press:
+    case x11::ButtonEvent::Release:
       return xevent.xbutton.time;
-    case MotionNotify:
+    case x11::MotionNotifyEvent::opcode:
       return xevent.xmotion.time;
-    case EnterNotify:
-    case LeaveNotify:
+    case x11::CrossingEvent::EnterNotify:
+    case x11::CrossingEvent::LeaveNotify:
       return xevent.xcrossing.time;
-    case PropertyNotify:
+    case x11::PropertyNotifyEvent::opcode:
       return xevent.xproperty.time;
-    case SelectionClear:
+    case x11::SelectionClearEvent::opcode:
       return xevent.xselectionclear.time;
-    case SelectionRequest:
+    case x11::SelectionRequestEvent::opcode:
       return xevent.xselectionrequest.time;
-    case SelectionNotify:
+    case x11::SelectionNotifyEvent::opcode:
       return xevent.xselection.time;
-    case GenericEvent:
-      if (DeviceDataManagerX11::GetInstance()->IsXIDeviceEvent(xevent))
+    case x11::GeGenericEvent::opcode:
+      if (DeviceDataManagerX11::GetInstance()->IsXIDeviceEvent(x11_event))
         return static_cast<XIDeviceEvent*>(xevent.xcookie.data)->time;
       else
         break;
@@ -120,26 +107,7 @@ void UpdateDeviceList() {
   DeviceDataManagerX11::GetInstance()->UpdateDeviceList(display);
 }
 
-x11::Bool IsPropertyNotifyForTimestamp(Display* display,
-                                       XEvent* event,
-                                       XPointer arg) {
-  return event->type == PropertyNotify &&
-         event->xproperty.window == *reinterpret_cast<Window*>(arg);
-}
-
 }  // namespace
-
-X11EventSource::Request::Request(bool is_void,
-                                 unsigned int sequence,
-                                 ResponseCallback callback)
-    : is_void(is_void), sequence(sequence), callback(std::move(callback)) {}
-
-X11EventSource::Request::Request(Request&& other)
-    : is_void(other.is_void),
-      sequence(other.sequence),
-      callback(std::move(other.callback)) {}
-
-X11EventSource::Request::~Request() = default;
 
 #if defined(USE_GLIB)
 using X11EventWatcherImpl = X11EventWatcherGlib;
@@ -154,7 +122,6 @@ X11EventSource::X11EventSource(XDisplay* display)
       display_(display),
       dispatching_event_(nullptr),
       dummy_initialized_(false),
-      continue_stream_(true),
       distribution_(0, 999) {
   DCHECK(!instance_);
   instance_ = this;
@@ -170,7 +137,7 @@ X11EventSource::~X11EventSource() {
   DCHECK_EQ(this, instance_);
   instance_ = nullptr;
   if (dummy_initialized_)
-    XDestroyWindow(display_, dummy_window_);
+    XDestroyWindow(display_, static_cast<uint32_t>(dummy_window_));
 }
 
 bool X11EventSource::HasInstance() {
@@ -187,63 +154,8 @@ X11EventSource* X11EventSource::GetInstance() {
 // X11EventSource, public
 
 void X11EventSource::DispatchXEvents() {
-  DCHECK(display_);
-
-  auto process_next_response = [&]() {
-    xcb_connection_t* connection = XGetXCBConnection(display_);
-    auto request = std::move(requests_.front());
-    requests_.pop();
-
-    void* raw_reply = nullptr;
-    xcb_generic_error_t* raw_error = nullptr;
-    xcb_poll_for_reply(connection, request.sequence, &raw_reply, &raw_error);
-    DCHECK(request.is_void || raw_reply || raw_error);
-
-    std::move(request.callback)
-        .Run(Reply{reinterpret_cast<uint8_t*>(raw_reply)}, Error{raw_error});
-  };
-
-  auto process_next_event = [&]() {
-    XEvent xevent;
-    XNextEvent(display_, &xevent);
-    ExtractCookieDataDispatchEvent(&xevent);
-  };
-
-  // Handle all pending events.
   continue_stream_ = true;
-  while (continue_stream_) {
-    bool has_next_response =
-        !requests_.empty() &&
-        CompareSequenceIds(XLastKnownRequestProcessed(display_),
-                           requests_.front().sequence) >= 0;
-    bool has_next_event = XPending(display_);
-
-    if (has_next_response && has_next_event) {
-      auto next_response_sequence = requests_.front().sequence;
-
-      XEvent event;
-      XPeekEvent(display_, &event);
-      auto next_event_sequence = event.xany.serial;
-
-      // All events have the sequence number of the last processed request
-      // included in them.  So if a reply and an event have the same sequence,
-      // the reply must have been received first.
-      if (CompareSequenceIds(next_event_sequence, next_response_sequence) <= 0)
-        process_next_response();
-      else
-        process_next_event();
-    } else if (has_next_response) {
-      process_next_response();
-    } else if (has_next_event) {
-      process_next_event();
-    } else {
-      break;
-    }
-  }
-}
-
-void X11EventSource::DispatchXEventNow(XEvent* event) {
-  ExtractCookieDataDispatchEvent(event);
+  x11::Connection::Get()->Dispatch(this);
 }
 
 Time X11EventSource::GetCurrentServerTime() {
@@ -251,11 +163,11 @@ Time X11EventSource::GetCurrentServerTime() {
 
   if (!dummy_initialized_) {
     // Create a new Window and Atom that will be used for the property change.
-    dummy_window_ = XCreateSimpleWindow(display_, DefaultRootWindow(display_),
-                                        0, 0, 1, 1, 0, 0, 0);
+    dummy_window_ = static_cast<x11::Window>(XCreateSimpleWindow(
+        display_, DefaultRootWindow(display_), 0, 0, 1, 1, 0, 0, 0));
     dummy_atom_ = gfx::GetAtom("CHROMIUM_TIMESTAMP");
-    dummy_window_events_.reset(
-        new XScopedEventSelector(dummy_window_, PropertyChangeMask));
+    dummy_window_events_ = std::make_unique<XScopedEventSelector>(
+        dummy_window_, PropertyChangeMask);
     dummy_initialized_ = true;
   }
 
@@ -268,21 +180,41 @@ Time X11EventSource::GetCurrentServerTime() {
     start = base::TimeTicks::Now();
 
   // Make a no-op property change on |dummy_window_|.
-  XChangeProperty(display_, dummy_window_, dummy_atom_, XA_STRING, 8,
-                  PropModeAppend, nullptr, 0);
+  auto* connection = x11::Connection::Get();
+  connection->ChangeProperty({
+      .window = static_cast<x11::Window>(dummy_window_),
+      .property = dummy_atom_,
+      .type = x11::Atom::STRING,
+      .format = CHAR_BIT,
+      .data_len = 1,
+      .data = std::vector<uint8_t>{0},
+  });
 
   // Observe the resulting PropertyNotify event to obtain the timestamp.
-  XEvent event;
-  XIfEvent(display_, &event, IsPropertyNotifyForTimestamp,
-           reinterpret_cast<XPointer>(&dummy_window_));
-
+  connection->Sync();
   if (measure_rtt) {
     UMA_HISTOGRAM_CUSTOM_COUNTS(
         "Linux.X11.ServerRTT",
         (base::TimeTicks::Now() - start).InMicroseconds(), 1,
         base::TimeDelta::FromMilliseconds(50).InMicroseconds(), 50);
   }
-  return event.xproperty.time;
+  connection->ReadResponses();
+
+  Time time = x11::CurrentTime;
+  auto pred = [&](const x11::Event& event) {
+    if (event.xlib_event().type == x11::PropertyNotifyEvent::opcode &&
+        event.xlib_event().xproperty.window ==
+            static_cast<uint32_t>(dummy_window_)) {
+      time = event.xlib_event().xproperty.time;
+      return true;
+    }
+    return false;
+  };
+
+  auto& events = connection->events();
+  events.erase(std::remove_if(events.begin(), events.end(), pred),
+               events.end());
+  return time;
 }
 
 Time X11EventSource::GetTimestamp() {
@@ -300,26 +232,26 @@ X11EventSource::GetRootCursorLocationFromCurrentEvent() const {
   if (!dispatching_event_)
     return base::nullopt;
 
-  XEvent* event = dispatching_event_;
-  DCHECK(event);
+  DCHECK(dispatching_event_);
+  XEvent* event = &dispatching_event_->xlib_event();
 
-  bool is_xi2_event = event->type == GenericEvent;
+  bool is_xi2_event = event->type == x11::GeGenericEvent::opcode;
   int event_type = is_xi2_event
                        ? reinterpret_cast<XIDeviceEvent*>(event)->evtype
                        : event->type;
 
   bool is_valid_event = false;
-  static_assert(XI_ButtonPress == ButtonPress, "");
-  static_assert(XI_ButtonRelease == ButtonRelease, "");
-  static_assert(XI_Motion == MotionNotify, "");
-  static_assert(XI_Enter == EnterNotify, "");
-  static_assert(XI_Leave == LeaveNotify, "");
+  static_assert(XI_ButtonPress == x11::ButtonEvent::Press, "");
+  static_assert(XI_ButtonRelease == x11::ButtonEvent::Release, "");
+  static_assert(XI_Motion == x11::MotionNotifyEvent::opcode, "");
+  static_assert(XI_Enter == x11::CrossingEvent::EnterNotify, "");
+  static_assert(XI_Leave == x11::CrossingEvent::LeaveNotify, "");
   switch (event_type) {
-    case ButtonPress:
-    case ButtonRelease:
-    case MotionNotify:
-    case EnterNotify:
-    case LeaveNotify:
+    case x11::ButtonEvent::Press:
+    case x11::ButtonEvent::Release:
+    case x11::MotionNotifyEvent::opcode:
+    case x11::CrossingEvent::EnterNotify:
+    case x11::CrossingEvent::LeaveNotify:
       is_valid_event =
           is_xi2_event
               ? ui::TouchFactory::GetInstance()->ShouldProcessXI2Event(event)
@@ -327,7 +259,7 @@ X11EventSource::GetRootCursorLocationFromCurrentEvent() const {
   }
 
   if (is_valid_event)
-    return ui::EventSystemLocationFromXEvent(*event);
+    return ui::EventSystemLocationFromXEvent(*dispatching_event_);
   return base::nullopt;
 }
 
@@ -371,7 +303,7 @@ void X11EventSource::RestoreOverridenXEventDispatcher() {
 }
 
 void X11EventSource::DispatchPlatformEvent(const PlatformEvent& event,
-                                           XEvent* xevent) {
+                                           x11::Event* xevent) {
   DCHECK(event);
 
   // First, tell the XEventDispatchers, which can have PlatformEventDispatcher,
@@ -390,7 +322,7 @@ void X11EventSource::DispatchPlatformEvent(const PlatformEvent& event,
     dispatcher.PlatformEventDispatchFinished();
 }
 
-void X11EventSource::DispatchXEventToXEventDispatchers(XEvent* xevent) {
+void X11EventSource::DispatchXEventToXEventDispatchers(x11::Event* xevent) {
   bool stop_dispatching = false;
 
   for (auto& observer : observers_)
@@ -421,7 +353,7 @@ void X11EventSource::DispatchXEventToXEventDispatchers(XEvent* xevent) {
   overridden_dispatcher_restored_ = false;
 }
 
-void XEventDispatcher::CheckCanDispatchNextPlatformEvent(XEvent* xev) {}
+void XEventDispatcher::CheckCanDispatchNextPlatformEvent(x11::Event* xev) {}
 
 void XEventDispatcher::PlatformEventDispatchFinished() {}
 
@@ -429,8 +361,14 @@ PlatformEventDispatcher* XEventDispatcher::GetPlatformEventDispatcher() {
   return nullptr;
 }
 
-void X11EventSource::ProcessXEvent(XEvent* xevent) {
+void X11EventSource::ProcessXEvent(x11::Event* xevent) {
   auto translated_event = ui::BuildEventFromXEvent(*xevent);
+  // Ignore native platform-events only if they correspond to mouse events.
+  // Allow other types of events to still be handled
+  if (ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents() &&
+      translated_event && translated_event->IsMouseEvent()) {
+    return;
+  }
   if (translated_event && translated_event->type() != ET_UNKNOWN) {
 #if defined(OS_CHROMEOS)
     if (translated_event->IsLocatedEvent()) {
@@ -449,28 +387,11 @@ void X11EventSource::ProcessXEvent(XEvent* xevent) {
 ////////////////////////////////////////////////////////////////////////////////
 // X11EventSource, protected
 
-void X11EventSource::ExtractCookieDataDispatchEvent(XEvent* xevent) {
-  bool have_cookie = false;
-  if (xevent->type == GenericEvent &&
-      XGetEventData(xevent->xgeneric.display, &xevent->xcookie)) {
-    have_cookie = true;
-  }
-
-  dispatching_event_ = xevent;
-
-  ProcessXEvent(xevent);
-  PostDispatchEvent(xevent);
-
-  dispatching_event_ = nullptr;
-
-  if (have_cookie)
-    XFreeEventData(xevent->xgeneric.display, &xevent->xcookie);
-}
-
-void X11EventSource::PostDispatchEvent(XEvent* xevent) {
+void X11EventSource::PostDispatchEvent(x11::Event* x11_event) {
+  XEvent* xevent = &x11_event->xlib_event();
   bool should_update_device_list = false;
 
-  if (xevent->type == GenericEvent) {
+  if (xevent->type == x11::GeGenericEvent::opcode) {
     if (xevent->xgeneric.evtype == XI_HierarchyChanged) {
       should_update_device_list = true;
     } else if (xevent->xgeneric.evtype == XI_DeviceChanged) {
@@ -490,7 +411,7 @@ void X11EventSource::PostDispatchEvent(XEvent* xevent) {
     hotplug_event_handler_->OnHotplugEvent();
   }
 
-  if (xevent->type == EnterNotify &&
+  if (xevent->type == x11::CrossingEvent::EnterNotify &&
       xevent->xcrossing.detail != NotifyInferior &&
       xevent->xcrossing.mode != NotifyUngrab) {
     // Clear stored scroll data
@@ -513,13 +434,21 @@ void X11EventSource::OnDispatcherListChanged() {
   }
 }
 
-void X11EventSource::AddRequest(bool is_void,
-                                unsigned int sequence,
-                                ResponseCallback callback) {
-  DCHECK(requests_.empty() ||
-         CompareSequenceIds(requests_.back().sequence, sequence) < 0);
+bool X11EventSource::ShouldContinueStream() const {
+  return continue_stream_;
+}
 
-  requests_.emplace(is_void, sequence, std::move(callback));
+void X11EventSource::DispatchXEvent(x11::Event* event) {
+  // NB: The event should be reset to nullptr when this function
+  // returns, not to its initial value, otherwise nested message loops
+  // will incorrectly think that the current event being dispatched is
+  // an old event.  This means base::AutoReset should not be used.
+  dispatching_event_ = event;
+
+  ProcessXEvent(event);
+  PostDispatchEvent(event);
+
+  dispatching_event_ = nullptr;
 }
 
 // ScopedXEventDispatcher implementation

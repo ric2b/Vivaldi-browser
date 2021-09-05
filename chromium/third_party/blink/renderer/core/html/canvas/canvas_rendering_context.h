@@ -46,7 +46,6 @@ class HTMLCanvasElement;
 class ImageBitmap;
 
 constexpr const char* kSRGBCanvasColorSpaceName = "srgb";
-constexpr const char* kLinearRGBCanvasColorSpaceName = "linear-rgb";
 constexpr const char* kRec2020CanvasColorSpaceName = "rec2020";
 constexpr const char* kP3CanvasColorSpaceName = "p3";
 
@@ -88,7 +87,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
 
   const CanvasColorParams& ColorParams() const { return color_params_; }
 
-  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) = 0;
+  virtual scoped_refptr<StaticBitmapImage> GetImage() = 0;
   virtual ContextType GetContextType() const = 0;
   virtual bool IsComposited() const = 0;
   virtual bool IsAccelerated() const = 0;
@@ -151,7 +150,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   void WillProcessTask(const base::PendingTask&, bool) final {}
 
   // Canvas2D-specific interface
-  virtual bool Is2d() const { return false; }
+  virtual bool IsRenderingContext2D() const { return false; }
   virtual void RestoreCanvasMatrixClipStack(cc::PaintCanvas*) const {}
   virtual void Reset() {}
   virtual void ClearRect(double x, double y, double width, double height) {}
@@ -201,8 +200,10 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     return creation_attributes_;
   }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
   virtual void Stop() = 0;
+
+  virtual uint64_t IdentifiabilityTextDigest() { return 0; }
 
  protected:
   CanvasRenderingContext(CanvasRenderingContextHost*,

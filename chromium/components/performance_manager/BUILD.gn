@@ -15,6 +15,7 @@ static_library("performance_manager") {
     "decorators/page_load_tracker_decorator.h",
     "decorators/page_load_tracker_decorator_helper.cc",
     "decorators/tab_properties_decorator.cc",
+    "decorators/v8_per_frame_memory_decorator.cc",
     "embedder/binders.cc",
     "embedder/binders.h",
     "embedder/performance_manager_lifetime.h",
@@ -67,6 +68,7 @@ static_library("performance_manager") {
     "graph/worker_node_impl_describer.cc",
     "graph/worker_node_impl_describer.h",
     "mechanisms/tab_loading_frame_navigation_scheduler.cc",
+    "owned_objects.h",
     "performance_manager.cc",
     "performance_manager_feature_observer_client.cc",
     "performance_manager_feature_observer_client.h",
@@ -83,6 +85,7 @@ static_library("performance_manager") {
     "public/decorators/page_live_state_decorator.h",
     "public/decorators/page_load_tracker_decorator_helper.h",
     "public/decorators/tab_properties_decorator.h",
+    "public/decorators/v8_per_frame_memory_decorator.h",
     "public/features.h",
     "public/frame_priority/boosting_vote_aggregator.h",
     "public/frame_priority/frame_priority.h",
@@ -108,9 +111,12 @@ static_library("performance_manager") {
     "public/performance_manager.h",
     "public/performance_manager_main_thread_mechanism.h",
     "public/performance_manager_main_thread_observer.h",
+    "public/performance_manager_owned.h",
+    "public/performance_manager_registered.h",
     "public/render_frame_host_proxy.h",
     "public/render_process_host_proxy.h",
     "public/web_contents_proxy.h",
+    "registered_objects.h",
     "render_frame_host_proxy.cc",
     "render_process_host_proxy.cc",
     "render_process_user_data.cc",
@@ -125,6 +131,7 @@ static_library("performance_manager") {
     "worker_watcher.cc",
     "worker_watcher.h",
   ]
+
   public_deps = [
     "//base",
     "//base/allocator:buildflags",
@@ -136,6 +143,8 @@ static_library("performance_manager") {
 
   if (!is_android) {
     sources += [
+      "decorators/site_data_recorder.cc",
+      "decorators/site_data_recorder.h",
       "persistence/site_data/exponential_moving_average.cc",
       "persistence/site_data/exponential_moving_average.h",
       "persistence/site_data/feature_usage.h",
@@ -176,6 +185,7 @@ source_set("unit_tests") {
     "decorators/page_live_state_decorator_unittest.cc",
     "decorators/page_load_tracker_decorator_unittest.cc",
     "decorators/tab_properties_decorator_unittest.cc",
+    "decorators/v8_per_frame_memory_decorator_unittest.cc",
     "frame_priority/boosting_vote_aggregator_unittest.cc",
     "frame_priority/frame_priority_unittest.cc",
     "frame_priority/max_vote_aggregator_unittest.cc",
@@ -194,10 +204,12 @@ source_set("unit_tests") {
     "graph/properties_unittest.cc",
     "graph/system_node_impl_unittest.cc",
     "graph/worker_node_impl_unittest.cc",
+    "owned_objects_unittest.cc",
     "performance_manager_impl_unittest.cc",
     "performance_manager_registry_impl_unittest.cc",
     "performance_manager_tab_helper_unittest.cc",
     "performance_manager_unittest.cc",
+    "registered_objects_unittest.cc",
     "web_contents_proxy_unittest.cc",
     "worker_watcher_unittest.cc",
   ]
@@ -215,6 +227,7 @@ source_set("unit_tests") {
   # The site data database isn't supported on Android.
   if (!is_android) {
     sources += [
+      "decorators/site_data_recorder_unittest.cc",
       "persistence/site_data/exponential_moving_average_unittest.cc",
       "persistence/site_data/leveldb_site_data_store_unittest.cc",
       "persistence/site_data/non_recording_site_data_cache_unittest.cc",

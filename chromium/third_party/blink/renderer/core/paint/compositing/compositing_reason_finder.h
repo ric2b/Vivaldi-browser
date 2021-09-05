@@ -15,7 +15,6 @@ namespace blink {
 class PaintLayer;
 class LayoutObject;
 class ComputedStyle;
-class LayoutView;
 
 class CORE_EXPORT CompositingReasonFinder {
   DISALLOW_NEW();
@@ -34,11 +33,11 @@ class CORE_EXPORT CompositingReasonFinder {
   static CompositingReasons DirectReasonsForPaintProperties(
       const LayoutObject&);
 
-  static bool RequiresCompositingForScrollableFrame(const LayoutView&);
   static CompositingReasons CompositingReasonsForAnimation(const LayoutObject&);
   static CompositingReasons CompositingReasonsForWillChange(
       const ComputedStyle&);
-  static bool RequiresCompositingFor3DTransform(const LayoutObject&);
+  static CompositingReasons CompositingReasonsFor3DTransform(
+      const LayoutObject&);
   static bool RequiresCompositingForRootScroller(const PaintLayer&);
 
   static bool RequiresCompositingForScrollDependentPosition(const PaintLayer&);

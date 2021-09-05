@@ -27,7 +27,18 @@ namespace {
 // case.
 bool gExecutedSetUpForTestCase = false;
 
+#if defined(CHROME_EARL_GREY_1)
 NSString* const kFlakyEarlGreyTestTargetSuffix = @"_flaky_egtests";
+NSString* const kMultitaskingEarlGreyTestTargetName =
+    @"ios_chrome_multitasking_egtests";
+#elif defined(CHROME_EARL_GREY_2)
+NSString* const kFlakyEarlGreyTestTargetSuffix =
+    @"_flaky_eg2tests_module-Runner";
+NSString* const kMultitaskingEarlGreyTestTargetName =
+    @"ios_chrome_multitasking_eg2tests_module-Runner";
+#else
+#error Must define either CHROME_EARL_GREY_1 or CHROME_EARL_GREY_2.
+#endif
 
 // Contains a list of test names that run in multitasking test suite.
 NSArray* multitaskingTests = @[
@@ -179,7 +190,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   if ([targetName hasSuffix:kFlakyEarlGreyTestTargetSuffix]) {
     // Only run FLAKY_ tests for flaky test suites.
     return [self flakyTestNames];
-  } else if ([targetName isEqualToString:@"ios_chrome_multitasking_egtests"]) {
+  } else if ([targetName isEqualToString:kMultitaskingEarlGreyTestTargetName]) {
     // Only run white listed tests for the multitasking test suite.
     return [self multitaskingTestNames];
   } else {
@@ -321,6 +332,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   _isHTTPServerStopped = YES;
 }
 
+- (BOOL)isRunningTest:(SEL)selector {
+  return [[self currentTestMethodName] isEqual:NSStringFromSelector(selector)];
+}
+
 #pragma mark - Private methods
 
 + (void)disableMockAuthentication {
@@ -416,6 +431,16 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   _isMockAuthenticationDisabled = NO;
   _tearDownHandler = nil;
   _originalOrientation = GetCurrentDeviceOrientation();
+}
+
+// Returns the method name, e.g. "testSomething" of the test that is currently
+// running. The name is extracted from the string for the test's name property,
+// e.g. "-[DemographicsTestCase testSomething]".
+- (NSString*)currentTestMethodName {
+  int testNameStart = [self.name rangeOfString:@"test"].location;
+  return [self.name
+      substringWithRange:NSMakeRange(testNameStart,
+                                     self.name.length - testNameStart - 1)];
 }
 
 #pragma mark - Handling system alerts

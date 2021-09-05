@@ -34,6 +34,7 @@ class ExistingUserController;
 class OobeUI;
 class WebUILoginView;
 class WizardController;
+class KioskAppId;
 
 // An interface that defines an out-of-box-experience (OOBE) or login screen
 // host. It contains code specific to the login UI implementation.
@@ -122,20 +123,13 @@ class LoginDisplayHost {
   // Initiates authentication network prewarming.
   virtual void PrewarmAuthentication() = 0;
 
-  // Starts app launch splash screen. If |is_auto_launch| is true, the app is
-  // being auto-launched with no delay.
-  virtual void StartAppLaunch(const std::string& app_id,
-                              bool diagnostic_mode,
-                              bool is_auto_launch) = 0;
-
   // Starts the demo app launch.
   virtual void StartDemoAppLaunch() = 0;
 
-  // Starts ARC kiosk splash screen.
-  virtual void StartArcKiosk(const AccountId& account_id) = 0;
-
-  // Starts web kiosk splash screen.
-  virtual void StartWebKiosk(const AccountId& account_id) = 0;
+  // Start kiosk identified by |kiosk_app-id| splash screen. if |is_auto_launch| is
+  // true, the app is being auto-launched with no delay.
+  virtual void StartKiosk(const KioskAppId& kiosk_app_id,
+                          bool is_auto_launch) = 0;
 
   // Show the gaia dialog. If available, |account| is preloaded in the gaia
   // dialog.
@@ -146,13 +140,6 @@ class LoginDisplayHost {
 
   // Update the state of the oobe dialog.
   virtual void UpdateOobeDialogState(ash::OobeDialogState state) = 0;
-
-  // Get users that are visible in the login screen UI.
-  // This is mainly used by views login screen. WebUI login screen will
-  // return an empty list.
-  // TODO(crbug.com/808271): WebUI and views implementation should return the
-  // same user list.
-  virtual const user_manager::UserList GetUsers() = 0;
 
   // Confirms sign in by provided credentials in |user_context|.
   // Used for new user login via GAIA extension.

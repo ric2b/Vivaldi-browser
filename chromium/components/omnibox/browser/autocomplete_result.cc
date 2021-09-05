@@ -268,15 +268,25 @@ void AutocompleteResult::SortAndCull(
                                                  matches_, comparing_object);
   matches_.resize(num_matches);
 
+#if defined(OS_ANDROID)
+  if (matches_.size() > 2 &&
+      !base::FeatureList::IsEnabled(omnibox::kAdaptiveSuggestionsCount)) {
+#else
   if (matches_.size() > 2) {
+#endif
     // Skip over default match.
     auto next = std::next(matches_.begin());
     // If it has submatches, skip them too.
-    if (matches_.front().subrelevance != 0) {
+    if (matches_.front().subrelevance != 0 ||
+        AutocompleteMatch::ShouldBeSkippedForGroupBySearchVsUrl(
+            matches_.front().type)) {
       while (next != matches_.end() &&
-             AutocompleteMatch::IsSameFamily(matches_.front().subrelevance,
-                                             next->subrelevance))
+             (AutocompleteMatch::IsSameFamily(matches_.front().subrelevance,
+                                              next->subrelevance) ||
+              AutocompleteMatch::ShouldBeSkippedForGroupBySearchVsUrl(
+                  matches_.front().type))) {
         next = std::next(next);
+      }
     }
     GroupSuggestionsBySearchVsURL(next, matches_.end());
   }

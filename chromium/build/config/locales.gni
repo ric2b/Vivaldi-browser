@@ -176,6 +176,10 @@ android_bundle_only_locales = [
 ]
 
 if (is_android) {
+  if (is_vivaldi) {
+    android_bundle_only_locales -= [ "is"]
+  }
+
   locales = all_chrome_locales
 
   # Android doesn't ship all locales on KitKat in order to save space

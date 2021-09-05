@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Лизгај надесно</translation>
 <translation id="1781173782405573156">Копче „Поминување преку“</translation>
 <translation id="1787176709638001873">Текст за уредување лозинки</translation>
+<translation id="180203835522132923">Search + O, потоа W</translation>
 <translation id="1810107444790159527">Поле за список</translation>
 <translation id="1812527064848182527">пејзаж</translation>
 <translation id="1829244130665387512">Најди на страница</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Повлечете налево со два прста</translation>
 <translation id="2998131015536248178">Претходен знак</translation>
 <translation id="2999559350546931576">Намалување висина</translation>
+<translation id="3009352964623081324">Search + O, потоа S. Користете за инсталирање, управување или приспособување на гласови.</translation>
 <translation id="3014130421870723208">@изм. 8точ.</translation>
 <translation id="3030432017085518523">Копче за радио на ставка од мени</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}one{# апостроф}other{# апострофи}}</translation>
@@ -455,6 +457,7 @@
 <translation id="4505167975768625962">Вметнување</translation>
 <translation id="4511186779140817916">Боја на бланширан бадем</translation>
 <translation id="451510441928265982">Нема претходен наслов на ниво 2</translation>
+<translation id="4515799157838123044">Затемни ги содржините во заднина</translation>
 <translation id="4517854969512651305">Зголемете ја вредноста</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{коса црта}one{# коса црта}other{# коси црти}}</translation>
 <translation id="4537277403911487429">Следна слична ставка</translation>
@@ -706,6 +709,7 @@
 <translation id="6628427060004938651">Дел</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Лента на напредок</translation>
+<translation id="6660819301598582123">Ѓакон Гоце и Љутфи Хоџа ноќе ѕвезди бројат. Постоиш ли боже? Молчење.</translation>
 <translation id="667999046851023355">Документ</translation>
 <translation id="6688209025607531203">Немодално предупредување</translation>
 <translation id="6689672606256159458">Темна боја на лосос</translation>
@@ -741,7 +745,6 @@
 <translation id="6951482098621102657">Нема следен наслов на ниво 5</translation>
 <translation id="6955705049214951590">Магловиторозова</translation>
 <translation id="696356426651109308">Скокнете до почеток</translation>
-<translation id="699159175332639490">Пребарување + O + W</translation>
 <translation id="6994042831499278539">Референца за поимници</translation>
 <translation id="6996566555547746822">Следно поле со комбинации</translation>
 <translation id="6997224546856374593">При читање големи букви:</translation>
@@ -810,6 +813,7 @@
 <translation id="743783356331413498">Пример</translation>
 <translation id="7439060726180460871">Директориум</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Смени ја висината на гласот кога изговараш типови елементи и текст што е цитиран, избришан, со задебелени букви, во загради или со големи букви.</translation>
 <translation id="7491962110804786152">картичка</translation>
 <translation id="7505149250476994901">Изговарајте „cap“ (голема) пред буквата</translation>
 <translation id="7518543783849163354">За привремено да го запрете зборувањето на ChromeVox, притиснете го копчето Control.</translation>

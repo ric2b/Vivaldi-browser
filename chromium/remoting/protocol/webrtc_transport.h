@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/macros.h"
@@ -17,6 +18,7 @@
 #include "base/timer/timer.h"
 #include "crypto/hmac.h"
 #include "remoting/base/session_options.h"
+#include "remoting/protocol/peer_connection_controls.h"
 #include "remoting/protocol/session_options_provider.h"
 #include "remoting/protocol/transport.h"
 #include "remoting/protocol/webrtc_data_stream_adapter.h"
@@ -31,7 +33,9 @@ class TransportContext;
 class MessagePipe;
 class WebrtcAudioModule;
 
-class WebrtcTransport : public Transport, public SessionOptionsProvider {
+class WebrtcTransport : public Transport,
+                        public SessionOptionsProvider,
+                        public PeerConnectionControls {
  public:
   class EventHandler {
    public:
@@ -91,6 +95,10 @@ class WebrtcTransport : public Transport, public SessionOptionsProvider {
 
   // SessionOptionsProvider implementations.
   const SessionOptions& session_options() const override;
+
+  // PeerConnectionControls implementations.
+  void SetPreferredBitrates(base::Optional<int> min_bitrate_bps,
+                            base::Optional<int> max_bitrate_bps) override;
 
   void Close(ErrorCode error);
 
@@ -152,19 +160,20 @@ class WebrtcTransport : public Transport, public SessionOptionsProvider {
   void OnStatsDelivered(
       const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report);
 
-  // Returns the max bitrate to set for this connection, taking into
-  // account any relay bitrate cap. If the relay status is unknown, this
-  // returns the default maximum bitrate.
-  int MaxBitrateForConnection();
+  // Returns the min (first element) and max (second element) bitrate for this
+  // connection, taking into account any relay bitrate cap and client overrides.
+  // The default range is [0, default max bixrate]. Client overrides that go
+  // beyond this bound or exceed the relay server's max bitrate will be ignored.
+  std::tuple<int, int> BitratesForConnection();
 
   // Sets bitrates on the PeerConnection.
   // Called after SetRemoteDescription(), but also called if the relay status
   // changes.
-  void SetPeerConnectionBitrates(int max_bitrate_bps);
+  void SetPeerConnectionBitrates(int min_bitrate_bps, int max_bitrate_bps);
 
   // Sets bitrates on the (video) sender. Called when the sender is created, but
   // also called if the relay status changes.
-  void SetSenderBitrates(int max_bitrate_bps);
+  void SetSenderBitrates(int min_bitrate_bps, int max_bitrate_bps);
 
   void RequestRtcStats();
   void RequestNegotiation();
@@ -225,6 +234,11 @@ class WebrtcTransport : public Transport, public SessionOptionsProvider {
   // other side of the WebRTC connection.
   rtc::scoped_refptr<webrtc::DataChannelInterface> control_data_channel_;
   rtc::scoped_refptr<webrtc::DataChannelInterface> event_data_channel_;
+
+  // Preferred bitrates set by the client. nullopt if the client has not
+  // provided any preferred bitrates.
+  base::Optional<int> preferred_min_bitrate_bps_;
+  base::Optional<int> preferred_max_bitrate_bps_;
 
   base::WeakPtrFactory<WebrtcTransport> weak_factory_{this};
 

@@ -60,6 +60,7 @@ class PreviewsUserData;
 }  // namespace previews
 
 namespace safe_browsing {
+class RealTimeUrlLookupServiceBase;
 class SafeBrowsingService;
 class UrlCheckerDelegate;
 }  // namespace safe_browsing
@@ -131,13 +132,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsShuttingDown() override;
   bool IsValidStoragePartitionId(content::BrowserContext* browser_context,
                                  const std::string& partition_id) override;
-  void GetStoragePartitionConfigForSite(
+  content::StoragePartitionConfig GetStoragePartitionConfigForSite(
       content::BrowserContext* browser_context,
-      const GURL& site,
-      bool can_be_default,
-      std::string* partition_domain,
-      std::string* partition_name,
-      bool* in_memory) override;
+      const GURL& site) override;
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
@@ -166,6 +163,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool ShouldIgnoreSameSiteCookieRestrictionsWhenTopLevel(
       base::StringPiece scheme,
       bool is_embedded_origin_secure) override;
+  std::string GetSiteDisplayNameForCdmProcess(
+      content::BrowserContext* browser_context,
+      const GURL& site_url) override;
   void OverrideURLLoaderFactoryParams(
       content::BrowserContext* browser_context,
       const url::Origin& origin,
@@ -274,6 +274,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& requesting_origin,
       const url::Origin& embedding_origin) override;
   std::string GetWebBluetoothBlocklist() override;
+  bool AllowConversionMeasurement(
+      content::BrowserContext* browser_context) override;
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed(content::BrowserContext* browser_context) override;
 #endif
@@ -325,7 +327,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                        bool* no_javascript_access) override;
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
+#if defined(OS_CHROMEOS)
   content::TtsControllerDelegate* GetTtsControllerDelegate() override;
+#endif
   content::TtsPlatform* GetTtsPlatform() override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* prefs) override;
@@ -351,7 +355,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::WebContents* web_contents) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) override;
-  void GetSchemesBypassingSecureContextCheckWhitelist(
+  void GetSchemesBypassingSecureContextCheckAllowlist(
       std::set<std::string>* schemes) override;
   void GetURLRequestAutoMountHandlers(
       std::vector<storage::URLRequestAutoMountHandler>* handlers) override;
@@ -408,6 +412,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& service_worker_scope,
       mojo::PendingReceiver<blink::mojom::BadgeService> receiver) override;
   void BindGpuHostReceiver(mojo::GenericPendingReceiver receiver) override;
+  void BindUtilityHostReceiver(mojo::GenericPendingReceiver receiver) override;
   void BindHostReceiverForRenderer(
       content::RenderProcessHost* render_process_host,
       mojo::GenericPendingReceiver receiver) override;
@@ -424,8 +429,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::ReceiverPresentationServiceDelegate*
   GetReceiverPresentationServiceDelegate(
       content::WebContents* web_contents) override;
-  void RecordURLMetric(const std::string& metric, const GURL& url) override;
-  std::string GetMetricSuffixForURL(const GURL& url) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
@@ -434,7 +437,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const std::string& key_system,
       base::flat_set<media::VideoCodec>* video_codecs,
       base::flat_set<media::EncryptionScheme>* encryption_schemes) override;
-  ::rappor::RapporService* GetRapporService() override;
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   void CreateMediaRemoter(
       content::RenderFrameHost* render_frame_host,
@@ -673,8 +675,11 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_context) override;
+  void BindBrowserControlInterface(
+      mojo::GenericPendingReceiver receiver) override;
   bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url) override;
+  ukm::UkmService* GetUkmService() override;
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);
@@ -715,8 +720,25 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool allow);
 #endif
 
+  // Returns the existing UrlCheckerDelegate object if it is already created.
+  // Otherwise, creates a new one and returns it. It returns nullptr if
+  // |safe_browsing_enabled_for_profile| is false, because it should bypass safe
+  // browsing check when safe browsing is disabled. Set
+  // |should_check_on_sb_disabled| to true if you still want to perform safe
+  // browsing check when safe browsing is disabled(e.g. for enterprise real time
+  // URL check).
   scoped_refptr<safe_browsing::UrlCheckerDelegate>
-  GetSafeBrowsingUrlCheckerDelegate(bool safe_browsing_enabled_for_profile);
+  GetSafeBrowsingUrlCheckerDelegate(bool safe_browsing_enabled_for_profile,
+                                    bool should_check_on_sb_disabled);
+
+  // Returns a RealTimeUrlLookupServiceBase object used for real time URL check.
+  // Returns an enterprise version if |is_enterprise_lookup_enabled| is true.
+  // Returns a consumer version if |is_enterprise_lookup_enabled| is false and
+  // |is_consumer_lookup_enabled| is true. Returns nullptr if both are false.
+  safe_browsing::RealTimeUrlLookupServiceBase* GetUrlLookupService(
+      content::BrowserContext* browser_context,
+      bool is_enterprise_lookup_enabled,
+      bool is_consumer_lookup_enabled);
 
   // Vector of additional ChromeContentBrowserClientParts.
   // Parts are deleted in the reverse order they are added.

@@ -47,8 +47,6 @@ blink_core_sources("parser") {
     "html_preload_scanner.h",
     "html_resource_preloader.cc",
     "html_resource_preloader.h",
-    "html_source_tracker.cc",
-    "html_source_tracker.h",
     "html_srcset_parser.cc",
     "html_srcset_parser.h",
     "html_stack_item.h",
@@ -76,12 +74,14 @@ blink_core_sources("parser") {
     "text_document_parser.h",
     "text_resource_decoder.cc",
     "text_resource_decoder.h",
+    "text_resource_decoder_builder.cc",
+    "text_resource_decoder_builder.h",
   ]
 
   # Optimizing the HTML parser for speed yields significant gains in performance
   # in parser-heavy scenarios. See https://crbug.com/787512.
-  # Windows builds already override the default optimization in core.gni.
-  if (!is_debug && !is_win) {
+  # All other platforms already override this in core.gni.
+  if (!is_debug && is_android) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }

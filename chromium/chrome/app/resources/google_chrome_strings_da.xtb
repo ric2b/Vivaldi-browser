@@ -35,8 +35,6 @@
 <translation id="1873233029667955273">Google Chrome er ikke din standardbrowser</translation>
 <translation id="1874309113135274312">Google Chrome beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome er forældet</translation>
-<translation id="1900795423379050516">Hvis en indstilling ikke vises på denne side, kan du kigge i <ph name="LINK_BEGIN" />
-      indstillingerne for Chrome-browseren<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Tillad login i Chrome</translation>
 <translation id="2063848847527508675">Chrome OS skal genstartes, før opdateringen kan anvendes.</translation>
 <translation id="2094919256425865063">Vil du slutte Chrome alligevel?</translation>
@@ -112,6 +110,7 @@
 <translation id="4251615635259297716">Vil du linke dine Chrome-data til denne konto?</translation>
 <translation id="4281844954008187215">Servicevilkår</translation>
 <translation id="4293420128516039005">Log ind for at synkronisere og tilpasse Chrome på alle dine enheder</translation>
+<translation id="4325083532956419387">Chrome OS-version</translation>
 <translation id="4328355335528187361">Udviklerversionen af Google Chrome (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome kan hjælpe med at beskytte dig mod brud på datasikkerheden, farlige udvidelser og meget mere</translation>

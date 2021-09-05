@@ -46,6 +46,7 @@ absl_cc_library(
     "internal/symbolize.h"
   SRCS
     "symbolize.cc"
+    "symbolize_darwin.inc"
     "symbolize_elf.inc"
     "symbolize_unimplemented.inc"
     "symbolize_win32.inc"
@@ -63,6 +64,7 @@ absl_cc_library(
     absl::dynamic_annotations
     absl::malloc_internal
     absl::raw_logging_internal
+    absl::strings
   PUBLIC
 )
 
@@ -83,6 +85,7 @@ absl_cc_test(
     absl::core_headers
     absl::memory
     absl::raw_logging_internal
+    absl::strings
     gmock
 )
 

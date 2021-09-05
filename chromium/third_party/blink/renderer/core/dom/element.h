@@ -784,6 +784,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual bool IsClearButtonElement() const { return false; }
   virtual bool IsScriptElement() const { return false; }
   virtual bool IsVTTCueBackgroundBox() const { return false; }
+  virtual bool IsSliderThumbElement() const { return false; }
 
   // Elements that may have an insertion mode other than "in body" should
   // override this and return true.
@@ -897,7 +898,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       const char element[],
       const AttributeModificationParams&);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   SpellcheckAttributeState GetSpellcheckAttributeState() const;
 

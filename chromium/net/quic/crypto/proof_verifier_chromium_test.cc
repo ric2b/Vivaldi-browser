@@ -10,6 +10,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_log_verifier.h"
@@ -113,6 +114,11 @@ const char kTestEmptySignature[] = "";
 
 const char kLogDescription[] = "somelog";
 
+// This test exercises code that does not depend on the QUIC version in use
+// but that still requires a version so we just use the first one.
+const quic::QuicTransportVersion kTestTransportVersion =
+    quic::AllSupportedVersions().front().transport_version;
+
 }  // namespace
 
 class ProofVerifierChromiumTest : public ::testing::Test {
@@ -152,7 +158,7 @@ class ProofVerifierChromiumTest : public ::testing::Test {
                       base::FilePath());
     std::string signature;
     source.GetProof(quic::QuicSocketAddress(), quic::QuicSocketAddress(),
-                    kTestHostname, kTestConfig, quic::QUIC_VERSION_43,
+                    kTestHostname, kTestConfig, kTestTransportVersion,
                     kTestChloHash,
                     std::make_unique<SignatureSaver>(&signature));
     return signature;
@@ -204,14 +210,14 @@ TEST_F(ProofVerifierChromiumTest, VerifyProof) {
   MockCertVerifier dummy_verifier;
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -238,14 +244,14 @@ TEST_F(ProofVerifierChromiumTest, VerifyProof) {
 // verification fails.
 TEST_F(ProofVerifierChromiumTest, FailsIfCertFails) {
   MockCertVerifier dummy_verifier;
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -264,14 +270,14 @@ TEST_F(ProofVerifierChromiumTest, ValidSCTList) {
 
   MockCertVerifier cert_verifier;
 
-  ProofVerifierChromium proof_verifier(&cert_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &cert_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, ct::GetSCTListForTesting(), kTestEmptySignature,
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -292,14 +298,14 @@ TEST_F(ProofVerifierChromiumTest, InvalidSCTList) {
   ASSERT_NO_FATAL_FAILURE(GetSCTTestCertificates(&certs_));
 
   MockCertVerifier cert_verifier;
-  ProofVerifierChromium proof_verifier(&cert_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &cert_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, ct::GetSCTListWithInvalidSCT(),
       kTestEmptySignature, verify_context_.get(), &error_details_, &details_,
       std::move(callback));
@@ -319,14 +325,14 @@ TEST_F(ProofVerifierChromiumTest, InvalidSCTList) {
 // signature fails.
 TEST_F(ProofVerifierChromiumTest, FailsIfSignatureFails) {
   FailsTestCertVerifier cert_verifier;
-  ProofVerifierChromium proof_verifier(&cert_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &cert_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, kTestEmptySignature,
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -344,14 +350,14 @@ TEST_F(ProofVerifierChromiumTest, PreservesEVIfAllowed) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -387,14 +393,14 @@ TEST_F(ProofVerifierChromiumTest, StripsEVIfNotAllowed) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -436,14 +442,14 @@ TEST_F(ProofVerifierChromiumTest, CTEVHistogramNonCompliant) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -492,14 +498,14 @@ TEST_F(ProofVerifierChromiumTest, CTEVHistogramCompliant) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -544,14 +550,14 @@ TEST_F(ProofVerifierChromiumTest, IsFatalErrorNotSetForNonFatalError) {
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_,
                                   ERR_CERT_DATE_INVALID);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -581,14 +587,14 @@ TEST_F(ProofVerifierChromiumTest, IsFatalErrorSetForFatalError) {
       base::Time::Now() + base::TimeDelta::FromSeconds(1000);
   transport_security_state_.AddHSTS(kTestHostname, expiry, true);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -616,14 +622,14 @@ TEST_F(ProofVerifierChromiumTest, PKPEnforced) {
   transport_security_state_.EnableStaticPinsForTesting();
   ScopedTransportSecurityStateSource scoped_security_state_source;
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kCTAndPKPHost, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kCTAndPKPHost, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -662,14 +668,14 @@ TEST_F(ProofVerifierChromiumTest, PKPBypassFlagSet) {
   transport_security_state_.EnableStaticPinsForTesting();
   ScopedTransportSecurityStateSource scoped_security_state_source;
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {kCTAndPKPHost});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {kCTAndPKPHost}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kCTAndPKPHost, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kCTAndPKPHost, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -712,14 +718,14 @@ TEST_F(ProofVerifierChromiumTest, CTIsRequired) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -769,14 +775,14 @@ TEST_F(ProofVerifierChromiumTest, CTIsRequiredHistogramNonCompliant) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -824,14 +830,14 @@ TEST_F(ProofVerifierChromiumTest, CTIsRequiredHistogramCompliant) {
   {
     MockCertVerifier dummy_verifier;
     dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
-    ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                         &transport_security_state_,
-                                         ct_verifier_.get(), {kTestHostname});
+    ProofVerifierChromium proof_verifier(
+        &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+        ct_verifier_.get(), {kTestHostname}, NetworkIsolationKey());
 
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
     ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -849,14 +855,14 @@ TEST_F(ProofVerifierChromiumTest, CTIsRequiredHistogramCompliant) {
     dummy_result_.is_issued_by_known_root = true;
     MockCertVerifier dummy_verifier;
     dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
-    ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                         &transport_security_state_,
-                                         ct_verifier_.get(), {});
+    ProofVerifierChromium proof_verifier(
+        &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+        ct_verifier_.get(), {}, NetworkIsolationKey());
 
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
     ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -892,14 +898,14 @@ TEST_F(ProofVerifierChromiumTest, CTIsNotRequiredHistogram) {
   MockCertVerifier dummy_verifier;
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {kTestHostname});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {kTestHostname}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -938,14 +944,14 @@ TEST_F(ProofVerifierChromiumTest, PKPAndCTBothTested) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kCTAndPKPHost, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kCTAndPKPHost, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -989,14 +995,14 @@ TEST_F(ProofVerifierChromiumTest, CTComplianceStatusHistogram) {
   {
     MockCertVerifier dummy_verifier;
     dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
-    ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                         &transport_security_state_,
-                                         ct_verifier_.get(), {kTestHostname});
+    ProofVerifierChromium proof_verifier(
+        &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+        ct_verifier_.get(), {kTestHostname}, NetworkIsolationKey());
 
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
     ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -1016,14 +1022,14 @@ TEST_F(ProofVerifierChromiumTest, CTComplianceStatusHistogram) {
     dummy_result_.is_issued_by_known_root = true;
     MockCertVerifier dummy_verifier;
     dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
-    ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                         &transport_security_state_,
-                                         ct_verifier_.get(), {});
+    ProofVerifierChromium proof_verifier(
+        &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+        ct_verifier_.get(), {}, NetworkIsolationKey());
 
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
     ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -1065,15 +1071,15 @@ TEST_F(ProofVerifierChromiumTest, CTRequirementsFlagNotMet) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   {
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
 
@@ -1118,15 +1124,15 @@ TEST_F(ProofVerifierChromiumTest, CTRequirementsFlagMet) {
       .WillRepeatedly(
           Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   {
     std::unique_ptr<DummyProofVerifierCallback> callback(
         new DummyProofVerifierCallback);
     proof_verifier.VerifyProof(
-        kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+        kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
         kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
         verify_context_.get(), &error_details_, &details_, std::move(callback));
 
@@ -1160,14 +1166,14 @@ TEST_F(ProofVerifierChromiumTest, UnknownRootRejected) {
   MockCertVerifier dummy_verifier;
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_FAILURE, status);
@@ -1191,14 +1197,14 @@ TEST_F(ProofVerifierChromiumTest, UnknownRootAcceptedWithOverride) {
   MockCertVerifier dummy_verifier;
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {kTestHostname});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {kTestHostname}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);
@@ -1227,14 +1233,14 @@ TEST_F(ProofVerifierChromiumTest, UnknownRootAcceptedWithWildcardOverride) {
   MockCertVerifier dummy_verifier;
   dummy_verifier.AddResultForCert(test_cert_.get(), dummy_result_, OK);
 
-  ProofVerifierChromium proof_verifier(&dummy_verifier, &ct_policy_enforcer_,
-                                       &transport_security_state_,
-                                       ct_verifier_.get(), {""});
+  ProofVerifierChromium proof_verifier(
+      &dummy_verifier, &ct_policy_enforcer_, &transport_security_state_,
+      ct_verifier_.get(), {""}, NetworkIsolationKey());
 
   std::unique_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   quic::QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestPort, kTestConfig, quic::QUIC_VERSION_43,
+      kTestHostname, kTestPort, kTestConfig, kTestTransportVersion,
       kTestChloHash, certs_, kTestEmptySCT, GetTestSignature(),
       verify_context_.get(), &error_details_, &details_, std::move(callback));
   ASSERT_EQ(quic::QUIC_SUCCESS, status);

@@ -30,17 +30,23 @@ enum class Subcommand : uint8_t {
   kGetPINToken = 0x05,
   kGetUvToken = 0x06,
   kGetUvRetries = 0x07,
+  kSetMinPINLength = 0x08,
+  kGetPinUvAuthTokenUsingPinWithPermissions = 0x09,
 };
 
 // RequestKey enumerates the keys in the top-level CBOR map for all PIN
 // commands.
 enum class RequestKey : int {
-  kProtocol = 1,
-  kSubcommand = 2,
-  kKeyAgreement = 3,
-  kPINAuth = 4,
-  kNewPINEnc = 5,
-  kPINHashEnc = 6,
+  kProtocol = 0x01,
+  kSubcommand = 0x02,
+  kKeyAgreement = 0x03,
+  kPINAuth = 0x04,
+  kNewPINEnc = 0x05,
+  kPINHashEnc = 0x06,
+  kMinPINLength = 0x07,
+  kMinPINLengthRPIDs = 0x08,
+  kPermissions = 0x09,
+  kPermissionsRPID = 0x0A,
 };
 
 // ResponseKey enumerates the keys in the top-level CBOR map for all PIN

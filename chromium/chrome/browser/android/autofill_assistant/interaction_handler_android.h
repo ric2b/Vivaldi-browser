@@ -22,6 +22,7 @@ namespace autofill_assistant {
 class BasicInteractions;
 class GenericUiControllerAndroid;
 class UserModel;
+class ViewHandlerAndroid;
 
 // Receives incoming events and runs the corresponding set of callbacks.
 //
@@ -33,13 +34,13 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
  public:
   using InteractionCallback = base::RepeatingCallback<void()>;
 
-  // Constructor. |event_handler|, |user_model|, |basic_interactions|,
-  // |views|, |jcontext| and |jdelegate| must outlive this instance.
+  // Constructor. All dependencies must outlive this instance.
   InteractionHandlerAndroid(
+      const std::map<std::string, std::string>& context,
       EventHandler* event_handler,
       UserModel* user_model,
       BasicInteractions* basic_interactions,
-      std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>* views,
+      ViewHandlerAndroid* view_handler,
       base::android::ScopedJavaGlobalRef<jobject> jcontext,
       base::android::ScopedJavaGlobalRef<jobject> jdelegate);
   ~InteractionHandlerAndroid() override;
@@ -48,6 +49,15 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
 
   void StartListening();
   void StopListening();
+
+  // Adds |context| to the current context of this interaction handler.
+  void AddContext(const std::map<std::string, std::string>& context);
+
+  // Removes the keys in |context| from this handler's context.
+  void RemoveContext(const std::map<std::string, std::string>& context);
+
+  // Returns a copy of the current context.
+  std::map<std::string, std::string> GetContext() const { return context_; }
 
   // Access to the user model that this interaction handler is bound to.
   UserModel* GetUserModel() const;
@@ -67,15 +77,10 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
   // Overrides autofill_assistant::EventHandler::Observer.
   void OnEvent(const EventHandler::EventKey& key) override;
 
-  // Adds |model_identifier| to the list of model identifiers belonging to
-  // |radio_group|.
-  void AddRadioButtonToGroup(const std::string& radio_group,
-                             const std::string& model_identifier);
-
-  // Ensures that only |selected_model_identifier| is set to true in
-  // |radio_group|.
-  void UpdateRadioButtonGroup(const std::string& radio_group,
-                              const std::string& selected_model_identifier);
+  // Runs all callbacks triggered by model value changes. This is useful to
+  // properly initialize a UI after inflation, since all UI state should be
+  // bound to the model.
+  void RunValueChangedCallbacks();
 
  private:
   base::Optional<InteractionCallback> CreateInteractionCallbackFromProto(
@@ -91,24 +96,28 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
       const GenericUserInterfaceProto& proto,
       const std::string& identifier);
 
+  void CreateAndAttachNestedGenericUi(const CreateNestedGenericUiProto& proto);
   void CreateAndShowGenericPopup(const ShowGenericUiPopupProto& proto);
 
   // Maps event keys to the corresponding list of callbacks to execute.
   std::map<EventHandler::EventKey, std::vector<InteractionCallback>>
       interactions_;
 
+  // These key-value pairs specify context variables that the handler will use
+  // to resolve views and values. Nested instances will inherit their parents'
+  // context variables. Special interactions, such as ForEach, may modify the
+  // context while they are being executed.
+  std::map<std::string, std::string> context_;
   EventHandler* event_handler_ = nullptr;
   UserModel* user_model_ = nullptr;
   BasicInteractions* basic_interactions_ = nullptr;
-  std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>* views_;
+  ViewHandlerAndroid* view_handler_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> jcontext_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> jdelegate_ = nullptr;
   bool is_listening_ = false;
 
-  // TODO(b/154811503): move radio_groups_ and nested_ui_controllers_ to
+  // TODO(b/154811503): move nested_ui_controllers_ to
   // generic_ui_controller_android.
-  // Maps radiogroup identifiers to the list of corresponding model identifiers.
-  std::map<std::string, std::vector<std::string>> radio_groups_;
   // Maps nested-ui identifiers to their instances.
   std::map<std::string, std::unique_ptr<GenericUiControllerAndroid>>
       nested_ui_controllers_;

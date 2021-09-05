@@ -67,49 +67,36 @@ class PluginVmInstaller : public KeyedService,
     DLC_NEED_SPACE = 22,
     INSUFFICIENT_DISK_SPACE = 23,
     INVALID_LICENSE = 24,
+    OFFLINE = 25,
 
-    kMaxValue = INVALID_LICENSE,
+    kMaxValue = OFFLINE,
   };
 
   enum class InstallingState {
     kInactive,
     kCheckingLicense,
     kCheckingDiskSpace,
-    kPausedLowDiskSpace,
     kDownloadingDlc,
     kCheckingForExistingVm,
     kDownloadingImage,
     kImporting,
   };
 
-  static constexpr int64_t kMinimumFreeDiskSpace = 16LL * 1024 * 1024 * 1024;
-  static constexpr int64_t kRecommendedFreeDiskSpace =
-      32LL * 1024 * 1024 * 1024;
-
   // Observer class for the PluginVm image related events.
-  // TODO(timloh): Merge OnFooFailed functions as the failure reason is enough
-  // to distinguish where we failed.
   class Observer {
    public:
     virtual ~Observer() = default;
 
+    // Fired on transitions to any state aside from kInactive.
+    virtual void OnStateUpdated(InstallingState new_state) = 0;
+
     virtual void OnProgressUpdated(double fraction_complete) = 0;
-
-    virtual void OnLicenseChecked() = 0;
-
-    // If |low_disk_space| is true, the device doesn't have the recommended
-    // amount of free disk space and the install will pause until Continue() or
-    // Cancel() is called.
-    virtual void OnCheckedDiskSpace(bool low_disk_space) = 0;
-
-    virtual void OnDlcDownloadCompleted() = 0;
-
-    // If |has_vm| is true, the install is done.
-    virtual void OnExistingVmCheckCompleted(bool has_vm) = 0;
-
     virtual void OnDownloadProgressUpdated(uint64_t bytes_downloaded,
                                            int64_t content_length) = 0;
-    virtual void OnDownloadCompleted() = 0;
+
+    // Exactly one of these will be fired once installation has finished,
+    // successfully or otherwise.
+    virtual void OnVmExists() = 0;
     virtual void OnCreated() = 0;
     virtual void OnImported() = 0;
     virtual void OnError(FailureReason reason) = 0;
@@ -124,8 +111,6 @@ class PluginVmInstaller : public KeyedService,
 
   // Start the installation. Progress updates will be sent to the observer.
   void Start();
-  // Continue the installation if it was paused due to low disk space.
-  void Continue();
   // Cancel the installation.
   void Cancel();
 
@@ -155,6 +140,9 @@ class PluginVmInstaller : public KeyedService,
   // Public for testing purposes.
   bool VerifyDownload(const std::string& downloaded_archive_hash);
 
+  // Returns free disk space required to install Plugin VM in bytes.
+  int64_t RequiredFreeDiskSpace();
+
   void SetFreeDiskSpaceForTesting(int64_t bytes) {
     free_disk_space_for_testing_ = bytes;
   }
@@ -172,6 +160,7 @@ class PluginVmInstaller : public KeyedService,
   void CheckDiskSpace();
   void OnAvailableDiskSpace(int64_t bytes);
   void StartDlcDownload();
+  void CheckForExistingVm();
   void OnUpdateVmState(bool default_vm_exists);
   void OnUpdateVmStateFailed();
   void StartDownload();
@@ -179,6 +168,7 @@ class PluginVmInstaller : public KeyedService,
   void StartImport();
 
   void UpdateProgress(double state_progress);
+  void UpdateInstallingState(InstallingState installing_state);
 
   // Cancels the download of PluginVm image finishing the image processing.
   // Downloaded PluginVm image archive is being deleted.
@@ -217,6 +207,7 @@ class PluginVmInstaller : public KeyedService,
 
   // -1 indicates not set
   int64_t free_disk_space_for_testing_ = -1;
+  base::Optional<base::FilePath> downloaded_image_for_testing_;
 
   ~PluginVmInstaller() override;
 

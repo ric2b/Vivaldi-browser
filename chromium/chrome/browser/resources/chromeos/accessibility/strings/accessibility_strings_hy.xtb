@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Ոլորել աջ</translation>
 <translation id="1781173782405573156">Բաց թողնել սեղմումը</translation>
 <translation id="1787176709638001873">Գաղտնաբառի դաշտ</translation>
+<translation id="180203835522132923">Search + O, այնուհետև W</translation>
 <translation id="1810107444790159527">Ցուցակ</translation>
 <translation id="1812527064848182527">հորիզոնական</translation>
 <translation id="1829244130665387512">Գտնել էջում</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Երկու մատը սահեցրեք ձախ</translation>
 <translation id="2998131015536248178">Նախորդ գրանշանը</translation>
 <translation id="2999559350546931576">Իջեցնել ձայնածավալը</translation>
+<translation id="3009352964623081324">Search + O, այնուհետև S։ Օգտագործեք այս դյուրանցումը՝ ձայներ տեղադրելու, ինչպես նաև դրանք կառավարելու և անհատականացնելու համար։</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">Ընտրացանկի միավոր կետակոճակ</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ապաթարց}one{# ապաթարց}other{# ապաթարց}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Զետեղում</translation>
 <translation id="4511186779140817916">Ճերմակ նուշ</translation>
 <translation id="451510441928265982">2-րդ մակարդակի նախորդ վերնագիր չկա</translation>
+<translation id="4515799157838123044">Երանգավորել ֆոնային բովանդակությունը</translation>
 <translation id="4517854969512651305">Մեծացնել արժեքը</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{շեղ գիծ}one{# շեղ գիծ}other{# շեղ գիծ}}</translation>
 <translation id="4537277403911487429">Հաջորդ նման տարրը</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Մաս</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Ընթացագոտի</translation>
+<translation id="6660819301598582123">Մուկը մատը մատին կտա, տան կարասը պատին կտա։</translation>
 <translation id="667999046851023355">Փաստաթուղթ</translation>
 <translation id="6688209025607531203">Ոչ մոդալ ծանուցում</translation>
 <translation id="6689672606256159458">Կարմրանարնջագույն</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">5-րդ մակարդակի հաջորդ վերնագիր չկա</translation>
 <translation id="6955705049214951590">Խամրած վարդագույն</translation>
 <translation id="696356426651109308">Անցնել սկիզբ</translation>
-<translation id="699159175332639490">Search+O+W</translation>
 <translation id="6994042831499278539">Մեջբերում բառացանկից</translation>
 <translation id="6996566555547746822">Հաջորդ համակցված տուփը</translation>
 <translation id="6997224546856374593">Մեծատառերը կարդալիս՝</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Օրինակ</translation>
 <translation id="7439060726180460871">Գրացուցակ</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Փոխել տոնը՝ տարրերի տեսակներ և մեջբերված, ջնջված, ընդգծված, փակագծերի մեջ վերցված կամ գլխատառերով գրված տեքստ արտասանելիս։</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">Տառից առաջ արտասանեք «մեծատառ»</translation>
 <translation id="7518543783849163354">ChromeVox-ի ձայնը ժամանակավորապես անջատելու համար սեղմեք Control ստեղնը:</translation>

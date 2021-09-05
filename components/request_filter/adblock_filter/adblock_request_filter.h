@@ -11,13 +11,14 @@
 namespace adblock_filter {
 class RulesIndexManager;
 class BlockedUrlsReporter;
+class Resources;
 
 class AdBlockRequestFilter : public vivaldi::RequestFilter {
  public:
-  AdBlockRequestFilter(
-      RuleGroup group,
-      base::WeakPtr<RulesIndexManager> rules_index_manager,
-      base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter);
+  AdBlockRequestFilter(RuleGroup group,
+                       base::WeakPtr<RulesIndexManager> rules_index_manager,
+                       base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
+                       base::WeakPtr<Resources> resources);
   ~AdBlockRequestFilter() override;
 
   // Implementing vivaldi::RequestFilter
@@ -52,6 +53,7 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
  private:
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
   base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter_;
+  base::WeakPtr<Resources> resources_;
 
   RuleGroup group_;
 

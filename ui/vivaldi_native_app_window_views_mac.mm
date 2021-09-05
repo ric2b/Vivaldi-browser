@@ -13,12 +13,14 @@
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "chrome/browser/profiles/profile.h"
-#import "chrome/browser/ui/views/apps/app_window_native_widget_mac.h"
+#import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
+#include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/widget/native_widget_mac.h"
 #include "ui/vivaldi_browser_window.h"
 #import "ui/vivaldi_native_app_window_frame_view_mac.h"
 
@@ -42,34 +44,28 @@
 - (id)initForNativeAppWindow:(VivaldiNativeAppWindowViewsMac*)nativeAppWindow {
   if ((self = [super init])) {
     nativeAppWindow_ = nativeAppWindow;
+    NSWindow* ns_window =
+        nativeAppWindow->GetNativeWindow().GetNativeNSWindow();
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(onWindowWillStartLiveResize:)
                name:NSWindowWillStartLiveResizeNotification
-             object:static_cast<ui::BaseWindow*>(nativeAppWindow)
-                        ->GetNativeWindow()
-                        .GetNativeNSWindow()];
+             object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(onWindowWillEnterFullScreen:)
                name:NSWindowWillEnterFullScreenNotification
-             object:static_cast<ui::BaseWindow*>(nativeAppWindow)
-                        ->GetNativeWindow()
-                        .GetNativeNSWindow()];
+             object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(onWindowWillExitFullScreen:)
                name:NSWindowWillExitFullScreenNotification
-             object:static_cast<ui::BaseWindow*>(nativeAppWindow)
-                        ->GetNativeWindow()
-                        .GetNativeNSWindow()];
+             object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(onWindowDidExitFullScreen:)
                name:NSWindowDidExitFullScreenNotification
-             object:static_cast<ui::BaseWindow*>(nativeAppWindow)
-                        ->GetNativeWindow()
-                        .GetNativeNSWindow()];
+             object:ns_window];
   }
   return self;
 }
@@ -97,7 +93,38 @@
 
 @end
 
-namespace vivaldi {
+namespace {
+
+// This is copied from
+// chromium/chrome/browser/ui/views/apps/app_window_native_widget_mac.h
+//
+// This implements features specific to vivaldi windows, e.g. frameless windows
+// that behave like normal windows.
+class VivaldiWindowNativeWidgetMac : public views::NativeWidgetMac {
+ public:
+  VivaldiWindowNativeWidgetMac(views::Widget* widget, bool is_frameless)
+      : NativeWidgetMac(widget), is_frameless_(is_frameless) {}
+  ~VivaldiWindowNativeWidgetMac() override {}
+
+ protected:
+  // NativeWidgetMac:
+  void PopulateCreateWindowParams(
+      const views::Widget::InitParams& widget_params,
+      remote_cocoa::mojom::CreateWindowParams* params) override {
+    if (is_frameless_) {
+      params->window_class = remote_cocoa::mojom::WindowClass::kFrameless;
+      params->style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+                           NSWindowStyleMaskMiniaturizable |
+                           NSWindowStyleMaskResizable |
+                           NSWindowStyleMaskFullSizeContentView;
+    }
+  }
+
+ private:
+  bool is_frameless_;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowNativeWidgetMac);
+};
 
 bool NSWindowIsMaximized(NSWindow* window) {
   // -[NSWindow isZoomed] only works if the zoom button is enabled.
@@ -110,7 +137,7 @@ bool NSWindowIsMaximized(NSWindow* window) {
   return NSEqualRects([window frame], [[window screen] visibleFrame]);
 }
 
-}  // vivaldi
+}  //namespace
 
 // static
 std::unique_ptr<VivaldiNativeAppWindowViews>
@@ -130,7 +157,7 @@ void VivaldiNativeAppWindowViewsMac::OnWindowWillEnterFullScreen() {
 }
 
 void VivaldiNativeAppWindowViewsMac::OnWindowWillStartLiveResize() {
-  if (!vivaldi::NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow()) &&
+  if (!NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow()) &&
       !in_fullscreen_transition_)
     bounds_before_maximize_ = [GetNativeWindow().GetNativeNSWindow() frame];
 }
@@ -148,33 +175,26 @@ void VivaldiNativeAppWindowViewsMac::OnWindowDidExitFullScreen() {
 }
 
 void VivaldiNativeAppWindowViewsMac::OnBeforeWidgetInit(
-    const extensions::AppWindow::CreateParams& create_params,
-    views::Widget::InitParams* init_params,
+    views::Widget::InitParams& init_params) {
+  DCHECK(!init_params.native_widget);
+  init_params.remove_standard_frame = is_frameless();
+  init_params.native_widget =
+      new VivaldiWindowNativeWidgetMac(widget(), is_frameless());
+}
+
+views::NonClientFrameView*
+VivaldiNativeAppWindowViewsMac::CreateNonClientFrameView(
     views::Widget* widget) {
-  DCHECK(!init_params->native_widget);
-  init_params->remove_standard_frame = IsFrameless();
-  init_params->native_widget = new AppWindowNativeWidgetMac(widget, this);
-  VivaldiNativeAppWindowViews::OnBeforeWidgetInit(create_params, init_params,
-                                                 widget);
-}
-
-views::NonClientFrameView*
-  VivaldiNativeAppWindowViewsMac::CreateStandardDesktopAppFrame() {
-  return new VivaldiNativeAppWindowFrameViewMac(widget(), this);
-}
-
-views::NonClientFrameView*
-  VivaldiNativeAppWindowViewsMac::CreateNonStandardAppFrame() {
-  return new VivaldiNativeAppWindowFrameViewMac(widget(), this);
+  return new VivaldiNativeAppWindowFrameViewMac(this);
 }
 
 bool VivaldiNativeAppWindowViewsMac::IsMaximized() const {
   return GetWidget() && !IsMinimized() && !IsFullscreen() &&
-         vivaldi::NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow());
+         NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow());
 }
 
 gfx::Rect VivaldiNativeAppWindowViewsMac::GetRestoredBounds() const {
-  if (vivaldi::NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow()))
+  if (NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow()))
     return gfx::ScreenRectFromNSRect(bounds_before_maximize_);
 
   return VivaldiNativeAppWindowViews::GetRestoredBounds();
@@ -195,7 +215,7 @@ void VivaldiNativeAppWindowViewsMac::Maximize() {
     return;
 
   NSWindow* window = GetNativeWindow().GetNativeNSWindow();
-  if (!vivaldi::NSWindowIsMaximized(window))
+  if (!NSWindowIsMaximized(window))
     [window setFrame:[[window screen] visibleFrame] display:YES animate:YES];
 
   if (IsMinimized())
@@ -204,7 +224,7 @@ void VivaldiNativeAppWindowViewsMac::Maximize() {
 
 void VivaldiNativeAppWindowViewsMac::Restore() {
   NSWindow* window = GetNativeWindow().GetNativeNSWindow();
-  if (vivaldi::NSWindowIsMaximized(window))
+  if (NSWindowIsMaximized(window))
     [window setFrame:bounds_before_maximize_ display:YES animate:YES];
 
   VivaldiNativeAppWindowViews::Restore();

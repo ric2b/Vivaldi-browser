@@ -6,6 +6,23 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <ImageView
+        android:id="@+id/back_button"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:contentDescription="@string/accessibility_toolbar_btn_back"
+        app:srcCompat="@drawable/ic_arrow_back_white_24dp" />
+
+    <TextView
+        android:id="@+id/video_file_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="56dp"
+        android:layout_marginTop="16dp"
+        android:textAppearance="@style/TextAppearance.TextMedium.Primary.Light" />
+
     <VideoView
         android:id="@+id/video_player"
         android:layout_width="match_parent"
@@ -17,14 +34,14 @@
         android:id="@+id/video_overlay_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="0.1dp"
         android:clickable="true"
         android:contentDescription="@string/accessibility_video_player"
-        android:layout_gravity="center">
+        android:layout_gravity="center"
+        android:visibility="gone">
         <FrameLayout
             android:id="@+id/video_controls_gradient"
             android:layout_width="match_parent"
-            android:layout_height="128dp"
+            android:layout_height="88dp"
             android:layout_gravity="bottom|start"
             android:background="@drawable/video_player_gradient"/>
 
@@ -33,9 +50,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:paddingBottom="15dp"
-            android:paddingStart="2dp"
-            android:paddingEnd="2dp">
+            android:paddingBottom="16dp">
             <LinearLayout
                 android:id="@+id/fast_forward_message"
                 android:layout_width="match_parent"
@@ -56,7 +71,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/fast_forward_hint"
-                    style="@style/TextAppearance.TextMedium.Primary.Light" />
+                    android:textAppearance="@style/TextAppearance.TextMedium.Primary.Light" />
                 <ImageView
                     android:id="@+id/fast_forward"
                     android:layout_width="24dp"
@@ -68,36 +83,47 @@
 
             <ImageView
                 android:id="@+id/video_player_play_button"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="@dimen/photo_picker_play_button_size"
+                android:layout_height="@dimen/photo_picker_play_button_size"
                 android:layout_gravity="center"
-                android:contentDescription="@string/accessibility_play_video"
-                app:srcCompat="@drawable/ic_play_circle_filled_white_24dp" />
+                android:contentDescription="@string/accessibility_pause_video"
+                app:srcCompat="@drawable/ic_pause_circle_outline_white_24dp" />
+
             <TextView
                 android:id="@+id/remaining_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|start"
+                android:layout_marginBottom="24dp"
                 android:layout_marginStart="16dp"
                 android:clickable="true"
-                android:paddingBottom="24dp"
-                style="@style/TextAppearance.TextMedium.Primary.Light" />
+                android:textAppearance="@style/TextAppearance.TextLarge.Primary.Light" />
             <ImageView
                 android:id="@+id/mute"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginBottom="24dp"
+                android:layout_marginEnd="68dp"
                 android:layout_gravity="bottom|end"
-                android:layout_marginEnd="14dp"
-                android:paddingBottom="24dp"
                 android:contentDescription="@string/accessibility_mute_video"
                 app:srcCompat="@drawable/ic_volume_on_white_24dp" />
+            <ImageView
+                android:id="@+id/fullscreen"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginBottom="24dp"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@string/accessibility_full_screen"
+                app:srcCompat="@drawable/ic_full_screen_white_24dp" />
             <SeekBar
                 android:id="@+id/seek_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|center"
                 android:clickable="true"
-                style="@style/PhotoPicker.SeekBar" />
+                android:progressDrawable="@drawable/photo_picker_seekbar_track"
+                android:thumb="@drawable/photo_picker_seekbar_thumb" />
         </FrameLayout>
     </FrameLayout>
 </merge>

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/app_mode/web_app/mock_web_kiosk_app_launcher.h"
-#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/web_kiosk_controller.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -45,8 +44,8 @@ class WebKioskControllerTest : public InProcessBrowserTest {
     return static_cast<WebKioskAppLauncher::Delegate*>(controller_.get());
   }
 
-  UserSessionManagerDelegate* session_controls() {
-    return static_cast<UserSessionManagerDelegate*>(controller_.get());
+  KioskProfileLoader::Delegate* profile_controls() {
+    return static_cast<KioskProfileLoader::Delegate*>(controller_.get());
   }
 
   AppLaunchSplashScreenView::Delegate* view_controls() {
@@ -82,15 +81,15 @@ IN_PROC_BROWSER_TEST_F(WebKioskControllerTest, RegularFlow) {
   controller()->StartWebKiosk(EmptyAccountId());
   ExpectState(AppState::CREATING_PROFILE, NetworkUIState::NOT_SHOWING);
 
-  EXPECT_CALL(*launcher(), Initialize(_)).Times(1);
-  session_controls()->OnProfilePrepared(profile(), false);
+  EXPECT_CALL(*launcher(), Initialize()).Times(1);
+  profile_controls()->OnProfileLoaded(profile());
 
   launch_controls()->InitializeNetwork();
   ExpectState(AppState::INIT_NETWORK, NetworkUIState::NOT_SHOWING);
   EXPECT_CALL(*launcher(), ContinueWithNetworkReady()).Times(1);
   SetOnline(true);
 
-  launch_controls()->OnAppStartedInstalling();
+  launch_controls()->OnAppInstalling();
 
   launch_controls()->OnAppPrepared();
   ExpectState(AppState::INSTALLED, NetworkUIState::NOT_SHOWING);
@@ -107,8 +106,8 @@ IN_PROC_BROWSER_TEST_F(WebKioskControllerTest, AlreadyInstalled) {
   controller()->StartWebKiosk(EmptyAccountId());
   ExpectState(AppState::CREATING_PROFILE, NetworkUIState::NOT_SHOWING);
 
-  EXPECT_CALL(*launcher(), Initialize(_)).Times(1);
-  session_controls()->OnProfilePrepared(profile(), false);
+  EXPECT_CALL(*launcher(), Initialize()).Times(1);
+  profile_controls()->OnProfileLoaded(profile());
 
   launch_controls()->OnAppPrepared();
   ExpectState(AppState::INSTALLED, NetworkUIState::NOT_SHOWING);
@@ -129,8 +128,8 @@ IN_PROC_BROWSER_TEST_F(WebKioskControllerTest, ConfigureNetworkBeforeProfile) {
   view_controls()->OnNetworkConfigRequested();
   ExpectState(AppState::CREATING_PROFILE, NetworkUIState::NEED_TO_SHOW);
 
-  EXPECT_CALL(*launcher(), Initialize(_)).Times(1);
-  session_controls()->OnProfilePrepared(profile(), false);
+  EXPECT_CALL(*launcher(), Initialize()).Times(1);
+  profile_controls()->OnProfileLoaded(profile());
   // WebKioskAppLauncher::Initialize call is synchronous, we have to call the
   // response now.
   launch_controls()->InitializeNetwork();
@@ -155,25 +154,27 @@ IN_PROC_BROWSER_TEST_F(WebKioskControllerTest,
   controller()->StartWebKiosk(EmptyAccountId());
   ExpectState(AppState::CREATING_PROFILE, NetworkUIState::NOT_SHOWING);
 
-  EXPECT_CALL(*launcher(), Initialize(_)).Times(1);
-  session_controls()->OnProfilePrepared(profile(), false);
+  EXPECT_CALL(*launcher(), Initialize()).Times(1);
+  profile_controls()->OnProfileLoaded(profile());
 
   launch_controls()->InitializeNetwork();
   ExpectState(AppState::INIT_NETWORK, NetworkUIState::NOT_SHOWING);
   EXPECT_CALL(*launcher(), ContinueWithNetworkReady()).Times(1);
   SetOnline(true);
 
-  launch_controls()->OnAppStartedInstalling();
+  launch_controls()->OnAppInstalling();
 
   // User presses the hotkey, current installation is canceled.
-  EXPECT_CALL(*launcher(), CancelCurrentInstallation()).Times(1);
+  EXPECT_CALL(*launcher(), RestartLauncher()).Times(1);
   view_controls()->OnNetworkConfigRequested();
+  // Launcher restart causes network to be requested again.
+  launch_controls()->InitializeNetwork();
   ExpectState(AppState::INIT_NETWORK, NetworkUIState::SHOWING);
 
   EXPECT_CALL(*launcher(), ContinueWithNetworkReady()).Times(1);
   view_controls()->OnNetworkConfigFinished();
 
-  launch_controls()->OnAppStartedInstalling();
+  launch_controls()->OnAppInstalling();
   ExpectState(AppState::INSTALLING, NetworkUIState::NOT_SHOWING);
 
   launch_controls()->OnAppPrepared();
@@ -192,24 +193,26 @@ IN_PROC_BROWSER_TEST_F(WebKioskControllerTest,
   controller()->StartWebKiosk(EmptyAccountId());
   ExpectState(AppState::CREATING_PROFILE, NetworkUIState::NOT_SHOWING);
 
-  EXPECT_CALL(*launcher(), Initialize(_)).Times(1);
-  session_controls()->OnProfilePrepared(profile(), false);
+  EXPECT_CALL(*launcher(), Initialize()).Times(1);
+  profile_controls()->OnProfileLoaded(profile());
 
   launch_controls()->InitializeNetwork();
   ExpectState(AppState::INIT_NETWORK, NetworkUIState::NOT_SHOWING);
   EXPECT_CALL(*launcher(), ContinueWithNetworkReady()).Times(1);
   SetOnline(true);
 
-  launch_controls()->OnAppStartedInstalling();
+  launch_controls()->OnAppInstalling();
+  ExpectState(AppState::INSTALLING, NetworkUIState::NOT_SHOWING);
 
-  EXPECT_CALL(*launcher(), CancelCurrentInstallation()).Times(1);
+  EXPECT_CALL(*launcher(), RestartLauncher()).Times(1);
   SetOnline(false);
+  launch_controls()->InitializeNetwork();
   ExpectState(AppState::INIT_NETWORK, NetworkUIState::SHOWING);
 
   EXPECT_CALL(*launcher(), ContinueWithNetworkReady()).Times(1);
   view_controls()->OnNetworkConfigFinished();
 
-  launch_controls()->OnAppStartedInstalling();
+  launch_controls()->OnAppInstalling();
   ExpectState(AppState::INSTALLING, NetworkUIState::NOT_SHOWING);
 
   launch_controls()->OnAppPrepared();

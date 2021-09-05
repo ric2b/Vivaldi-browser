@@ -28,12 +28,18 @@ namespace content {
 // destroyed on the same sequence. The sequence must outlive |this|.
 class CONTENT_EXPORT ConversionStorageSql : public ConversionStorage {
  public:
-  ConversionStorageSql(const base::FilePath& path_to_database_dir,
+  static void RunInMemoryForTesting();
+
+  ConversionStorageSql(const base::FilePath& path_to_database,
                        std::unique_ptr<Delegate> delegate,
                        const base::Clock* clock);
   ConversionStorageSql(const ConversionStorageSql& other) = delete;
   ConversionStorageSql& operator=(const ConversionStorageSql& other) = delete;
   ~ConversionStorageSql() override;
+
+  void set_ignore_errors_for_testing(bool ignore_for_testing) {
+    ignore_errors_for_testing_ = ignore_for_testing;
+  }
 
  private:
   // ConversionStorage
@@ -62,8 +68,21 @@ class CONTENT_EXPORT ConversionStorageSql : public ConversionStorage {
 
   void DatabaseErrorCallback(int extended_error, sql::Statement* stmt);
 
+  static bool g_run_in_memory_;
+
+  // If set, database errors will not crash the client when run in debug mode.
+  bool ignore_errors_for_testing_ = false;
+
   const base::FilePath path_to_database_;
-  sql::Database db_;
+
+  // Whether the db is open and should be accessed. False if database
+  // initialization failed, or if the db suffered from an unrecoverable error.
+  bool db_is_open_ = false;
+
+  // May be null if the database:
+  //  - could not be opened
+  //  - table/index initialization failed
+  std::unique_ptr<sql::Database> db_;
 
   // Must outlive |this|.
   const base::Clock* clock_;

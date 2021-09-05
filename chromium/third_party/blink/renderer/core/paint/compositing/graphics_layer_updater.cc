@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
+#include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -50,7 +51,7 @@ GraphicsLayerUpdater::UpdateContext::UpdateContext(const UpdateContext& other,
   if (compositing_state != kNotComposited &&
       compositing_state != kPaintsIntoGroupedBacking) {
     compositing_ancestor_ = &layer;
-    if (layer.GetLayoutObject().StyleRef().IsStackingContext())
+    if (layer.GetLayoutObject().IsStackingContext())
       compositing_stacking_context_ = &layer;
   }
   // Any composited content under SVG must be a descendant of (but not
@@ -76,7 +77,7 @@ const PaintLayer* GraphicsLayerUpdater::UpdateContext::CompositingContainer(
     return layer.EnclosingLayerWithCompositedLayerMapping(kExcludeSelf);
 
   const PaintLayer* compositing_container;
-  if (layer.GetLayoutObject().StyleRef().IsStacked() &&
+  if (layer.GetLayoutObject().IsStacked() &&
       !layer.IsReplacedNormalFlowStacking()) {
     compositing_container = compositing_stacking_context_;
   } else if ((layer.Parent() &&
@@ -122,13 +123,13 @@ void GraphicsLayerUpdater::UpdateRecursive(
     CompositedLayerMapping* mapping = layer.GetCompositedLayerMapping();
 
     if (update_type == kForceUpdate || mapping->NeedsGraphicsLayerUpdate()) {
-      bool had_scrolling_layer = mapping->ScrollingLayer();
+      bool had_scrolling_layer = mapping->ScrollingContentsLayer();
       const auto* compositing_container = context.CompositingContainer(layer);
       if (mapping->UpdateGraphicsLayerConfiguration(compositing_container)) {
         needs_rebuild_tree_ = true;
         // Change of existence of scrolling layer affects visual rect offsets of
         // descendants via LayoutObject::ScrollAdjustmentForPaintInvalidation().
-        if (had_scrolling_layer != !!mapping->ScrollingLayer())
+        if (had_scrolling_layer != !!mapping->ScrollingContentsLayer())
           layers_needing_paint_invalidation.push_back(&layer);
       }
       mapping->UpdateGraphicsLayerGeometry(compositing_container,
@@ -137,6 +138,15 @@ void GraphicsLayerUpdater::UpdateRecursive(
         scrollable_area->PositionOverflowControls();
       update_type = mapping->UpdateTypeForChildren(update_type);
       mapping->ClearNeedsGraphicsLayerUpdate();
+    }
+  }
+
+  if (layer.GetLayoutObject().IsLayoutEmbeddedContent()) {
+    if (PaintLayerCompositor* inner_compositor =
+            PaintLayerCompositor::FrameContentsCompositor(
+                ToLayoutEmbeddedContent(layer.GetLayoutObject()))) {
+      if (inner_compositor->RootLayerAttachmentDirty())
+        needs_rebuild_tree_ = true;
     }
   }
 

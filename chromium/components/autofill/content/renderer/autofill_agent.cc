@@ -86,6 +86,7 @@ using blink::WebVector;
 
 namespace autofill {
 
+using form_util::ExtractMask;
 using form_util::FindFormAndFieldForFormControlElement;
 using form_util::UnownedCheckoutFormElementsAndFieldSetsToFormData;
 using mojom::SubmissionSource;
@@ -98,32 +99,12 @@ namespace {
 // upon, instead of multiple in close succession (debounce time).
 size_t kWaitTimeForSelectOptionsChangesMs = 50;
 
-// Gets all the data list values (with corresponding label) for the given
-// element.
-void GetDataListSuggestions(const WebInputElement& element,
-                            std::vector<base::string16>* values,
-                            std::vector<base::string16>* labels) {
-  for (const auto& option : element.FilteredDataListOptions()) {
-    values->push_back(option.Value().Utf16());
-    if (option.Value() != option.Label())
-      labels->push_back(option.Label().Utf16());
-    else
-      labels->push_back(base::string16());
-  }
-}
-
-// Trim the vector before sending it to the browser process to ensure we
-// don't send too much data through the IPC.
-void TrimStringVectorForIPC(std::vector<base::string16>* strings) {
-  // Limit the size of the vector.
-  if (strings->size() > kMaxListSize)
-    strings->resize(kMaxListSize);
-
-  // Limit the size of the strings in the vector.
-  for (size_t i = 0; i < strings->size(); ++i) {
-    if ((*strings)[i].length() > kMaxDataLength)
-      (*strings)[i].resize(kMaxDataLength);
-  }
+// Helper function to return EXTRACT_DATALIST if kAutofillExtractAllDatalist is
+// enabled, otherwise EXTRACT_NONE is returned.
+ExtractMask GetExtractDatalistMask() {
+  return base::FeatureList::IsEnabled(features::kAutofillExtractAllDatalists)
+             ? form_util::EXTRACT_DATALIST
+             : form_util::EXTRACT_NONE;
 }
 
 }  // namespace
@@ -160,6 +141,9 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
       &AutofillAgent::BindPendingReceiver, base::Unretained(this)));
 }
 
+// The destructor is not guaranteed to be called. Destruction happens (only)
+// through the OnDestruct() event, which posts a task to delete this object.
+// The process may be killed before this deletion can happen.
 AutofillAgent::~AutofillAgent() {
   RemoveFormObserver(this);
 }
@@ -175,16 +159,12 @@ bool AutofillAgent::FormDataCompare::operator()(const FormData& lhs,
          std::tie(rhs.name, rhs.url, rhs.action, rhs.is_form_tag);
 }
 
-void AutofillAgent::DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                             ui::PageTransition transition) {
+void AutofillAgent::DidCommitProvisionalLoad(ui::PageTransition transition) {
   blink::WebFrame* frame = render_frame()->GetWebFrame();
   // TODO(dvadym): check if we need to check if it is main frame navigation
   // http://crbug.com/443155
   if (frame->Parent())
     return;  // Not a top-level navigation.
-
-  if (is_same_document_navigation)
-    return;
 
   // Navigation to a new page or a page refresh.
 
@@ -225,9 +205,11 @@ void AutofillAgent::DidChangeScrollOffsetImpl(
 
   FormData form;
   FormFieldData field;
-  if (FindFormAndFieldForFormControlElement(element_, field_data_manager_.get(),
-                                            form_util::EXTRACT_BOUNDS, &form,
-                                            &field)) {
+  if (FindFormAndFieldForFormControlElement(
+          element_, field_data_manager_.get(),
+          static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
+                                   GetExtractDatalistMask()),
+          &form, &field)) {
     GetAutofillDriver()->TextFieldDidScroll(form, field, field.bounds);
   }
 
@@ -237,14 +219,6 @@ void AutofillAgent::DidChangeScrollOffsetImpl(
 
 void AutofillAgent::FocusedElementChanged(const WebElement& element) {
   was_focused_before_now_ = false;
-
-  if ((IsKeyboardAccessoryEnabled() || !focus_requires_scroll_) &&
-      !element.IsNull() &&
-      element.GetDocument().GetFrame()->HasTransientUserActivation()) {
-    focused_node_was_last_clicked_ = true;
-    HandleFocusChangeComplete();
-  }
-
   HidePopup();
 
   if (element.IsNull()) {
@@ -258,13 +232,29 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
 
   const WebInputElement* input = ToWebInputElement(&element);
 
+  bool focus_moved_to_new_form = false;
   if (!last_interacted_form_.IsNull() &&
       (!input || last_interacted_form_ != input->Form())) {
     // The focused element is not part of the last interacted form (could be
     // in a different form).
     GetAutofillDriver()->FocusNoLongerOnForm();
-    return;
+    focus_moved_to_new_form = true;
   }
+
+  // Calls HandleFocusChangeComplete() after notifying the focus is no longer on
+  // the previous form, then early return. No need to notify the newly focused
+  // element because that will be done by HandleFocusChangeComplete() which
+  // triggers FormControlElementClicked().
+  // Refer to http://crbug.com/1105254
+  if ((IsKeyboardAccessoryEnabled() || !focus_requires_scroll_) &&
+      !element.IsNull() &&
+      element.GetDocument().GetFrame()->HasTransientUserActivation()) {
+    focused_node_was_last_clicked_ = true;
+    HandleFocusChangeComplete();
+  }
+
+  if (focus_moved_to_new_form)
+    return;
 
   if (!input || !input->IsEnabled() || input->IsReadOnly() ||
       !input->IsTextField())
@@ -274,9 +264,11 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
 
   FormData form;
   FormFieldData field;
-  if (FindFormAndFieldForFormControlElement(element_, field_data_manager_.get(),
-                                            form_util::EXTRACT_BOUNDS, &form,
-                                            &field)) {
+  if (FindFormAndFieldForFormControlElement(
+          element_, field_data_manager_.get(),
+          static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
+                                   GetExtractDatalistMask()),
+          &form, &field)) {
     GetAutofillDriver()->FocusOnFormField(form, field, field.bounds);
   }
 }
@@ -355,9 +347,11 @@ void AutofillAgent::OnTextFieldDidChange(const WebInputElement& element) {
 
   FormData form;
   FormFieldData field;
-  if (FindFormAndFieldForFormControlElement(element, field_data_manager_.get(),
-                                            form_util::EXTRACT_BOUNDS, &form,
-                                            &field)) {
+  if (FindFormAndFieldForFormControlElement(
+          element, field_data_manager_.get(),
+          static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
+                                   GetExtractDatalistMask()),
+          &form, &field)) {
     GetAutofillDriver()->TextFieldDidChange(form, field, field.bounds,
                                             AutofillTickClock::NowTicks());
   }
@@ -616,9 +610,8 @@ bool AutofillAgent::CollectFormlessElements(FormData* output) {
   if (control_elements.size() > kMaxParseableFields)
     return false;
 
-  const form_util::ExtractMask extract_mask =
-      static_cast<form_util::ExtractMask>(form_util::EXTRACT_VALUE |
-                                          form_util::EXTRACT_OPTIONS);
+  const ExtractMask extract_mask = static_cast<ExtractMask>(
+      form_util::EXTRACT_VALUE | form_util::EXTRACT_OPTIONS);
 
   return UnownedCheckoutFormElementsAndFieldSetsToFormData(
       fieldsets, control_elements, nullptr, document, field_data_manager_.get(),
@@ -784,15 +777,18 @@ void AutofillAgent::QueryAutofillSuggestions(
 
   FormData form;
   FormFieldData field;
-  if (!FindFormAndFieldForFormControlElement(element, field_data_manager_.get(),
-                                             form_util::EXTRACT_BOUNDS, &form,
-                                             &field)) {
+  if (!FindFormAndFieldForFormControlElement(
+          element, field_data_manager_.get(),
+          static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
+                                   GetExtractDatalistMask()),
+          &form, &field)) {
     // If we didn't find the cached form, at least let autocomplete have a shot
     // at providing suggestions.
     WebFormControlElementToFormField(
         element, nullptr,
-        static_cast<form_util::ExtractMask>(form_util::EXTRACT_VALUE |
-                                            form_util::EXTRACT_BOUNDS),
+        static_cast<ExtractMask>(form_util::EXTRACT_VALUE |
+                                 form_util::EXTRACT_BOUNDS |
+                                 GetExtractDatalistMask()),
         &field);
   }
 
@@ -803,20 +799,15 @@ void AutofillAgent::QueryAutofillSuggestions(
     return;
   }
 
-  std::vector<base::string16> data_list_values;
-  std::vector<base::string16> data_list_labels;
-  const WebInputElement* input_element = ToWebInputElement(&element);
-  if (input_element) {
-    // Find the datalist values and send them to the browser process.
-    GetDataListSuggestions(*input_element, &data_list_values,
-                           &data_list_labels);
-    TrimStringVectorForIPC(&data_list_values);
-    TrimStringVectorForIPC(&data_list_labels);
+  if (!base::FeatureList::IsEnabled(features::kAutofillExtractAllDatalists)) {
+    if (const WebInputElement* input_element = ToWebInputElement(&element)) {
+      // Find the datalist values and send them to the browser process.
+      form_util::GetDataListSuggestions(*input_element, &field.datalist_values,
+                                        &field.datalist_labels);
+    }
   }
 
   is_popup_possibly_visible_ = true;
-
-  GetAutofillDriver()->SetDataList(data_list_values, data_list_labels);
   GetAutofillDriver()->QueryFormFieldAutofill(autofill_query_id_, form, field,
                                               field.bounds,
                                               autoselect_first_suggestion);
@@ -1041,7 +1032,9 @@ void AutofillAgent::OnProvisionallySaveForm(
       FormData form;
       FormFieldData field;
       if (FindFormAndFieldForFormControlElement(
-              element, field_data_manager_.get(), form_util::EXTRACT_BOUNDS,
+              element, field_data_manager_.get(),
+              static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
+                                       GetExtractDatalistMask()),
               &form, &field)) {
         GetAutofillDriver()->SelectControlDidChange(form, field, field.bounds);
       }

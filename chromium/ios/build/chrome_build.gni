@@ -15,11 +15,11 @@ declare_args() {
   ios_enable_share_extension = true
 
   # Enable credential provider extension.
-  ios_enable_credential_provider_extension = false
+  ios_enable_credential_provider_extension = true
 
   # Label of the target providing implementation for AccountVerificationProvider.
   # Overridden when using the Google-internal repository to build Chrome on iOS.
-  ios_account_verification_provider_target = "//ios/chrome/common/credential_provider:account_verification_provider_implementation"
+  ios_account_verification_provider_target = "//ios/chrome/credential_provider_extension:account_verification_provider_implementation"
 
   # Enable use of SceneDelegate-driven startup flow in
   # Info.plist.
@@ -36,6 +36,10 @@ declare_args() {
 
   # List of plist templates to merge when generating chrome Info.plist.
   ios_chrome_info_plist_additions = []
+
+  # List of targets used to generate the plist listed in
+  # ios_chrome_info_plist_additions variable (if any).
+  ios_chrome_info_plist_addition_targets = []
 
   # List of plist templates to merge when generating chrome entitlements.
   ios_chrome_entitlements_additions = []

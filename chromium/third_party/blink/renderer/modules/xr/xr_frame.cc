@@ -237,11 +237,10 @@ ScriptPromise XRFrame::createAnchor(ScriptState* script_state,
     return {};
   }
 
-  base::Optional<XRNativeOriginInformation> native_origin =
-      space->NativeOrigin();
-
-  if (!native_origin) {
-    DVLOG(2) << __func__ << ": native_origin not set, failing anchor creation";
+  base::Optional<device::mojom::blink::XRNativeOriginInformation>
+      maybe_native_origin = space->NativeOrigin();
+  if (!maybe_native_origin) {
+    DVLOG(2) << __func__ << ": native origin not set, failing anchor creation";
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kCannotObtainNativeOrigin);
     return {};
@@ -264,7 +263,7 @@ ScriptPromise XRFrame::createAnchor(ScriptState* script_state,
   if (space->IsStationary()) {
     // Space is considered stationary, no adjustments are needed.
     return session_->CreateAnchorHelper(script_state, native_origin_from_anchor,
-                                        *native_origin, exception_state);
+                                        *maybe_native_origin, exception_state);
   }
 
   return CreateAnchorFromNonStationarySpace(
@@ -280,26 +279,20 @@ ScriptPromise XRFrame::CreateAnchorFromNonStationarySpace(
 
   // Space is not considered stationary - need to adjust the app-provided pose.
   // Let's ask the session about the appropriate stationary reference space:
-  auto stationary_reference_space_category =
-      device::mojom::XRReferenceSpaceCategory::LOCAL;
-  auto mojo_from_stationary_space =
-      session_->GetMojoFrom(XRReferenceSpace::Type::kTypeLocal);
-  if (!mojo_from_stationary_space) {
-    // Local space is not available, try unbounded.
-    stationary_reference_space_category =
-        device::mojom::XRReferenceSpaceCategory::UNBOUNDED;
-    mojo_from_stationary_space =
-        session_->GetMojoFrom(XRReferenceSpace::Type::kTypeUnbounded);
-  }
+  base::Optional<XRSession::ReferenceSpaceInformation>
+      reference_space_information = session_->GetStationaryReferenceSpace();
 
-  if (!mojo_from_stationary_space) {
+  if (!reference_space_information) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       XRSession::kUnableToRetrieveMatrix);
     return {};
   }
 
-  DCHECK(mojo_from_stationary_space->IsInvertible());
-  auto stationary_space_from_mojo = mojo_from_stationary_space->Inverse();
+  const TransformationMatrix& mojo_from_stationary_space =
+      reference_space_information->mojo_from_space;
+
+  DCHECK(mojo_from_stationary_space.IsInvertible());
+  auto stationary_space_from_mojo = mojo_from_stationary_space.Inverse();
 
   // We now have 2 spaces - the dynamic one passed in to create anchor
   // call, and the stationary one. We also have a rigid transform
@@ -318,22 +311,13 @@ ScriptPromise XRFrame::CreateAnchorFromNonStationarySpace(
   auto stationary_space_from_anchor =
       stationary_space_from_mojo * mojo_from_anchor;
 
-  auto stationary_space_native_origin =
-      XRNativeOriginInformation::Create(stationary_reference_space_category);
-
-  if (!stationary_space_native_origin) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      kCannotObtainNativeOrigin);
-    return {};
-  }
-
   // Conversion done, make the adjusted call:
   return session_->CreateAnchorHelper(
       script_state, stationary_space_from_anchor,
-      *stationary_space_native_origin, exception_state);
+      reference_space_information->native_origin, exception_state);
 }
 
-void XRFrame::Trace(Visitor* visitor) {
+void XRFrame::Trace(Visitor* visitor) const {
   visitor->Trace(session_);
   visitor->Trace(world_information_);
   ScriptWrappable::Trace(visitor);

@@ -22,10 +22,8 @@
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/common/web_application_info.h"
-#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace web_app {
@@ -46,25 +44,23 @@ void PendingAppInstallTask::CreateTabHelpers(
   InstallableManager::CreateForWebContents(web_contents);
   SecurityStateTabHelper::CreateForWebContents(web_contents);
   favicon::CreateContentFaviconDriverForWebContents(web_contents);
-  if (auto* performance_manager_registry =
-          performance_manager::PerformanceManagerRegistry::GetInstance()) {
-    performance_manager_registry->CreatePageNodeForWebContents(web_contents);
-  }
 }
 
 PendingAppInstallTask::PendingAppInstallTask(
     Profile* profile,
     AppRegistrar* registrar,
-    AppShortcutManager* shortcut_manger,
+    AppShortcutManager* shortcut_manager,
     FileHandlerManager* file_handler_manager,
     WebAppUiManager* ui_manager,
     InstallFinalizer* install_finalizer,
+    InstallManager* install_manager,
     ExternalInstallOptions install_options)
     : profile_(profile),
       registrar_(registrar),
-      shortcut_manager_(shortcut_manger),
+      shortcut_manager_(shortcut_manager),
       file_handler_manager_(file_handler_manager),
       install_finalizer_(install_finalizer),
+      install_manager_(install_manager),
       ui_manager_(ui_manager),
       externally_installed_app_prefs_(profile_->GetPrefs()),
       install_options_(std::move(install_options)) {}
@@ -169,14 +165,12 @@ void PendingAppInstallTask::OnPlaceholderUninstalled(
 void PendingAppInstallTask::ContinueWebAppInstall(
     content::WebContents* web_contents,
     ResultCallback result_callback) {
-  auto* provider = WebAppProviderBase::GetProviderBase(profile_);
-  DCHECK(provider);
 
   auto install_params = ConvertExternalInstallOptionsToParams(install_options_);
   auto install_source = ConvertExternalInstallSourceToInstallSource(
       install_options_.install_source);
 
-  provider->install_manager().InstallWebAppWithParams(
+  install_manager_->InstallWebAppWithParams(
       web_contents, install_params, install_source,
       base::BindOnce(&PendingAppInstallTask::OnWebAppInstalled,
                      weak_ptr_factory_.GetWeakPtr(), false /* is_placeholder */,

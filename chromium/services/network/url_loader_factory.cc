@@ -24,6 +24,7 @@
 #include "services/network/network_usage_accumulator.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/trust_tokens/trust_token_request_helper_factory.h"
 #include "services/network/url_loader.h"
@@ -130,6 +131,7 @@ void URLLoaderFactory::CreateLoaderAndStart(
   mojom::NetworkServiceClient* network_service_client = nullptr;
   base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder;
   base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator;
+  base::Optional<DataPipeUseTracker> data_pipe_use_tracker;
   if (context_->network_service()) {
     network_service_client = context_->network_service()->client();
     keepalive_statistics_recorder = context_->network_service()
@@ -137,6 +139,8 @@ void URLLoaderFactory::CreateLoaderAndStart(
                                         ->AsWeakPtr();
     network_usage_accumulator =
         context_->network_service()->network_usage_accumulator()->AsWeakPtr();
+    data_pipe_use_tracker.emplace(context_->network_service(),
+                                  DataPipeUser::kUrlLoader);
   }
 
   bool exhausted = false;
@@ -259,6 +263,7 @@ void URLLoaderFactory::CreateLoaderAndStart(
       base::BindOnce(&cors::CorsURLLoaderFactory::DestroyURLLoader,
                      base::Unretained(cors_url_loader_factory_)),
       std::move(receiver), options, url_request, std::move(client),
+      std::move(data_pipe_use_tracker),
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
       params_.get(), coep_reporter_ ? coep_reporter_.get() : nullptr,
       request_id, keepalive_request_size, resource_scheduler_client_,

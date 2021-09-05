@@ -11,6 +11,9 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "components/data_use_measurement/core/data_use_pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
 #include "net/base/network_change_notifier.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,10 +24,11 @@
 
 namespace data_use_measurement {
 
-class DataUseMeasurementTest : public testing::Test {
+class DataUseMeasurementTest {
  public:
-  DataUseMeasurementTest()
+  explicit DataUseMeasurementTest(TestingPrefServiceSimple* test_prefs_)
       : data_use_measurement_(
+            test_prefs_,
             network::TestNetworkConnectionTracker::GetInstance()) {
     // During the test it is expected to not have cellular connection.
     DCHECK(!net::NetworkChangeNotifier::IsConnectionCellular(
@@ -59,22 +63,45 @@ class DataUseMeasurementTest : public testing::Test {
 // foreground or the OS is not Android.
 // TODO(amohammadkhan): Add tests for Cellular/non-cellular connection types
 // when support for testing is provided in its class.
-TEST_F(DataUseMeasurementTest, UserNotUserTest) {
+TEST(DataUseMeasurementTest, UserNotUserTest) {
+  TestingPrefServiceSimple test_prefs;
+
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kDataUsedUserForeground);
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kDataUsedUserBackground);
+  test_prefs.registry()->RegisterDictionaryPref(
+      prefs::kDataUsedServicesForeground);
+  test_prefs.registry()->RegisterDictionaryPref(
+      prefs::kDataUsedServicesBackground);
+
+  DataUseMeasurementTest data_use_measurement_test(&test_prefs);
 #if defined(OS_ANDROID)
-  data_use_measurement()->OnApplicationStateChangeForTesting(
-      base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES);
+  data_use_measurement_test.data_use_measurement()
+      ->OnApplicationStateChangeForTesting(
+          base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES);
 #endif
-  TestForAUserRequest("Foreground.");
+  data_use_measurement_test.TestForAUserRequest("Foreground.");
 }
 
 #if defined(OS_ANDROID)
 // This test function tests recording of data use information in UMA histogram
 // when packet is originated from user or services when the app is in the
 // background and OS is Android.
-TEST_F(DataUseMeasurementTest, ApplicationStateTest) {
-  data_use_measurement()->OnApplicationStateChangeForTesting(
-      base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES);
-  TestForAUserRequest("Background.");
+TEST(DataUseMeasurementTest, ApplicationStateTest) {
+  TestingPrefServiceSimple test_prefs;
+
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kDataUsedUserForeground);
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kDataUsedUserBackground);
+  test_prefs.registry()->RegisterDictionaryPref(
+      prefs::kDataUsedServicesForeground);
+  test_prefs.registry()->RegisterDictionaryPref(
+      prefs::kDataUsedServicesBackground);
+
+  DataUseMeasurementTest data_use_measurement_test(&test_prefs);
+
+  data_use_measurement_test.data_use_measurement()
+      ->OnApplicationStateChangeForTesting(
+          base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES);
+  data_use_measurement_test.TestForAUserRequest("Background.");
 }
 #endif
 

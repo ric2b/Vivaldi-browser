@@ -192,6 +192,9 @@ DMServerJobConfiguration::MapNetErrorAndResponseCodeToDMStatus(
       case DeviceManagementService::kArcDisabled:
         code = DM_STATUS_SERVICE_ARC_DISABLED;
         break;
+      case DeviceManagementService::kInvalidDomainlessCustomer:
+        code = DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL;
+        break;
       case DeviceManagementService::kTosHasNotBeenAccepted:
         code = DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED;
         break;

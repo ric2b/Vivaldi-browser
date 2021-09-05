@@ -5,6 +5,7 @@
 #include "platform_media/common/platform_ipc_util.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
 

@@ -52,6 +52,7 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/types/event_type.h"
 #include "url/gurl.h"
 
 #if defined(OS_WIN)
@@ -102,6 +103,7 @@ class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
 class RenderFrameMetadataProviderImpl;
+class RenderFrameProxyHost;
 class RenderWidgetHost;
 class RenderWidgetHostView;
 class ScopedAllowRendererCrashes;
@@ -197,24 +199,19 @@ void SimulateUnresponsiveRenderer(WebContents* web_contents,
                                   RenderWidgetHost* widget);
 
 // Simulates clicking at the center of the given tab asynchronously; modifiers
-// may contain bits from WebInputEvent::Modifiers.
+// may contain bits from WebInputEvent::Modifiers. Sends the event through
+// RenderWidgetHostInputEventRouter and thus can target OOPIFs.
 void SimulateMouseClick(WebContents* web_contents,
                         int modifiers,
                         blink::WebMouseEvent::Button button);
 
 // Simulates clicking at the point |point| of the given tab asynchronously;
-// modifiers may contain bits from WebInputEvent::Modifiers.
+// modifiers may contain bits from WebInputEvent::Modifiers. Sends the event
+// through RenderWidgetHostInputEventRouter and thus can target OOPIFs.
 void SimulateMouseClickAt(WebContents* web_contents,
                           int modifiers,
                           blink::WebMouseEvent::Button button,
                           const gfx::Point& point);
-
-// Same as SimulateMouseClickAt() except it forces the mouse event to go through
-// RenderWidgetHostInputEventRouter.
-void SimulateRoutedMouseClickAt(WebContents* web_contents,
-                                int modifiers,
-                                blink::WebMouseEvent::Button button,
-                                const gfx::Point& point);
 
 // Simulates MouseDown at the center of the given RenderWidgetHost's area.
 // This does not send a corresponding MouseUp.
@@ -222,20 +219,15 @@ void SendMouseDownToWidget(RenderWidgetHost* target,
                            int modifiers,
                            blink::WebMouseEvent::Button button);
 
-// Simulates asynchronously a mouse enter/move/leave event.
+// Simulates asynchronously a mouse enter/move/leave event. The mouse event is
+// routed through RenderWidgetHostInputEventRouter and thus can target OOPIFs.
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point);
-
-// Same as SimulateMouseEvent() except it forces the mouse event to go through
-// RenderWidgetHostInputEventRouter.
-void SimulateRoutedMouseEvent(WebContents* web_contents,
-                              blink::WebInputEvent::Type type,
-                              const gfx::Point& point);
-void SimulateRoutedMouseEvent(WebContents* web_contents,
-                              blink::WebInputEvent::Type type,
-                              blink::WebMouseEvent::Button button,
-                              const gfx::Point& point);
+void SimulateMouseEvent(WebContents* web_contents,
+                        blink::WebInputEvent::Type type,
+                        blink::WebMouseEvent::Button button,
+                        const gfx::Point& point);
 
 // Simulate a mouse wheel event.
 void SimulateMouseWheelEvent(WebContents* web_contents,
@@ -286,8 +278,10 @@ void SimulateTouchGestureAt(WebContents* web_contents,
                             blink::WebInputEvent::Type type);
 
 #if defined(USE_AURA)
-// Generates a TouchStart at |point|.
-void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point);
+// Generates a TouchEvent of |event_type| at |point|.
+void SimulateTouchEventAt(WebContents* web_contents,
+                          ui::EventType event_type,
+                          const gfx::Point& point);
 
 void SimulateLongTapAt(WebContents* web_contents, const gfx::Point& point);
 #endif
@@ -882,19 +876,6 @@ void FetchHistogramsFromChildProcesses();
 // because adding the request handler won't be thread safe.
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server);
 
-// Waits for an interstitial page to attach to given web contents.
-void WaitForInterstitialAttach(content::WebContents* web_contents);
-
-// Waits for an interstitial page to detach from given web contents.
-void WaitForInterstitialDetach(content::WebContents* web_contents);
-
-// Runs task and waits for an interstitial page to detach from given web
-// contents. Prefer this over WaitForInterstitialDetach if web_contents may be
-// destroyed by the time WaitForInterstitialDetach is called (e.g. when waiting
-// for an interstitial detach after closing a tab).
-void RunTaskAndWaitForInterstitialDetach(content::WebContents* web_contents,
-                                         base::OnceClosure task);
-
 // Waits until all resources have loaded in the given RenderFrameHost.
 // When the load completes, this function sends a "pageLoadComplete" message
 // via domAutomationController. The caller should make sure this extra
@@ -1001,26 +982,6 @@ bool IsRenderWidgetHostFocused(const RenderWidgetHost*);
 
 // Returns the focused WebContents.
 WebContents* GetFocusedWebContents(WebContents* web_contents);
-
-// Route the |event| through the RenderWidgetHostInputEventRouter. This allows
-// correct targeting of events to out of process iframes.
-void RouteMouseEvent(WebContents* web_contents, blink::WebMouseEvent* event);
-
-#if defined(USE_AURA)
-// The following two methods allow a test to send a touch tap sequence, and
-// a corresponding gesture tap sequence, by sending it to the top-level
-// WebContents for the page.
-
-// Send a TouchStart/End sequence routed via the main frame's
-// RenderWidgetHostViewAura.
-void SendRoutedTouchTapSequence(content::WebContents* web_contents,
-                                gfx::Point point);
-
-// Send a GestureTapDown/GestureTap sequence routed via the main frame's
-// RenderWidgetHostViewAura.
-void SendRoutedGestureTapSequence(content::WebContents* web_contents,
-                                  gfx::Point point);
-#endif  // defined(USE_AURA)
 
 // Watches title changes on a WebContents, blocking until an expected title is
 // set.
@@ -1302,6 +1263,9 @@ class RenderFrameSubmissionObserver
   // Returns the number of frames submitted since the observer's creation.
   int render_frame_count() const { return render_frame_count_; }
 
+  // Runs |closure| the next time metadata changes.
+  void NotifyOnNextMetadataChange(base::OnceClosure closure);
+
  private:
   // Exits |run_loop_| unblocking the UI thread. Execution will resume in Wait.
   void Quit();
@@ -1324,6 +1288,8 @@ class RenderFrameSubmissionObserver
 
   RenderFrameMetadataProviderImpl* render_frame_metadata_provider_ = nullptr;
   base::OnceClosure quit_closure_;
+  // If non-null, run when metadata changes.
+  base::OnceClosure metadata_change_closure_;
   int render_frame_count_ = 0;
 };
 
@@ -1708,11 +1674,6 @@ class PwnMessageHelper {
                               std::string blob_uuid,
                               int64_t position);
 
-  // Sends FrameHostMsg_OpenURL
-  static void OpenURL(RenderProcessHost* process,
-                      int routing_id,
-                      const GURL& url);
-
  private:
   PwnMessageHelper();  // Not instantiable.
 
@@ -1904,6 +1865,38 @@ class DidStartNavigationObserver : public WebContentsObserver {
   NavigationHandle* navigation_handle_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(DidStartNavigationObserver);
+};
+
+// Tracks the creation of RenderFrameProxyHosts that have
+// CrossProcessFrameConnectors, and records the initial (post-construction)
+// device scale factor in the CrossProcessFrameConnector.
+class ProxyDSFObserver {
+ public:
+  ProxyDSFObserver();
+  ~ProxyDSFObserver();
+
+  // Waits until a single RenderFrameProxyHost with a CrossProcessFrameConnector
+  // has been created. If a creation occurs before this function is called, it
+  // returns immediately.
+  void WaitForOneProxyHostCreation();
+
+  size_t num_creations() { return proxy_host_created_dsf_.size(); }
+
+  float get_proxy_host_dsf(unsigned index) {
+    return proxy_host_created_dsf_[index];
+  }
+
+ private:
+  void OnCreation(RenderFrameProxyHost* rfph);
+
+  // Make this a vector, just in case we encounter multiple creations prior to
+  // calling WaitForOneProxyHostCreation(). That way we can confirm we're
+  // getting the device scale factor we expect.
+  // Note: We can modify the vector to collect a void* id for each
+  // RenderFrameProxyHost if we want to expand to cases where multiple creations
+  // must be observed.
+  std::vector<float> proxy_host_created_dsf_;
+  std::unique_ptr<base::RunLoop> runner_;
 };
 
 }  // namespace content

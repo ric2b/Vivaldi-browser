@@ -15,14 +15,6 @@
 
 namespace ash {
 
-namespace {
-
-// This class has a local in memory cache of downloaded photos. This is the max
-// number of photos before and after currently shown image.
-constexpr int kTestImageBufferLength = 3;
-
-}  // namespace
-
 class AmbientBackendModelTest : public AshTestBase {
  public:
   AmbientBackendModelTest() = default;
@@ -32,18 +24,13 @@ class AmbientBackendModelTest : public AshTestBase {
 
   void SetUp() override {
     AshTestBase::SetUp();
-
     ambient_backend_model_ = std::make_unique<AmbientBackendModel>();
-    ambient_backend_model_->set_buffer_length_for_testing(
-        kTestImageBufferLength);
   }
 
   void TearDown() override {
     ambient_backend_model_.reset();
     AshTestBase::TearDown();
   }
-
-  void ShowNextImage() { ambient_backend_model_->ShowNextImage(); }
 
   // Adds n test images to the model.
   void AddNTestImages(int n) {
@@ -78,11 +65,9 @@ class AmbientBackendModelTest : public AshTestBase {
     return ambient_backend_model_.get();
   }
 
-  gfx::ImageSkia prev_image() { return ambient_backend_model_->GetPrevImage(); }
-
-  gfx::ImageSkia curr_image() { return ambient_backend_model_->GetCurrImage(); }
-
-  gfx::ImageSkia next_image() { return ambient_backend_model_->GetNextImage(); }
+  gfx::ImageSkia GetNextImage() {
+    return ambient_backend_model_->GetNextImage();
+  }
 
  private:
   std::unique_ptr<AmbientBackendModel> ambient_backend_model_;
@@ -92,53 +77,16 @@ class AmbientBackendModelTest : public AshTestBase {
 TEST_F(AmbientBackendModelTest, AddFirstImage) {
   AddNTestImages(1);
 
-  EXPECT_TRUE(IsNullImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(IsNullImage(next_image()));
+  EXPECT_TRUE(EqualsToTestImage(GetNextImage()));
 }
 
 // Test adding the second image.
 TEST_F(AmbientBackendModelTest, AddSecondImage) {
-  AddNTestImages(2);
+  AddNTestImages(1);
+  EXPECT_TRUE(EqualsToTestImage(GetNextImage()));
 
-  // The default |current_image_index_| is 0.
-  EXPECT_TRUE(IsNullImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(EqualsToTestImage(next_image()));
-
-  // Increment the |current_image_index_| to 1.
-  ShowNextImage();
-  EXPECT_TRUE(EqualsToTestImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(IsNullImage(next_image()));
-}
-
-// Test adding the third image.
-TEST_F(AmbientBackendModelTest, AddThirdImage) {
-  AddNTestImages(3);
-
-  // The default |current_image_index_| is 0.
-  EXPECT_TRUE(IsNullImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(EqualsToTestImage(next_image()));
-
-  // Increment the |current_image_index_| to 1.
-  ShowNextImage();
-  EXPECT_TRUE(EqualsToTestImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(EqualsToTestImage(next_image()));
-
-  // Pop the |images_| front and keep the |current_image_index_| to 1.
-  ShowNextImage();
-  EXPECT_TRUE(EqualsToTestImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(IsNullImage(next_image()));
-
-  // ShowNextImage() will early return.
-  ShowNextImage();
-  EXPECT_TRUE(EqualsToTestImage(prev_image()));
-  EXPECT_TRUE(EqualsToTestImage(curr_image()));
-  EXPECT_TRUE(IsNullImage(next_image()));
+  AddNTestImages(1);
+  EXPECT_TRUE(EqualsToTestImage(GetNextImage()));
 }
 
 // Test the photo refresh interval is expected.

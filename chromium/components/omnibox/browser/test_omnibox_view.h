@@ -28,6 +28,11 @@ class TestOmniboxView : public OmniboxView {
     return inline_autocomplete_text_;
   }
 
+  static State CreateState(std::string text,
+                           size_t sel_start,
+                           size_t sel_end,
+                           size_t all_sel_length);
+
   // OmniboxView:
   void Update() override {}
   void OpenMatch(const AutocompleteMatch& match,
@@ -42,9 +47,11 @@ class TestOmniboxView : public OmniboxView {
                                 bool update_popup,
                                 bool notify_text_changed) override;
   void SetCaretPos(size_t caret_pos) override {}
+  void SetAdditionalText(const base::string16& text) override {}
   void EnterKeywordModeForDefaultSearchProvider() override {}
   bool IsSelectAll() const override;
   void GetSelectionBounds(size_t* start, size_t* end) const override;
+  size_t GetAllSelectionsLength() const override;
   void SelectAll(bool reversed) override;
   void RevertAll() override {}
   void UpdatePopup() override {}
@@ -54,7 +61,8 @@ class TestOmniboxView : public OmniboxView {
                                    const AutocompleteMatch& match,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
-  bool OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+  void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+                                            size_t user_text_start,
                                             size_t user_text_length) override;
   void OnInlineAutocompleteTextCleared() override;
   void OnRevertTemporaryText(const base::string16& display_text,
@@ -68,6 +76,7 @@ class TestOmniboxView : public OmniboxView {
   void EmphasizeURLComponents() override {}
   void SetEmphasis(bool emphasize, const gfx::Range& range) override {}
   void UpdateSchemeStyle(const gfx::Range& range) override {}
+  using OmniboxView::GetStateChanges;
 
  private:
   base::string16 text_;

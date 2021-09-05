@@ -101,12 +101,6 @@ class Profile : public content::BrowserContext {
     EXIT_CRASHED,
   };
 
-  enum ProfileType {
-    REGULAR_PROFILE,  // Login user's normal profile
-    INCOGNITO_PROFILE,  // Login user's off-the-record profile
-    GUEST_PROFILE,  // Guest session's profile
-  };
-
   class OTRProfileID {
    public:
     // Creates an OTR profile ID from |profile_id|.
@@ -122,6 +116,9 @@ class Profile : public content::BrowserContext {
     // Creates a unique OTR profile id with the given profile id prefix.
     static OTRProfileID CreateUnique(const std::string& profile_id_prefix);
 
+    // Creates a unique OTR profile id to be used for DevTools browser contexts.
+    static OTRProfileID CreateUniqueForDevTools();
+
     bool operator==(const OTRProfileID& other) const {
       return profile_id_ == other.profile_id_;
     }
@@ -133,6 +130,8 @@ class Profile : public content::BrowserContext {
     bool operator<(const OTRProfileID& other) const {
       return profile_id_ < other.profile_id_;
     }
+
+    bool AllowsBrowserWindows() const;
 
 #if defined(OS_ANDROID)
     // Constructs a Java OTRProfileID from the provided C++ OTRProfileID
@@ -254,11 +253,6 @@ class Profile : public content::BrowserContext {
   // Destroys the OffTheRecord profile.
   virtual void DestroyOffTheRecordProfile(Profile* otr_profile) = 0;
 
-  // TODO(https://crbug.com/1033903): Remove this function when all the use
-  // cases are migrated to above version. The parameter-less version destroys
-  // the primary OffTheRecord profile.
-  void DestroyOffTheRecordProfile();
-
   // True if an OffTheRecord profile with given id exists.
   // TODO(https://crbug.com/1033903): Remove the default value.
   virtual bool HasOffTheRecordProfile(
@@ -324,17 +318,9 @@ class Profile : public content::BrowserContext {
   virtual scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactory() = 0;
 
-  // Return whether 2 profiles are the same. 2 profiles are the same if they
-  // represent the same profile. This can happen if there is pointer equality
-  // or if one profile is the OffTheRecord version of another profile (or vice
-  // versa).
-  virtual bool IsSameProfile(Profile* profile) = 0;
-
-  // Returns whether two profiles are the same and of the same type.
-  bool IsSameProfileAndType(Profile* profile) {
-    return IsSameProfile(profile) &&
-           GetProfileType() == profile->GetProfileType();
-  }
+  // Return whether two profiles are the same or one is the OffTheRecord version
+  // of the other.
+  virtual bool IsSameOrParent(Profile* profile) = 0;
 
   // Returns the time the profile was started. This is not the time the profile
   // was created, rather it is the time the user started chrome and logged into
@@ -413,21 +399,18 @@ class Profile : public content::BrowserContext {
   // IsRegularProfile() and IsIncognitoProfile() are mutually exclusive.
   // IsSystemProfile() implies that IsRegularProfile() is true.
   // IsOffTheRecord() is true for the off the record profile of incognito mode
-  // and guest sessions.
+  // and guest sessions, and also non-primary OffTheRecord profiles.
 
   // Returns whether it's a regular profile.
   bool IsRegularProfile() const;
 
   // Returns whether it is an Incognito profile. An Incognito profile is an
-  // off-the-record profile that is not a guest profile.
-  //
-  // TODO(https://crbug.com/1033903): Update to return false for non-primary
-  // OTRs and update documentation above.
+  // off-the-record profile that is used for incognito mode.
   bool IsIncognitoProfile() const;
 
   // Returns true if this is a primary OffTheRecord profile, which covers the
   // OffTheRecord profile used for incognito mode and guest sessions.
-  virtual bool IsPrimaryOTRProfile();
+  bool IsPrimaryOTRProfile() const;
 
   // Returns whether it is a guest session. This covers both the guest profile
   // and its parent.
@@ -512,9 +495,6 @@ class Profile : public content::BrowserContext {
   virtual void SetCreationTimeForTesting(base::Time creation_time) = 0;
 
  protected:
-  // Returns the profile type.
-  virtual ProfileType GetProfileType() const = 0;
-
   void set_is_guest_profile(bool is_guest_profile) {
     is_guest_profile_ = is_guest_profile;
   }

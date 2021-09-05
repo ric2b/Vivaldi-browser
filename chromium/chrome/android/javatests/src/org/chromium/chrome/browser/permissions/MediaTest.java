@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.permissions;
 
-import android.support.test.filters.MediumTest;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -12,9 +12,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.permissions.PermissionTestRule.PermissionUpdateWaiter;
 import org.chromium.chrome.browser.tab.Tab;
@@ -26,7 +25,6 @@ import org.chromium.content_public.common.ContentSwitches;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class MediaTest {
     @Rule
     public PermissionTestRule mPermissionRule = new PermissionTestRule();
@@ -53,19 +51,6 @@ public class MediaTest {
     }
 
     /**
-     * Verify asking for microphone creates an InfoBar and works when the permission is granted.
-     * @throws Exception
-     */
-    @Test
-    @MediumTest
-    @Feature({"MediaPermissions", "Main"})
-    @CommandLineFlags.Add({FAKE_DEVICE})
-    @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
-    public void testMicrophonePermissionsPlumbingInfoBar() throws Exception {
-        testMediaPermissionsPlumbing("Mic count:", "initiate_getMicrophone()", 1, false, false);
-    }
-
-    /**
      * Verify asking for microphone creates a dialog and works when the permission is granted.
      * @throws Exception
      */
@@ -73,48 +58,23 @@ public class MediaTest {
     @MediumTest
     @Feature({"MediaPermissions", "Main"})
     @CommandLineFlags.Add({FAKE_DEVICE})
+    @FlakyTest
     public void testMicrophoneMediaPermissionsPlumbingDialog() throws Exception {
         testMediaPermissionsPlumbing("Mic count:", "initiate_getMicrophone()", 1, true, true);
     }
 
     /**
-     * Verify asking for camera creates an InfoBar and works when the permission is granted.
+     * Verify asking for camera with no gesture creates a dialog and works when the permission is
+     * granted.
      * @throws Exception
      */
     @Test
     @MediumTest
     @Feature({"MediaPermissions", "Main"})
     @CommandLineFlags.Add({FAKE_DEVICE})
-    @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
-    public void testCameraPermissionsPlumbingInfoBar() throws Exception {
-        testMediaPermissionsPlumbing("Camera count:", "initiate_getCamera()", 1, false, false);
-    }
-
-    /**
-     * Verify asking for camera with no gesture creates a dialog when the modal flag is turned on,
-     * and works when the permission is granted.
-     * @throws Exception
-     */
-    @Test
-    @MediumTest
-    @Feature({"MediaPermissions", "Main"})
-    @CommandLineFlags.Add({FAKE_DEVICE})
+    @FlakyTest
     public void testCameraPermissionsPlumbingDialog() throws Exception {
         testMediaPermissionsPlumbing("Camera count:", "initiate_getCamera()", 1, false, true);
-    }
-
-    /**
-     * Verify asking for both mic and camera creates a combined InfoBar and works when the
-     * permissions are granted.
-     * @throws Exception
-     */
-    @Test
-    @MediumTest
-    @Feature({"MediaPermissions", "Main"})
-    @CommandLineFlags.Add({FAKE_DEVICE})
-    @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
-    public void testCombinedPermissionsPlumbing() throws Exception {
-        testMediaPermissionsPlumbing("Combined count:", "initiate_getCombined()", 1, false, false);
     }
 
     /**
@@ -126,6 +86,7 @@ public class MediaTest {
     @MediumTest
     @Feature({"MediaPermissions", "Main"})
     @CommandLineFlags.Add({FAKE_DEVICE})
+    @FlakyTest
     public void testCombinedPermissionsPlumbingDialog() throws Exception {
         testMediaPermissionsPlumbing("Combined count:", "initiate_getCombined()", 1, true, true);
     }

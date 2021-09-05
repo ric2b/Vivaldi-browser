@@ -20,11 +20,8 @@
 ../../../../markupsafe/_compat.py
 ../../../../markupsafe/_native.py
 ../../../../pyjson5/src/json5/__init__.py
-../../../../pyjson5/src/json5/arg_parser.py
-../../../../pyjson5/src/json5/host.py
 ../../../../pyjson5/src/json5/lib.py
 ../../../../pyjson5/src/json5/parser.py
-../../../../pyjson5/src/json5/tool.py
 ../../../../pyjson5/src/json5/version.py
 ../../build/scripts/blinkbuild/__init__.py
 ../../build/scripts/blinkbuild/name_style_converter.py
@@ -45,7 +42,7 @@ bind_gen/name_style.py
 bind_gen/package_initializer.py
 bind_gen/path_manager.py
 bind_gen/style_format.py
-bind_gen/union.py
+bind_gen/task_queue.py
 generate_bindings.py
 web_idl/__init__.py
 web_idl/argument.py

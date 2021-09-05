@@ -66,12 +66,14 @@
 <translation id="4582480609585453144">Բացել հղումը հետին ներդիրում</translation>
 <translation id="4636708767492582204">Ուղարկել փոստով</translation>
 <translation id="4677434526832593569">Գազան 8</translation>
+<translation id="474217410105706308">Լռեցնել ներդիրը</translation>
 <translation id="4881695831933465202">Բացել</translation>
 <translation id="5014281392052865061">Ներկրված Արագ կանչ</translation>
 <translation id="5092656712000637858">Էջը հավելել վեբ վահանակին</translation>
 <translation id="5177818338935286353">Հրեշ 7</translation>
 <translation id="5213743983876949565">Գազան 1</translation>
 <translation id="5238244642230426581">Ներկրված էջանիշեր</translation>
+<translation id="527605719918376753">Լռեցնել ներդիրը</translation>
 <translation id="5305569355661722298">Հաստատեք պատուհանի փակումը</translation>
 <translation id="5388358297987318779">Բացել պատկերը</translation>
 <translation id="5416008465899576639">Հասանելի է Vivaldi-ի նոր տարբերակ։</translation>
@@ -87,6 +89,7 @@
 <translation id="6229528619562190452">Սեղմեք այստեղ՝ Vivaldi-ն թարմացնելու համար։</translation>
 <translation id="6234173136417926046">Պատկերն օգտագործել որպես սկզբնական էջի ֆոն</translation>
 <translation id="630690498669249215">Opera-ի էջանիշերի ֆայլ</translation>
+<translation id="6339818817272922368">Լոկալ հաշիվ</translation>
 <translation id="6438786710866753178">Բնապատկեր 4</translation>
 <translation id="6477028720702061455">Ընտրեք Opera-ի պրոֆիլի պանակը՝ ներկրելու համար</translation>
 <translation id="6510706699590490869">Թ&amp;արմացնել Vivaldi-ն</translation>
@@ -101,6 +104,7 @@
 <translation id="7496505986576158197">Vivaldi-ն ստեղծվել է՝ օգտագործելով <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> բաց կոդով նախագիծն ու այլ <ph name="BEGIN_LINK_OSS" />բաց կոդով ծրագրեր<ph name="END_LINK_OSS" />։</translation>
 <translation id="7715497554424665066">Ա&amp;նտեսել թարմացումը</translation>
 <translation id="7724603315864178912">Կտրել</translation>
+<translation id="7793738202466490491">Ավելացնել որպես օրացույցի իրադարձություն</translation>
 <translation id="7865983598101744945">Հաստատեք ելքը</translation>
 <translation id="7957213167373139414">Իմ օրացույցը</translation>
 <translation id="8027581147000338959">Բացել նոր պատուհանում</translation>
@@ -110,6 +114,7 @@
 <translation id="8331671104904436324">Բացել հետին ներդիրում</translation>
 <translation id="8373293945112511707">Բնապատկեր 1</translation>
 <translation id="8427094907586191051">Բնապատկեր 17</translation>
+<translation id="8446668873108041390">AppleScript-ի միջոցով JavaScript-ի կատարումն անջատված է։ Անցնելով Կարգավորումներ &gt; Գաղտնիություն &gt; Apple Events՝ կարող եք թույլատրել JavaScript-ը Apple Events-ից։</translation>
 <translation id="8539196077526389150">Բնապատկեր 13</translation>
 <translation id="8624587806981488221">Կրկին բե&amp;ռնել պատկերը</translation>
 <translation id="864444594187862076">Opera 15+ (փորձնական)</translation>

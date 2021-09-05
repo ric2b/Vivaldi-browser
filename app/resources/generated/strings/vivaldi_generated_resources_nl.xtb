@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privé)</translation>
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1627276047960621195">Bestandsdescriptors</translation>
-<translation id="1635033183663317347">Geïnstalleerd door je ouder/verzorger.</translation>
 <translation id="1682548588986054654">Nieuw privévenster</translation>
 <translation id="1698122934742150150">Alleen huidige privésessie</translation>
 <translation id="1706625117072057435">Zoomniveaus</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Verzoek voor scherm delen van <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Pl&amp;akken en naar <ph name="URL" /> gaan</translation>
-<translation id="3725367690636977613">pagina's</translation>
 <translation id="3727187387656390258">Pop-up inspecteren</translation>
 <translation id="3744111561329211289">Synchronisatie op de achtergrond</translation>
 <translation id="3760460896538743390">&amp;Achtergrondpagina inspecteren</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Accepteren voor groep</translation>
-<translation id="4091434297613116013">vellen papier</translation>
 <translation id="4096508467498758490">Extensies in ontwikkelaarsmodus uitschakelen</translation>
 <translation id="4100839878934973028">Een ander programma op je computer heeft een app toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
 <translation id="4109898769411476438">Browser sluiten voor het importeren</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Besturingselementen &amp;weergeven</translation>
 <translation id="7311079019872751559">Plug-in-toegang zonder sandbox</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">Paginabron &amp;weergeven</translation>
@@ -433,7 +429,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8071432093239591881">Afdrukken als afbeelding</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8137559199583651773">Extensies beheren</translation>
-<translation id="8180239481735238521">pagina</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Download wordt uitgevoerd}other{Downloads worden uitgevoerd}}</translation>
 <translation id="8230134520748321204">Wachtwoord opslaan voor <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Deze extensie wordt niet vermeld in de <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> en is mogelijk zonder je medeweten toegevoegd.</translation>
@@ -465,7 +460,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8798099450830957504">Standaard</translation>
 <translation id="8800004011501252845">Bestemmingen weergeven voor</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">vel papier</translation>
 <translation id="8823514049557262177">Koppelings&amp;tekst kopiëren</translation>
 <translation id="8823704566850948458">Wachtwoord voorstellen...</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>

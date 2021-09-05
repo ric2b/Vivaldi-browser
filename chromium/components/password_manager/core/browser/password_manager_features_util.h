@@ -61,16 +61,21 @@ void OptOutOfAccountStorageAndClearSettings(
     PrefService* pref_service,
     const syncer::SyncService* sync_service);
 
-// Whether it makes sense to ask the user about the store when saving a
-// password (i.e. profile or account store). This is true if the user has
-// opted in already, or hasn't opted in but all other requirements are met (i.e.
-// there is a signed-in user, Sync-the-feature is not enabled, etc).
-// |pref_service| must not be null.
-// |sync_service| may be null (commonly the case in incognito mode), in which
-// case this will simply return false.
-// See PasswordFeatureManager::ShouldShowPasswordStorePicker.
-bool ShouldShowPasswordStorePicker(const PrefService* pref_service,
-                                   const syncer::SyncService* sync_service);
+// Like OptOutOfAccountStorageAndClearSettings(), but applies to a specific
+// given |gaia_id| rather than to the current signed-in user.
+void OptOutOfAccountStorageAndClearSettingsForAccount(
+    PrefService* pref_service,
+    const std::string& gaia_id);
+
+// Whether it makes sense to ask the user to move a password to their account or
+// about the store when saving a password (i.e. profile or account store). This
+// is true if the user has opted in already, or hasn't opted in but all other
+// requirements are met (i.e. there is a signed-in user, Sync-the-feature is not
+// enabled, etc). |pref_service| must not be null. |sync_service| may be null
+// (commonly the case in incognito mode), in which case this will simply return
+// false. See PasswordFeatureManager::ShouldShowPasswordStorePicker.
+bool ShouldShowAccountStorageBubbleUi(const PrefService* pref_service,
+                                      const syncer::SyncService* sync_service);
 
 // Sets the default storage location for signed-in but non-syncing users. This
 // store is used for saving new credentials and adding blacking listing entries.
@@ -90,6 +95,14 @@ void SetDefaultPasswordStore(PrefService* pref_service,
 autofill::PasswordForm::Store GetDefaultPasswordStore(
     const PrefService* pref_service,
     const syncer::SyncService* sync_service);
+
+// Clears all account-storage-related settings for all users *except* the ones
+// in the passed-in |gaia_ids|. Most notably, this includes the opt-in, but also
+// all other related settings like the default password store.
+// |pref_service| must not be null.
+void KeepAccountStorageSettingsOnlyForUsers(
+    PrefService* pref_service,
+    const std::vector<std::string>& gaia_ids);
 
 // Clears all account-storage-related settings for all users. Most notably, this
 // includes the opt-in, but also all other related settings like the default

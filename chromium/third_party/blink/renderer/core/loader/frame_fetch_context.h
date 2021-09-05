@@ -75,7 +75,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
       const KURL& url,
       const ResourceLoaderOptions& options,
       ReportingDisposition reporting_disposition,
-      ResourceRequest::RedirectStatus redirect_status) const override;
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info)
+      const override;
   mojom::FetchCacheMode ResourceRequestCachePolicy(
       const ResourceRequest&,
       ResourceType,
@@ -91,7 +92,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void PopulateResourceRequest(ResourceType,
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
-                               ResourceRequest&) override;
+                               ResourceRequest&,
+                               const FetchInitiatorInfo&) override;
 
   // Exposed for testing.
   void ModifyRequestForCSP(ResourceRequest&);
@@ -101,7 +103,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   FetchContext* Detach() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   bool CalculateIfAdSubresource(
       const ResourceRequest& resource_request,
@@ -110,7 +112,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   bool SendConversionRequestInsteadOfRedirecting(
       const KURL& url,
-      ResourceRequest::RedirectStatus redirect_status,
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       ReportingDisposition reporting_disposition) const override;
 
   mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
@@ -125,7 +127,6 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   // relevant document loader or frame in either cases without null-checks.
   //
   // TODO(kinuko): Remove constness, these return non-const members.
-  DocumentLoader* MasterDocumentLoader() const;
   LocalFrame* GetFrame() const;
   LocalFrameClient* GetLocalFrameClient() const;
 
@@ -151,7 +152,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
       override;
   bool ShouldBlockFetchByMixedContentCheck(
       mojom::blink::RequestContextType request_context,
-      ResourceRequest::RedirectStatus redirect_status,
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       const KURL& url,
       ReportingDisposition reporting_disposition,
       const base::Optional<String>& devtools_id) const override;
@@ -195,6 +196,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   CoreProbeSink* Probe() const;
 
+  // These are set on the constructor, and valid until Detach() is called.
   Member<DocumentLoader> document_loader_;
   Member<Document> document_;
 

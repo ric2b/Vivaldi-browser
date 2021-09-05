@@ -4,9 +4,14 @@
 
 #include "components/paint_preview/browser/file_manager.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/hash/hash.h"
+#include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/paint_preview/common/file_utils.h"
 #include "third_party/zlib/google/zip.h"
@@ -17,6 +22,11 @@ namespace {
 
 constexpr char kProtoName[] = "proto.pb";
 constexpr char kZipExt[] = ".zip";
+
+bool CompareByLastModified(const base::FileEnumerator::FileInfo& a,
+                           const base::FileEnumerator::FileInfo& b) {
+  return a.GetLastModifiedTime() < b.GetLastModifiedTime();
+}
 
 }  // namespace
 
@@ -68,6 +78,10 @@ base::Optional<base::File::Info> FileManager::GetInfo(
   if (!base::GetFileInfo(path, &info))
     return base::nullopt;
   return info;
+}
+
+size_t FileManager::GetTotalDiskUsage() const {
+  return base::ComputeDirectorySize(root_directory_);
 }
 
 bool FileManager::DirectoryExists(const DirectoryKey& key) const {
@@ -185,8 +199,23 @@ bool FileManager::SerializePaintPreviewProto(const DirectoryKey& key,
   auto path = CreateOrGetDirectory(key, false);
   if (!path.has_value())
     return false;
-  return WriteProtoToFile(path->AppendASCII(kProtoName), proto) &&
-         (!compress || CompressDirectory(key));
+  bool result = WriteProtoToFile(path->AppendASCII(kProtoName), proto) &&
+                (!compress || CompressDirectory(key));
+
+  if (compress) {
+    auto info = GetInfo(key);
+    if (info.has_value()) {
+      base::UmaHistogramMemoryKB(
+          "Browser.PaintPreview.Capture.CompressedOnDiskSize",
+          info->size / 1000);
+    }
+  } else {
+    size_t size_bytes = base::ComputeDirectorySize(path.value());
+    base::UmaHistogramMemoryKB(
+        "Browser.PaintPreview.Capture.UncompressedOnDiskSize",
+        size_bytes / 1000);
+  }
+  return result;
 }
 
 std::unique_ptr<PaintPreviewProto> FileManager::DeserializePaintPreviewProto(
@@ -210,6 +239,45 @@ base::flat_set<DirectoryKey> FileManager::ListUsedKeys() const {
         DirectoryKey{name.BaseName().RemoveExtension().MaybeAsASCII()});
   }
   return base::flat_set<DirectoryKey>(std::move(keys));
+}
+
+std::vector<DirectoryKey> FileManager::GetOldestArtifactsForCleanup(
+    size_t max_size) {
+  // The rest of this function is expensive so cleanup should exit early if not
+  // required.
+  size_t size = base::ComputeDirectorySize(root_directory_);
+  if (size <= max_size)
+    return std::vector<DirectoryKey>();
+
+  base::FileEnumerator file_enum(
+      root_directory_, false,
+      base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);
+  std::vector<base::FileEnumerator::FileInfo> file_infos;
+  for (base::FilePath name = file_enum.Next(); !name.empty();
+       name = file_enum.Next()) {
+    file_infos.push_back(file_enum.GetInfo());
+  }
+
+  std::sort(file_infos.begin(), file_infos.end(), CompareByLastModified);
+
+  std::vector<DirectoryKey> keys_to_remove;
+  for (const auto& file_info : file_infos) {
+    base::FilePath full_path = root_directory_.Append(file_info.GetName());
+
+    size_t size_delta = file_info.GetSize();
+    // Computing a directory size is expensive. Most files should hopefully be
+    // compressed already.
+    if (file_info.IsDirectory())
+      size_delta = base::ComputeDirectorySize(full_path);
+
+    // Directory names should always be ASCII.
+    keys_to_remove.emplace_back(
+        file_info.GetName().RemoveExtension().MaybeAsASCII());
+    size -= size_delta;
+    if (size <= max_size)
+      break;
+  }
+  return keys_to_remove;
 }
 
 FileManager::StorageType FileManager::GetPathForKey(

@@ -8,7 +8,6 @@
 
 #include "base/check_op.h"
 #include "base/numerics/safe_math.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "content/browser/web_package/web_bundle_blob_data_source.h"
@@ -188,7 +187,7 @@ void WebBundleReader::ReadResponse(
 
   auto it = entries_.find(net::SimplifyUrlForRequest(resource_request.url));
   if (it == entries_.end() || it->second->response_locations.empty()) {
-    PostTask(
+    base::ThreadPool::PostTask(
         FROM_HERE,
         base::BindOnce(
             std::move(callback), nullptr,
@@ -206,7 +205,7 @@ void WebBundleReader::ReadResponse(
                                             accept_langs);
     auto found = matcher.FindBestMatchingIndex(entry->variants_value);
     if (!found || *found >= entry->response_locations.size()) {
-      PostTask(
+      base::ThreadPool::PostTask(
           FROM_HERE,
           base::BindOnce(
               std::move(callback), nullptr,
@@ -257,8 +256,8 @@ void WebBundleReader::Reconnect() {
       pending_remote.InitWithNewPipeAndPassReceiver());
   parser_->OpenDataSource(std::move(pending_remote));
 
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&WebBundleReader::DidReconnect, this,
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&WebBundleReader::DidReconnect, this,
                                 base::nullopt /* error */));
 }
 
@@ -267,8 +266,8 @@ void WebBundleReader::ReconnectForFile(base::File file) {
   base::Optional<std::string> error;
   if (file_error != base::File::FILE_OK)
     error = base::File::ErrorToString(file_error);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&WebBundleReader::DidReconnect, this, std::move(error)));
 }
 
@@ -279,7 +278,7 @@ void WebBundleReader::DidReconnect(base::Optional<std::string> error) {
 
   if (error) {
     for (auto& pair : read_tasks) {
-      PostTask(
+      base::ThreadPool::PostTask(
           FROM_HERE,
           base::BindOnce(std::move(pair.second), nullptr,
                          data_decoder::mojom::BundleResponseParseError::New(
@@ -352,8 +351,8 @@ void WebBundleReader::ReadMetadataInternal(MetadataCallback callback,
   DCHECK(source_->is_trusted_file() || source_->is_file());
   base::File::Error error = parser_->OpenFile(std::move(file));
   if (base::File::FILE_OK != error) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             std::move(callback),
             data_decoder::mojom::BundleMetadataParseError::New(

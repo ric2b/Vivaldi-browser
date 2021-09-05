@@ -5,8 +5,7 @@
 export const description = `
 vertexState validation tests.
 `;
-import * as C from '../../../common/constants.js';
-import { TestGroup } from '../../../common/framework/test_group.js';
+import { makeTestGroup } from '../../../common/framework/test_group.js';
 import { ValidationTest } from './validation_test.js';
 const MAX_VERTEX_ATTRIBUTES = 16;
 const MAX_VERTEX_BUFFER_END = 2048;
@@ -60,13 +59,13 @@ class F extends ValidationTest {
 
 }
 
-export const g = new TestGroup(F);
-g.test('an empty vertex input is valid', t => {
+export const g = makeTestGroup(F);
+g.test('an_empty_vertex_input_is_valid').fn(t => {
   const vertexState = {};
   const descriptor = t.getDescriptor(vertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
   t.device.createRenderPipeline(descriptor);
 });
-g.test('a null buffer is valid', t => {
+g.test('a_null_buffer_is_valid').fn(t => {
   {
     // One null buffer is OK
     const vertexState = {
@@ -122,7 +121,7 @@ g.test('a null buffer is valid', t => {
     t.device.createRenderPipeline(descriptor);
   }
 });
-g.test('pipeline vertex buffers are backed by attributes in vertex input', async t => {
+g.test('pipeline_vertex_buffers_are_backed_by_attributes_in_vertex_input').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 2 * SIZEOF_FLOAT,
@@ -177,12 +176,12 @@ g.test('pipeline vertex buffers are backed by attributes in vertex input', async
     });
   }
 });
-g.test('an arrayStride of 0 is valid', t => {
+g.test('an_arrayStride_of_0_is_valid').fn(t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: 0
       }]
@@ -200,16 +199,16 @@ g.test('an arrayStride of 0 is valid', t => {
     t.device.createRenderPipeline(descriptor);
   }
 });
-g.test('offset should be within vertex buffer arrayStride if arrayStride is not zero', async t => {
+g.test('offset_should_be_within_vertex_buffer_arrayStride_if_arrayStride_is_not_zero').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 2 * SIZEOF_FLOAT,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: 0
       }, {
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: SIZEOF_FLOAT,
         shaderLocation: 1
       }]
@@ -223,7 +222,7 @@ g.test('offset should be within vertex buffer arrayStride if arrayStride is not 
   {
     // Test vertex attribute offset exceed vertex buffer arrayStride range
     const badVertexState = clone(vertexState);
-    badVertexState.vertexBuffers[0].attributes[1].format = C.VertexFormat.Float2;
+    badVertexState.vertexBuffers[0].attributes[1].format = 'float2';
     const descriptor = t.getDescriptor(badVertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
     t.expectValidationError(() => {
       t.device.createRenderPipeline(descriptor);
@@ -245,17 +244,18 @@ g.test('offset should be within vertex buffer arrayStride if arrayStride is not 
     const descriptor = t.getDescriptor(goodVertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
     t.device.createRenderPipeline(descriptor);
   }
-});
-g.test('check two attributes overlapping', async t => {
+}); // TODO: This should be made into an operation test.
+
+g.test('check_two_attributes_overlapping').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 2 * SIZEOF_FLOAT,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: 0
       }, {
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: SIZEOF_FLOAT,
         shaderLocation: 1
       }]
@@ -268,15 +268,13 @@ g.test('check two attributes overlapping', async t => {
   }
   {
     // Test two attributes overlapping
-    const badVertexState = clone(vertexState);
-    badVertexState.vertexBuffers[0].attributes[0].format = C.VertexFormat.Int2;
-    const descriptor = t.getDescriptor(badVertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
-    t.expectValidationError(() => {
-      t.device.createRenderPipeline(descriptor);
-    });
+    const overlappingVertexState = clone(vertexState);
+    overlappingVertexState.vertexBuffers[0].attributes[0].format = 'int2';
+    const descriptor = t.getDescriptor(overlappingVertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
+    t.device.createRenderPipeline(descriptor);
   }
 });
-g.test('check out of bounds condition on total number of vertex buffers', async t => {
+g.test('check_out_of_bounds_condition_on_total_number_of_vertex_buffers').fn(async t => {
   const vertexBuffers = [];
 
   for (let i = 0; i < MAX_VERTEX_BUFFERS; i++) {
@@ -316,7 +314,7 @@ g.test('check out of bounds condition on total number of vertex buffers', async 
     });
   }
 });
-g.test('check out of bounds on number of vertex attributes on a single vertex buffer', async t => {
+g.test('check_out_of_bounds_on_number_of_vertex_attributes_on_a_single_vertex_buffer').fn(async t => {
   const vertexAttributes = [];
 
   for (let i = 0; i < MAX_VERTEX_ATTRIBUTES; i++) {
@@ -356,14 +354,14 @@ g.test('check out of bounds on number of vertex attributes on a single vertex bu
     });
   }
 });
-g.test('check out of bounds on number of vertex attributes across vertex buffers', async t => {
+g.test('check_out_of_bounds_on_number_of_vertex_attributes_across_vertex_buffers').fn(async t => {
   const vertexBuffers = [];
 
   for (let i = 0; i < MAX_VERTEX_ATTRIBUTES; i++) {
     vertexBuffers.push({
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: i
       }]
@@ -381,7 +379,7 @@ g.test('check out of bounds on number of vertex attributes across vertex buffers
   {
     // Test vertex attribute number exceed the limit
     vertexBuffers[MAX_VERTEX_ATTRIBUTES - 1].attributes.push({
-      format: C.VertexFormat.Float,
+      format: 'float',
       offset: 0,
       shaderLocation: MAX_VERTEX_ATTRIBUTES
     });
@@ -394,7 +392,7 @@ g.test('check out of bounds on number of vertex attributes across vertex buffers
     });
   }
 });
-g.test('check out of bounds condition on input strides', async t => {
+g.test('check_out_of_bounds_condition_on_input_strides').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: MAX_VERTEX_BUFFER_ARRAY_STRIDE,
@@ -415,12 +413,12 @@ g.test('check out of bounds condition on input strides', async t => {
     });
   }
 });
-g.test('check multiple of 4 bytes constraint on input arrayStride', async t => {
+g.test('check_multiple_of_4_bytes_constraint_on_input_arrayStride').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 4,
       attributes: [{
-        format: C.VertexFormat.Uchar2,
+        format: 'uchar2',
         offset: 0,
         shaderLocation: 0
       }]
@@ -440,12 +438,12 @@ g.test('check multiple of 4 bytes constraint on input arrayStride', async t => {
     });
   }
 });
-g.test('identical duplicate attributes are invalid', async t => {
+g.test('identical_duplicate_attributes_are_invalid').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: 0
       }]
@@ -459,7 +457,7 @@ g.test('identical duplicate attributes are invalid', async t => {
   {
     // Oh no, attribute 0 is set twice
     vertexState.vertexBuffers[0].attributes.push({
-      format: C.VertexFormat.Float,
+      format: 'float',
       offset: 0,
       shaderLocation: 0
     });
@@ -469,17 +467,17 @@ g.test('identical duplicate attributes are invalid', async t => {
     });
   }
 });
-g.test('we cannot set same shader location', async t => {
+g.test('we_cannot_set_same_shader_location').fn(async t => {
   {
     const vertexState = {
       vertexBuffers: [{
         arrayStride: 0,
         attributes: [{
-          format: C.VertexFormat.Float,
+          format: 'float',
           offset: 0,
           shaderLocation: 0
         }, {
-          format: C.VertexFormat.Float,
+          format: 'float',
           offset: SIZEOF_FLOAT,
           shaderLocation: 1
         }]
@@ -524,12 +522,12 @@ g.test('we cannot set same shader location', async t => {
     });
   }
 });
-g.test('check out of bounds condition on attribute shader location', async t => {
+g.test('check_out_of_bounds_condition_on_attribute_shader_location').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: 0,
         shaderLocation: MAX_VERTEX_ATTRIBUTES - 1
       }]
@@ -549,12 +547,12 @@ g.test('check out of bounds condition on attribute shader location', async t => 
     });
   }
 });
-g.test('check attribute offset out of bounds', async t => {
+g.test('check_attribute_offset_out_of_bounds').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float2,
+        format: 'float2',
         offset: MAX_VERTEX_BUFFER_END - 2 * SIZEOF_FLOAT,
         shaderLocation: 0
       }]
@@ -580,12 +578,12 @@ g.test('check attribute offset out of bounds', async t => {
     });
   }
 });
-g.test('check multiple of 4 bytes constraint on offset', async t => {
+g.test('check_multiple_of_4_bytes_constraint_on_offset').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,
       attributes: [{
-        format: C.VertexFormat.Float,
+        format: 'float',
         offset: SIZEOF_FLOAT,
         shaderLocation: 0
       }]
@@ -599,7 +597,7 @@ g.test('check multiple of 4 bytes constraint on offset', async t => {
   {
     // Test offset of 2 bytes with uchar2 format
     vertexState.vertexBuffers[0].attributes[0].offset = 2;
-    vertexState.vertexBuffers[0].attributes[0].format = C.VertexFormat.Uchar2;
+    vertexState.vertexBuffers[0].attributes[0].format = 'uchar2';
     const descriptor = t.getDescriptor(vertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
     t.expectValidationError(() => {
       t.device.createRenderPipeline(descriptor);
@@ -608,14 +606,14 @@ g.test('check multiple of 4 bytes constraint on offset', async t => {
   {
     // Test offset of 2 bytes with float format
     vertexState.vertexBuffers[0].attributes[0].offset = 2;
-    vertexState.vertexBuffers[0].attributes[0].format = C.VertexFormat.Float;
+    vertexState.vertexBuffers[0].attributes[0].format = 'float';
     const descriptor = t.getDescriptor(vertexState, VERTEX_SHADER_CODE_WITH_NO_INPUT);
     t.expectValidationError(() => {
       t.device.createRenderPipeline(descriptor);
     });
   }
 });
-g.test('check attribute offset overflow', async t => {
+g.test('check_attribute_offset_overflow').fn(async t => {
   const vertexState = {
     vertexBuffers: [{
       arrayStride: 0,

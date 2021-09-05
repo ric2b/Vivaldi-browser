@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privat fönster)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fildeskriptorer</translation>
-<translation id="1635033183663317347">Har installerats av din vårdnadshavare.</translation>
 <translation id="1682548588986054654">Nytt inkognitofönster</translation>
 <translation id="1698122934742150150">Endast nuvarande inkognitosession</translation>
 <translation id="1706625117072057435">Zoomnivåer</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Tillägg: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Förfrågan från <ph name="APP_NAME" /> om skärmdelning</translation>
 <translation id="3711931198657368127">Klistra in och &amp;gå till <ph name="URL" /></translation>
-<translation id="3725367690636977613">sidor</translation>
 <translation id="3727187387656390258">Inspektera popup-fönster</translation>
 <translation id="3744111561329211289">Synkronisera i bakgrunden</translation>
 <translation id="3760460896538743390">Inspektera &amp;bakgrundssida</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Godta för grupp</translation>
-<translation id="4091434297613116013">pappersark</translation>
 <translation id="4096508467498758490">Inaktivera tillägg i utvecklarläge</translation>
 <translation id="4100839878934973028">Ett annat program i datorn har lagt till en app som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="4109898769411476438">Stäng webbläsare innan import</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Visa &amp;kontroller</translation>
 <translation id="7311079019872751559">Åtkomst till insticksprogram utanför sandlåda</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Det uppstod ett problem vid utskriften.  Kontrollera skrivaren och försök igen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">Visa &amp;sidkälla</translation>
@@ -433,7 +429,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8071432093239591881">Skriv ut som bild</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8137559199583651773">Hantera tillägg</translation>
-<translation id="8180239481735238521">sida</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1{Hämtning pågår} other {Hämtningar pågår}}</translation>
 <translation id="8230134520748321204">Vill du spara lösenordet för <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8798099450830957504">Förval</translation>
 <translation id="8800004011501252845">Visar destinationer för</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">pappersark</translation>
 <translation id="8823514049557262177">Kopiera länkte&amp;xt</translation>
 <translation id="8823704566850948458">Föreslå lösenord…</translation>
 <translation id="8859174528519900719">Underram: <ph name="SUBFRAME_SITE" /></translation>

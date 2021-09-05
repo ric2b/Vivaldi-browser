@@ -16,6 +16,10 @@ namespace errors {
 // Only a single PaymentRequest UI can be displayed at a time.
 extern const char kAnotherUiShowing[];
 
+// App store billing methods (e.g., https://play.google.com/billing) is
+// only supported in Trusted Web Activity.
+extern const char kAppStoreMethodOnlySupportedInTwa[];
+
 // Mojo call PaymentRequest::Init() must precede PaymentRequest::Show().
 extern const char kAttemptedInitializationTwice[];
 
@@ -37,6 +41,13 @@ extern const char kCannotUpdateWithoutShow[];
 
 // Used when an invalid state is encountered generically.
 extern const char kInvalidState[];
+
+// Used when the {"supportedMethods": "", data: {}} is required, but not
+// provided.
+extern const char kMethodDataRequired[];
+
+// Used when non-empty "supportedMethods": "" is required, but not provided.
+extern const char kMethodNameRequired[];
 
 // The payment handler responded with an empty "details" field.
 extern const char kMissingDetailsFromPaymentApp[];
@@ -68,6 +79,9 @@ extern const char kShippingAddressInvalid[];
 
 // The payment handler responded with an empty "shipping option" field.
 extern const char kShippingOptionEmpty[];
+
+// Used when non-empty "shippingOptionId": "" is required, but not provided.
+extern const char kShippingOptionIdRequired[];
 
 // Used when rejecting show() with NotSupportedError, because the user did not
 // have all valid autofill data.

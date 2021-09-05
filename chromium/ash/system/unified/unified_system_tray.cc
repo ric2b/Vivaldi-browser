@@ -33,6 +33,7 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/system/unified/unified_system_tray_view.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -113,10 +114,7 @@ bool UnifiedSystemTray::UiDelegate::ShowMessageCenter(bool show_by_click) {
   return true;
 }
 
-void UnifiedSystemTray::UiDelegate::HideMessageCenter() {
-  if (!features::IsUnifiedMessageCenterRefactorEnabled())
-    owner_->HideBubbleInternal();
-}
+void UnifiedSystemTray::UiDelegate::HideMessageCenter() {}
 
 UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
     : TrayBackgroundView(shelf),
@@ -137,24 +135,24 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
       kUnifiedTrayContentPadding -
           ShelfConfig::Get()->status_area_hit_region_padding(),
       0);
-  tray_container()->AddChildView(current_locale_view_);
-  tray_container()->AddChildView(ime_mode_view_);
-  tray_container()->AddChildView(managed_device_view_);
-  tray_container()->AddChildView(notification_counter_item_);
-  tray_container()->AddChildView(quiet_mode_view_);
+  AddTrayItemToContainer(current_locale_view_);
+  AddTrayItemToContainer(ime_mode_view_);
+  AddTrayItemToContainer(managed_device_view_);
+  AddTrayItemToContainer(notification_counter_item_);
+  AddTrayItemToContainer(quiet_mode_view_);
 
   if (features::IsSeparateNetworkIconsEnabled()) {
     network_tray_view_ =
         new tray::NetworkTrayView(shelf, ActiveNetworkIcon::Type::kPrimary);
-    tray_container()->AddChildView(
+    AddTrayItemToContainer(
         new tray::NetworkTrayView(shelf, ActiveNetworkIcon::Type::kCellular));
   } else {
     network_tray_view_ =
         new tray::NetworkTrayView(shelf, ActiveNetworkIcon::Type::kSingle);
   }
-  tray_container()->AddChildView(network_tray_view_);
-  tray_container()->AddChildView(new tray::PowerTrayView(shelf));
-  tray_container()->AddChildView(time_view_);
+  AddTrayItemToContainer(network_tray_view_);
+  AddTrayItemToContainer(new tray::PowerTrayView(shelf));
+  AddTrayItemToContainer(time_view_);
 
   set_separator_visibility(false);
 
@@ -246,9 +244,6 @@ void UnifiedSystemTray::SetTrayBubbleHeight(int height) {
 }
 
 void UnifiedSystemTray::FocusFirstNotification() {
-  if (!features::IsUnifiedMessageCenterRefactorEnabled())
-    return;
-
   FocusMessageCenter(false /*reverse*/);
 
   // Do not focus an individual element in quick settings if chrome vox is
@@ -303,6 +298,15 @@ bool UnifiedSystemTray::IsQuickSettingsExplicitlyExpanded() const {
 
 gfx::Rect UnifiedSystemTray::GetBubbleBoundsInScreen() const {
   return bubble_ ? bubble_->GetBoundsInScreen() : gfx::Rect();
+}
+
+void UnifiedSystemTray::MaybeRecordFirstInteraction(FirstInteractionType type) {
+  if (first_interaction_recorded_)
+    return;
+  first_interaction_recorded_ = true;
+
+  UMA_HISTOGRAM_ENUMERATION("ChromeOS.SystemTray.FirstInteraction", type,
+                            FirstInteractionType::kMaxValue);
 }
 
 void UnifiedSystemTray::UpdateAfterLoginStatusChange() {
@@ -362,8 +366,7 @@ void UnifiedSystemTray::CloseBubble() {
   // HideMessageCenterBubbleInternal will be called from UiDelegate.
   ui_delegate_->ui_controller()->HideMessageCenterBubble();
 
-  if (features::IsUnifiedMessageCenterRefactorEnabled())
-    HideBubbleInternal();
+  HideBubbleInternal();
 }
 
 base::string16 UnifiedSystemTray::GetAccessibleNameForBubble() {
@@ -379,6 +382,11 @@ base::string16 UnifiedSystemTray::GetAccessibleNameForQuickSettingsBubble() {
 
   return l10n_util::GetStringUTF16(
       IDS_ASH_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION);
+}
+
+void UnifiedSystemTray::HandleLocaleChange() {
+  for (TrayItemView* item : tray_items_)
+    item->HandleLocaleChange();
 }
 
 base::string16 UnifiedSystemTray::GetAccessibleNameForTray() {
@@ -431,10 +439,10 @@ void UnifiedSystemTray::ShowBubbleInternal(bool show_by_click) {
 
   bubble_ = std::make_unique<UnifiedSystemTrayBubble>(this, show_by_click);
 
-  if (features::IsUnifiedMessageCenterRefactorEnabled()) {
-    message_center_bubble_ = std::make_unique<UnifiedMessageCenterBubble>(this);
-    message_center_bubble_->ShowBubble();
-  }
+  message_center_bubble_ = std::make_unique<UnifiedMessageCenterBubble>(this);
+  message_center_bubble_->ShowBubble();
+
+  first_interaction_recorded_ = false;
 
   SetIsActive(true);
 }
@@ -466,4 +474,8 @@ UnifiedSystemTray::GetPopupViewForNotificationID(
   return ui_delegate_->GetPopupViewForNotificationID(notification_id);
 }
 
+void UnifiedSystemTray::AddTrayItemToContainer(TrayItemView* tray_item) {
+  tray_items_.push_back(tray_item);
+  tray_container()->AddChildView(tray_item);
+}
 }  // namespace ash

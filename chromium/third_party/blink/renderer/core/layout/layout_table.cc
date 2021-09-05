@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
+#include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_table_caption.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_table_col.h"
@@ -231,8 +232,8 @@ void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
       NeedsTableSection(before_child))
     before_child = nullptr;
 
-  LayoutTableSection* section =
-      LayoutTableSection::CreateAnonymousWithParent(this);
+  LayoutBox* section =
+      LayoutObjectFactory::CreateAnonymousTableSectionWithParent(*this);
   AddChild(section, before_child);
   section->AddChild(child);
 }
@@ -315,7 +316,7 @@ void LayoutTable::UpdateLogicalWidth() {
   // might not even get there.
   UpdateCachedIntrinsicLogicalWidthsIfNeeded();
 
-  if (IsFlexItemIncludingDeprecatedAndNG() || IsGridItem()) {
+  if (IsGridItem()) {
     // TODO(jfernandez): Investigate whether the grid layout algorithm provides
     // all the logic needed and that we're not skipping anything essential due
     // to the early return here.
@@ -387,6 +388,9 @@ void LayoutTable::UpdateLogicalWidth() {
     SetLogicalWidth(LayoutUnit(
         std::min(available_content_logical_width, max_width).Floor()));
   }
+
+  if (HasOverrideLogicalWidth())
+    SetLogicalWidth(std::max(LogicalWidth(), OverrideLogicalWidth()));
 
   // Ensure we aren't bigger than our max-width style.
   const Length& style_max_logical_width = StyleRef().LogicalMaxWidth();
@@ -565,6 +569,7 @@ LayoutUnit LayoutTable::LogicalHeightFromStyle() const {
        !logical_max_height_length.IsNegative() &&
        !logical_max_height_length.IsMinContent() &&
        !logical_max_height_length.IsMaxContent() &&
+       !logical_max_height_length.IsMinIntrinsic() &&
        !logical_max_height_length.IsFitContent())) {
     LayoutUnit computed_max_logical_height =
         ConvertStyleLogicalHeightToComputedHeight(logical_max_height_length);
@@ -575,6 +580,7 @@ LayoutUnit LayoutTable::LogicalHeightFromStyle() const {
   Length logical_min_height_length = StyleRef().LogicalMinHeight();
   if (logical_min_height_length.IsMinContent() ||
       logical_min_height_length.IsMaxContent() ||
+      logical_min_height_length.IsMinIntrinsic() ||
       logical_min_height_length.IsFitContent())
     logical_min_height_length = Length::Auto();
 
@@ -1657,16 +1663,9 @@ bool LayoutTable::NodeAtPoint(HitTestResult& result,
   return false;
 }
 
-LayoutTable* LayoutTable::CreateAnonymousWithParent(
-    const LayoutObject* parent) {
-  scoped_refptr<ComputedStyle> new_style =
-      ComputedStyle::CreateAnonymousStyleWithDisplay(
-          parent->StyleRef(),
-          parent->IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
-  LayoutTable* new_table = new LayoutTable(nullptr);
-  new_table->SetDocumentForAnonymous(&parent->GetDocument());
-  new_table->SetStyle(std::move(new_style));
-  return new_table;
+LayoutBox* LayoutTable::CreateAnonymousBoxWithSameTypeAs(
+    const LayoutObject* parent) const {
+  return LayoutObjectFactory::CreateAnonymousTableWithParent(*parent);
 }
 
 void LayoutTable::EnsureIsReadyForPaintInvalidation() {

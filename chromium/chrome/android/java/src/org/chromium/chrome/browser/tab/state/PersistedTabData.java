@@ -8,9 +8,17 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.UserData;
+import org.chromium.base.UserDataHost;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.tab.Tab;
+
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * PersistedTabData is Tab data persisted across restarts
@@ -22,6 +30,7 @@ import org.chromium.chrome.browser.tab.Tab;
  */
 public abstract class PersistedTabData implements UserData {
     private static final String TAG = "PTD";
+    private static final Map<String, List<Callback>> sCachedCallbacks = new HashMap<>();
     protected final Tab mTab;
     private final PersistedTabDataStorage mPersistedTabDataStorage;
     private final String mPersistedTabDataId;
@@ -67,6 +76,7 @@ public abstract class PersistedTabData implements UserData {
     protected static <T extends PersistedTabData> void from(Tab tab,
             PersistedTabDataFactory<T> factory, Supplier<T> supplier, Class<T> clazz,
             Callback<T> callback) {
+        ThreadUtils.assertOnUiThread();
         // TODO(crbug.com/1059602) cache callbacks
         T persistedTabDataFromTab = getUserData(tab, clazz);
         if (persistedTabDataFromTab != null) {
@@ -74,6 +84,10 @@ public abstract class PersistedTabData implements UserData {
             callback.onResult(persistedTabDataFromTab);
             return;
         }
+        String key = String.format(Locale.ENGLISH, "%d-%s", tab.getId(), clazz.toString());
+        addCallback(key, callback);
+        // Only load data for the same key once
+        if (sCachedCallbacks.get(key).size() > 1) return;
         PersistedTabDataConfiguration config =
                 PersistedTabDataConfiguration.get(clazz, tab.isIncognito());
         config.storage.restore(tab.getId(), config.id, (data) -> {
@@ -86,8 +100,38 @@ public abstract class PersistedTabData implements UserData {
             if (persistedTabData != null) {
                 setUserData(tab, clazz, persistedTabData);
             }
-            callback.onResult(persistedTabData);
+            for (Callback cachedCallback : sCachedCallbacks.get(key)) {
+                cachedCallback.onResult(persistedTabData);
+            }
+            sCachedCallbacks.remove(key);
         });
+    }
+
+    /**
+     * Acquire {@link PersistedTabData} from a {@link Tab} or create and
+     * associate using provided {@link Supplier}
+     * @param corresponding {@link Tab} for which {@link PersistedTabData} is
+     * desired
+     * @param  userDataKey derived {@link PersistedTabData} class corresponding
+     * to desired {@link PersistedTabData}
+     * @param  supplier means of building {@link PersistedTabData} if it doesn't
+     * exist on the {@link Tab}
+     */
+    protected static <T extends PersistedTabData> T from(
+            Tab tab, Class<T> userDataKey, Supplier<T> supplier) {
+        UserDataHost host = tab.getUserDataHost();
+        T persistedTabData = host.getUserData(userDataKey);
+        if (persistedTabData == null) {
+            persistedTabData = host.setUserData(userDataKey, supplier.get());
+        }
+        return persistedTabData;
+    }
+
+    private static <T extends PersistedTabData> void addCallback(String key, Callback<T> callback) {
+        if (!sCachedCallbacks.containsKey(key)) {
+            sCachedCallbacks.put(key, new LinkedList<>());
+        }
+        sCachedCallbacks.get(key).add(callback);
     }
 
     /**

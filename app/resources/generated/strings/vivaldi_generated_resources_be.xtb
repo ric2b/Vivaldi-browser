@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
 <translation id="1017280919048282932">Дадаць у слоўнік</translation>
-<translation id="1031362278801463162">Ладуецца папярэдни агляд</translation>
+<translation id="1031362278801463162">Ладуецца ПерадАгляд</translation>
 <translation id="1047431265488717055">Капіяваць тэкст Спасылкі</translation>
 <translation id="1049795001945932310">&amp;Налады мовы</translation>
 <translation id="1054153489933238809">Адчыніць арыгінал малюнку ў Новай Картке</translation>
@@ -36,7 +36,6 @@
 <translation id="1603914832182249871">(прыватны)</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Дэскрыптары файла</translation>
-<translation id="1635033183663317347">Усталявана тваім апекуном.</translation>
 <translation id="1682548588986054654">Новае прыватнае акно</translation>
 <translation id="1698122934742150150">Толькі для гэтай прыватнай сэсіі</translation>
 <translation id="1706625117072057435">Маштаб сайту</translation>
@@ -132,7 +131,7 @@
 <translation id="329838636886466101">Аднавіць</translation>
 <translation id="33022249435934718">GDI-дэскрыптары</translation>
 <translation id="3303818374450886607">Копіі</translation>
-<translation id="3305661444342691068">Адчыніць PDF папярэднім праглядам</translation>
+<translation id="3305661444342691068">Адчыніць PDF перадаглядам</translation>
 <translation id="3308134619352333507">Схаваць кнопку</translation>
 <translation id="3317459757438853210">Дзву-старонні друк</translation>
 <translation id="3341703758641437857">Дазволіць для лакальных файлаў</translation>
@@ -153,7 +152,6 @@
 <translation id="3678156199662914018">Пашырэнне: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ад <ph name="APP_NAME" /> запыт на доступ да экрана</translation>
 <translation id="3711931198657368127">Уставіць і ісці да <ph name="URL" /></translation>
-<translation id="3725367690636977613">старонак</translation>
 <translation id="3727187387656390258">Інспектаваць Выскакваючае Акно</translation>
 <translation id="3744111561329211289">Фонава сінхранізаваць</translation>
 <translation id="3760460896538743390">Праверыць фонаваю старонку</translation>
@@ -180,7 +178,6 @@
 <translation id="4087089424473531098">Створана пашырэнне:
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Прыняць для групы</translation>
-<translation id="4091434297613116013">Лістоў паперы</translation>
 <translation id="4096508467498758490">Адключыць пашырэнні ў рэжыме распрацоўніка</translation>
 <translation id="4100839878934973028">Іншая праграма на тваім кампутары дадала прыладу, якая можа ўплываць на працу Вівалдзі.</translation>
 <translation id="4109898769411476438">Зачыніце браўзэр перад імпартам</translation>
@@ -265,7 +262,7 @@
 <translation id="5707185214361380026">Правалена спампоўка з:</translation>
 <translation id="5715711091495208045">Плагін пасрэднік: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Захаваць як PDF</translation>
-<translation id="5747809636523347288">&amp;Уставіць і перайсці на <ph name="URL" /></translation>
+<translation id="5747809636523347288">&amp;Уставіць і Перайсці на <ph name="URL" /></translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" /> могуць чытаць дакументы, дасланыя на друк праз прыладу <ph name="APP_NAME" />.</translation>
 <translation id="577624874850706961">Шукаць cookie</translation>
 <translation id="5804241973901381774">Дазволы</translation>
@@ -305,7 +302,7 @@
 <translation id="6445450263907939268">Калі Вы не хочаце гэтых змен, то можеце аднавіць Вашыя налады.</translation>
 <translation id="6447842834002726250">Файлы cookie</translation>
 <translation id="6452181791372256707">Адхіліць</translation>
-<translation id="6498249116389603658">Усе твае мовы</translation>
+<translation id="6498249116389603658">Усе Мовы</translation>
 <translation id="6503077044568424649">Найчасцейшыя</translation>
 <translation id="6508261954199872201">Прылада: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Капіява&amp;ць Малюнак</translation>
@@ -389,7 +386,6 @@
 <translation id="8032244173881942855">Немагчыма трансляваць картку.</translation>
 <translation id="8071432093239591881">Друкаваць як малюнак</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />К</translation>
-<translation id="8180239481735238521">старонка</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Сцягваецца} other {Сцягваюцца}}</translation>
 <translation id="8230134520748321204">Захаваць пароль для <ph name="ORIGIN" />?</translation>
@@ -421,7 +417,6 @@
 <translation id="8798099450830957504">Па змаўчанні</translation>
 <translation id="8800004011501252845">Паказаць месца прызначэння для</translation>
 <translation id="8808478386290700967">WEB-крама</translation>
-<translation id="8813811964357448561">ліст паперы</translation>
 <translation id="8823514049557262177">Капіяваць Тэкст URL</translation>
 <translation id="8859174528519900719">Падфрэйм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Засуполіць доступ да экрану</translation>

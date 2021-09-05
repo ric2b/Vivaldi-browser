@@ -1481,10 +1481,7 @@ TEST_F(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
   base::Time expiration1;
   ASSERT_TRUE(base::Time::FromUTCString("2036-12-01 10:00:00", &expiration1));
   quic::ParsedQuicVersionVector advertised_versions = {
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_46),
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_43)};
+      quic::ParsedQuicVersion::Q046(), quic::ParsedQuicVersion::Q043()};
   alternative_service_info_vector.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions));
@@ -1543,7 +1540,7 @@ TEST_F(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
       "\"isolation\":[],"
       "\"server\":\"https://www.google.com:80\"},"
       "{\"alternative_service\":[{"
-      "\"advertised_versions\":[46],\"expiration\":\"9223372036854775807\","
+      "\"advertised_versions\":[50],\"expiration\":\"9223372036854775807\","
       "\"host\":\"foo.google.com\",\"port\":444,\"protocol_str\":\"quic\"}],"
       "\"isolation\":[],"
       "\"network_stats\":{\"srtt\":42},"
@@ -1606,12 +1603,8 @@ TEST_F(HttpServerPropertiesManagerTest, ReadAdvertisedVersionsFromPref) {
   const quic::ParsedQuicVersionVector loaded_advertised_versions =
       alternative_service_info_vector[1].advertised_versions();
   EXPECT_EQ(2u, loaded_advertised_versions.size());
-  EXPECT_EQ(quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                                    quic::QUIC_VERSION_43),
-            loaded_advertised_versions[0]);
-  EXPECT_EQ(quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                                    quic::QUIC_VERSION_46),
-            loaded_advertised_versions[1]);
+  EXPECT_EQ(quic::ParsedQuicVersion::Q043(), loaded_advertised_versions[0]);
+  EXPECT_EQ(quic::ParsedQuicVersion::Q046(), loaded_advertised_versions[1]);
 
   // No other fields should have been populated.
   server_info.alternative_services.reset();
@@ -1626,8 +1619,7 @@ TEST_F(HttpServerPropertiesManagerTest,
 
   // #1: Set alternate protocol.
   AlternativeServiceInfoVector alternative_service_info_vector;
-  // Quic alternative service set with a single QUIC version:
-  // quic::QUIC_VERSION_46.
+  // Quic alternative service set with a single QUIC version: Q046.
   AlternativeService quic_alternative_service1(kProtoQUIC, "", 443);
   base::Time expiration1;
   ASSERT_TRUE(base::Time::FromUTCString("2036-12-01 10:00:00", &expiration1));
@@ -1660,7 +1652,7 @@ TEST_F(HttpServerPropertiesManagerTest,
       "\"server_id\":\"https://mail.google.com:80\","
       "\"server_info\":\"quic_server_info1\"}],"
       "\"servers\":["
-      "{\"alternative_service\":[{\"advertised_versions\":[46],"
+      "{\"alternative_service\":[{\"advertised_versions\":[50],"
       "\"expiration\":\"13756212000000000\",\"port\":443,"
       "\"protocol_str\":\"quic\"}],"
       "\"isolation\":[],"
@@ -1680,10 +1672,7 @@ TEST_F(HttpServerPropertiesManagerTest,
   AlternativeServiceInfoVector alternative_service_info_vector_2;
   // Quic alternative service set with two advertised QUIC versions.
   quic::ParsedQuicVersionVector advertised_versions = {
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_46),
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_43)};
+      quic::ParsedQuicVersion::Q046(), quic::ParsedQuicVersion::Q043()};
   alternative_service_info_vector_2.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions));
@@ -1718,10 +1707,7 @@ TEST_F(HttpServerPropertiesManagerTest,
   AlternativeServiceInfoVector alternative_service_info_vector_3;
   // A same set of QUIC versions but listed in a different order.
   quic::ParsedQuicVersionVector advertised_versions_2 = {
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_43),
-      quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                              quic::QUIC_VERSION_46)};
+      quic::ParsedQuicVersion::Q043(), quic::ParsedQuicVersion::Q046()};
   alternative_service_info_vector_3.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions_2));

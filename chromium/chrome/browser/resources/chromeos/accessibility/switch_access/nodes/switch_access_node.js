@@ -28,14 +28,14 @@ class SAChildNode {
 
   /**
    * Returns a list of all the actions available for this node.
-   * @return {!Array<SAConstants.MenuAction>}
+   * @return {!Array<SwitchAccessMenuAction>}
    * @abstract
    */
   get actions() {}
 
   /**
    * Returns the underlying automation node, if one exists.
-   * @return {chrome.automation.AutomationNode}
+   * @return {AutomationNode}
    * @abstract
    */
   get automationNode() {}
@@ -57,6 +57,7 @@ class SAChildNode {
    */
   get next() {
     if (!this.next_) {
+      setTimeout(NavigationManager.moveToValidNode, 0);
       throw SwitchAccess.error(
           SAConstants.ErrorType.NEXT_UNDEFINED,
           'Next node must be set on all SAChildNodes before navigating');
@@ -75,6 +76,7 @@ class SAChildNode {
    */
   get previous() {
     if (!this.previous_) {
+      setTimeout(NavigationManager.moveToValidNode, 0);
       throw SwitchAccess.error(
           SAConstants.ErrorType.PREVIOUS_UNDEFINED,
           'Previous node must be set on all SAChildNodes before navigating');
@@ -97,6 +99,14 @@ class SAChildNode {
    */
   asRootNode() {}
 
+  /** Performs the node's default action. */
+  doDefaultAction() {
+    if (!this.isFocused_) {
+      return;
+    }
+    this.performAction(SwitchAccessMenuAction.SELECT);
+  }
+
   /**
    * @param {SAChildNode} other
    * @return {boolean}
@@ -106,7 +116,7 @@ class SAChildNode {
 
   /**
    * Given a menu action, returns whether it can be performed on this node.
-   * @param {SAConstants.MenuAction} action
+   * @param {SwitchAccessMenuAction} action
    * @return {boolean}
    */
   hasAction(action) {
@@ -114,7 +124,7 @@ class SAChildNode {
   }
 
   /**
-   * @param {?chrome.automation.AutomationNode|!SAChildNode|!SARootNode} node
+   * @param {?AutomationNode|!SAChildNode|!SARootNode} node
    * @return {boolean}
    * @abstract
    */
@@ -139,15 +149,17 @@ class SAChildNode {
    * Returns whether this node is still both valid and visible onscreen (e.g.
    *    not hidden, not offscreen, not invisible)
    * @return {boolean}
-   * @abstract
    */
-  isValidAndVisible() {}
+  isValidAndVisible() {
+    return !!this.location;
+  }
 
   /**
    * Called when this node becomes the primary highlighted node.
    */
   onFocus() {
     this.isFocused_ = true;
+    FocusRingManager.setFocusedNode(this);
   }
 
   /**
@@ -159,7 +171,7 @@ class SAChildNode {
 
   /**
    * Performs the specified action on the node, if it is available.
-   * @param {SAConstants.MenuAction} action
+   * @param {SwitchAccessMenuAction} action
    * @return {SAConstants.ActionResponse} What action the menu should perform in
    *      response.
    * @abstract
@@ -212,7 +224,7 @@ class SARootNode {
 
   // ================= Getters and setters =================
 
-  /** @return {chrome.automation.AutomationNode} */
+  /** @return {AutomationNode} */
   get automationNode() {}
 
   /** @param {!Array<!SAChildNode>} newVal */
@@ -231,6 +243,7 @@ class SARootNode {
     if (this.children_.length > 0) {
       return this.children_[0];
     } else {
+      setTimeout(NavigationManager.moveToValidNode, 0);
       throw SwitchAccess.error(
           SAConstants.ErrorType.NO_CHILDREN,
           'Root nodes must contain children.');
@@ -242,6 +255,7 @@ class SARootNode {
     if (this.children_.length > 0) {
       return this.children_[this.children_.length - 1];
     } else {
+      setTimeout(NavigationManager.moveToValidNode, 0);
       throw SwitchAccess.error(
           SAConstants.ErrorType.NO_CHILDREN,
           'Root nodes must contain children.');
@@ -273,8 +287,9 @@ class SARootNode {
     let result = true;
     for (let i = 0; i < this.children_.length; i++) {
       if (!this.children_[i]) {
-        throw SwitchAccess.error(
-            SAConstants.ErrorType.NULL_CHILD, 'Child cannot be null.');
+        console.error(SwitchAccess.error(
+            SAConstants.ErrorType.NULL_CHILD, 'Child cannot be null.'));
+        return false;
       }
       result = result && this.children_[i].equals(other.children_[i]);
     }
@@ -298,7 +313,7 @@ class SARootNode {
   }
 
   /**
-   * @param {?chrome.automation.AutomationNode|!SARootNode|!SAChildNode} node
+   * @param {?AutomationNode|!SARootNode|!SAChildNode} node
    * @return {boolean}
    */
   isEquivalentTo(node) {
@@ -370,9 +385,10 @@ class SARootNode {
    */
   connectChildren_() {
     if (this.children_.length < 1) {
-      throw SwitchAccess.error(
+      console.error(SwitchAccess.error(
           SAConstants.ErrorType.NO_CHILDREN,
-          'Root node must have at least 1 interesting child.');
+          'Root node must have at least 1 interesting child.'));
+      return;
     }
 
     let previous = this.children_[this.children_.length - 1];

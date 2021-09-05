@@ -37,7 +37,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/platform_thread.h"
@@ -85,7 +84,6 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/sessions/chrome_serialized_navigation_driver.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/browser/site_isolation/site_isolation_policy.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/browser/tracing/background_tracing_field_trial.h"
 #include "chrome/browser/tracing/trace_event_system_stats_monitor.h"
@@ -136,6 +134,8 @@
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/rappor/rappor_service_impl.h"
+#include "components/site_isolation/site_isolation_policy.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -162,7 +162,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/profiling.h"
-#include "device/vr/buildflags/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/localized_strings.h"
 #include "media/media_buildflags.h"
@@ -175,6 +174,7 @@
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/experiments/memory_ablation_experiment.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -247,7 +247,9 @@
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
+#include "chrome/browser/metrics/desktop_session_duration/touch_mode_stats_tracker.h"
 #include "chrome/browser/profiles/profile_activity_metrics_recorder.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -292,17 +294,22 @@
 #include "components/rlz/rlz_tracker.h"
 #endif  // BUILDFLAG(ENABLE_RLZ)
 
-#if BUILDFLAG(ENABLE_VR) && defined(OS_WIN)
-#include "chrome/browser/vr/consent/xr_session_request_consent_manager_impl.h"
+#if BUILDFLAG(LACROS)
+#include "ui/shell_dialogs/select_file_dialog_lacros.h"
 #endif
 
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
+#if defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
+#include "chrome/browser/spellchecker/spellcheck_factory.h"
+#include "chrome/browser/spellchecker/spellcheck_service.h"
+#include "components/spellcheck/browser/pref_names.h"
+#include "components/spellcheck/common/spellcheck_features.h"
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
-using content::BrowserThread;
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -316,8 +323,7 @@ base::RunLoop* g_run_loop = nullptr;
 void HandleTestParameters(const base::CommandLine& command_line) {
   // This parameter causes a null pointer crash (crash reporter trigger).
   if (command_line.HasSwitch(switches::kBrowserCrashTest)) {
-    int* bad_pointer = NULL;
-    *bad_pointer = 0;
+    IMMEDIATE_CRASH();
   }
 }
 
@@ -489,7 +495,7 @@ ChromeBrowserMainParts::ChromeBrowserMainParts(
       result_code_(service_manager::RESULT_CODE_NORMAL_EXIT),
       should_call_pre_main_loop_start_startup_on_variations_service_(
           !parameters.ui_task),
-      profile_(NULL),
+      profile_(nullptr),
       run_message_loop_(true),
       startup_data_(startup_data) {
   DCHECK(startup_data_);
@@ -947,25 +953,23 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // properly. See issue 37766.
   // (Note that the callback mask here is empty. I don't want to register for
   // any callbacks, I just want to initialize the mechanism.)
-  SecKeychainAddCallback(&KeychainCallback, 0, NULL);
+  SecKeychainAddCallback(&KeychainCallback, 0, nullptr);
 #endif  // defined(OS_MACOSX)
-
-#if BUILDFLAG(ENABLE_VR) && defined(OS_WIN)
-  vr::XRSessionRequestConsentManager::SetInstance(
-      new vr::XRSessionRequestConsentManagerImpl());
-#endif  // BUILDFLAG(ENABLE_VR) && OS_WIN
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   metrics::DesktopSessionDurationTracker::Initialize();
   ProfileActivityMetricsRecorder::Initialize();
+  TouchModeStatsTracker::Initialize(
+      metrics::DesktopSessionDurationTracker::Get(),
+      ui::TouchUiController::Get());
 #endif
   metrics::RendererUptimeTracker::Initialize();
 
   // Add Site Isolation switches as dictated by policy.
   auto* command_line = base::CommandLine::ForCurrentProcess();
   if (local_state->GetBoolean(prefs::kSitePerProcess) &&
-      SiteIsolationPolicy::IsEnterprisePolicyApplicable() &&
+      site_isolation::SiteIsolationPolicy::IsEnterprisePolicyApplicable() &&
       !command_line->HasSwitch(switches::kSitePerProcess)) {
     command_line->AppendSwitch(switches::kSitePerProcess);
   }
@@ -1007,14 +1011,14 @@ void ChromeBrowserMainParts::PostCreateThreads() {
   // BrowserMainLoop::InitializeMainThread(). PostCreateThreads is preferred to
   // BrowserThreadsStarted as it matches the PreCreateThreads and CreateThreads
   // stages.
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&ThreadProfiler::StartOnChildThread,
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ThreadProfiler::StartOnChildThread,
                                 metrics::CallStackProfileParams::IO_THREAD));
 // Sampling multiple threads might cause overhead on Android and we don't want
 // to enable it unless the data is needed.
 #if !defined(OS_ANDROID)
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&tracing::TracingSamplerProfiler::CreateOnChildThread));
 #endif
 
@@ -1103,19 +1107,18 @@ void ChromeBrowserMainParts::PostBrowserStart() {
 #endif  // !defined(OS_ANDROID)
   // Set up a task to delete old WebRTC log files for all profiles. Use a delay
   // to reduce the impact on startup time.
-  base::PostDelayedTask(
-      FROM_HERE, {BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
       base::BindOnce(&WebRtcLogUtil::DeleteOldWebRtcLogFilesForAllProfiles),
       base::TimeDelta::FromMinutes(1));
 
 #if !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kWebUsb)) {
     web_usb_detector_.reset(new WebUsbDetector());
-    base::PostTask(
-        FROM_HERE,
-        {content::BrowserThread::UI, base::TaskPriority::BEST_EFFORT},
-        base::BindOnce(&WebUsbDetector::Initialize,
-                       base::Unretained(web_usb_detector_.get())));
+    content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(&WebUsbDetector::Initialize,
+                                  base::Unretained(web_usb_detector_.get())));
   }
   if (base::FeatureList::IsEnabled(features::kTabMetricsLogging)) {
     // Initialize the TabActivityWatcher to begin logging tab activity events.
@@ -1138,7 +1141,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   // Can't be in SetupFieldTrials() because it needs a task runner.
   blink::MemoryAblationExperiment::MaybeStart(
-      base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
+      content::GetIOThreadTaskRunner({}));
 
 #if defined(OS_WIN)
   // Windows parental controls calls can be slow, so we do an early init here
@@ -1181,6 +1184,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   }
 
   ui::SelectFileDialog::SetFactory(new ChromeSelectFileDialogFactory());
+#elif BUILDFLAG(LACROS)
+  ui::SelectFileDialog::SetFactory(new ui::SelectFileDialogLacros::Factory());
 #endif  // defined(OS_WIN)
 
   if (parsed_command_line().HasSwitch(switches::kMakeDefaultBrowser)) {
@@ -1339,7 +1344,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // Do the tasks if chrome has been upgraded while it was last running.
   if (!already_running && upgrade_util::DoUpgradeTasks(parsed_command_line()))
     return service_manager::RESULT_CODE_NORMAL_EXIT;
-
+  if (!vivaldi::IsVivaldiRunning()) {
   // Check if there is any machine level Chrome installed on the current
   // machine. If yes and the current Chrome process is user level, we do not
   // allow the user level Chrome to run. So we notify the user and uninstall
@@ -1348,6 +1353,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // obtained but before potentially creating the first run sentinel).
   if (ChromeBrowserMainPartsWin::CheckMachineLevelInstall())
     return chrome::RESULT_CODE_MACHINE_LEVEL_INSTALL_EXISTS;
+  }
 #endif  // defined(OS_WIN)
 
   // Desktop construction occurs here, (required before profile creation).
@@ -1360,6 +1366,18 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
                                   parsed_command_line());
   if (!profile_)
     return service_manager::RESULT_CODE_NORMAL_EXIT;
+
+#if defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
+  // Create the spellcheck service. This will asynchronously retrieve the
+  // Windows platform spellcheck dictionary language tags used to populate the
+  // context menu for editable content.
+  if (spellcheck::UseBrowserSpellChecker() &&
+      profile_->GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckEnable) &&
+      !base::FeatureList::IsEnabled(
+          spellcheck::kWinDelaySpellcheckServiceInit)) {
+    SpellcheckServiceFactory::GetForContext(profile_);
+  }
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
 #if !defined(OS_ANDROID)
   // The first run sentinel must be created after the process singleton was
@@ -1547,8 +1565,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(nacl::NaClProcessHost::EarlyStartup));
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(nacl::NaClProcessHost::EarlyStartup));
 #endif  // BUILDFLAG(ENABLE_NACL)
 
   // Make sure initial prefs are recorded
@@ -1708,7 +1726,7 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
   // Some tests don't set parameters.ui_task, so they started translate
   // language fetch that was never completed so we need to cleanup here
   // otherwise it will be done by the destructor in a wrong thread.
-  TranslateService::Shutdown(parameters().ui_task == NULL);
+  TranslateService::Shutdown(!parameters().ui_task);
 
   if (notify_result_ == ProcessSingleton::PROCESS_NONE)
     process_singleton_->Cleanup();

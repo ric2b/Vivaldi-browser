@@ -28,6 +28,7 @@
 #include "content/public/browser/allow_service_worker_result.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/generated_code_cache_settings.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
@@ -148,10 +149,6 @@ class TrustedURLLoaderHeaderClient;
 struct ResourceRequest;
 }  // namespace network
 
-namespace rappor {
-class RapporService;
-}  // namespace rappor
-
 namespace sandbox {
 class TargetPolicy;
 }  // namespace sandbox
@@ -160,6 +157,10 @@ namespace ui {
 class SelectFilePolicy;
 class ClipboardFormatType;
 }  // namespace ui
+
+namespace ukm {
+class UkmService;
+}  // namespace ukm
 
 namespace url {
 class Origin;
@@ -202,7 +203,6 @@ class SiteInstance;
 class SpeechRecognitionManagerDelegate;
 class StoragePartition;
 class TracingDelegate;
-class TtsControllerDelegate;
 class TtsPlatform;
 class URLLoaderRequestInterceptor;
 class VpnServiceProxy;
@@ -218,6 +218,10 @@ struct PepperPluginInfo;
 struct Referrer;
 struct SocketPermissionRequest;
 struct WebPreferences;
+
+#if defined(OS_CHROMEOS)
+class TtsControllerDelegate;
+#endif
 
 // Embedder API (or SPI) for participating in browser logic, to be implemented
 // by the client of the content browser. See ChromeContentBrowserClient for the
@@ -395,6 +399,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldIgnoreSameSiteCookieRestrictionsWhenTopLevel(
       base::StringPiece scheme,
       bool is_embedded_origin_secure);
+
+  // Gets a user friendly display name for a given |site_url| to be used in the
+  // CDM process name.
+  virtual std::string GetSiteDisplayNameForCdmProcess(
+      BrowserContext* browser_context,
+      const GURL& site_url);
 
   // This method allows the //content embedder to override |factory_params| with
   // |origin|-specific properties (e.g. with relaxed Cross-Origin Read Blocking
@@ -706,6 +716,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // "1812:e, 00001800-0000-1000-8000-00805f9b34fb:w, ignored:1, alsoignored."
   virtual std::string GetWebBluetoothBlocklist();
 
+  // Allows the embedder to control the conversion measurement API.
+  // This gates the following behaviors:
+  // - Impression registration
+  // - Conversion registration
+  // - Conversion reports
+  virtual bool AllowConversionMeasurement(
+      content::BrowserContext* browser_context);
+
 #if defined(OS_CHROMEOS)
   // Notification that a trust anchor was used by the given user.
   virtual void OnTrustAnchorUsed(BrowserContext* browser_context) {}
@@ -751,27 +769,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsValidStoragePartitionId(BrowserContext* browser_context,
                                          const std::string& partition_id);
 
-  // Allows the embedder to provide a storage parititon configuration for a
+  // Allows the embedder to provide a storage partition configuration for a
   // site. A storage partition configuration includes a domain of the embedder's
   // choice, an optional name within that domain, and whether the partition is
   // in-memory only.
-  //
-  // If |can_be_default| is false, the caller is telling the embedder that the
-  // |site| is known to not be in the default partition. This is useful in
-  // some shutdown situations where the bookkeeping logic that maps sites to
-  // their partition configuration are no longer valid.
-  //
-  // The |partition_domain| is [a-z]* UTF-8 string, specifying the domain in
-  // which partitions live (similar to namespace). Within a domain, partitions
-  // can be uniquely identified by the combination of |partition_name| and
-  // |in_memory| values. When a partition is not to be persisted, the
-  // |in_memory| value must be set to true.
-  virtual void GetStoragePartitionConfigForSite(BrowserContext* browser_context,
-                                                const GURL& site,
-                                                bool can_be_default,
-                                                std::string* partition_domain,
-                                                std::string* partition_name,
-                                                bool* in_memory);
+  virtual StoragePartitionConfig GetStoragePartitionConfigForSite(
+      BrowserContext* browser_context,
+      const GURL& site);
 
   // Create and return a new quota permission context.
   virtual scoped_refptr<QuotaPermissionContext> CreateQuotaPermissionContext();
@@ -854,8 +858,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate();
 
+#if defined(OS_CHROMEOS)
   // Allows the embedder to return a delegate for the TtsController.
   virtual TtsControllerDelegate* GetTtsControllerDelegate();
+#endif
 
   // Allows the embedder to return a TTS platform implementation.
   virtual TtsPlatform* GetTtsPlatform();
@@ -928,10 +934,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) {}
 
-  // |schemes| is a return value parameter that gets a whitelist of schemes that
-  // should bypass the Is Privileged Context check.
+  // |schemes| is a return value parameter that gets an allowlist of schemes
+  // that should bypass the Is Privileged Context check.
   // See http://www.w3.org/TR/powerful-features/#settings-privileged
-  virtual void GetSchemesBypassingSecureContextCheckWhitelist(
+  virtual void GetSchemesBypassingSecureContextCheckAllowlist(
       std::set<std::string>* schemes) {}
 
   // Returns auto mount handlers for URL requests for FileSystem APIs.
@@ -995,12 +1001,6 @@ class CONTENT_EXPORT ContentBrowserClient {
                                         mojo::GenericPendingReceiver receiver) {
   }
 
-  // Called when RenderFrameHostImpl connects to the Media service. Expose
-  // interfaces to the service using |registry|.
-  virtual void ExposeInterfacesToMediaService(
-      service_manager::BinderRegistry* registry,
-      RenderFrameHost* render_frame_host) {}
-
   // The Media Service can run in many different types of configurations
   // (typically in the GPU process or its own isolated process), but some
   // clients want an additional dedicated instance to use for specific
@@ -1038,6 +1038,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Handles an unhandled incoming interface binding request from the GPU
   // process. Called on the IO thread.
   virtual void BindGpuHostReceiver(mojo::GenericPendingReceiver receiver) {}
+
+  // Handles an unhandled incoming interface binding request from a Utility
+  // process. Called on the IO thread.
+  virtual void BindUtilityHostReceiver(mojo::GenericPendingReceiver receiver) {}
 
   // Called on the main thread to handle an unhandled interface receiver binding
   // request from a render process. See |RenderThread::BindHostReceiver()|.
@@ -1108,16 +1112,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void OpenURL(SiteInstance* site_instance,
                        const OpenURLParams& params,
                        base::OnceCallback<void(WebContents*)> callback);
-
-  // Allows the embedder to record |metric| for a specific |url|.
-  virtual void RecordURLMetric(const std::string& metric, const GURL& url) {}
-
-  // Allows the embedder to map URLs to strings, intended to be used as suffixes
-  // for metric names. For example, the embedder can map
-  // "my-special-site-with-a-complicated-name.example.com/and-complicated-path"
-  // to the string "MySpecialSite", which will cause some UMA involving that URL
-  // to be logged as "UmaName.MySpecialSite".
-  virtual std::string GetMetricSuffixForURL(const GURL& url);
 
   // Allows the embedder to register one or more NavigationThrottles for the
   // navigation indicated by |navigation_handle|.  A NavigationThrottle is used
@@ -1192,19 +1186,18 @@ class CONTENT_EXPORT ContentBrowserClient {
       mojo::PendingRemote<media::mojom::RemotingSource> source,
       mojo::PendingReceiver<media::mojom::Remoter> receiver) {}
 
-  // Returns the RapporService from the browser process.
-  virtual ::rappor::RapporService* GetRapporService();
-
-  // Allows the embedder to register one or more URLLoaderThrottles for one of
-  // the following requests:
-  // 1) A navigation request.
-  // 2) A request for a dedicated worker's main script (when PlzDedicatedWorker
-  //    is enabled).
-  // 3) A request for a shared worker's main script.
+  // Allows the embedder to register one or more URLLoaderThrottles for a
+  // browser-initiated request. These include navigation requests and requests
+  // for web worker scripts.
   //
-  // For a request for worker's main script, |wc_getter|, |navigation_ui_data|,
-  // and |frame_tree_node_id| take a callback returning a nullptr, nullptr, and
-  // RenderFrameHost::kNoFrameTreeNodeId respectively.
+  // |wc_getter| returns the WebContents of the context of the |request| when
+  // available. It can return nullptr for requests for which it there are no
+  // WebContents (e.g., requests for web workers).
+  //
+  // |navigation_ui_data| is only valid if this is a navigation request.
+  //
+  // |frame_tree_node_id| is also invalid (kNoFrameTreeNodeId) in some cases
+  // (e.g., requests for web workers).
   //
   // This is called on the UI thread.
   virtual std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
@@ -1466,6 +1459,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // BrowserContext's StoragePartition. StoragePartition will use the
   // NetworkService to create a new NetworkContext using these params.
   //
+  // If the CertVerifierService is enabled, the CertVerifierCreationParams will
+  // be used to create a new CertVerifierService, which will be passed to the
+  // network service in NetworkContextParams. Otherwise, the
+  // CertVerifierCreationParams will be placed in the NetworkContextParams and
+  // sent directly to the NetworkService for in-process CertVerifier creation.
+  //
   // If |in_memory| is true, |relative_partition_path| is still a path that
   // uniquely identifies the storage partition, though nothing should be written
   // to it.
@@ -1558,8 +1557,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // destroyed before the RenderFrame goes out of scope. The embedder may choose
   // to return nullptr to indicate that the request cannot be serviced right
   // now.
+#if !defined(OS_ANDROID)
   virtual std::unique_ptr<AuthenticatorRequestClientDelegate>
   GetWebAuthenticationRequestDelegate(RenderFrameHost* render_frame_host);
+#endif
 
   // Get platform ClientCertStore. May return nullptr. Called on the UI thread.
   virtual std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
@@ -1831,10 +1832,19 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_text);
 
+  // External applications and services may launch the browser in a mode which
+  // exposes browser control interfaces via Mojo. Any such interface binding
+  // request received from an external client is passed to this method.
+  virtual void BindBrowserControlInterface(
+      mojo::GenericPendingReceiver receiver);
+
   // Returns true when a context (e.g., iframe) whose URL is |url| should
   // inherit the parent COEP value implicitly, similar to "blob:"
   virtual bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url);
+
+  // Returns the URL-Keyed Metrics service for chrome:ukm.
+  virtual ukm::UkmService* GetUkmService();
 };
 
 }  // namespace content

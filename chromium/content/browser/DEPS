@@ -72,6 +72,9 @@ include_rules = [
   "-services/network",
   "+services/network/public/cpp",
   "+services/network/public/mojom",
+  "-services/cert_verifier",
+  "+services/cert_verifier/public/cpp",
+  "+services/cert_verifier/public/mojom",
 
   # In general, //content shouldn't depend on //device.
   # This is the an exception.
@@ -103,7 +106,7 @@ include_rules = [
   "+third_party/blink/public/platform/viewport_intersection_state.h",
   "+third_party/blink/public/platform/web_client_hints_type.h",
   "+third_party/blink/public/platform/web_content_security_policy.h",
-  "+third_party/blink/public/platform/web_drag_operation.h",
+  "+third_party/blink/public/common/page/web_drag_operation.h",
   "+third_party/blink/public/platform/web_fullscreen_video_status.h",
   "+third_party/blink/public/platform/web_mixed_content_context_type.h",
   "+third_party/blink/public/platform/web_screen_info.h",
@@ -119,7 +122,6 @@ include_rules = [
   "+third_party/blink/public/web/web_context_menu_data.h",
   "+third_party/blink/public/web/web_device_emulation_params.h",
   "+third_party/blink/public/web/web_drag_status.h",
-  "+third_party/blink/public/web/web_ime_text_span.h",
   "+third_party/blink/public/web/web_serialized_script_value_version.h",
   "+third_party/blink/public/mojom/frame/tree_scope_type.mojom.h",
 
@@ -152,18 +154,12 @@ specific_include_rules = {
     "+services/network/url_request_context_owner.h",
   ],
   "network_service_instance_impl\.cc": [
+    # Used to instantiate a CertVerifierServiceFactory in the browser process.
+    "+services/cert_verifier/cert_verifier_service_factory.h",
     # TODO(crbug.com/1049894): Remove.
     "+services/network/network_service.h",
   ],
-  "service_worker_fetch_dispatcher\.cc": [
-    # TODO(crbug.com/1049894): Remove.
-    "+services/network/throttling/throttling_controller.h",
-  ],
-  "signed_exchange_certificate_chain\.h": [
-    "+services/network/ignore_errors_cert_verifier.h",
-  ],
   "signed_exchange_handler_unittest\.cc": [
-    "+services/network/ignore_errors_cert_verifier.h",
     "+services/network/network_context.h",
   ],
   "signed_exchange_subresource_prefetch_browsertest\.cc": [

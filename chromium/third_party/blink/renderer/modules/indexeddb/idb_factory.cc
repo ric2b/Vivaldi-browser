@@ -104,13 +104,13 @@ class WebIDBGetDBNamesCallbacksImpl : public WebIDBCallbacks {
     promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kUnknownError,
         "The databases() promise was rejected."));
-    promise_resolver_.Clear();
   }
 
   void SuccessNamesAndVersionsList(
       Vector<mojom::blink::IDBNameAndVersionPtr> names_and_versions) override {
     if (!promise_resolver_)
       return;
+    DCHECK(!async_task_.has_value());
 
     HeapVector<Member<IDBDatabaseInfo>> name_and_version_list;
     name_and_version_list.ReserveInitialCapacity(name_and_version_list.size());
@@ -124,11 +124,12 @@ class WebIDBGetDBNamesCallbacksImpl : public WebIDBCallbacks {
       name_and_version_list.push_back(idb_info);
     }
 
-    probe::AsyncTask async_task(
+    async_task_.emplace(
         ExecutionContext::From(promise_resolver_->GetScriptState()),
         &async_task_id_, "success");
     promise_resolver_->Resolve(name_and_version_list);
-    promise_resolver_.Clear();
+    // Note: Resolve may cause |this| to be deleted.  async_task_ will be
+    // completed in the destructor.
   }
 
   void SuccessStringList(const Vector<String>&) override { NOTREACHED(); }
@@ -190,6 +191,7 @@ class WebIDBGetDBNamesCallbacksImpl : public WebIDBCallbacks {
 
  private:
   probe::AsyncTaskId async_task_id_;
+  base::Optional<probe::AsyncTask> async_task_;
   Persistent<ScriptPromiseResolver> promise_resolver_;
 };
 

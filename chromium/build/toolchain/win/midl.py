@@ -173,8 +173,8 @@ def overwrite_cls_guid(h_file, iid_file, tlb_file, dynamic_guid):
   overwrite_cls_guid_tlb(tlb_file, dynamic_guid)
 
 
-def main(arch, gendir, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, idl,
-         *flags):
+def main(arch, gendir, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, clang,
+         idl, *flags):
   # Copy checked-in outputs to final location.
   source = gendir
   if os.path.isdir(os.path.join(source, os.path.basename(idl))):
@@ -204,6 +204,10 @@ def main(arch, gendir, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, idl,
   env_pairs = open(arch).read()[:-2].split('\0')
   env_dict = dict([item.split('=', 1) for item in env_pairs])
 
+  # Extract the /D options and send them to the preprocessor.
+  preprocessor_options = '-E -nologo -Wno-nonportable-include-path'
+  preprocessor_options += ''.join(
+      [' ' + flag for flag in flags if flag.startswith('/D')])
   args = ['midl', '/nologo'] + list(flags) + [
       '/out', tmp_dir,
       '/tlb', tlb,
@@ -211,6 +215,8 @@ def main(arch, gendir, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, idl,
       '/dlldata', dlldata,
       '/iid', iid,
       '/proxy', proxy,
+      '/cpp_cmd', clang,
+      '/cpp_opt', preprocessor_options,
       idl]
   try:
     popen = subprocess.Popen(args, shell=True, env=env_dict,

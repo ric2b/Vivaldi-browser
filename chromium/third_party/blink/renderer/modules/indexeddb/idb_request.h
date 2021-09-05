@@ -149,6 +149,8 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
     size_t PopulateForNewEvent(const char* trace_event_name);
 
    private:
+    friend class IDBRequest;
+
     // The name of the async trace events tracked by this instance.
     //
     // Null is used to signal that the instance is empty, so the event name
@@ -180,7 +182,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   IDBRequest(ScriptState*, const Source&, IDBTransaction*, AsyncTraceState);
   ~IDBRequest() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   v8::Isolate* GetIsolate() const { return isolate_; }
   ScriptValue result(ScriptState*, ExceptionState&);

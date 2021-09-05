@@ -31,6 +31,7 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_service_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_handler.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -56,6 +57,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/gaia_password_changed_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gesture_navigation_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/hid_detection_screen_handler.h"
@@ -74,6 +76,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/supervision_transition_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/sync_consent_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_board_screen_handler.h"
@@ -101,6 +104,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -192,7 +196,8 @@ void AddAssistantScreensResources(content::WebUIDataSource* source) {
                           IDR_ASSISTANT_VOICE_MATCH_ANIMATION);
   source->AddResourcePath("voice_match_already_setup_animation.json",
                           IDR_ASSISTANT_VOICE_MATCH_ALREADY_SETUP_ANIMATION);
-  source->OverrideContentSecurityPolicyWorkerSrc("worker-src blob: 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
 }
 
 void AddGestureNavigationResources(content::WebUIDataSource* source) {
@@ -202,13 +207,15 @@ void AddGestureNavigationResources(content::WebUIDataSource* source) {
                           IDR_GESTURE_NAVIGATION_GO_BACK_ANIMATION);
   source->AddResourcePath("gesture_hotseat_overview.json",
                           IDR_GESTURE_NAVIGATION_HOTSEAT_OVERVIEW_ANIMATION);
-  source->OverrideContentSecurityPolicyWorkerSrc("worker-src blob: 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
 }
 
 void AddMarketingOptInResources(content::WebUIDataSource* source) {
   source->AddResourcePath("all_set.json",
                           IDR_MARKETING_OPT_IN_ALL_SET_ANIMATION);
-  source->OverrideContentSecurityPolicyWorkerSrc("worker-src blob: 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
 }
 
 void AddFingerprintResources(content::WebUIDataSource* source) {
@@ -238,7 +245,9 @@ void AddFingerprintResources(content::WebUIDataSource* source) {
     // lottie animations, this update has to be performed manually. As the usage
     // increases, set this as the default so manual override is no longer
     // required.
-    source->OverrideContentSecurityPolicyWorkerSrc("worker-src blob: 'self';");
+    source->OverrideContentSecurityPolicy(
+        network::mojom::CSPDirectiveName::WorkerSrc,
+        "worker-src blob: 'self';");
   } else {
     source->AddResourcePath("fingerprint_scanner_animation.png", animation_id);
   }
@@ -250,10 +259,12 @@ void AddDebuggerResources(content::WebUIDataSource* source) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool enable_debugger =
       command_line->HasSwitch(::chromeos::switches::kShowOobeDevOverlay);
-  // TODO(crbug.com/1073095): Also enable for ChromeOS test images.
-  // Enable for ChromeOS-on-linux for developers.
-  bool test_mode = !base::SysInfo::IsRunningOnChromeOS();
-  if (enable_debugger && test_mode) {
+  // Enable for ChromeOS-on-linux for developers and test images.
+  if (enable_debugger && base::SysInfo::IsRunningOnChromeOS()) {
+    LOG(WARNING) << "OOBE Debug overlay can only be used on test images";
+    base::SysInfo::CrashIfChromeOSNonTestImage();
+  }
+  if (enable_debugger) {
     source->AddResourcePath(kDebuggerJSPath, IDR_OOBE_DEBUGGER_JS);
   } else {
     source->AddResourcePath(kDebuggerJSPath, IDR_OOBE_DEBUGGER_STUB_JS);
@@ -325,8 +336,8 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   AddDebuggerResources(source);
 
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
-  source->OverrideContentSecurityPolicyObjectSrc(
-      "object-src chrome:;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ObjectSrc, "object-src chrome:;");
 
   // Only add a filter when runing as test.
   const bool is_running_test = command_line->HasSwitch(::switches::kTestName) ||
@@ -346,14 +357,6 @@ std::string GetDisplayType(const GURL& url) {
     return OobeUI::kLoginDisplay;
   }
   return path;
-}
-
-bool IsRemoraRequisitioned() {
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-  return policy_manager && policy_manager->IsRemoraRequisition();
 }
 
 }  // namespace
@@ -454,13 +457,15 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(
       std::make_unique<MarketingOptInScreenHandler>(js_calls_container_.get()));
 
+  AddScreenHandler(std::make_unique<GaiaPasswordChangedScreenHandler>(
+      js_calls_container_.get()));
+
   auto password_change_handler =
       std::make_unique<ActiveDirectoryPasswordChangeScreenHandler>(
           js_calls_container_.get(), core_handler_);
 
   AddScreenHandler(std::make_unique<GaiaScreenHandler>(
-      js_calls_container_.get(), core_handler_, network_state_informer_,
-      password_change_handler.get()));
+      js_calls_container_.get(), core_handler_, network_state_informer_));
 
   AddScreenHandler(std::move(password_change_handler));
 
@@ -494,6 +499,9 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(std::make_unique<PackagedLicenseScreenHandler>(
       js_calls_container_.get()));
 
+  AddScreenHandler(
+      std::make_unique<TpmErrorScreenHandler>(js_calls_container_.get()));
+
   Profile* profile = Profile::FromWebUI(web_ui());
   // Set up the chrome://theme/ source, for Chrome logo.
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
@@ -514,7 +522,7 @@ void OobeUI::ConfigureOobeDisplay() {
   content::URLDataSource::Add(profile,
                               std::make_unique<chromeos::VideoSource>());
 
-  if (IsRemoraRequisitioned())
+  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition())
     oobe_display_chooser_ = std::make_unique<OobeDisplayChooser>();
 }
 
@@ -547,7 +555,7 @@ void OobeUI::BindInterface(
 OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
     : ui::MojoWebUIController(web_ui, true /* enable_chrome_send */) {
   // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "Creating new OobeUI";
+  LOG(ERROR) << "1082670 : Creating new OobeUI";
 
   display_type_ = GetDisplayType(url);
 
@@ -648,12 +656,12 @@ void OobeUI::AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler) {
 
 void OobeUI::InitializeHandlers() {
   // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "OobeUI::InitializeHandlers";
+  LOG(ERROR) << "1082670 : OobeUI::InitializeHandlers";
 
   js_calls_container_->ExecuteDeferredJSCalls(web_ui());
 
   // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "OobeUI::Marking as ready and executing callbacks";
+  LOG(ERROR) << "1082670 : OobeUI::Marking as ready and executing callbacks";
 
   ready_ = true;
   for (size_t i = 0; i < ready_callbacks_.size(); ++i)
@@ -686,7 +694,8 @@ bool OobeUI::IsScreenInitialized(OobeScreenId screen) {
 
 bool OobeUI::IsJSReady(const base::Closure& display_is_ready_callback) {
   // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "OobeUI::IsJSReady? = " << ready_;
+  LOG(ERROR) << "1082670 : OobeUI::IsJSReady? = " << ready_;
+
   if (!ready_)
     ready_callbacks_.push_back(display_is_ready_callback);
   return ready_;
@@ -699,8 +708,7 @@ void OobeUI::ShowOobeUI(bool show) {
     oobe_display_chooser_->TryToPlaceUiOnTouchDisplay();
 }
 
-void OobeUI::ShowSigninScreen(SigninScreenHandlerDelegate* delegate,
-                              NativeWindowDelegate* native_window_delegate) {
+void OobeUI::ShowSigninScreen(SigninScreenHandlerDelegate* delegate) {
   // Check our device mode.
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -712,7 +720,6 @@ void OobeUI::ShowSigninScreen(SigninScreenHandlerDelegate* delegate,
   }
 
   signin_screen_handler_->SetDelegate(delegate);
-  signin_screen_handler_->SetNativeWindowDelegate(native_window_delegate);
 
   signin_screen_handler_->Show(core_handler_->show_oobe_ui());
 }
@@ -723,7 +730,6 @@ void OobeUI::ForwardAccelerator(std::string accelerator_name) {
 
 void OobeUI::ResetSigninScreenHandlerDelegate() {
   signin_screen_handler_->SetDelegate(nullptr);
-  signin_screen_handler_->SetNativeWindowDelegate(nullptr);
 }
 
 

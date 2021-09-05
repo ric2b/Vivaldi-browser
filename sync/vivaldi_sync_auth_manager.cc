@@ -14,6 +14,8 @@
 namespace vivaldi {
 
 namespace {
+const char kEmailSuffix[] = "@vivaldi.net";
+
 GoogleServiceAuthError ToGoogleServiceAuthError(
     VivaldiAccountManager::FetchError error) {
   switch (error.type) {
@@ -37,7 +39,7 @@ syncer::SyncAccountInfo ToSyncAccountInfo(
   CoreAccountInfo chromium_account_info;
   // Email is the closest thing to a username that the chromium account info
   // takes. It isn't really used for anything else than disply purposes anyway.
-  chromium_account_info.email = account_info.username;
+  chromium_account_info.email = account_info.username + kEmailSuffix;
   chromium_account_info.gaia = account_info.username;
   chromium_account_info.account_id =
       CoreAccountId::FromString(account_info.account_id);

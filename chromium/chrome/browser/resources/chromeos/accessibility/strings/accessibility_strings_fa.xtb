@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">پیمایش به راست</translation>
 <translation id="1781173782405573156">کلید عبور</translation>
 <translation id="1787176709638001873">نوشتار ویرایش گذرواژه</translation>
+<translation id="180203835522132923">‏Search + O، سپس W</translation>
 <translation id="1810107444790159527">کادر فهرست</translation>
 <translation id="1812527064848182527">منظره</translation>
 <translation id="1829244130665387512">یافتن در صفحه</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">تند کشیدن دو انگشت به راست</translation>
 <translation id="2998131015536248178">نویسه قبلی</translation>
 <translation id="2999559350546931576">کاهش گام</translation>
+<translation id="3009352964623081324">‏Search + O، سپس S برای نصب، مدیریت، و سفارشی‌سازی صداها استفاده کنید.</translation>
 <translation id="3014130421870723208">‏‎@ویرایش ۸ نقطه‌ای</translation>
 <translation id="3030432017085518523">دکمه رادیویی مورد منو</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{آپاستروف}one{# آپاستروف}other{# آپاستروف}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">درج</translation>
 <translation id="4511186779140817916">کاهگلی</translation>
 <translation id="451510441928265982">عنوان سطح ۲ قبلی وجود ندارد</translation>
+<translation id="4515799157838123044">تار کردن محتوای پس‌زمینه</translation>
 <translation id="4517854969512651305">افزایش مقدار</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{ممیز}one{# ممیز}other{# ممیز}}</translation>
 <translation id="4537277403911487429">مورد مشابه بعدی</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">بخش</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">نوار پیشرفت</translation>
+<translation id="6660819301598582123">روباه قهوه‌ای چالاک از روی سگ تنبل پرید.</translation>
 <translation id="667999046851023355">سند</translation>
 <translation id="6688209025607531203">هشدار غیرکیفیتی</translation>
 <translation id="6689672606256159458">قهوه‌ای حنایی</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">عنوان سطح ۵ بعدی وجود ندارد</translation>
 <translation id="6955705049214951590">صورتی محو</translation>
 <translation id="696356426651109308">پرش به شروع</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">مرجع واژه‌نامه</translation>
 <translation id="6996566555547746822">کادر ترکیبی بعدی</translation>
 <translation id="6997224546856374593">هنگام خواندن حروف بزرگ:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">مثال</translation>
 <translation id="7439060726180460871">فهرست راهنما</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">هنگام خواندن انواع عناصر و متن نقل‌شده، حذف‌شده، پررنگ‌شده، داخل پرانتز، یا با حروف بزرگ، زیروبمی صدا تغییر داده شود.</translation>
 <translation id="7491962110804786152">برگه</translation>
 <translation id="7505149250476994901">‏گفتن «cap» (حرف بزرگ) قبل از حرف</translation>
 <translation id="7518543783849163354">‏برای توقف موقت صدای ChromeVox، کلید Control را فشار دهید.</translation>

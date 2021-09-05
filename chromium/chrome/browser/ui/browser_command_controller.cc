@@ -84,7 +84,7 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
@@ -95,6 +95,7 @@
 #endif
 
 #if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -538,9 +539,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
           ->GetMainFrame()
           ->ViewSource();
       break;
-    case IDC_EMAIL_PAGE_LOCATION:
-      EmailPageLocation(browser_);
-      break;
     case IDC_PRINT:
       Print(browser_);
       break;
@@ -882,11 +880,6 @@ void BrowserCommandController::OnTabStripModelChanged(
     default:
       break;
   }
-
-  for (auto* contents : old_contents)
-    RemoveInterstitialObservers(contents);
-  for (auto* contents : new_contents)
-    AddInterstitialObservers(contents);
 }
 
 void BrowserCommandController::TabBlockedStateChanged(
@@ -918,27 +911,6 @@ void BrowserCommandController::TabRestoreServiceLoaded(
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserCommandController, private:
-
-class BrowserCommandController::InterstitialObserver
-    : public content::WebContentsObserver {
- public:
-  InterstitialObserver(BrowserCommandController* controller,
-                       content::WebContents* web_contents)
-      : WebContentsObserver(web_contents), controller_(controller) {}
-
-  void DidAttachInterstitialPage() override {
-    controller_->UpdateCommandsForTabState();
-  }
-
-  void DidDetachInterstitialPage() override {
-    controller_->UpdateCommandsForTabState();
-  }
-
- private:
-  BrowserCommandController* controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(InterstitialObserver);
-};
 
 bool BrowserCommandController::IsShowingMainUI() {
   return browser_->SupportsWindowFeature(Browser::FEATURE_TABSTRIP);
@@ -991,9 +963,11 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_RESTORE_WINDOW, true);
   bool use_system_title_bar = true;
 #if defined(USE_OZONE)
-  use_system_title_bar = ui::OzonePlatform::GetInstance()
-                             ->GetPlatformProperties()
-                             .use_system_title_bar;
+  if (features::IsUsingOzonePlatform()) {
+    use_system_title_bar = ui::OzonePlatform::GetInstance()
+                               ->GetPlatformProperties()
+                               .use_system_title_bar;
+  }
 #endif
   command_updater_.UpdateCommandEnabled(IDC_USE_SYSTEM_TITLE_BAR,
                                         use_system_title_bar);
@@ -1001,7 +975,6 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_PWA_WINDOW, true);
 
   // Page-related commands
-  command_updater_.UpdateCommandEnabled(IDC_EMAIL_PAGE_LOCATION, true);
   command_updater_.UpdateCommandEnabled(IDC_MANAGE_PASSWORDS_FOR_PAGE, true);
 
   // Zoom
@@ -1051,13 +1024,19 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(
       IDC_HOME, normal_window || browser_->deprecated_is_app());
 
-  const bool is_web_app =
+  const bool is_web_app_or_custom_tab =
+#if defined(OS_CHROMEOS)
+      browser_->is_type_custom_tab() ||
+#endif
       web_app::AppBrowserController::IsForWebAppBrowser(browser_);
   // Hosted app browser commands.
-  command_updater_.UpdateCommandEnabled(IDC_COPY_URL, is_web_app);
-  command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME, is_web_app);
-  command_updater_.UpdateCommandEnabled(IDC_SITE_SETTINGS, is_web_app);
-  command_updater_.UpdateCommandEnabled(IDC_WEB_APP_MENU_APP_INFO, is_web_app);
+  command_updater_.UpdateCommandEnabled(IDC_COPY_URL, is_web_app_or_custom_tab);
+  command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME,
+                                        is_web_app_or_custom_tab);
+  command_updater_.UpdateCommandEnabled(IDC_SITE_SETTINGS,
+                                        is_web_app_or_custom_tab);
+  command_updater_.UpdateCommandEnabled(IDC_WEB_APP_MENU_APP_INFO,
+                                        is_web_app_or_custom_tab);
 
   // Tab management commands
   const bool supports_tabs =
@@ -1194,8 +1173,6 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   window()->ZoomChangedForActiveTab(false);
   command_updater_.UpdateCommandEnabled(IDC_VIEW_SOURCE,
                                         CanViewSource(browser_));
-  command_updater_.UpdateCommandEnabled(IDC_EMAIL_PAGE_LOCATION,
-                                        CanEmailPageLocation(browser_));
   if (browser_->is_type_devtools())
     command_updater_.UpdateCommandEnabled(IDC_OPEN_FILE, false);
 
@@ -1529,22 +1506,6 @@ void BrowserCommandController::UpdateCommandsForTabKeyboardFocus(
       IDC_PIN_TARGET_TAB, normal_window && target_index.has_value());
   command_updater_.UpdateCommandEnabled(
       IDC_GROUP_TARGET_TAB, normal_window && target_index.has_value());
-}
-
-void BrowserCommandController::AddInterstitialObservers(WebContents* contents) {
-  interstitial_observers_.push_back(new InterstitialObserver(this, contents));
-}
-
-void BrowserCommandController::RemoveInterstitialObservers(
-    WebContents* contents) {
-  for (size_t i = 0; i < interstitial_observers_.size(); i++) {
-    if (interstitial_observers_[i]->web_contents() != contents)
-      continue;
-
-    delete interstitial_observers_[i];
-    interstitial_observers_.erase(interstitial_observers_.begin() + i);
-    return;
-  }
 }
 
 BrowserWindow* BrowserCommandController::window() {

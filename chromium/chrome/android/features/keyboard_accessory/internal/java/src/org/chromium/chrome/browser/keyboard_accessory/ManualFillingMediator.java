@@ -37,7 +37,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.KeyboardExtensionState;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.StateProperty;
@@ -58,11 +58,11 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetObserver;
-import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillSuggestion;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.DropdownPopupWindow;
@@ -123,12 +123,13 @@ class ManualFillingMediator extends EmptyTabObserver
         }
     };
 
-    private final FullscreenListener mFullscreenListener = new FullscreenListener() {
-        @Override
-        public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
-            pause();
-        }
-    };
+    private final FullscreenManager.Observer mFullscreenObserver =
+            new FullscreenManager.Observer() {
+                @Override
+                public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
+                    pause();
+                }
+            };
 
     private final BottomSheetObserver mBottomSheetObserver = new EmptyBottomSheetObserver() {
         @Override
@@ -175,7 +176,7 @@ class ManualFillingMediator extends EmptyTabObserver
                 mStateCache.destroyStateFor(tab);
             }
         };
-        mActivity.getFullscreenManager().addListener(mFullscreenListener);
+        mActivity.getFullscreenManager().addObserver(mFullscreenObserver);
         mActivity.getBottomSheetController().addObserver(mBottomSheetObserver);
         ensureObserverRegistered(getActiveBrowserTab());
         refreshTabs();
@@ -224,6 +225,7 @@ class ManualFillingMediator extends EmptyTabObserver
 
     void registerSheetDataProvider(@AccessoryTabType int tabType,
             PropertyProvider<KeyboardAccessoryData.AccessorySheetData> dataProvider) {
+        if (!isInitialized()) return;
         ManualFillingState state = mStateCache.getStateFor(mActivity.getCurrentWebContents());
 
         state.wrapSheetDataProvider(tabType, dataProvider);
@@ -234,6 +236,7 @@ class ManualFillingMediator extends EmptyTabObserver
 
     void registerAutofillProvider(
             PropertyProvider<AutofillSuggestion[]> autofillProvider, AutofillDelegate delegate) {
+        if (!isInitialized()) return;
         if (mKeyboardAccessory == null) return;
         mKeyboardAccessory.registerAutofillProvider(autofillProvider, delegate);
     }
@@ -257,7 +260,7 @@ class ManualFillingMediator extends EmptyTabObserver
         mObservedTabs.clear();
         LayoutManager manager = getLayoutManager();
         if (manager != null) manager.removeSceneChangeObserver(mTabSwitcherObserver);
-        mActivity.getFullscreenManager().removeListener(mFullscreenListener);
+        mActivity.getFullscreenManager().removeObserver(mFullscreenObserver);
         mActivity.getBottomSheetController().removeObserver(mBottomSheetObserver);
         mWindowAndroid = null;
         mActivity = null;

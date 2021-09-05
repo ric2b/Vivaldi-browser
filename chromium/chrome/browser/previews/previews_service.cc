@@ -18,8 +18,8 @@
 #include "chrome/browser/previews/previews_offline_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
-#include "components/blacklist/opt_out_blacklist/opt_out_store.h"
-#include "components/blacklist/opt_out_blacklist/sql/opt_out_store_sql.h"
+#include "components/blocklist/opt_out_blocklist/opt_out_store.h"
+#include "components/blocklist/opt_out_blocklist/sql/opt_out_store_sql.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
@@ -140,9 +140,9 @@ bool PreviewsService::HasURLRedirectCycle(
 }
 
 // static
-blacklist::BlacklistData::AllowedTypesAndVersions
+blocklist::BlocklistData::AllowedTypesAndVersions
 PreviewsService::GetAllowedPreviews() {
-  blacklist::BlacklistData::AllowedTypesAndVersions enabled_previews;
+  blocklist::BlocklistData::AllowedTypesAndVersions enabled_previews;
 
   // Loop across all previews types (relies on sequential enum values).
   for (int i = static_cast<int>(previews::PreviewsType::NONE) + 1;
@@ -203,7 +203,7 @@ void PreviewsService::Initialize(
 
   previews_ui_service_ = std::make_unique<previews::PreviewsUIService>(
       std::move(previews_decider_impl),
-      std::make_unique<blacklist::OptOutStoreSQL>(
+      std::make_unique<blocklist::OptOutStoreSQL>(
           ui_task_runner, background_task_runner,
           profile_path.Append(chrome::kPreviewsOptOutDBFilename)),
       std::move(previews_opt_guide), base::Bind(&IsPreviewsTypeEnabled),
@@ -219,10 +219,10 @@ void PreviewsService::Shutdown() {
     previews_offline_helper_->Shutdown();
 }
 
-void PreviewsService::ClearBlackList(base::Time begin_time,
+void PreviewsService::ClearBlockList(base::Time begin_time,
                                      base::Time end_time) {
   if (previews_ui_service_)
-    previews_ui_service_->ClearBlackList(begin_time, end_time);
+    previews_ui_service_->ClearBlockList(begin_time, end_time);
 }
 
 void PreviewsService::ReportObservedRedirectWithDeferAllScriptPreview(

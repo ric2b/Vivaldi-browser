@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -380,7 +381,7 @@ void RenderViewTest::SetUp() {
   if (!render_thread_)
     render_thread_ = std::make_unique<MockRenderThread>();
 
-  render_widget_host_.reset(new FakeRenderWidgetHost());
+  render_widget_host_ = CreateRenderWidgetHost();
 
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
@@ -438,7 +439,7 @@ void RenderViewTest::SetUp() {
   process_ = std::make_unique<RenderProcess>();
 
   mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
-  view_params->opener_frame_route_id = MSG_ROUTING_NONE;
+  view_params->opener_frame_token = base::nullopt;
   view_params->window_was_created_with_opener = false;
   view_params->renderer_preferences = blink::mojom::RendererPreferences::New();
   view_params->web_preferences = WebPreferences();
@@ -467,6 +468,8 @@ void RenderViewTest::SetUp() {
   view_params->hidden = false;
   view_params->never_composited = false;
   view_params->visual_properties = InitialVisualProperties();
+  std::tie(view_params->widget_host, view_params->widget) =
+      render_widget_host_->BindNewWidgetInterfaces();
   std::tie(view_params->frame_widget_host, view_params->frame_widget) =
       render_widget_host_->BindNewFrameWidgetInterfaces();
 
@@ -560,9 +563,9 @@ void RenderViewTest::SendNativeKeyEvent(
 void RenderViewTest::SendInputEvent(const blink::WebInputEvent& input_event) {
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(input_event, ui::LatencyInfo()),
-      HandledEventCallback());
+      base::DoNothing());
 }
 
 void RenderViewTest::SendWebKeyboardEvent(
@@ -645,13 +648,13 @@ void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
   mouse_event.click_count = 1;
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      HandledEventCallback());
+      base::DoNothing());
   mouse_event.SetType(WebInputEvent::Type::kMouseUp);
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      HandledEventCallback());
+      base::DoNothing());
 }
 
 
@@ -671,13 +674,13 @@ void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
   mouse_event.click_count = 1;
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      HandledEventCallback());
+      base::DoNothing());
   mouse_event.SetType(WebInputEvent::Type::kMouseUp);
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      HandledEventCallback());
+      base::DoNothing());
 }
 
 void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
@@ -690,10 +693,9 @@ void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   gesture_event.data.tap.height = rect.height();
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(
+  widget->GetWebWidget()->ProcessInputEventSynchronously(
       blink::WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()),
-      HandledEventCallback());
-  widget->FocusChangeComplete();
+      base::DoNothing());
 }
 
 void RenderViewTest::SetFocused(const blink::WebElement& element) {
@@ -828,6 +830,10 @@ ContentBrowserClient* RenderViewTest::CreateContentBrowserClient() {
 
 ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
   return new ContentRendererClient;
+}
+
+std::unique_ptr<FakeRenderWidgetHost> RenderViewTest::CreateRenderWidgetHost() {
+  return std::make_unique<FakeRenderWidgetHost>();
 }
 
 VisualProperties RenderViewTest::InitialVisualProperties() {

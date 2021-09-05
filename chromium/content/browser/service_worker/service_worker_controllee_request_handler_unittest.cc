@@ -19,7 +19,7 @@
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
+#include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/public/browser/resource_context.h"
@@ -70,7 +70,7 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
                                   base::DoNothing(), base::DoNothing());
     }
 
-    ServiceWorkerNavigationLoader* loader() { return handler_->loader(); }
+    ServiceWorkerMainResourceLoader* loader() { return handler_->loader(); }
 
     void SetHandler(
         std::unique_ptr<ServiceWorkerControlleeRequestHandler> handler) {
@@ -145,7 +145,7 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
   net::TestDelegate url_request_delegate_;
   GURL scope_;
   GURL script_url_;
-  std::vector<ServiceWorkerRemoteProviderEndpoint> remote_endpoints_;
+  std::vector<ServiceWorkerRemoteContainerEndpoint> remote_endpoints_;
 };
 
 class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {

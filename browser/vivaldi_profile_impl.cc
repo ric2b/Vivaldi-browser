@@ -45,6 +45,13 @@ void VivaldiInitProfile(Profile* profile) {
       menus::MenuServiceFactory::GetForBrowserContext(profile);
   menu_model->AddObserver(new menus::MenuModelLoadedObserver());
 
+  extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
+      ->Get(profile)
+      ->PostProfileSetup();
+
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
   calendar::CalendarService* calendar_service =
       calendar::CalendarServiceFactory::GetForProfile(profile);
   calendar_service->AddObserver(new calendar::CalendarModelLoadedObserver());
@@ -52,13 +59,6 @@ void VivaldiInitProfile(Profile* profile) {
   contact::ContactService* contact_service =
       contact::ContactServiceFactory::GetForProfile(profile);
   contact_service->AddObserver(new contact::ContactModelLoadedObserver());
-
-  extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-      ->Get(profile)
-      ->PostProfileSetup();
-
-  if (!vivaldi::IsVivaldiRunning())
-    return;
 
   vivaldi::LazyLoadServiceFactory::GetForProfile(profile);
 

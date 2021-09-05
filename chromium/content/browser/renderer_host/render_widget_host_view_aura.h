@@ -29,6 +29,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/text_input_manager.h"
+#include "content/browser/renderer_host/virtual_keyboard_controller_win.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/public/browser/context_menu_params.h"
@@ -188,6 +189,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       override;
   void TransferTouches(
       const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) override;
+  // TODO(lanwei): Use TestApi interface to write functions that are used in
+  // tests and remove FRIEND_TEST_ALL_PREFIXES.
+  void SetLastPointerType(ui::EventPointerType last_pointer_type) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -226,6 +230,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool SetCompositionFromExistingText(
       const gfx::Range& range,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
+#endif
+
+#if defined(OS_CHROMEOS)
+  // Set the autocorrect range
+  bool SetAutocorrectRange(const base::string16& autocorrect_text,
+                           const gfx::Range& range) override;
 #endif
 
 #if defined(OS_WIN)
@@ -304,13 +314,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Notification that the LegacyRenderWidgetHostHWND was destroyed.
   void OnLegacyWindowDestroyed();
+#endif
 
   gfx::NativeViewAccessible GetParentNativeViewAccessible();
-
-  void SetVirtualKeyboardRequested(bool virtual_keyboard_requested) {
-    virtual_keyboard_requested_ = virtual_keyboard_requested;
-  }
-#endif
 
   // Method to indicate if this instance is shutting down or closing.
   // TODO(shrikant): Discuss around to see if it makes sense to add this method
@@ -338,17 +344,17 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void ShowContextMenu(const ContextMenuParams& params) override;
   void Shutdown() override;
 
+  bool ShouldVirtualKeyboardOverlayContent() const;
+  void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect);
+  bool FocusedFrameHasStickyActivation() const;
+
   RenderWidgetHostViewEventHandler* event_handler() {
     return event_handler_.get();
   }
 
   void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
 
-  // TODO(lanwei): Use TestApi interface to write functions that are used in
-  // tests and remove FRIEND_TEST_ALL_PREFIXES.
-  void SetLastPointerType(ui::EventPointerType last_pointer_type) {
-    last_pointer_type_ = last_pointer_type;
-  }
+  ui::EventPointerType GetLastPointerType() const { return last_pointer_type_; }
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
@@ -432,6 +438,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            KeyboardObserverForFocusedNodeChanged);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
                            KeyboardObserverForPenInput);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
+                           KeyboardObserverDetachDuringWindowDestroy);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            DropFallbackWhenHidden);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
@@ -530,7 +538,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                               RenderWidgetHostViewBase* updated_view) override;
 
   // Detaches |this| from the input method object.
-  void DetachFromInputMethod();
+  // is_removed flag is true if this is called while the window is
+  // getting removed/destroyed, false, otherwise.
+  void DetachFromInputMethod(bool is_removed);
 
   // Dismisses a Web Popup on a mouse or touch press outside the popup and its
   // parent.
@@ -564,6 +574,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Common part of Occluded() and Hide().
   void HideImpl();
+
+  blink::mojom::FrameWidgetInputHandler*
+  GetFrameWidgetInputHandlerForFocusedWidget();
 
   // NOTE: this is null if |is_mus_browser_plugin_guest_| is true.
   aura::Window* window_;
@@ -639,11 +652,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // we receive a request to show the context menu on a long press.
   std::unique_ptr<ContextMenuParams> last_context_menu_params_;
 
-  // Set to true if we requested the on screen keyboard to be displayed.
-  bool virtual_keyboard_requested_;
-
-  friend class WinScreenKeyboardObserver;
-  std::unique_ptr<WinScreenKeyboardObserver> keyboard_observer_;
+  // Handles the showing/hiding of the VK on Windows.
+  friend class VirtualKeyboardControllerWin;
+  std::unique_ptr<VirtualKeyboardControllerWin>
+      virtual_keyboard_controller_win_;
 
   gfx::Point last_mouse_move_location_;
 #endif

@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Շարունակել</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Աշխատեցնել ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Ծանուցումներ</translation>
+<translation id="2501278716633472235">Հետ գնալ</translation>
 <translation id="2539524384386349900">Հայտնաբերել</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />-ը ուղարկել է անվավեր պատասխան։</translation>
 <translation id="2586657967955657006">Փոխանակման պահեստ</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Սեղմեք թարմացնելու կոճակը՝ էջի բեռնման համար անհրաժեշտ տվյալները կրկին ուղարկելու համար։</translation>
 <translation id="3227137524299004712">Խոսափող</translation>
 <translation id="3234666976984236645">Միշտ հայտնաբերել կարևոր բովանդակությունն այս կայքում</translation>
+<translation id="3308738399950580893">գովազդը</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />-ն այս պահին անհասանելի է։</translation>
 <translation id="3427092606871434483">Թույլատրել (ստանդարտ)</translation>
 <translation id="3447661539832366887">Այս սարքի տերն անջատել է դինոզավրով խաղը։</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Հավաստագրի տվյալներ</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Ստուգել պրոքսին, հրապատը և DNS-ի կոնֆիգուրացիան<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Եթե Դուք օգտագործում եք պրոքսի սերվեր…</translation>
+<translation id="3894751534882749287">Եթե այնուամենայնիվ ցանկանում եք դիտել էջը, կարող եք փոխել պաշտպանության մակարդակը հետևման արգելափակման մենյուից կամ սեղմել «Թույլատրել» կոճակը</translation>
 <translation id="3950820424414687140">Մուտք</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />-ն արգելափակված է</translation>
 <translation id="3987940399970879459">1 ՄԲ-ից պակաս</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Ձեր միացումն ընդհատվեց</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Աշխատեցնել Windows-ի ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Հետևման արգելափակիչ</translation>
 <translation id="4744603770635761495">Կատարելի ֆայլի ուղի</translation>
 <translation id="4750917950439032686">Ձեր տվյալները (օրինակ՝ գաղտնաբառերը կամ բանկային քարտի համարները), երբ ուղարկվում են այս կայքին, գաղտնի են։</translation>
 <translation id="4764776831041365478"><ph name="URL" /> հասցեով վեբ էջը, հնարավոր է, որ ժամանակավորապես անհասանելի է կամ մշտապես տեղափոխվել է նոր վեբ հասցե։</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770">Որոնել Google-ում <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Թույլատրված է ընդլայնման կողմից</translation>
 <translation id="7111012039238467737">(վավեր)</translation>
+<translation id="7113310725918019676">Թույլատրել <ph name="BLOCKED_TYPE" /> <ph name="DOMAIN" />-ից</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />-ը չի համապատասխանում անվտանգության ստանդարտներին։</translation>
 <translation id="7219179957768738017">Միացումն օգտագործում է <ph name="SSL_VERSION" />։</translation>
 <translation id="7260504762447901703">Չեղարկել օգտվելու արտոնությունը</translation>
 <translation id="7353601530677266744">Հրամանի տող</translation>
+<translation id="7364115444476960850">Էջը, որը փորձում եք մուտք գործել, արգելափակված է Vivaldi-ի <ph name="BLOCKER_NAME" />ի կողմից</translation>
 <translation id="7419106976560586862">Պրոֆիլի ուղի</translation>
 <translation id="7445762425076701745">Սերվերի ինքնությունը, որին միացած եք, հնարավոր չէ ամբողջապես վավերացնել։ Դուք միացած եք սերվերին, օգտագործելով անուն, որը վավեր է միայն Ձեր ցանցում և որի պատկանելությունը չի կարող ստուգվել արտաքին հավաստագրման կենտրոնի կողմից։ Քանի որ որոշ հավաստագրման կենտրոններ կարող են թողարկել հավաստագրեր այսպիսի անունների համար, ուստի հնարավոր չէ վստահ լինել, որ միացած եք ակնկալվող կայքին, այլ ոչ թե հարձակվողի կայքի։</translation>
 <translation id="7455133967321480974">Կիրառել գլոբալ ստանդարտը (արգելափակել)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">Հարցնել (ստանդարտ)</translation>
 <translation id="8041940743680923270">Կիրառել գլոբալ ստանդարտը (հարցնել)</translation>
 <translation id="808894953321890993">Փոխել գաղտնաբառը</translation>
+<translation id="8119307142152921512">հետևումն ու գովազդը</translation>
 <translation id="8142868475871995937">Այցելեք &lt;strong&gt;vivaldi://policy&lt;/strong&gt;՝ տեսնելու համար URL-ների սև ցուցակը և այլ դրույթներ՝ պարտադրված Ձեր համակարգի ադմինիստրատորի կողմից։</translation>
 <translation id="8149426793427495338">Ձեր համակարգիչն անցավ քնի ռեժիմի։</translation>
 <translation id="8150722005171944719"><ph name="URL" /> հասցեով ֆայլն ընթեռնելի չէ։ Այն կարող է լինել հեռացված, տեղափոխված, կամ ֆայլի թույլտվությունները կարող են կանխել դրա հասանելիությունը։</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206">Ձեր միացումը <ph name="DOMAIN" />-ի հետ գաղտնագրված չէ։</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
 <translation id="8820817407110198400">Էջանիշեր</translation>
+<translation id="8940028675168378100">Արգելափակված է <ph name="BLOCKER_NAME" />ի կողմից</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> պրոքսին պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="9008201768610948239">Անտեսել</translation>
 <translation id="9011424611726486705">Բացել կայքի կարգավորումները</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">Բացի այդ, այս էջը պարունակում է ոչ անվտանգ ռեսուրսներ։ Փոխանցվելիս դրանք կարող են դիտվել երրորդ անձանց կողմից, և հարձակվողը կարող է փոփոխել դրանք՝ էջի վարքագիծը փոխելու նպատակով։</translation>
 <translation id="9069693763241529744">Արգելափակված է ընդլայնման կողմից</translation>
 <translation id="9169664750068251925">Միշտ արգելափակել այս կայքում</translation>
+<translation id="9180553614777056266">Գովազդի արգելափակիչ</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />-ն օգտագործում է չաջակցվող պրոտոկոլ։</translation>
 <translation id="9219103736887031265">Պատկերներ</translation>
 <translation id="936602727769022409">Դուք կարող եք կորցնել մուտքի իրավունքը Ձեր Google-ի հաշիվ։ Խորհուրդ ենք տալիս հենց հիմա փոխել գաղտնաբառը։ Դրանից հետո կպահանջվի կրկին մուտք գործել։</translation>

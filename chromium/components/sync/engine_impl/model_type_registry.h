@@ -21,7 +21,6 @@
 #include "components/sync/engine/non_blocking_sync_common.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine_impl/nudge_handler.h"
-#include "components/sync/engine_impl/uss_migrator.h"
 #include "components/sync/syncable/user_share.h"
 
 namespace syncer {
@@ -29,8 +28,6 @@ namespace syncer {
 class CancelationSignal;
 class CommitContributor;
 class DataTypeDebugInfoEmitter;
-class DirectoryCommitContributor;
-class DirectoryUpdateHandler;
 class KeystoreKeysHandler;
 class ModelTypeWorker;
 class UpdateHandler;
@@ -45,7 +42,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
   ModelTypeRegistry(const std::vector<scoped_refptr<ModelSafeWorker>>& workers,
                     UserShare* user_share,
                     NudgeHandler* nudge_handler,
-                    const UssMigrator& uss_migrator,
                     CancelationSignal* cancelation_signal,
                     KeystoreKeysHandler* keystore_keys_handler);
   ~ModelTypeRegistry() override;
@@ -55,8 +51,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
       ModelType type,
       std::unique_ptr<DataTypeActivationResponse> activation_response) override;
   void DisconnectNonBlockingType(ModelType type) override;
-  void RegisterDirectoryType(ModelType type, ModelSafeGroup group) override;
-  void UnregisterDirectoryType(ModelType type) override;
   void ConnectProxyType(ModelType type) override;
   void DisconnectProxyType(ModelType type) override;
 
@@ -114,7 +108,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
   DataTypeDebugInfoEmitter* GetEmitter(ModelType type);
 
   ModelTypeSet GetEnabledNonBlockingTypes() const;
-  ModelTypeSet GetEnabledDirectoryTypes() const;
 
   syncable::Directory* directory() const {
     return user_share_->directory.get();
@@ -122,12 +115,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
 
   // Enabled proxy types, which don't have a worker.
   ModelTypeSet enabled_proxy_types_;
-
-  // Sets of handlers and contributors.
-  std::map<ModelType, std::unique_ptr<DirectoryCommitContributor>>
-      directory_commit_contributors_;
-  std::map<ModelType, std::unique_ptr<DirectoryUpdateHandler>>
-      directory_update_handlers_;
 
   std::vector<std::unique_ptr<ModelTypeWorker>> model_type_workers_;
 
@@ -156,9 +143,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
   ModelTypeSet encrypted_types_;
 
   NudgeHandler* const nudge_handler_;
-
-  // Function to call to migrate data from the directory to USS.
-  UssMigrator uss_migrator_;
 
   // CancelationSignal is signalled on engine shutdown. It is passed to
   // ModelTypeWorker to cancel blocking operation.

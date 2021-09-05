@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Настави</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />да покренете дијагностику мреже<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Обавештења</translation>
+<translation id="2501278716633472235">Иди назад</translation>
 <translation id="2539524384386349900">Откриј</translation>
 <translation id="255002559098805027">Хост <ph name="HOST_NAME" /> је послао неважећи одговор.</translation>
 <translation id="2586657967955657006">Остава</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Притисните дугме за поновно учитавање да бисте поново послали податке потребне за учитавање странице.</translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3234666976984236645">Увек откриј важан садржај на овом сајту</translation>
+<translation id="3308738399950580893">рекламе</translation>
 <translation id="3422472998109090673">Хост <ph name="HOST_NAME" /> тренутно није доступан.</translation>
 <translation id="3427092606871434483">Дозволи (подразумевано)</translation>
 <translation id="3447661539832366887">Власник овог уређаја је искључио ову застарелу игру.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Информације о сертификату</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />да проверите конфигурацију проксија, заштитног зида и DNS-а<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Ако користите прокси сервер...</translation>
+<translation id="3894751534882749287">Ако ипак желите да погледате страницу, можете да промените ниво заштите од праћења у искачућем прозору блокатора праћења или кликом на дугме Дозволи</translation>
 <translation id="3950820424414687140">Пријави се</translation>
 <translation id="3973234410852337861">Хост <ph name="HOST_NAME" /> је блокиран</translation>
 <translation id="3987940399970879459">Мање од 1 MB</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Веза је прекинута</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />да покренете Windows дијагностику мреже<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Блокатор праћења</translation>
 <translation id="4744603770635761495">Путања извршне датотеке</translation>
 <translation id="4750917950439032686">Информације (на пример, лозинке или бројеви кредитних картица) су приватне када се шаљу овом сајту.</translation>
 <translation id="4764776831041365478">Могуће је да веб страница на адреси <ph name="URL" /> привремено не функционише или да је трајно премештена на нову веб адресу.</translation>
@@ -118,7 +122,7 @@
 <translation id="4974590756084640048">Поново омогући упозорења</translation>
 <translation id="5023310440958281426">Проверите смернице администратора</translation>
 <translation id="5039804452771397117">Дозволи</translation>
-<translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(користи се 1)} one {(користи се #)} few {(користе се #)} other {(користи се #)}}</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {користи се 1} one {користи се #} few {користе се #} other {користи се #}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />да проверите адресу проксија<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бита)</translation>
 <translation id="5287240709317226393">Прикажи колачиће</translation>
@@ -172,11 +176,13 @@
 <translation id="7079718277001814089">Овај сајт садржи малвер</translation>
 <translation id="7090678807593890770">Тражи <ph name="LINK" /> помоћу Google</translation>
 <translation id="7108819624672055576">Дозволио додатак</translation>
-<translation id="7111012039238467737">(Важећи)</translation>
+<translation id="7111012039238467737">(важећи)</translation>
+<translation id="7113310725918019676">Дозволи <ph name="BLOCKED_TYPE" /> од <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не поштује безбедносне стандарде.</translation>
 <translation id="7219179957768738017">Веза користи <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Опозови приступ</translation>
 <translation id="7353601530677266744">Командна линија</translation>
+<translation id="7364115444476960850">Страницу којој сте покушавали да приступите је блокирао Vivaldi-јев <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Путања профила</translation>
 <translation id="7445762425076701745">Није могуће у потпуности потврдити идентитет сервера са којим сте повезани. Повезани сте са сервером који користи назив који је важећи само у вашој мрежи, а којем спољни ауторитет за издавање сертификата не може да провери власништво. Будући да неки ауторитети за издавање сертификата упркос томе издају сертификате за ове називе, ни на који начин не можете да будете сигурни да сте повезани са жељеним веб сајтом, а не са нападачем.</translation>
 <translation id="7455133967321480974">Користи глобалну подразумевану вредност (Блокирај)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">Питај (подразумевано)</translation>
 <translation id="8041940743680923270">Користи глобалну подразумевану вредност (Питај)</translation>
 <translation id="808894953321890993">Промени лозинку</translation>
+<translation id="8119307142152921512">праћења и рекламе</translation>
 <translation id="8142868475871995937">Посетите &lt;strong&gt;vivaldi://policy&lt;/strong&gt; да бисте видели листу URL адреса стављених на црну листу и друге смернице које је наметнуо администратор система.</translation>
 <translation id="8149426793427495338">Рачунар је прешао у стање мировања.</translation>
 <translation id="8150722005171944719">Датотека на адреси <ph name="URL" /> не може да се чита. Можда је уклоњена или премештена или дозволе за датотеке спречавају приступ.</translation>
@@ -217,13 +224,15 @@
 <translation id="8703575177326907206">Ваша веза са доменом <ph name="DOMAIN" /> није шифрована.</translation>
 <translation id="8740359287975076522">Није пронађена &lt;abbr id="dnsDefinition"&gt;DNS адреса&lt;/abbr&gt; хоста <ph name="HOST_NAME" />. У току је дијагностика проблема.</translation>
 <translation id="8820817407110198400">Обележивачи</translation>
+<translation id="8940028675168378100">Блокирао <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Прокси <ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>
 <translation id="9008201768610948239">Игнориши</translation>
 <translation id="9011424611726486705">Отвори подешавања сајта</translation>
-<translation id="9025348182339809926">(Неважећи)</translation>
+<translation id="9025348182339809926">(неважећи)</translation>
 <translation id="9039213469156557790">Поред тога, ова страница садржи и друге ресурсе који нису безбедни. Ове ресурсе могу да виде и други док су у пролазу и нападач може да их измени како би променио понашање странице.</translation>
 <translation id="9069693763241529744">Блокирао додатак</translation>
 <translation id="9169664750068251925">Увек блокирај на овом сајту</translation>
+<translation id="9180553614777056266">Блокатор реклама</translation>
 <translation id="9183425211371246419">Хост <ph name="HOST_NAME" /> користи неподржани протокол.</translation>
 <translation id="9219103736887031265">Слике</translation>
 <translation id="936602727769022409">Могли бисте да изгубите приступ Google налогу. Препоручује се да одмах промените лозинку. Мораћете да се пријавите.</translation>

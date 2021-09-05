@@ -11,8 +11,8 @@
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 
 namespace ash {
 
@@ -112,12 +112,12 @@ AssistantResponse::~AssistantResponse() {
 }
 
 void AssistantResponse::AddObserver(AssistantResponseObserver* observer) const {
-  const_cast<AssistantResponse*>(this)->observers_.AddObserver(observer);
+  observers_.AddObserver(observer);
 }
 
 void AssistantResponse::RemoveObserver(
     AssistantResponseObserver* observer) const {
-  const_cast<AssistantResponse*>(this)->observers_.RemoveObserver(observer);
+  observers_.RemoveObserver(observer);
 }
 
 void AssistantResponse::AddUiElement(
@@ -168,34 +168,24 @@ AssistantResponse::GetUiElements() const {
 }
 
 void AssistantResponse::AddSuggestions(
-    std::vector<AssistantSuggestionPtr> suggestions) {
-  std::vector<const AssistantSuggestion*> ptrs;
-
-  for (AssistantSuggestionPtr& suggestion : suggestions) {
-    suggestions_.push_back(std::move(suggestion));
-    ptrs.push_back(suggestions_.back().get());
-  }
-
-  NotifySuggestionsAdded(ptrs);
+    const std::vector<AssistantSuggestion>& suggestions) {
+  for (const auto& suggestion : suggestions)
+    suggestions_.push_back(suggestion);
+  NotifySuggestionsAdded(suggestions);
 }
 
-const chromeos::assistant::mojom::AssistantSuggestion*
+const chromeos::assistant::AssistantSuggestion*
 AssistantResponse::GetSuggestionById(const base::UnguessableToken& id) const {
   for (auto& suggestion : suggestions_) {
-    if (suggestion->id == id)
-      return suggestion.get();
+    if (suggestion.id == id)
+      return &suggestion;
   }
   return nullptr;
 }
 
-std::vector<const chromeos::assistant::mojom::AssistantSuggestion*>
+const std::vector<chromeos::assistant::AssistantSuggestion>&
 AssistantResponse::GetSuggestions() const {
-  std::vector<const AssistantSuggestion*> suggestions;
-
-  for (auto& suggestion : suggestions_)
-    suggestions.push_back(suggestion.get());
-
-  return suggestions;
+  return suggestions_;
 }
 
 void AssistantResponse::Process(ProcessingCallback callback) {
@@ -210,7 +200,7 @@ void AssistantResponse::NotifyUiElementAdded(
 }
 
 void AssistantResponse::NotifySuggestionsAdded(
-    const std::vector<const AssistantSuggestion*>& suggestions) {
+    const std::vector<AssistantSuggestion>& suggestions) {
   for (auto& observer : observers_)
     observer.OnSuggestionsAdded(suggestions);
 }

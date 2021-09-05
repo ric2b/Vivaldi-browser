@@ -38,6 +38,7 @@
 #include "base/task/sequence_manager/thread_controller.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/default_tick_clock.h"
+#include "base/values.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -125,9 +126,12 @@ class BASE_EXPORT SequenceManagerImpl
   void RemoveTaskObserver(TaskObserver* task_observer) override;
 
   // SequencedTaskSource implementation:
-  Task* SelectNextTask() override;
+  Task* SelectNextTask(
+      SelectTaskOption option = SelectTaskOption::kDefault) override;
   void DidRunTask() override;
-  TimeDelta DelayTillNextTask(LazyNow* lazy_now) const override;
+  TimeDelta DelayTillNextTask(
+      LazyNow* lazy_now,
+      SelectTaskOption option = SelectTaskOption::kDefault) const override;
   bool HasPendingHighResolutionTasks() override;
   bool OnSystemIdle() override;
 
@@ -342,11 +346,10 @@ class BASE_EXPORT SequenceManagerImpl
   bool GetAddQueueTimeToTasks();
 
   std::unique_ptr<trace_event::ConvertableToTraceFormat>
-  AsValueWithSelectorResult(internal::WorkQueue* selected_work_queue,
-                            bool force_verbose) const;
-  void AsValueWithSelectorResultInto(trace_event::TracedValue*,
-                                     internal::WorkQueue* selected_work_queue,
-                                     bool force_verbose) const;
+  AsValueWithSelectorResultForTracing(internal::WorkQueue* selected_work_queue,
+                                      bool force_verbose) const;
+  Value AsValueWithSelectorResult(internal::WorkQueue* selected_work_queue,
+                                  bool force_verbose) const;
 
   // Used in construction of TaskQueueImpl to obtain an AtomicFlag which it can
   // use to request reload by ReloadEmptyWorkQueues. The lifetime of
@@ -379,14 +382,15 @@ class BASE_EXPORT SequenceManagerImpl
 
   // Helper to terminate all scoped trace events to allow starting new ones
   // in SelectNextTask().
-  Task* SelectNextTaskImpl();
+  Task* SelectNextTaskImpl(SelectTaskOption option);
 
   // Check if a task of priority |priority| should run given the pending set of
   // native work.
   bool ShouldRunTaskOfPriority(TaskQueue::QueuePriority priority) const;
 
   // Ignores any immediate work.
-  TimeDelta GetDelayTillNextDelayedTask(LazyNow* lazy_now) const;
+  TimeDelta GetDelayTillNextDelayedTask(LazyNow* lazy_now,
+                                        SelectTaskOption option) const;
 
 #if DCHECK_IS_ON()
   void LogTaskDebugInfo(const internal::WorkQueue* work_queue) const;

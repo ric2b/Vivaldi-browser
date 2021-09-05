@@ -10,6 +10,7 @@
 #include "platform_media/common/platform_mime_util.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 
 #if defined(OS_MACOSX)

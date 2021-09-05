@@ -8,7 +8,9 @@
 #include <errno.h>
 #include <sys/mman.h>
 
-#include "base/logging.h"
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 
 #if defined(OS_MACOSX)
@@ -56,7 +58,7 @@ const char* PageTagToName(PageTag tag) {
     case PageTag::kV8:
       return "v8";
     default:
-      DCHECK(false);
+      PA_DCHECK(false);
       return "";
   }
 }
@@ -112,8 +114,8 @@ void* SystemAllocPagesInternal(void* hint,
 #if defined(OS_MACOSX)
   // Use a custom tag to make it easier to distinguish Partition Alloc regions
   // in vmmap(1). Tags between 240-255 are supported.
-  DCHECK_LE(PageTag::kFirst, page_tag);
-  DCHECK_GE(PageTag::kLast, page_tag);
+  PA_DCHECK(PageTag::kFirst <= page_tag);
+  PA_DCHECK(PageTag::kLast >= page_tag);
   int fd = VM_MAKE_TAG(static_cast<int>(page_tag));
 #else
   int fd = -1;
@@ -165,12 +167,12 @@ void* TrimMappingInternal(void* base,
   // the aligned range.
   if (pre_slack) {
     int res = munmap(base, pre_slack);
-    CHECK(!res);
+    PCHECK(!res);
     ret = reinterpret_cast<char*>(base) + pre_slack;
   }
   if (post_slack) {
     int res = munmap(reinterpret_cast<char*>(ret) + trim_length, post_slack);
-    CHECK(!res);
+    PCHECK(!res);
   }
   return ret;
 }
@@ -186,11 +188,11 @@ void SetSystemPagesAccessInternal(
     void* address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-  CHECK_EQ(0, mprotect(address, length, GetAccessFlags(accessibility)));
+  PCHECK(!mprotect(address, length, GetAccessFlags(accessibility)));
 }
 
 void FreePagesInternal(void* address, size_t length) {
-  CHECK(!munmap(address, length));
+  PCHECK(!munmap(address, length));
 }
 
 void DecommitSystemPagesInternal(void* address, size_t length) {
@@ -227,7 +229,7 @@ void DiscardSystemPagesInternal(void* address, size_t length) {
     // MADV_FREE_REUSABLE sometimes fails, so fall back to MADV_DONTNEED.
     ret = madvise(address, length, MADV_DONTNEED);
   }
-  CHECK(0 == ret);
+  PCHECK(0 == ret);
 #else
   // We have experimented with other flags, but with suboptimal results.
   //
@@ -235,7 +237,7 @@ void DiscardSystemPagesInternal(void* address, size_t length) {
   // performance benefits unclear.
   //
   // Therefore, we just do the simple thing: MADV_DONTNEED.
-  CHECK(!madvise(address, length, MADV_DONTNEED));
+  PCHECK(!madvise(address, length, MADV_DONTNEED));
 #endif
 }
 

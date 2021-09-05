@@ -19,11 +19,13 @@ ScenicSurface::ScenicSurface(
     scenic::SessionPtrAndListenerRequest sesion_and_listener_request)
     : scenic_session_(std::move(sesion_and_listener_request)),
       shape_(&scenic_session_),
-      material_(&scenic_session_),
       scenic_surface_factory_(scenic_surface_factory),
       window_(window) {
+  // Setting alpha to 0 makes this transparent.
+  scenic::Material transparent_material(&scenic_session_);
+  transparent_material.SetColor(0, 0, 0, 0);
   shape_.SetShape(scenic::Rectangle(&scenic_session_, 1.f, 1.f));
-  shape_.SetMaterial(material_);
+  shape_.SetMaterial(transparent_material);
   scenic_surface_factory->AddSurface(window, this);
   scenic_session_.SetDebugName("Chromium ScenicSurface");
 }
@@ -33,23 +35,28 @@ ScenicSurface::~ScenicSurface() {
   scenic_surface_factory_->RemoveSurface(window_);
 }
 
-void ScenicSurface::SetTextureToNewImagePipe(
+bool ScenicSurface::SetTextureToNewImagePipe(
     fidl::InterfaceRequest<fuchsia::images::ImagePipe2> image_pipe_request) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   uint32_t image_pipe_id = scenic_session_.AllocResourceId();
   scenic_session_.Enqueue(scenic::NewCreateImagePipe2Cmd(
       image_pipe_id, std::move(image_pipe_request)));
-  material_.SetTexture(image_pipe_id);
+  scenic::Material image_material(&scenic_session_);
+  image_material.SetTexture(image_pipe_id);
+  shape_.SetMaterial(image_material);
   scenic_session_.ReleaseResource(image_pipe_id);
   scenic_session_.Present2(
       /*requested_presentation_time=*/0,
       /*requested_prediction_span=*/0,
       [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+  return true;
 }
 
 void ScenicSurface::SetTextureToImage(const scenic::Image& image) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  material_.SetTexture(image);
+  scenic::Material image_material(&scenic_session_);
+  image_material.SetTexture(image);
+  shape_.SetMaterial(image_material);
 }
 
 mojo::PlatformHandle ScenicSurface::CreateView() {

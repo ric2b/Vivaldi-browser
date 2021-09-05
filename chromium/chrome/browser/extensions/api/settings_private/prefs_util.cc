@@ -9,9 +9,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs_factory.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
+#include "chrome/browser/nearby_sharing/nearby_sharing_prefs.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -286,13 +288,29 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
 #if defined(OS_CHROMEOS)
   (*s_whitelist)[::prefs::kLanguageImeMenuActivated] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::prefs::kAssistPersonalInfoEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::prefs::kEmojiSuggestionEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kLanguageInputMethodSpecificSettings] =
+      settings_api::PrefType::PREF_TYPE_DICTIONARY;
 #endif
+
+  // Nearby Share.
+  (*s_whitelist)[::prefs::kNearbySharingEnabledPrefName] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kNearbySharingActiveProfilePrefName] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Search page.
   (*s_whitelist)[DefaultSearchManager::kDefaultSearchProviderDataPrefName] =
       settings_api::PrefType::PREF_TYPE_DICTIONARY;
 
   // Site Settings prefs.
+  (*s_whitelist)[::content_settings::kCookiePrimarySetting] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::content_settings::kCookieSessionOnly] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kBlockThirdPartyCookies] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kCookieControlsMode] =
@@ -355,6 +373,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kLiveCaptionEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
+#if !defined(OS_CHROMEOS)
+  (*s_whitelist)[::prefs::kAccessibilityFocusHighlightEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
 #if defined(OS_CHROMEOS)
   // Accounts / Users / People.
@@ -406,6 +428,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[ash::prefs::kAccessibilityLargeCursorEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kAccessibilityLargeCursorDipSize] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[ash::prefs::kAccessibilityCursorColorEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[ash::prefs::kAccessibilityCursorColor] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[ash::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -471,8 +497,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[plugin_vm::prefs::kPluginVmPrintersAllowed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[plugin_vm::prefs::kPluginVmCameraSharing] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Android Apps.
   (*s_whitelist)[arc::prefs::kArcEnabled] =
@@ -511,11 +535,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::kStatsReportingPref] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::chromeos::prefs::kSuggestedContentEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::kAttestationForContentProtectionEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[prefs::kRestoreLastLockScreenNote] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kSettingsShowBrowserBanner] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSettingsShowOSBanner] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;

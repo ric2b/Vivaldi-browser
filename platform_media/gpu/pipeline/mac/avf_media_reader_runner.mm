@@ -8,6 +8,7 @@
 #include "platform_media/gpu/pipeline/mac/avf_media_reader_runner.h"
 
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "media/base/bind_to_current_loop.h"
 

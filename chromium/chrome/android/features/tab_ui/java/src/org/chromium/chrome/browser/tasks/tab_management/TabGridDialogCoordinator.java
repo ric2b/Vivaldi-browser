@@ -21,6 +21,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -37,10 +38,9 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
     private final TabGridDialogMediator mMediator;
     private final PropertyModel mModel;
     private final PropertyModelChangeProcessor mModelChangeProcessor;
-    private final TabGridDialogParent mParentLayout;
-
     private TabSelectionEditorCoordinator mTabSelectionEditorCoordinator;
     private ViewGroup mContainerView;
+    private TabGridDialogView mDialogView;
     private boolean mIsInitialized;
 
     TabGridDialogCoordinator(Context context, TabModelSelector tabModelSelector,
@@ -48,14 +48,21 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
             ViewGroup containerView, TabSwitcherMediator.ResetHandler resetHandler,
             TabListMediator.GridCardOnClickListenerProvider gridCardOnClickListenerProvider,
             TabGridDialogMediator.AnimationSourceViewProvider animationSourceViewProvider,
-            ObservableSupplier<ShareDelegate> shareDelegateSupplier) {
+            ObservableSupplier<ShareDelegate> shareDelegateSupplier,
+            ScrimCoordinator scrimCoordinator) {
         mComponentName = animationSourceViewProvider == null ? "TabGridDialogFromStrip"
                                                              : "TabGridDialogInSwitcher";
 
         mModel = new PropertyModel(TabGridPanelProperties.ALL_KEYS);
         mContainerView = containerView;
 
-        mParentLayout = new TabGridDialogParent(context, containerView);
+        mDialogView = containerView.findViewById(R.id.dialog_parent_view);
+        if (mDialogView == null) {
+            LayoutInflater.from(context).inflate(
+                    R.layout.tab_grid_dialog_layout, containerView, true);
+            mDialogView = containerView.findViewById(R.id.dialog_parent_view);
+            mDialogView.setupScrimCoordinator(scrimCoordinator);
+        }
 
         mMediator = new TabGridDialogMediator(context, this, mModel, tabModelSelector,
                 tabCreatorManager, resetHandler, animationSourceViewProvider, shareDelegateSupplier,
@@ -81,7 +88,7 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
             toolbarView.hideTabGroupsContinuationWidgets();
         }
         mModelChangeProcessor = PropertyModelChangeProcessor.create(mModel,
-                new TabGridPanelViewBinder.ViewHolder(toolbarView, recyclerView, mParentLayout),
+                new TabGridPanelViewBinder.ViewHolder(toolbarView, recyclerView, mDialogView),
                 TabGridPanelViewBinder::bind);
     }
 
@@ -95,7 +102,7 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
             int mode = SysUtils.isLowEndDevice() ? TabListCoordinator.TabListMode.LIST
                                                  : TabListCoordinator.TabListMode.GRID;
             mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(context,
-                    mContainerView, tabModelSelector, tabContentManager, mParentLayout, mode);
+                    mContainerView, tabModelSelector, tabContentManager, mDialogView, mode);
 
             controller = mTabSelectionEditorCoordinator.getController();
         } else {
@@ -111,7 +118,6 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
     public void destroy() {
         mTabListCoordinator.destroy();
         mMediator.destroy();
-        mParentLayout.destroy();
         mModelChangeProcessor.destroy();
         if (mTabSelectionEditorCoordinator != null) {
             mTabSelectionEditorCoordinator.destroy();

@@ -165,24 +165,8 @@ views::View* TaskManagerView::GetInitiallyFocusedView() {
   return nullptr;
 }
 
-bool TaskManagerView::CanResize() const {
-  return true;
-}
-
-bool TaskManagerView::CanMaximize() const {
-  return true;
-}
-
-bool TaskManagerView::CanMinimize() const {
-  return true;
-}
-
 bool TaskManagerView::ExecuteWindowsCommand(int command_id) {
   return false;
-}
-
-base::string16 TaskManagerView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_TASK_MANAGER_TITLE);
 }
 
 gfx::ImageSkia TaskManagerView::GetWindowIcon() {
@@ -293,6 +277,8 @@ TaskManagerView::TaskManagerView()
   SetButtons(ui::DIALOG_BUTTON_OK);
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_TASK_MANAGER_KILL));
+  SetHasWindowSizeControls(true);
+  SetTitle(IDS_TASK_MANAGER_TITLE);
 
   // Avoid calling Accept() when closing the dialog, since Accept() here means
   // "kill task" (!).

@@ -10,11 +10,10 @@
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_list_item.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_store_delete_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_store_get_options.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_store_set_extra_options.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_store_set_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -69,7 +68,7 @@ network::mojom::blink::CookieManagerGetOptionsPtr ToBackendOptions(
 // Returns no value if and only if an exception is thrown.
 base::Optional<CanonicalCookie> ToCanonicalCookie(
     const KURL& cookie_url,
-    const CookieStoreSetExtraOptions* options,
+    const CookieInit* options,
     ExceptionState& exception_state) {
   const String& name = options->name();
   const String& value = options->value();
@@ -79,8 +78,8 @@ base::Optional<CanonicalCookie> ToCanonicalCookie(
     return base::nullopt;
   }
 
-  base::Time expires = options->hasExpires()
-                           ? base::Time::FromJavaTime(options->expires())
+  base::Time expires = options->hasExpiresNonNull()
+                           ? base::Time::FromJavaTime(options->expiresNonNull())
                            : base::Time();
 
   String cookie_url_host = cookie_url.Host();
@@ -256,7 +255,7 @@ ScriptPromise CookieStore::getAll(ScriptState* script_state,
                                   ExceptionState& exception_state) {
   UseCounter::Count(CurrentExecutionContext(script_state->GetIsolate()),
                     WebFeature::kCookieStoreAPI);
-  RecordMatchType(options->matchType());
+  RecordMatchType(*options);
 
   return DoRead(script_state, options, &CookieStore::GetAllForUrlToGetAllResult,
                 exception_state);
@@ -275,7 +274,7 @@ ScriptPromise CookieStore::get(ScriptState* script_state,
                                ExceptionState& exception_state) {
   UseCounter::Count(CurrentExecutionContext(script_state->GetIsolate()),
                     WebFeature::kCookieStoreAPI);
-  RecordMatchType(options->matchType());
+  RecordMatchType(*options);
 
   return DoRead(script_state, options, &CookieStore::GetAllForUrlToGetResult,
                 exception_state);
@@ -284,22 +283,15 @@ ScriptPromise CookieStore::get(ScriptState* script_state,
 ScriptPromise CookieStore::set(ScriptState* script_state,
                                const String& name,
                                const String& value,
-                               const CookieStoreSetOptions* options,
                                ExceptionState& exception_state) {
-  CookieStoreSetExtraOptions* set_options =
-      CookieStoreSetExtraOptions::Create();
+  CookieInit* set_options = CookieInit::Create();
   set_options->setName(name);
   set_options->setValue(value);
-  if (options->hasExpires())
-    set_options->setExpires(options->expires());
-  set_options->setDomain(options->domain());
-  set_options->setPath(options->path());
-  set_options->setSameSite(options->sameSite());
   return set(script_state, set_options, exception_state);
 }
 
 ScriptPromise CookieStore::set(ScriptState* script_state,
-                               const CookieStoreSetExtraOptions* options,
+                               const CookieInit* options,
                                ExceptionState& exception_state) {
   UseCounter::Count(CurrentExecutionContext(script_state->GetIsolate()),
                     WebFeature::kCookieStoreAPI);
@@ -313,8 +305,7 @@ ScriptPromise CookieStore::Delete(ScriptState* script_state,
   UseCounter::Count(CurrentExecutionContext(script_state->GetIsolate()),
                     WebFeature::kCookieStoreAPI);
 
-  CookieStoreSetExtraOptions* set_options =
-      CookieStoreSetExtraOptions::Create();
+  CookieInit* set_options = CookieInit::Create();
   set_options->setName(name);
   set_options->setValue(g_empty_string);
   set_options->setExpires(0);
@@ -324,8 +315,7 @@ ScriptPromise CookieStore::Delete(ScriptState* script_state,
 ScriptPromise CookieStore::Delete(ScriptState* script_state,
                                   const CookieStoreDeleteOptions* options,
                                   ExceptionState& exception_state) {
-  CookieStoreSetExtraOptions* set_options =
-      CookieStoreSetExtraOptions::Create();
+  CookieInit* set_options = CookieInit::Create();
   set_options->setName(options->name());
   set_options->setValue(g_empty_string);
   set_options->setExpires(0);
@@ -335,7 +325,7 @@ ScriptPromise CookieStore::Delete(ScriptState* script_state,
   return DoWrite(script_state, set_options, exception_state);
 }
 
-void CookieStore::Trace(Visitor* visitor) {
+void CookieStore::Trace(Visitor* visitor) const {
   visitor->Trace(change_listener_receiver_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
@@ -427,7 +417,8 @@ ScriptPromise CookieStore::DoRead(
 // static
 void CookieStore::GetAllForUrlToGetAllResult(
     ScriptPromiseResolver* resolver,
-    const Vector<CanonicalCookie>& backend_cookies) {
+    const Vector<network::mojom::blink::CookieWithAccessResultPtr>
+        backend_cookies) {
   ScriptState* script_state = resolver->GetScriptState();
   if (!script_state->ContextIsValid())
     return;
@@ -437,7 +428,7 @@ void CookieStore::GetAllForUrlToGetAllResult(
   cookies.ReserveInitialCapacity(backend_cookies.size());
   for (const auto& backend_cookie : backend_cookies) {
     cookies.push_back(CookieChangeEvent::ToCookieListItem(
-        backend_cookie, false /* is_deleted */));
+        backend_cookie->cookie, false /* is_deleted */));
   }
 
   resolver->Resolve(std::move(cookies));
@@ -446,7 +437,8 @@ void CookieStore::GetAllForUrlToGetAllResult(
 // static
 void CookieStore::GetAllForUrlToGetResult(
     ScriptPromiseResolver* resolver,
-    const Vector<CanonicalCookie>& backend_cookies) {
+    const Vector<network::mojom::blink::CookieWithAccessResultPtr>
+        backend_cookies) {
   ScriptState* script_state = resolver->GetScriptState();
   if (!script_state->ContextIsValid())
     return;
@@ -459,12 +451,12 @@ void CookieStore::GetAllForUrlToGetResult(
 
   const auto& backend_cookie = backend_cookies.front();
   CookieListItem* cookie = CookieChangeEvent::ToCookieListItem(
-      backend_cookie, false /* is_deleted */);
+      backend_cookie->cookie, false /* is_deleted */);
   resolver->Resolve(cookie);
 }
 
 ScriptPromise CookieStore::DoWrite(ScriptState* script_state,
-                                   const CookieStoreSetExtraOptions* options,
+                                   const CookieInit* options,
                                    ExceptionState& exception_state) {
   ExecutionContext* context = ExecutionContext::From(script_state);
   if (!context->GetSecurityOrigin()->CanAccessCookies()) {

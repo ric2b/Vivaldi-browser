@@ -32,6 +32,7 @@
 #include "base/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -60,7 +61,7 @@ class CORE_EXPORT Screen final : public ScriptWrappable,
   int availHeight() const;
   int availWidth() const;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // Proposed extensions to the Screen interface.
   // https://github.com/webscreens/screen-enumeration

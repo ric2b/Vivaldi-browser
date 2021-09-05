@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/ambient/common/ambient_settings.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/callback_forward.h"
 #include "base/optional.h"
@@ -17,16 +18,6 @@ class TimeDelta;
 }  // namespace base
 
 namespace ash {
-
-// Enumeration of the topic source, i.e. where the photos come from.
-// Values need to stay in sync with the |topicSource_| in ambient_mode_page.js.
-// Art gallery is a super set of art related topic sources in Backdrop service.
-enum class AmbientModeTopicSource {
-  kMinValue = 0,
-  kGooglePhotos = kMinValue,
-  kArtGallery = 1,
-  kMaxValue = kArtGallery
-};
 
 // AmbientModeTopic contains the information we need for rendering photo frame
 // for Ambient Mode. Corresponding to the |backdrop::ScreenUpdate::Topic| proto.
@@ -86,9 +77,11 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
  public:
   using OnScreenUpdateInfoFetchedCallback =
       base::OnceCallback<void(const ScreenUpdate&)>;
-  using GetSettingsCallback = base::OnceCallback<void(
-      base::Optional<AmbientModeTopicSource> topic_source)>;
+  using GetSettingsCallback =
+      base::OnceCallback<void(const base::Optional<AmbientSettings>& settings)>;
   using UpdateSettingsCallback = base::OnceCallback<void(bool success)>;
+  using OnPersonalAlbumsFetchedCallback =
+      base::OnceCallback<void(PersonalAlbums)>;
 
   static AmbientBackendController* Get();
 
@@ -97,21 +90,27 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
   AmbientBackendController& operator=(const AmbientBackendController&) = delete;
   virtual ~AmbientBackendController();
 
-  // Sends request to retrieve |ScreenUpdate| from the backdrop server.
+  // Sends request to retrieve |num_topics| of |ScreenUpdate| from the backdrop
+  // server.
   // Upon completion, |callback| is run with the parsed |ScreenUpdate|. If any
   // errors happened during the process, e.g. failed to fetch access token, a
   // dummy instance will be returned.
   virtual void FetchScreenUpdateInfo(
+      int num_topics,
       OnScreenUpdateInfoFetchedCallback callback) = 0;
 
   // Get ambient mode Settings from server.
-  // Currently only return the AmbientModeTopicSource.
   virtual void GetSettings(GetSettingsCallback callback) = 0;
 
   // Update ambient mode Settings to server.
-  // Currently only updating the AmbientModeTopicSource.
-  virtual void UpdateSettings(AmbientModeTopicSource topic_source,
+  virtual void UpdateSettings(const AmbientSettings& settings,
                               UpdateSettingsCallback callback) = 0;
+
+  virtual void FetchPersonalAlbums(int banner_width,
+                                   int banner_height,
+                                   int num_albums,
+                                   const std::string& resume_token,
+                                   OnPersonalAlbumsFetchedCallback) = 0;
 
   // Set the photo refresh interval in ambient mode.
   virtual void SetPhotoRefreshInterval(base::TimeDelta interval) = 0;

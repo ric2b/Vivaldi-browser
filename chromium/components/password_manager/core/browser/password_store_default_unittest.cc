@@ -53,7 +53,6 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
 class BadLoginDatabase : public LoginDatabase {
  public:
   BadLoginDatabase() : LoginDatabase(base::FilePath(), IsAccountStore(false)) {}
-  ~BadLoginDatabase() override {}
 
   // LoginDatabase:
   bool Init() override { return false; }
@@ -173,8 +172,8 @@ TEST(PasswordStoreDefaultTest, NonASCIIData) {
 
   // Build the expected forms vector and add the forms to the store.
   std::vector<std::unique_ptr<PasswordForm>> expected_forms;
-  for (unsigned int i = 0; i < base::size(form_data); ++i) {
-    expected_forms.push_back(FillPasswordFormWithData(form_data[i]));
+  for (const auto& data : form_data) {
+    expected_forms.push_back(FillPasswordFormWithData(data));
     store->AddLogin(*expected_forms.back());
   }
 
@@ -256,7 +255,7 @@ TEST(PasswordStoreDefaultTest, OperationsOnABadDatabaseSilentlyFail) {
       FillPasswordFormWithData(CreateTestPasswordFormData());
   std::unique_ptr<PasswordForm> blacklisted_form(new PasswordForm(*form));
   blacklisted_form->signon_realm = "http://foo.example.com";
-  blacklisted_form->origin = GURL("http://foo.example.com/origin");
+  blacklisted_form->url = GURL("http://foo.example.com/origin");
   blacklisted_form->action = GURL("http://foo.example.com/action");
   blacklisted_form->blacklisted_by_user = true;
   bad_store->AddLogin(*form);

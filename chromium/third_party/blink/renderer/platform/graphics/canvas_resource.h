@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "components/viz/common/resources/shared_bitmap.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -636,9 +637,8 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   scoped_refptr<StaticBitmapImage> Bitmap() override;
 
   GLenum TextureTarget() const final { return GL_TEXTURE_2D; }
-  GLuint GetBackingTextureHandleForOverwrite() {
-    return back_buffer_texture_id_;
-  }
+
+  GLuint GetBackBufferTextureId() const { return back_buffer_texture_id_; }
 
   void PresentSwapChain();
   const gpu::Mailbox& GetOrCreateGpuMailbox(MailboxSyncMode) override;
@@ -662,7 +662,6 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   const IntSize size_;
   gpu::Mailbox front_buffer_mailbox_;
   gpu::Mailbox back_buffer_mailbox_;
-  GLuint front_buffer_texture_id_ = 0u;
   GLuint back_buffer_texture_id_ = 0u;
   gpu::SyncToken sync_token_;
 

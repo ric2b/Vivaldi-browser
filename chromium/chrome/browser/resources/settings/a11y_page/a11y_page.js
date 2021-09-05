@@ -54,15 +54,27 @@ Polymer({
       notify: true,
     },
 
-    /**
-     * Returns true if the 'LiveCaption' media switch is enabled.
-     */
+    // <if expr="not chromeos">
+    /** @private */
     enableLiveCaption_: {
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean('enableLiveCaption');
       },
     },
+
+    /**
+     * Whether to show the focus highlight setting.
+     * Depends on feature flag for focus highlight.
+     * @private {boolean}
+     */
+    showFocusHighlightOption_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('showFocusHighlightOption');
+      }
+    },
+    // </if>
 
     /**
      * Whether to show accessibility labels settings.
@@ -132,20 +144,19 @@ Polymer({
     if (a11yImageLabelsOn) {
       chrome.send('confirmA11yImageLabels');
     }
-    chrome.metricsPrivate.recordBoolean(
-        'Accessibility.ImageLabels.FromSettings.ToggleSetting',
-        a11yImageLabelsOn);
   },
 
+  // <if expr="not chromeos">
   /**
-   * @private
    * @param {!Event} event
+   * @private
    */
   onA11yLiveCaptionChange_(event) {
     const a11yLiveCaptionOn = event.target.checked;
     chrome.metricsPrivate.recordBoolean(
         'Accessibility.LiveCaption.ToggleEnabled', a11yLiveCaptionOn);
   },
+  // </if>
 
   // <if expr="chromeos">
   /** @private */

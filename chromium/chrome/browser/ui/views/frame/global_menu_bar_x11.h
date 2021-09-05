@@ -26,6 +26,7 @@
 #include "components/sessions/core/tab_restore_service_observer.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 
 namespace ui {
@@ -53,10 +54,10 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
 
   void Initialize(DbusMenu::InitializedCallback callback);
 
-  // Creates the object path for DbusemenuServer which is attached to |xid|.
+  // Creates the object path for DbusemenuServer which is attached to |window|.
   std::string GetPath() const;
 
-  XID xid() const { return xid_; }
+  x11::Window window() const { return window_; }
 
  private:
   struct HistoryItem;
@@ -129,7 +130,7 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
   Browser* const browser_;
   Profile* profile_;
   BrowserView* browser_view_;
-  XID xid_;
+  x11::Window window_;
 
   // Has Initialize() been called?
   bool initialized_ = false;

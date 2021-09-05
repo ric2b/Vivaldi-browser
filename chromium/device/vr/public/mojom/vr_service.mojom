@@ -60,6 +60,7 @@ enum XRSessionFeature {
   HIT_TEST = 7,
   LIGHT_ESTIMATION = 8, // Experimental feature.
   ANCHORS = 9,  // Experimental feature.
+  CAMERA_ACCESS = 10, // Experimental feature.
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -261,7 +262,7 @@ struct XRRay {
 };
 
 struct XRHitResult {
-  gfx.mojom.Transform hit_matrix;
+  Pose mojo_from_result;  // Pose of the result (aka intersection point).
   uint64 plane_id;  // If the hit test result was computed based off of a plane,
                     // the plane ID will be stored here. 0 signifies no plane.
                     // TODO(https://crbug.com/657632) - make it optional once
@@ -329,14 +330,14 @@ struct XRPresentationTransportOptions {
   bool wait_for_gpu_fence;
 };
 
-// Native origins that are reference spaces are identified by their category.
-// Currently, the device needs to know about 3 reference space categories.
-enum XRReferenceSpaceCategory {
-  LOCAL,
-  LOCAL_FLOOR,
-  VIEWER,
-  BOUNDED_FLOOR,
-  UNBOUNDED
+// Native origins that are reference spaces are identified by their type.
+// Used for metrics, don't remove or change values.
+enum XRReferenceSpaceType {
+  kViewer = 0,
+  kLocal = 1,
+  kLocalFloor = 2,
+  kBoundedFloor = 3,
+  kUnbounded = 4,
 };
 
 // Native origin represents a reference space that is known to the device and
@@ -346,12 +347,12 @@ enum XRReferenceSpaceCategory {
 // XRReferenceSpaceType, XRBoundedReferenceSpace) or returns an XRSpace (for
 // example XRAnchor, XRPlane, XRInputSource). Native origin can be identified,
 // depending on its type, by the id of the entity (this is the case for planes,
-// anchors and input sources), or by reference space category.
+// anchors and input sources), or by reference space type.
 union XRNativeOriginInformation {
   uint32 input_source_id;
   uint64 plane_id;
   uint64 anchor_id;
-  XRReferenceSpaceCategory reference_space_category;
+  XRReferenceSpaceType reference_space_type;
 };
 
 enum XRPlaneOrientation {
@@ -540,8 +541,7 @@ struct XRFrameData {
   // The pose may be null if the device lost tracking. The XRFrameData can still
   // have other data, such as pass through camera image.
   VRPose? pose;
-  // TODO(https://crbug.com/838515): Is this delta since the last
-  // frame? OR an unspecified origin? Something else?
+  // Time delta from an unspecified origin.
   mojo_base.mojom.TimeDelta time_delta;
   // The buffer_holder is used for sending data imagery back and forth across
   // the process boundary. For application with pass through camera, it holds
@@ -655,6 +655,19 @@ union RequestSessionResult {
   RequestSessionError failure_reason;
 };
 
+// Return value for VRService.MakeXrCompatible() to indicate whether the GPU
+// process is compatible with the active VR headset.
+enum XrCompatibleResult {
+  // Compatibility results where the GPU process was not restarted.
+  kAlreadyCompatible,
+  kNotCompatible,
+
+  // Compatibility results where the GPU was restarted. Context lost and
+  // restored for existing WebGL contexts must be handled before using for XR.
+  kCompatibleAfterRestart,    // XR compatible, GPU process was restarted.
+  kNotCompatibleAfterRestart, // Not XR compatible, GPU process was restarted.
+};
+
 // Interface for requesting XRDevice interfaces and registering for
 // notifications that the XRDevice has changed. Implemented in the browser
 // process and consumed in the renderer process.
@@ -681,6 +694,17 @@ interface VRService {
   // renderer can (and may) still decide to submit frames and that should not be
   // treated as illegal or clear the throttled state.
   SetFramesThrottled(bool throttled);
+
+  // Request for the GPU process to be compatible with the active VR headset.
+  // This will trigger the initialization of the XR process if it isn't already
+  // initialized and then restart the GPU process if it's not using the same GPU
+  // as the VR headset. The Sync attribute is needed because there are two ways
+  // for WebXR to trigger this - WebGLRenderingContext.makeXRCompatible()
+  // which returns a promise and is asynchronous, and
+  // HTMLCanvasElement.getContext('webgl', { xrCompatible: true }) which is
+  // synchronous and must return a context that is already xr compatible.
+  [Sync]
+  MakeXrCompatible() => (XrCompatibleResult xr_compatible_result);
 };
 
 // Any metrics that must be recorded throughout the duration of an XR session
@@ -770,7 +794,11 @@ interface XREnvironmentIntegrationProvider {
   // ignored.
   UnsubscribeFromHitTest(uint64 subscription_id);
 
-  // Issues a request to create an anchor attached to a session.
+  // Issues a request to create a free-floating anchor (not attached to any
+  // particular real world entity).
+  // |native_origin_information| specifies native origin relative to which the
+  // anchor is supposed to be created. |native_origin_from_anchor| describes the
+  // desired pose of the newly created anchor.
   // |result| will contain status code of the request. |anchor_id| will be valid
   // only if the |result| is SUCCESS.
   CreateAnchor(
@@ -782,11 +810,18 @@ interface XREnvironmentIntegrationProvider {
   // not interested in obtaining detailed error information from the device.
 
   // Issues a request to create an anchor attached to a plane.
+  // |native_origin_information| specifies native origin relative to which the
+  // anchor is supposed to be created. |native_origin_from_anchor| describes the
+  // desired pose of the newly created anchor. |plane_id| identifies which plane
+  // the anchor will be attached to.
   // |result| will contain status code of the request. |anchor_id| will be valid
   // only if the |result| is SUCCESS.
-  CreatePlaneAnchor(Pose plane_from_anchor, uint64 plane_id) =>
-    (CreateAnchorResult result, uint64 anchor_id);
-  // TODO(https://crbug.com/657632): Ditto - make anchor_id a nullable integer..
+  CreatePlaneAnchor(
+    XRNativeOriginInformation native_origin_information,
+    Pose native_origin_from_anchor,
+    uint64 plane_id)
+      => (CreateAnchorResult result, uint64 anchor_id);
+  // TODO(https://crbug.com/657632): Ditto - make anchor_id a nullable integer.
 
   // Detaches an existing anchor. The |anchor_id| must be a valid id of an
   // anchor created by one of the CreateAnchor calls, otherwise the call will be

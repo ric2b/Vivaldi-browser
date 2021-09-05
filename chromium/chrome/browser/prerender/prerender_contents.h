@@ -18,10 +18,10 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/prerender/prerender_final_status.h"
-#include "chrome/browser/prerender/prerender_origin.h"
-#include "chrome/common/prerender_canceler.mojom.h"
-#include "chrome/common/prerender_types.h"
+#include "components/prerender/common/prerender_canceler.mojom.h"
+#include "components/prerender/common/prerender_final_status.h"
+#include "components/prerender/common/prerender_origin.h"
+#include "components/prerender/common/prerender_types.mojom.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -56,7 +56,7 @@ class PrerenderManager;
 
 class PrerenderContents : public content::NotificationObserver,
                           public content::WebContentsObserver,
-                          public chrome::mojom::PrerenderCanceler {
+                          public prerender::mojom::PrerenderCanceler {
  public:
   // PrerenderContents::Create uses the currently registered Factory to create
   // the PrerenderContents. Factory is intended for testing.
@@ -116,8 +116,10 @@ class PrerenderContents : public content::NotificationObserver,
 
   // Set the mode of this contents. This must be called before prerender has
   // started.
-  void SetPrerenderMode(PrerenderMode mode);
-  PrerenderMode prerender_mode() const { return prerender_mode_; }
+  void SetPrerenderMode(prerender::mojom::PrerenderMode mode);
+  prerender::mojom::PrerenderMode prerender_mode() const {
+    return prerender_mode_;
+  }
 
   static Factory* CreateFactory();
 
@@ -233,7 +235,7 @@ class PrerenderContents : public content::NotificationObserver,
   int64_t network_bytes() { return network_bytes_; }
 
   void AddPrerenderCancelerReceiver(
-      mojo::PendingReceiver<chrome::mojom::PrerenderCanceler> receiver);
+      mojo::PendingReceiver<prerender::mojom::PrerenderCanceler> receiver);
 
  protected:
   PrerenderContents(PrerenderManager* prerender_manager,
@@ -263,7 +265,7 @@ class PrerenderContents : public content::NotificationObserver,
   std::unique_ptr<content::WebContents> CreateWebContents(
       content::SessionStorageNamespace* session_storage_namespace);
 
-  PrerenderMode prerender_mode_;
+  prerender::mojom::PrerenderMode prerender_mode_;
   bool prerendering_has_started_;
 
   // Time at which we started to load the URL.  This is used to compute
@@ -290,10 +292,10 @@ class PrerenderContents : public content::NotificationObserver,
       bool success,
       std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
 
-  // chrome::mojom::PrerenderCanceler:
+  // prerender::mojom::PrerenderCanceler:
   void CancelPrerenderForUnsupportedScheme(const GURL& url) override;
 
-  mojo::ReceiverSet<chrome::mojom::PrerenderCanceler>
+  mojo::ReceiverSet<prerender::mojom::PrerenderCanceler>
       prerender_canceler_receiver_set_;
 
   base::ObserverList<Observer>::Unchecked observer_list_;

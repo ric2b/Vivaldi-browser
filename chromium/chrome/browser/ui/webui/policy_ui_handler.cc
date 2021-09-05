@@ -68,6 +68,8 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -564,6 +566,9 @@ void MachineLevelUserCloudPolicyStatusProvider::GetStatus(
               refresh_scheduler ? refresh_scheduler->GetActualRefreshDelay()
                                 : policy::CloudPolicyRefreshScheduler::
                                       kDefaultRefreshDelayMs)));
+  dict->SetBoolean(
+      "policiesPushAvailable",
+      refresh_scheduler ? refresh_scheduler->invalidations_available() : false);
 
   if (dmTokenStorage) {
     dict->SetString("enrollmentToken",
@@ -810,6 +815,7 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
       {"levelRecommended", IDS_POLICY_LEVEL_RECOMMENDED},
       {"error", IDS_POLICY_LABEL_ERROR},
       {"deprecated", IDS_POLICY_LABEL_DEPRECATED},
+      {"future", IDS_POLICY_LABEL_FUTURE},
       {"ignored", IDS_POLICY_LABEL_IGNORED},
       {"notSpecified", IDS_POLICY_NOT_SPECIFIED},
       {"ok", IDS_POLICY_OK},
@@ -938,6 +944,10 @@ void PolicyUIHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "reloadPolicies",
       base::BindRepeating(&PolicyUIHandler::HandleReloadPolicies,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "copyPoliciesJSON",
+      base::BindRepeating(&PolicyUIHandler::HandleCopyPoliciesJson,
                           base::Unretained(this)));
 }
 
@@ -1178,13 +1188,13 @@ void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
       &PolicyUIHandler::OnRefreshPoliciesDone, weak_factory_.GetWeakPtr()));
 }
 
-void DoWritePoliciesToJSONFile(const base::FilePath& path,
-                               const std::string& data) {
-  base::WriteFile(path, data.c_str(), data.size());
+void PolicyUIHandler::HandleCopyPoliciesJson(const base::ListValue* args) {
+  std::string policies_json = GetPoliciesAsJson();
+  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+  scw.WriteText(base::UTF8ToUTF16(policies_json));
 }
 
-void PolicyUIHandler::WritePoliciesToJSONFile(
-    const base::FilePath& path) const {
+std::string PolicyUIHandler::GetPoliciesAsJson() const {
   auto client = std::make_unique<policy::ChromePolicyConversionsClient>(
       web_ui()->GetWebContents()->GetBrowserContext());
   base::Value dict =
@@ -1241,6 +1251,17 @@ void PolicyUIHandler::WritePoliciesToJSONFile(
   base::JSONWriter::WriteWithOptions(
       dict, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json_policies);
 
+  return json_policies;
+}
+
+void DoWritePoliciesToJSONFile(const base::FilePath& path,
+                               const std::string& data) {
+  base::WriteFile(path, data.c_str(), data.size());
+}
+
+void PolicyUIHandler::WritePoliciesToJSONFile(
+    const base::FilePath& path) const {
+  std::string json_policies = GetPoliciesAsJson();
   base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,

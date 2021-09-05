@@ -10,6 +10,7 @@
 
 class Builder;
 class BuildSettings;
+class StringOutputBuffer;
 
 class JSONProjectWriter {
  public:
@@ -26,6 +27,10 @@ class JSONProjectWriter {
   FRIEND_TEST_ALL_PREFIXES(JSONWriter, ActionWithResponseFile);
   FRIEND_TEST_ALL_PREFIXES(JSONWriter, ForEachWithResponseFile);
   FRIEND_TEST_ALL_PREFIXES(JSONWriter, RustTarget);
+
+  static StringOutputBuffer GenerateJSON(
+      const BuildSettings* build_settings,
+      std::vector<const Target*>& all_targets);
 
   static std::string RenderJSON(const BuildSettings* build_settings,
                                 std::vector<const Target*>& all_targets);

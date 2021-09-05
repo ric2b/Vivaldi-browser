@@ -45,7 +45,7 @@ void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
-  password_form.origin = GURL(kSyncOrigin);
+  password_form.url = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
   password_form.password_value = base::UTF8ToUTF16(password);
   password_form.date_created = base::Time::Now();
@@ -60,7 +60,7 @@ void VivaldiAccountPasswordHandler::ForgetPassword() {
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
-  password_form.origin = GURL(kSyncOrigin);
+  password_form.url = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
 
   password_store_->RemoveLogin(password_form);
@@ -79,7 +79,7 @@ void VivaldiAccountPasswordHandler::OnLoginsChanged(
     const password_manager::PasswordStoreChangeList& changes) {
   for (const auto& change : changes) {
     if (change.form().signon_realm == kSyncSignonRealm &&
-        change.form().origin == GURL(kSyncOrigin) &&
+        change.form().url == GURL(kSyncOrigin) &&
         base::UTF16ToUTF8(change.form().username_value) ==
             delegate_->GetUsername()) {
       if (change.type() == password_manager::PasswordStoreChange::REMOVE)

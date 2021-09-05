@@ -15,7 +15,7 @@ namespace password_manager {
 StubPasswordManagerClient::StubPasswordManagerClient()
     : ukm_source_id_(ukm::UkmRecorder::GetNewSourceID()) {}
 
-StubPasswordManagerClient::~StubPasswordManagerClient() {}
+StubPasswordManagerClient::~StubPasswordManagerClient() = default;
 
 bool StubPasswordManagerClient::PromptUserToSaveOrUpdatePassword(
     std::unique_ptr<PasswordFormManagerForUI> form_to_save,
@@ -44,14 +44,14 @@ void StubPasswordManagerClient::FocusedInputChanged(
 
 bool StubPasswordManagerClient::PromptUserToChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin,
+    const url::Origin& origin,
     const CredentialsCallback& callback) {
   return false;
 }
 
 void StubPasswordManagerClient::NotifyUserAutoSignin(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin) {}
+    const url::Origin& origin) {}
 
 void StubPasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
     std::unique_ptr<autofill::PasswordForm> form) {}
@@ -76,8 +76,12 @@ PasswordStore* StubPasswordManagerClient::GetAccountPasswordStore() const {
   return nullptr;
 }
 
-const GURL& StubPasswordManagerClient::GetLastCommittedEntryURL() const {
+const GURL& StubPasswordManagerClient::GetLastCommittedURL() const {
   return GURL::EmptyGURL();
+}
+
+url::Origin StubPasswordManagerClient::GetLastCommittedOrigin() const {
+  return url::Origin();
 }
 
 const CredentialsFilter* StubPasswordManagerClient::GetStoreResultFilter()
@@ -132,7 +136,7 @@ ukm::SourceId StubPasswordManagerClient::GetUkmSourceId() {
 PasswordManagerMetricsRecorder*
 StubPasswordManagerClient::GetMetricsRecorder() {
   if (!metrics_recorder_) {
-    metrics_recorder_.emplace(GetUkmSourceId(), GetMainFrameURL(), nullptr);
+    metrics_recorder_.emplace(GetUkmSourceId(), nullptr);
   }
   return base::OptionalOrNullptr(metrics_recorder_);
 }

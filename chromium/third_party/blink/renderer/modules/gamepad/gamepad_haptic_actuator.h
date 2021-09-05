@@ -26,10 +26,7 @@ class GamepadHapticActuator final : public ScriptWrappable,
   USING_GARBAGE_COLLECTED_MIXIN(GamepadHapticActuator);
 
  public:
-  static GamepadHapticActuator* Create(ExecutionContext* context,
-                                       int pad_index);
-
-  GamepadHapticActuator(ExecutionContext* context,
+  GamepadHapticActuator(ExecutionContext& context,
                         int pad_index,
                         device::GamepadHapticActuatorType type);
   ~GamepadHapticActuator() override;
@@ -43,7 +40,7 @@ class GamepadHapticActuator final : public ScriptWrappable,
 
   ScriptPromise reset(ScriptState*);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   void OnPlayEffectCompleted(ScriptPromiseResolver*,

@@ -17,9 +17,9 @@
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_row_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
+#include "components/payments/content/autofill_payment_app.h"
+#include "components/payments/content/payment_app.h"
 #include "components/payments/content/payment_request_state.h"
-#include "components/payments/core/autofill_payment_app.h"
-#include "components/payments/core/payment_app.h"
 #include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -90,9 +90,14 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
             base::OnceCallback<void(const autofill::CreditCard&)>(),
             static_cast<AutofillPaymentApp*>(app_)->credit_card());
         return;
+      case PaymentApp::Type::UNDEFINED:
+        // Intentionally fall through.
       case PaymentApp::Type::NATIVE_MOBILE_APP:
+        // Intentionally fall through.
       case PaymentApp::Type::SERVICE_WORKER_APP:
-        // We cannot edit a native mobile app and service worker app.
+        // Intentionally fall through.
+      case PaymentApp::Type::INTERNAL:
+        // We cannot edit these types of payment apps.
         return;
     }
     NOTREACHED();
@@ -101,7 +106,7 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
   // PaymentRequestItemList::Item:
   std::unique_ptr<views::View> CreateExtraView() override {
     std::unique_ptr<views::ImageView> icon_view = CreateAppIconView(
-        app_->icon_resource_id(), app_->icon_image_skia(), app_->GetLabel());
+        app_->icon_resource_id(), app_->icon_bitmap(), app_->GetLabel());
     return icon_view;
   }
 

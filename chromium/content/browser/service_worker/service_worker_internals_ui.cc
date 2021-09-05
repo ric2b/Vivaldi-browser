@@ -36,6 +36,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/url_constants.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 
 using base::DictionaryValue;
@@ -56,8 +57,8 @@ void OperationCompleteCallback(WeakPtr<ServiceWorkerInternalsUI> internals,
                                int callback_id,
                                blink::ServiceWorkerStatusCode status) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(OperationCompleteCallback, internals,
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(OperationCompleteCallback, internals,
                                   callback_id, status));
     return;
   }
@@ -159,9 +160,9 @@ void UpdateVersionInfo(const ServiceWorkerVersionInfo& version,
   for (auto& it : version.clients) {
     auto client = DictionaryValue();
     client.SetStringPath("client_id", it.first);
-    if (it.second.type == blink::mojom::ServiceWorkerClientType::kWindow) {
+    if (it.second.type() == blink::mojom::ServiceWorkerClientType::kWindow) {
       WebContents* web_contents =
-          WebContents::FromFrameTreeNodeId(it.second.frame_tree_node_id);
+          WebContents::FromFrameTreeNodeId(it.second.GetFrameTreeNodeId());
       if (web_contents)
         client.SetStringPath("url", web_contents->GetURL().spec());
     }
@@ -221,8 +222,8 @@ void DidGetStoredRegistrationsOnCoreThread(
     blink::ServiceWorkerStatusCode status,
     const std::vector<ServiceWorkerRegistrationInfo>& stored_registrations) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(std::move(callback), context->GetAllLiveRegistrationInfo(),
                      context->GetAllLiveVersionInfo(), stored_registrations));
 }
@@ -349,7 +350,8 @@ ServiceWorkerInternalsUI::ServiceWorkerInternalsUI(WebUI* web_ui)
     : WebUIController(web_ui), next_partition_id_(0) {
   WebUIDataSource* source =
       WebUIDataSource::Create(kChromeUIServiceWorkerInternalsHost);
-  source->OverrideContentSecurityPolicyScriptSrc(
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources 'self' 'unsafe-eval';");
   source->UseStringsJs();
   source->AddResourcePath("serviceworker_internals.js",

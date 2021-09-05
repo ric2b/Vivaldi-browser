@@ -7,10 +7,10 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "content/browser/native_file_system/native_file_system_error.h"
 #include "content/browser/native_file_system/native_file_system_transfer_token_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/mime_util.h"
 #include "storage/browser/blob/blob_data_builder.h"
@@ -108,7 +108,7 @@ void NativeFileSystemFileHandleImpl::IsSameEntry(
 void NativeFileSystemFileHandleImpl::IsSameEntryImpl(
     IsSameEntryCallback callback,
     NativeFileSystemTransferTokenImpl* other) {
-  if (!other) {
+  if (!other || !other->GetAsFileSystemURL()) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
             blink::mojom::NativeFileSystemStatus::kOperationFailed),
@@ -122,7 +122,7 @@ void NativeFileSystemFileHandleImpl::IsSameEntryImpl(
   }
 
   const storage::FileSystemURL& url1 = url();
-  const storage::FileSystemURL& url2 = other->url();
+  const storage::FileSystemURL& url2 = *other->GetAsFileSystemURL();
 
   // If two URLs are of a different type they are definitely not related.
   if (url1.type() != url2.type()) {
@@ -216,8 +216,8 @@ void NativeFileSystemFileHandleImpl::DidGetMetaDataForBlob(
       blink::mojom::SerializedBlob::New(uuid, content_type, info.size,
                                         std::move(blob_remote)));
 
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&CreateBlobOnIOThread,
                      base::WrapRefCounted(file_system_context()),
                      base::WrapRefCounted(manager()->blob_context()),

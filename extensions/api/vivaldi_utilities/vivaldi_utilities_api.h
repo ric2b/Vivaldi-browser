@@ -219,6 +219,22 @@ class UtilitiesIsUrlValidFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
 };
 
+class UtilitiesGetUrlFragmentsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getUrlFragments",
+                             UTILITIES_GET_URL_FRAGMENTS)
+  UtilitiesGetUrlFragmentsFunction() = default;
+
+ protected:
+  ~UtilitiesGetUrlFragmentsFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetUrlFragmentsFunction);
+};
+
 class UtilitiesGetSelectedTextFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getSelectedText",

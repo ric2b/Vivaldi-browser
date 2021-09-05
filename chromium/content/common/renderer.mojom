@@ -54,9 +54,9 @@ struct CreateViewParams {
   // The session storage namespace ID this view should use.
   string session_storage_namespace_id;
 
-  // The route ID of the opener RenderFrame or RenderFrameProxy, if we need to
-  // set one (MSG_ROUTING_NONE otherwise).
-  int32 opener_frame_route_id = IPC.mojom.kRoutingIdNone;
+  // The frame token of the opener RenderFrame or RenderFrameProxy, if we need
+  // to set one (base::nullopt otherwise).
+  mojo_base.mojom.UnguessableToken? opener_frame_token;
 
   // Carries replicated information, such as frame name and sandbox flags, for
   // this view's main frame, which will be a proxy when |main_frame_routing_id|
@@ -144,8 +144,8 @@ struct CreateFrameParams {
   mojo_base.mojom.UnguessableToken frame_token;
 
   // Specifies the new frame's opener.  The opener will be null if this is
-  // MSG_ROUTING_NONE.
-  int32 opener_routing_id;
+  // base::nullopt.
+  mojo_base.mojom.UnguessableToken? opener_frame_token;
 
   // The new frame should be created as a child of the object
   // identified by |parent_routing_id| or as top level if that is
@@ -246,9 +246,9 @@ interface Renderer {
 
   // Tells the renderer to create a new RenderFrameProxy object with
   // |routing_id|.  |render_view_routing_id| identifies the
-  // RenderView to be associated with this proxy.  The new proxy's opener should
-  // be set to the object identified by |opener_routing_id|, or to null if that
-  // is MSG_ROUTING_NONE.  The new proxy should be created as a child of the
+  // RenderView to be associated with this proxy. The new proxy's opener should
+  // be set to the object identified by |opener_frame_token|, or to null if that
+  // is base::nullopt.  The new proxy should be created as a child of the
   // object identified by |parent_routing_id| or as top level if that is
   // MSG_ROUTING_NONE.
   // |proxy_frame_token| is used uniquely identify the
@@ -257,7 +257,8 @@ interface Renderer {
   // and trace-ability. It is defined by the browser and is never
   // sent back from the renderer in the control calls.
   CreateFrameProxy(int32 routing_id, int32 render_view_routing_id,
-                   int32 opener_routing_id, int32 parent_routing_id,
+                   mojo_base.mojom.UnguessableToken? opener_frame_token,
+                   int32 parent_routing_id,
                    FrameReplicationState replication_state,
                    mojo_base.mojom.UnguessableToken proxy_frame_token,
                    mojo_base.mojom.UnguessableToken devtools_frame_token);
@@ -294,6 +295,9 @@ interface Renderer {
   // decide to ship https://github.com/WICG/ua-client-hints.
   SetUserAgentMetadata(blink.mojom.UserAgentMetadata metadata);
 
+  // Sets the CORS exempt header list for sanity checking (e.g. DCHECKs).
+  SetCorsExemptHeaderList(array<string> list);
+
   // Tells the renderer about a scrollbar appearance change. Only for use on
   // OS X.
   UpdateScrollbarTheme(UpdateScrollbarThemeParams params);
@@ -324,15 +328,17 @@ interface Renderer {
   // origin.
   SetIsLockedToSite();
 
-  // Tells the renderer to enable V8's memory saving mode when possible.
-  // This is only used when site-per-process is enabled. If the process
-  // only contains subframes, V8's low memory mode will be enabled.
-  // If a main frame exists or is created, the low memory mode will
-  // be disabled.
-  EnableV8LowMemoryMode();
-
   // Write out the accumulated code profiling profile to the configured file.
   // The callback is invoked once the profile has been flushed to disk.
   [EnableIf=clang_profiling_inside_sandbox]
   WriteClangProfilingProfile() => ();
+
+  // Set whether this renderer process is "cross-origin isolated". This
+  // corresponds to agent cluster's "cross-origin isolated" concept.
+  // TODO(yhirano): Have the spec URL.
+  // This property is process global because we ensure that a renderer process
+  // host only cross-origin isolated agents or only non-cross-origin isolated
+  // agents, not both.
+  // This is called at most once. This is called earlier than any frame commit.
+  SetIsCrossOriginIsolated(bool value);
 };

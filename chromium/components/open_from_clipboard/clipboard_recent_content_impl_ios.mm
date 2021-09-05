@@ -4,7 +4,6 @@
 
 #import "components/open_from_clipboard/clipboard_recent_content_impl_ios.h"
 
-#import <CommonCrypto/CommonDigest.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <UIKit/UIKit.h>
 
@@ -16,6 +15,10 @@
 #error "This file requires ARC support."
 #endif
 
+ContentType const ContentTypeURL = @"ContentTypeURL";
+ContentType const ContentTypeText = @"ContentTypeString";
+ContentType const ContentTypeImage = @"ContentTypeImage";
+
 namespace {
 // Key used to store the pasteboard's current change count. If when resuming
 // chrome the pasteboard's change count is different from the stored one, then
@@ -24,45 +27,6 @@ NSString* const kPasteboardChangeCountKey = @"PasteboardChangeCount";
 // Key used to store the last date at which it was detected that the pasteboard
 // changed. It is used to evaluate the age of the pasteboard's content.
 NSString* const kPasteboardChangeDateKey = @"PasteboardChangeDate";
-// Key used to store the hash of the content of the pasteboard. Whenever the
-// hash changed, the pasteboard content is considered to have changed.
-NSString* const kPasteboardEntryMD5Key = @"PasteboardEntryMD5";
-
-// Compute a hash consisting of the first 4 bytes of the MD5 hash of |string|,
-// |image_data|, and |url|. This value is used to detect pasteboard content
-// change. Keeping only 4 bytes is a privacy requirement to introduce collision
-// and allow deniability of having copied a given string, image, or url.
-//
-// |image_data| is passed in as NSData instead of UIImage because converting
-// UIImage to NSData can be slow for large images and getting NSData directly
-// from the pasteboard is quicker.
-NSData* WeakMD5FromPasteboardData(NSString* string,
-                                  NSData* image_data,
-                                  NSURL* url) {
-  CC_MD5_CTX ctx;
-  CC_MD5_Init(&ctx);
-
-  const std::string clipboard_string = base::SysNSStringToUTF8(string);
-  const char* c_string = clipboard_string.c_str();
-  CC_MD5_Update(&ctx, c_string, strlen(c_string));
-
-  // This hash is used only to tell if the image has changed, so
-  // limit the number of bytes to hash to prevent slowdown.
-  NSUInteger bytes_to_hash = fmin([image_data length], 1000000);
-  if (bytes_to_hash > 0) {
-    CC_MD5_Update(&ctx, [image_data bytes], bytes_to_hash);
-  }
-
-  const std::string url_string = base::SysNSStringToUTF8([url absoluteString]);
-  const char* url_c_string = url_string.c_str();
-  CC_MD5_Update(&ctx, url_c_string, strlen(url_c_string));
-
-  unsigned char hash[CC_MD5_DIGEST_LENGTH];
-  CC_MD5_Final(hash, &ctx);
-
-  NSData* data = [NSData dataWithBytes:hash length:4];
-  return data;
-}
 
 }  // namespace
 
@@ -73,8 +37,6 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
 @property(nonatomic, strong) NSUserDefaults* sharedUserDefaults;
 // The pasteboard's change count. Increases everytime the pasteboard changes.
 @property(nonatomic) NSInteger lastPasteboardChangeCount;
-// MD5 hash of the last registered pasteboard entry.
-@property(nonatomic, strong) NSData* lastPasteboardEntryMD5;
 // Contains the authorized schemes for URLs.
 @property(nonatomic, readonly) NSSet* authorizedSchemes;
 // Delegate for metrics.
@@ -82,8 +44,18 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
 // Maximum age of clipboard in seconds.
 @property(nonatomic, readonly) NSTimeInterval maximumAgeOfClipboard;
 
-// If the content of the pasteboard has changed, updates the change count,
-// change date, and md5 of the latest pasteboard entry if necessary.
+// A cached version of an already-retrieved URL. This prevents subsequent URL
+// requests from triggering the iOS 14 pasteboard notification.
+@property(nonatomic, strong) NSURL* cachedURL;
+// A cached version of an already-retrieved string. This prevents subsequent
+// string requests from triggering the iOS 14 pasteboard notification.
+@property(nonatomic, copy) NSString* cachedText;
+// A cached version of an already-retrieved image. This prevents subsequent
+// image requests from triggering the iOS 14 pasteboard notification.
+@property(nonatomic, strong) UIImage* cachedImage;
+
+// If the content of the pasteboard has changed, updates the change count
+// and change date.
 - (void)updateIfNeeded;
 
 // Returns whether the pasteboard changed since the last time a pasteboard
@@ -99,13 +71,15 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
 // Returns the uptime.
 - (NSTimeInterval)uptime;
 
+// Returns whether the value of the clipboard should be returned.
+- (BOOL)shouldReturnValueOfClipboard;
+
 @end
 
 @implementation ClipboardRecentContentImplIOS
 
 @synthesize lastPasteboardChangeCount = _lastPasteboardChangeCount;
 @synthesize lastPasteboardChangeDate = _lastPasteboardChangeDate;
-@synthesize lastPasteboardEntryMD5 = _lastPasteboardEntryMD5;
 @synthesize sharedUserDefaults = _sharedUserDefaults;
 @synthesize authorizedSchemes = _authorizedSchemes;
 @synthesize delegate = _delegate;
@@ -146,91 +120,280 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
   [self updateIfNeeded];
 }
 
-- (NSData*)getCurrentMD5 {
-  NSString* pasteboardString = [UIPasteboard generalPasteboard].string;
-  NSData* pasteboardImageData = [[UIPasteboard generalPasteboard]
-      dataForPasteboardType:(NSString*)kUTTypeImage];
-  NSURL* pasteboardURL = [UIPasteboard generalPasteboard].URL;
-  NSData* md5 = WeakMD5FromPasteboardData(pasteboardString, pasteboardImageData,
-                                          pasteboardURL);
-
-  return md5;
-}
-
 - (BOOL)hasPasteboardChanged {
-  // If |MD5Changed|, we know for sure there has been at least one pasteboard
-  // copy since last time it was checked.
-  // If the pasteboard content is still the same but the device was not
-  // rebooted, the change count can be checked to see if it changed.
-  // Note: due to a mismatch between the actual behavior and documentation, and
-  // lack of consistency on different reboot scenarios, the change count cannot
-  // be checked after a reboot.
-  // See radar://21833556 for more information.
-  BOOL deviceRebooted = [self clipboardContentAge] >= [self uptime];
-
-  // On iOS 13, there is a bug where every time a UITextField is opened, the
-  // changeCount increases by 2. Thus, if the difference in counts is even,
-  // it is unknown whether there is a real change or the user just focused some
-  // UITextFields.
-  // See radar://7619972 or crbug.com/1058487 for more information.
-  NSInteger changeCount = [UIPasteboard generalPasteboard].changeCount;
-  BOOL changeCountChanged = changeCount != self.lastPasteboardChangeCount;
-  if (@available(iOS 13, *)) {
-    // No-op. This should be if !available(13), but that is not supported.
-  } else {
-    if (!deviceRebooted) {
-      return changeCountChanged;
-    }
-  }
-
-  // If there was no reboot, and the number hasn't changed, the pasteboard
-  // definitely hasn't changed.
-  if (!deviceRebooted && !changeCountChanged) {
-    return NO;
-  }
-
-  // If there was no reboot and the size of the change is odd , the pasteboard
-  // definitely has changed.
-  BOOL changeCountIncreasedIsOdd =
-      (changeCount - self.lastPasteboardChangeCount) % 2 != 0;
-  if (!deviceRebooted && changeCountIncreasedIsOdd) {
-    return YES;
-  }
-
-  // Otherwise, it is unknown whether or not there was a real change, so
-  // fallback to looking at the MD5.
-  self.lastPasteboardChangeCount = changeCount;
-  BOOL md5Changed =
-      ![[self getCurrentMD5] isEqualToData:self.lastPasteboardEntryMD5];
-  return md5Changed;
+  return UIPasteboard.generalPasteboard.changeCount !=
+         self.lastPasteboardChangeCount;
 }
 
 - (NSURL*)recentURLFromClipboard {
   [self updateIfNeeded];
-  if ([self clipboardContentAge] > self.maximumAgeOfClipboard) {
+
+  if (![self shouldReturnValueOfClipboard])
     return nil;
+
+  if (!self.cachedURL) {
+    self.cachedURL = [self URLFromPasteboard];
   }
-  return [self URLFromPasteboard];
+  return self.cachedURL;
 }
 
 - (NSString*)recentTextFromClipboard {
   [self updateIfNeeded];
-  if ([self clipboardContentAge] > self.maximumAgeOfClipboard) {
+
+  if (![self shouldReturnValueOfClipboard])
     return nil;
+
+  if (!self.cachedText) {
+    self.cachedText = UIPasteboard.generalPasteboard.string;
   }
-  return [UIPasteboard generalPasteboard].string;
+  return self.cachedText;
 }
 
 - (UIImage*)recentImageFromClipboard {
   [self updateIfNeeded];
-  if ([self clipboardContentAge] > self.maximumAgeOfClipboard) {
+
+  if (![self shouldReturnValueOfClipboard])
     return nil;
+
+  if (!self.cachedImage) {
+    self.cachedImage = UIPasteboard.generalPasteboard.image;
   }
-  return [UIPasteboard generalPasteboard].image;
+
+  return self.cachedImage;
+}
+
+- (void)hasContentMatchingTypes:(NSSet<ContentType>*)types
+              completionHandler:
+                  (void (^)(NSSet<ContentType>*))completionHandler {
+  [self updateIfNeeded];
+  if (![self shouldReturnValueOfClipboard]) {
+    completionHandler([NSSet set]);
+    return;
+  }
+
+  __block NSMutableDictionary<ContentType, NSNumber*>* results =
+      [[NSMutableDictionary alloc] init];
+
+  void (^checkResults)() = ^{
+    NSMutableSet<ContentType>* matchingTypes = [NSMutableSet set];
+    if ([results count] != [types count]) {
+      return;
+    }
+
+    for (ContentType type in results) {
+      if ([results[type] boolValue]) {
+        [matchingTypes addObject:type];
+      }
+    }
+    completionHandler(matchingTypes);
+  };
+
+  for (ContentType type in types) {
+    if ([type isEqualToString:ContentTypeURL]) {
+      [self hasRecentURLFromClipboardInternal:^(BOOL hasURL) {
+        results[ContentTypeURL] = [NSNumber numberWithBool:hasURL];
+        checkResults();
+      }];
+    } else if ([type isEqualToString:ContentTypeText]) {
+      [self hasRecentTextFromClipboardInternal:^(BOOL hasText) {
+        results[ContentTypeText] = [NSNumber numberWithBool:hasText];
+        checkResults();
+      }];
+    } else if ([type isEqualToString:ContentTypeImage]) {
+      [self hasRecentImageFromClipboardInternal:^(BOOL hasImage) {
+        results[ContentTypeImage] = [NSNumber numberWithBool:hasImage];
+        checkResults();
+      }];
+    }
+  }
+}
+
+- (void)hasRecentURLFromClipboardInternal:(void (^)(BOOL))callback {
+  DCHECK(callback);
+  if (@available(iOS 14, *)) {
+    // Use cached value if it exists
+    if (self.cachedURL) {
+      callback(YES);
+      return;
+    }
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+    NSSet<UIPasteboardDetectionPattern>* urlPattern =
+        [NSSet setWithObject:UIPasteboardDetectionPatternProbableWebURL];
+    [UIPasteboard.generalPasteboard
+        detectPatternsForPatterns:urlPattern
+                completionHandler:^(
+                    NSSet<UIPasteboardDetectionPattern>* patterns,
+                    NSError* error) {
+                  callback([patterns
+                      containsObject:
+                          UIPasteboardDetectionPatternProbableWebURL]);
+                }];
+#else
+    // To prevent clipboard notification from appearing on iOS 14 with iOS 13
+    // SDK, use the -hasURLs property to check for URL existence. This will
+    // cause crbug.com/1033935 to reappear in code using this method (also see
+    // the comments in -URLFromPasteboard in this file), but that is preferable
+    // to the notificatio appearing when it shouldn't.
+    callback(UIPasteboard.generalPasteboard.hasURLs);
+#endif
+  } else {
+    callback([self recentURLFromClipboard] != nil);
+  }
+}
+
+- (void)hasRecentTextFromClipboardInternal:(void (^)(BOOL))callback {
+  DCHECK(callback);
+  if (@available(iOS 14, *)) {
+    // Use cached value if it exists
+    if (self.cachedText) {
+      callback(YES);
+      return;
+    }
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+    NSSet<UIPasteboardDetectionPattern>* textPattern =
+        [NSSet setWithObject:UIPasteboardDetectionPatternProbableWebSearch];
+    [UIPasteboard.generalPasteboard
+        detectPatternsForPatterns:textPattern
+                completionHandler:^(
+                    NSSet<UIPasteboardDetectionPattern>* patterns,
+                    NSError* error) {
+                  callback([patterns
+                      containsObject:
+                          UIPasteboardDetectionPatternProbableWebSearch]);
+                }];
+#else
+    callback(UIPasteboard.generalPasteboard.hasStrings);
+#endif
+  } else {
+    callback([self recentTextFromClipboard] != nil);
+  }
+}
+
+- (void)hasRecentImageFromClipboardInternal:(void (^)(BOOL))callback {
+  DCHECK(callback);
+  if (@available(iOS 14, *)) {
+    // Use cached value if it exists
+    if (self.cachedImage) {
+      callback(YES);
+      return;
+    }
+
+    callback(UIPasteboard.generalPasteboard.hasImages);
+  } else {
+    callback([self recentImageFromClipboard] != nil);
+  }
+}
+
+- (void)recentURLFromClipboardAsync:(void (^)(NSURL*))callback {
+  DCHECK(callback);
+  if (@available(iOS 14, *)) {
+    [self updateIfNeeded];
+    if (![self shouldReturnValueOfClipboard]) {
+      callback(nil);
+      return;
+    }
+
+    // Use cached value if it exists.
+    if (self.cachedURL) {
+      callback(self.cachedURL);
+      return;
+    }
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+    __weak __typeof(self) weakSelf = self;
+    NSSet<UIPasteboardDetectionPattern>* urlPattern =
+        [NSSet setWithObject:UIPasteboardDetectionPatternProbableWebURL];
+    [UIPasteboard.generalPasteboard
+        detectValuesForPatterns:urlPattern
+              completionHandler:^(
+                  NSDictionary<UIPasteboardDetectionPattern, id>* values,
+                  NSError* error) {
+                NSURL* url = [NSURL
+                    URLWithString:
+                        values[UIPasteboardDetectionPatternProbableWebURL]];
+                weakSelf.cachedURL = url;
+                callback(url);
+              }];
+#else
+    callback([self recentURLFromClipboard]);
+#endif
+  } else {
+    callback([self recentURLFromClipboard]);
+  }
+}
+
+- (void)recentTextFromClipboardAsync:(void (^)(NSString*))callback {
+  DCHECK(callback);
+  if (@available(iOS 14, *)) {
+    [self updateIfNeeded];
+    if (![self shouldReturnValueOfClipboard]) {
+      callback(nil);
+      return;
+    }
+
+    // Use cached value if it exists.
+    if (self.cachedText) {
+      callback(self.cachedText);
+      return;
+    }
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+    __weak __typeof(self) weakSelf = self;
+    NSSet<UIPasteboardDetectionPattern>* textPattern =
+        [NSSet setWithObject:UIPasteboardDetectionPatternProbableWebSearch];
+    [UIPasteboard.generalPasteboard
+        detectValuesForPatterns:textPattern
+              completionHandler:^(
+                  NSDictionary<UIPasteboardDetectionPattern, id>* values,
+                  NSError* error) {
+                NSString* text =
+                    values[UIPasteboardDetectionPatternProbableWebSearch];
+                weakSelf.cachedText = text;
+
+                callback(text);
+              }];
+#else
+    callback([self recentTextFromClipboard]);
+#endif
+  } else {
+    callback([self recentTextFromClipboard]);
+  }
+}
+
+- (void)recentImageFromClipboardAsync:(void (^)(UIImage*))callback {
+  DCHECK(callback);
+  [self updateIfNeeded];
+  if (![self shouldReturnValueOfClipboard]) {
+    callback(nil);
+    return;
+  }
+
+  if (!self.cachedImage) {
+    self.cachedImage = UIPasteboard.generalPasteboard.image;
+  }
+  callback(self.cachedImage);
 }
 
 - (NSTimeInterval)clipboardContentAge {
   return -[self.lastPasteboardChangeDate timeIntervalSinceNow];
+}
+
+- (BOOL)shouldReturnValueOfClipboard {
+  if ([self clipboardContentAge] > self.maximumAgeOfClipboard)
+    return NO;
+
+  // It is the common convention on iOS that password managers tag confidential
+  // data with the flavor "org.nspasteboard.ConcealedType". Obey this
+  // convention; the user doesn't want for their confidential data to be
+  // suggested as a search, anyway. See http://nspasteboard.org/ for more info.
+  NSArray<NSString*>* types =
+      [[UIPasteboard generalPasteboard] pasteboardTypes];
+  if ([types containsObject:@"org.nspasteboard.ConcealedType"])
+    return NO;
+
+  return YES;
 }
 
 - (void)suppressClipboardContent {
@@ -246,11 +409,15 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
     return;
   }
 
-  [self.delegate onClipboardChanged];
-
   self.lastPasteboardChangeDate = [NSDate date];
   self.lastPasteboardChangeCount = [UIPasteboard generalPasteboard].changeCount;
-  self.lastPasteboardEntryMD5 = [self getCurrentMD5];
+
+  // Clear the cache because the pasteboard data has changed.
+  self.cachedURL = nil;
+  self.cachedText = nil;
+  self.cachedImage = nil;
+
+  [self.delegate onClipboardChanged];
 
   [self saveToUserDefaults];
 }
@@ -276,8 +443,6 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
       [self.sharedUserDefaults integerForKey:kPasteboardChangeCountKey];
   self.lastPasteboardChangeDate = base::mac::ObjCCastStrict<NSDate>(
       [self.sharedUserDefaults objectForKey:kPasteboardChangeDateKey]);
-  self.lastPasteboardEntryMD5 = base::mac::ObjCCastStrict<NSData>(
-      [self.sharedUserDefaults objectForKey:kPasteboardEntryMD5Key]);
 }
 
 - (void)saveToUserDefaults {
@@ -285,8 +450,6 @@ NSData* WeakMD5FromPasteboardData(NSString* string,
                                forKey:kPasteboardChangeCountKey];
   [self.sharedUserDefaults setObject:self.lastPasteboardChangeDate
                               forKey:kPasteboardChangeDateKey];
-  [self.sharedUserDefaults setObject:self.lastPasteboardEntryMD5
-                              forKey:kPasteboardEntryMD5Key];
 }
 
 - (NSTimeInterval)uptime {

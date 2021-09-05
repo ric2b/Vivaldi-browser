@@ -5,6 +5,8 @@
 <translation id="1013598600051641573"><ph name="DISPLAY_NAME" /> đã đổi thành <ph name="RESOLUTION" /> (<ph name="REFRESH_RATE" /> Hz). Hãy nhấp vào xác nhận để lưu các thay đổi. Các tùy chọn cài đặt trước sẽ được khôi phục sau <ph name="TIMEOUT_SECONDS" /> nữa.</translation>
 <translation id="1013923882670373915">Thiết bị Bluetooth "<ph name="DEVICE_NAME" />" muốn được phép ghép nối. Vui lòng nhập mã PIN này trên thiết bị đó: <ph name="PINCODE" /></translation>
 <translation id="1032891413405719768">Pin của bút cảm ứng ở mức thấp</translation>
+<translation id="1036672894875463507">Tôi là Trợ lý Google của bạn. Tôi có thể giúp bạn bất cứ lúc nào!
+Dưới đây là một số việc bạn có thể thử để bắt đầu.</translation>
 <translation id="1037492556044956303">Đã thêm <ph name="DEVICE_NAME" /></translation>
 <translation id="1056775291175587022">Không có mạng</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
@@ -21,6 +23,7 @@
 <translation id="119944043368869598">Xóa tất cả</translation>
 <translation id="1199716647557067911">Bạn có chắc chắn muốn tắt tính năng Tiếp cận bằng công tắc không?</translation>
 <translation id="121097972571826261">Tiến một từ</translation>
+<translation id="1225748608451425081">Chromebook của bạn đã bị khóa do một vấn đề đã biết. Bạn có thể đăng nhập sau: <ph name="TIME_LEFT" />.</translation>
 <translation id="1229194443904279055">Dừng chọn</translation>
 <translation id="1247372569136754018">Micrô (bên trong)</translation>
 <translation id="1252999807265626933">Đang sạc từ <ph name="POWER_SOURCE" /></translation>
@@ -42,6 +45,7 @@
 <translation id="1346748346194534595">Phải</translation>
 <translation id="1351937230027495976">Thu gọn menu</translation>
 <translation id="1383876407941801731">Tìm kiếm</translation>
+<translation id="1391102559483454063">Đang bật</translation>
 <translation id="1419738280318246476">Mở khóa thiết bị để thực hiện hành động đối với thông báo</translation>
 <translation id="1420408895951708260">Bật/tắt chế độ Ánh sáng đêm. <ph name="STATE_TEXT" /></translation>
 <translation id="1426410128494586442">Có</translation>
@@ -50,7 +54,6 @@
 <translation id="1467432559032391204">Trái</translation>
 <translation id="1479909375538722835">Trình đơn hỗ trợ tiếp cận nổi</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
-<translation id="1508507608940204251">Đang bật</translation>
 <translation id="1516740043221086139">Chế độ Không làm phiền đang bật.</translation>
 <translation id="1520303207432623762">{NUM_APPS,plural, =1{Hiển thị tùy chọn cài đặt thông báo. Các thông báo hiện đang tắt cho một ứng dụng}other{Hiển thị tùy chọn cài đặt thông báo. Các thông báo hiện đang tắt cho # ứng dụng}}</translation>
 <translation id="1525508553941733066">LOẠI BỎ</translation>
@@ -63,6 +66,7 @@
 <translation id="1654477262762802994">Bắt đầu đặt câu hỏi bằng giọng nói</translation>
 <translation id="1658406695958299976">Rất tiếc, chúng tôi vẫn không thể xác minh được mật khẩu của bạn. Lưu ý: nếu gần đây bạn đã đổi mật khẩu thì mật khẩu mới của bạn sẽ được áp dụng sau khi bạn đăng xuất. Vui lòng sử dụng mật khẩu cũ của bạn tại đây.</translation>
 <translation id="1677472565718498478">Còn <ph name="TIME" /></translation>
+<translation id="1698080062160024910">Đồng hồ hẹn giờ <ph name="TOTAL_TIME" /> · <ph name="LABEL" /></translation>
 <translation id="1698760176351776263">Địa chỉ IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1709762881904163296">Cài đặt mạng</translation>
 <translation id="1743570585616704562">Không nhận dạng được</translation>
@@ -70,16 +74,17 @@
 <translation id="1747827819627189109">Đã bật bàn phím ảo</translation>
 <translation id="1761222317188459878">Bật/tắt kết nối mạng. <ph name="STATE_TEXT" /></translation>
 <translation id="1771761307086386028">Cuộn sang phải</translation>
+<translation id="1782199038061388045">dịch</translation>
 <translation id="181103072419391116">Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />, Do quản trị viên của bạn quản lý</translation>
 <translation id="1812997170047690955">Trên màn hình của tôi có nội dung gì?</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">Trợ lý (đang tải...)</translation>
 <translation id="1838895407229022812">Chế độ Ánh sáng đêm đang tắt.</translation>
 <translation id="1850504506766569011">Wi-Fi đang tắt.</translation>
-<translation id="1859889070386344428">Đang tắt</translation>
 <translation id="1864454756846565995">Thiết bị USB-C (cổng phía sau)</translation>
 <translation id="1882897271359938046">Đang phản chiếu tới <ph name="DISPLAY_NAME" /></translation>
 <translation id="1885785240814121742">Mở khóa bằng vân tay</translation>
+<translation id="1888656773939766144"><ph name="DISPLAY_NAME" /> không hỗ trợ <ph name="SPECIFIED_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" /> Hz). Độ phân giải đã được đổi thành <ph name="FALLBACK_RESOLUTION" /> (<ph name="FALLBACK_REFRESH_RATE" />). Hãy nhấp vào xác nhận để lưu các thay đổi. Các tùy chọn cài đặt trước sẽ được khôi phục sau <ph name="TIMEOUT_SECONDS" /> nữa.</translation>
 <translation id="1919743966458266018">Phím tắt để mở trình quản lý tác vụ đã thay đổi. Vui lòng sử dụng <ph name="NEW_SHORTCUT" /> thay vì <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="1923539912171292317">Nhấp chuột tự động</translation>
 <translation id="1928739107511554905">Để cập nhật, hãy dùng màn hình cảm ứng để khởi động lại Chromebook bằng bàn phím đã kết nối.</translation>
@@ -109,6 +114,7 @@
 <translation id="2268813581635650749">Đăng xuất tất cả</translation>
 <translation id="2277103315734023688">Tua tiến</translation>
 <translation id="2292698582925480719">Tỷ lệ hiển thị</translation>
+<translation id="229397294990920565">Đang tắt dữ liệu di động...</translation>
 <translation id="2295777434187870477">Micrô đang bật. Nhấn vào nút bật tắt sẽ tắt micrô và không thu được tiếng.</translation>
 <translation id="2298170939937364391">Đã bật tính năng Phóng to toàn màn hình. Hãy nhấn lại tổ hợp phím Ctrl+Tìm kiếm+M để tắt tính năng này.</translation>
 <translation id="2302092602801625023">Tài khoản này do Family Link quản lý</translation>
@@ -132,14 +138,13 @@
 <translation id="2484513351006226581">Hãy nhấn <ph name="KEYBOARD_SHORTCUT" /> để chuyển bố cục bàn phím.</translation>
 <translation id="2501920221385095727">Phím cố định</translation>
 <translation id="2509468283778169019">Đang bật CAPS LOCK</translation>
-<translation id="2519465031217098801">Đang bật</translation>
 <translation id="2542089167727451762">Nhấn vào ảnh hồ sơ của bạn</translation>
 <translation id="255671100581129685">Bạn không thể sử dụng Trợ lý Google trong phiên công khai.</translation>
 <translation id="256712445991462162">tính năng phóng to ở vị trí cố định</translation>
 <translation id="2575685495496069081">Đã tắt tính năng đăng nhập nhiều tài khoản</translation>
 <translation id="2582112259361606227">Khởi động lại để cập nhật</translation>
 <translation id="2617342710774726426">Thẻ SIM bị khóa</translation>
-<translation id="2621713457727696555">Đã áp dụng biện pháp bảo mật</translation>
+<translation id="2621713457727696555">Đã bảo mật</translation>
 <translation id="2653659639078652383">Gửi</translation>
 <translation id="2658778018866295321">Nhấp và kéo</translation>
 <translation id="2700493154570097719">Đặt bàn phím</translation>
@@ -168,6 +173,7 @@
 <translation id="2996462380875591307">Đã bật tính năng Phóng to ở vị trí cố định. Hãy nhấn lại tổ hợp phím Ctrl+Search+D để tắt tính năng này.</translation>
 <translation id="3000461861112256445">Đơn âm</translation>
 <translation id="3009178788565917040">Thiết bị ra</translation>
+<translation id="3033545621352269033">Đang bật</translation>
 <translation id="3051128274746680507">Hồ sơ người dùng được giám sát của bạn sẽ sớm bị xóa. Đăng nhập để tìm hiểu thêm.</translation>
 <translation id="3055162170959710888">Bạn đã dùng thiết bị này trong <ph name="USED_TIME" /> hôm nay</translation>
 <translation id="3076778413190775903">Khay trạng thái, thời gian <ph name="TIME" />,
@@ -180,6 +186,7 @@
 <translation id="3081696990447829002">Mở rộng menu</translation>
 <translation id="3087734570205094154">Bên dưới</translation>
 <translation id="309749186376891736">Di con trỏ</translation>
+<translation id="3098580329624789136">Xem <ph name="INTENT" /> của "<ph name="QUERY" />"</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Khởi động lại để cập nhật</translation>
 <translation id="3139942575505304791">Không gian làm việc 1</translation>
@@ -217,6 +224,7 @@
 <translation id="3465356146291925647">Do quản trị viên của bạn quản lý</translation>
 <translation id="3477079411857374384">Control-Shift-Space</translation>
 <translation id="3485319357743610354"><ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" /></translation>
+<translation id="3486220673238053218">định nghĩa</translation>
 <translation id="3510164367642747937">Đánh dấu con trỏ chuột</translation>
 <translation id="3513798432020909783">Người quản lý tài khoản: <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Thay đổi lại thành "<ph name="FROM_LOCALE" />" (yêu cầu khởi động lại)</translation>
@@ -255,22 +263,23 @@
 <translation id="3943857333388298514">Dán</translation>
 <translation id="394485226368336402">Cài đặt âm thanh</translation>
 <translation id="3962859241508114581">Bản nhạc trước</translation>
-<translation id="3965097803111112935">Đang tắt</translation>
 <translation id="397105322502079400">Đang tính...</translation>
 <translation id="3977512764614765090">Pin ở mức <ph name="PERCENTAGE" />% và đang sạc.</translation>
 <translation id="3995138139523574647">Thiết bị USB-C (cổng phía sau, bên phải)</translation>
 <translation id="4017989525502048489">Con trỏ laser</translation>
 <translation id="4021716437419160885">Cuộn xuống</translation>
 <translation id="4028481283645788203">Bạn cần nhập mật khẩu để tăng cường bảo mật</translation>
+<translation id="4032485810211612751"><ph name="HOURS" />:<ph name="MINUTES" />:<ph name="SECONDS" /></translation>
 <translation id="4042660782729322247">Bạn đang chia sẻ màn hình</translation>
-<translation id="4065525899979931964">{NUM_APPS,plural, =1{Tắt thông báo của một ứng dụng}other{Tắt thông báo của # ứng dụng}}</translation>
+<translation id="4065525899979931964">{NUM_APPS,plural, =1{Tắt, 1 ư.dụng}other{Tắt, # ư.dụng}}</translation>
 <translation id="4072264167173457037">Tín hiệu trung bình</translation>
 <translation id="4112140312785995938">Tua lùi</translation>
 <translation id="4129129681837227511">Để xem thông báo trên màn hình khóa, hãy mở khóa thiết bị để thay đổi tùy chọn cài đặt này</translation>
-<translation id="4144413954005649103">Khi nhấp chuột phải hoặc nhấn và giữ, Trợ lý sẽ hiển thị cho bạn thông tin liên quan đến nội dung bạn chọn trên màn hình.</translation>
 <translation id="4146833061457621061">Phát nhạc</translation>
+<translation id="4149156641122542261"><ph name="DOMAIN" /> quản lý <ph name="DEVICE_TYPE" /></translation>
 <translation id="4181841719683918333">Ngôn ngữ</translation>
 <translation id="4195877955194704651">Nút Lượt nhấp tự động</translation>
+<translation id="4197790712631116042">Đang tắt</translation>
 <translation id="4215497585250573029">Cài đặt mạng riêng ảo (VPN)</translation>
 <translation id="4217571870635786043">Nhập bằng giọng nói</translation>
 <translation id="4239069858505860023">GPRS</translation>
@@ -285,10 +294,10 @@
 <translation id="4338109981321384717">Kính lúp</translation>
 <translation id="4351433414020964307">Trợ lý đang tải...</translation>
 <translation id="4356930093361201197">chế độ tương phản cao</translation>
+<translation id="4368583494516669646">Chúc ngủ ngon <ph name="GIVEN_NAME" />!</translation>
 <translation id="4371348193907997655">Cài đặt phương thức truyền</translation>
 <translation id="4378551569595875038">Đang kết nối…</translation>
 <translation id="4379531060876907730">Đây là các công cụ bút dành cho bút cảm ứng</translation>
-<translation id="4383956581743965695">-<ph name="TIME_SINCE_EXPIRATION" /></translation>
 <translation id="4389184120735010762">Bạn đã nhấn phím tắt của tính năng phóng to ở vị trí cố định. Bạn có muốn bật tính năng này không?</translation>
 <translation id="4421231901400348175">Chia sẻ quyền kiểm soát màn hình của bạn với <ph name="HELPER_NAME" /> qua Trợ giúp từ xa.</translation>
 <translation id="4430019312045809116">Âm lượng</translation>
@@ -301,9 +310,11 @@
 <translation id="4513946894732546136">Phản hồi</translation>
 <translation id="4527045527269911712">Thiết bị Bluetooth "<ph name="DEVICE_NAME" />"muốn được phép ghép nối.</translation>
 <translation id="453661520163887813"><ph name="TIME" /> cho đến khi đầy</translation>
+<translation id="4560576029703263363">Đang bật</translation>
 <translation id="4561267230861221837">3G</translation>
 <translation id="4565377596337484307">Ẩn mật khẩu</translation>
 <translation id="4570957409596482333">Nút Chọn để nói</translation>
+<translation id="4577274620589681794">Hết giờ · <ph name="LABEL" /></translation>
 <translation id="4585337515783392668">Dừng truyền trên bộ thu không xác định</translation>
 <translation id="4628757576491864469">Thiết bị</translation>
 <translation id="4659419629803378708">Đã bật ChromeVox</translation>
@@ -335,6 +346,8 @@
 <translation id="4924411785043111640">Khởi động lại và đặt lại</translation>
 <translation id="495046168593986294">Cuộn lên</translation>
 <translation id="4961318399572185831">Truyền màn hình</translation>
+<translation id="4969092041573468113"><ph name="HOURS" /> giờ <ph name="MINUTES" /> phút <ph name="SECONDS" /> giây</translation>
+<translation id="4970352680959471247">Chào buổi tối <ph name="GIVEN_NAME" />!</translation>
 <translation id="5030687792513154421">Đã hết thời gian</translation>
 <translation id="5035236842988137213">Đã kết nối <ph name="DEVICE_NAME" /> với một điện thoại mới</translation>
 <translation id="5035389544768382859">Xác nhận cấu hình của màn hình</translation>
@@ -344,11 +357,11 @@
 <translation id="5207949376430453814">Đánh dấu điểm chèn văn bản</translation>
 <translation id="5222676887888702881">Đăng xuất</translation>
 <translation id="523505283826916779">Hỗ trợ tiếp cận</translation>
-<translation id="5250225880026334010">Đang tắt</translation>
 <translation id="5260676007519551770">Không gian làm việc 4</translation>
 <translation id="5283198616748585639">Thêm 1 phút</translation>
 <translation id="528468243742722775">Kết thúc</translation>
 <translation id="5286194356314741248">Đang quét</translation>
+<translation id="5297704307811127955">Đang tắt</translation>
 <translation id="5302048478445481009">Ngôn ngữ</translation>
 <translation id="5313326810920013265">Cài đặt Bluetooth</translation>
 <translation id="5331975486040154427">Thiết bị USB-C (cổng phía sau, bên trái)</translation>
@@ -361,6 +374,7 @@
 <translation id="544691375626129091">Tất cả người dùng hiện có mặt đã được thêm vào phiên này.</translation>
 <translation id="54609108002486618">Được quản lý</translation>
 <translation id="5465662442746197494">Bạn cần trợ giúp?</translation>
+<translation id="5485091064403948243">Chào buổi sáng <ph name="GIVEN_NAME" />!</translation>
 <translation id="5496819745535887422">Quản trị viên đang hạ cấp hệ điều hành của thiết bị của bạn. Tất cả dữ liệu sẽ bị xóa khi thiết bị khởi động lại.</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="553675580533261935">Thoát phiên</translation>
@@ -401,7 +415,7 @@
 <translation id="5958529069007801266">Người dùng được giám sát</translation>
 <translation id="5977415296283489383">Tai nghe</translation>
 <translation id="5978382165065462689">Chia sẻ quyền kiểm soát màn hình của bạn qua Trợ giúp từ xa.</translation>
-<translation id="5980301590375426705">Thoát khỏi phiên khách</translation>
+<translation id="5980301590375426705">Thoát phiên khách</translation>
 <translation id="598882571027504733">Để cập nhật, hãy khởi động lại Chromebook bằng bàn phím đã kết nối.</translation>
 <translation id="5992218262414051481">Đã bật Chế độ tương phản cao. Nhấn lại Ctrl+Search+H để tắt.</translation>
 <translation id="6018164090099858612">Đang thoát chế độ phản chiếu</translation>
@@ -448,7 +462,7 @@
 <translation id="6501401484702599040">Đang truyền màn hình tới <ph name="RECEIVER_NAME" /></translation>
 <translation id="652139407789908527">Màn hình của bạn sẽ trống lâu hơn bình thường (tối đa là 1 phút) trong quá trình cập nhật này. Vui lòng không nhấn nút nguồn trong khi đang cập nhật.</translation>
 <translation id="6521655319214113338">Nhập bằng chữ viết tay</translation>
-<translation id="6528179044667508675">Không làm phiền</translation>
+<translation id="6528179044667508675">Ko làm phiền</translation>
 <translation id="6537270692134705506">Chụp màn hình</translation>
 <translation id="6537924328260219877">Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />, Pin điện thoại <ph name="BATTERY_STATUS" /></translation>
 <translation id="6542521951477560771">Đang truyền tới <ph name="RECEIVER_NAME" /></translation>
@@ -462,7 +476,6 @@
 <translation id="6650933572246256093">Thiết bị Bluetooth "<ph name="DEVICE_NAME" />" muốn được phép ghép nối. Vui lòng nhập mã xác nhận này trên thiết bị đó: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Mật khẩu</translation>
 <translation id="6665545700722362599">Cấp cho trang web, ứng dụng và tiện ích quyền sử dụng dịch vụ vị trí, micrô, máy ảnh hoặc các tính năng khác của thiết bị</translation>
-<translation id="6669268301501499730">Đang bật</translation>
 <translation id="6670153871843998651">Không gian làm việc 3</translation>
 <translation id="6691659475504239918">Search+Shift+H</translation>
 <translation id="6692996468359469499">Nhận thông tin liên quan đến lựa chọn của bạn</translation>
@@ -500,7 +513,6 @@
 <translation id="7068360136237591149">Mở tệp</translation>
 <translation id="7076293881109082629">Đăng nhập</translation>
 <translation id="7088960765736518739">Tiếp cận bằng công tắc</translation>
-<translation id="7092922358121866860">Hiển thị các tùy chọn cài đặt Ánh sáng đêm</translation>
 <translation id="7098389117866926363">Thiết bị USB-C (cổng bên trái ở phía sau)</translation>
 <translation id="7131634465328662194">Bạn sẽ tự động bị đăng xuất.</translation>
 <translation id="7143207342074048698">Đang kết nối</translation>
@@ -519,8 +531,10 @@
 <translation id="7378594059915113390">Các chức năng điều khiển nội dung đa phương tiện</translation>
 <translation id="7398254312354928459">Đã chuyển kết nối mạng</translation>
 <translation id="7405710164030118432">Để mở khóa thiết bị này, hãy nhập mã truy cập Family Link dành cho cha mẹ của bạn</translation>
+<translation id="741244894080940828">chuyển đổi</translation>
 <translation id="742594950370306541">Máy ảnh đang được sử dụng.</translation>
 <translation id="743058460480092004">Máy ảnh và micrô đang được sử dụng.</translation>
+<translation id="7436182601308224670">Chào buổi chiều <ph name="GIVEN_NAME" />!</translation>
 <translation id="7466449121337984263">Vui lòng chạm vào cảm biến</translation>
 <translation id="7497767806359279797">Chọn ngôn ngữ và bàn phím</translation>
 <translation id="7526573455193969409">Mạng có thể được giám sát</translation>
@@ -530,14 +544,17 @@
 <translation id="7562368315689366235">Bảng màu biểu tượng cảm xúc</translation>
 <translation id="7564874036684306347">Di chuyển cửa sổ sang màn hình khác có thể gây ra hoạt động không mong muốn. Các thông báo, cửa sổ và hộp thoại tiếp theo có thể bị phân tách giữa các màn hình.</translation>
 <translation id="7568294522609223312">Tắt tính năng tự động nhấp</translation>
+<translation id="7568637526529101738">Khi nhấp chuột phải hoặc nhấn và giữ, Trợ lý sẽ hiển thị các thông tin như định nghĩa hoặc hoạt động chuyển đổi đơn vị để bạn lựa chọn.</translation>
 <translation id="7569509451529460200">Đã bật chữ nổi Braille và ChromeVox</translation>
 <translation id="7593891976182323525">Search hoặc Shift</translation>
 <translation id="7600875258240007829">Xem tất cả thông báo</translation>
+<translation id="7624117708979618027"><ph name="TEMPERATURE_F" />°F</translation>
 <translation id="7642647758716480637">Mở phần cài đặt <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" /></translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (chủ sở hữu)</translation>
 <translation id="7647488630410863958">Mở khóa thiết bị để xem thông báo của bạn</translation>
 <translation id="7649070708921625228">Trợ giúp</translation>
 <translation id="7654687942625752712">Nhấn và giữ cả hai phím âm lượng trong 5 giây để tắt tính năng phản hồi bằng giọng nói.</translation>
+<translation id="7658239707568436148">Hủy</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7723389094756330927">{NUM_NOTIFICATIONS,plural, =1{1 thông báo}other{# thông báo}}</translation>
 <translation id="7724603315864178912">Cắt</translation>
@@ -574,7 +591,7 @@
 <translation id="8054466585765276473">Đang tính toán thời lượng pin.</translation>
 <translation id="8061464966246066292">Độ tương phản cao</translation>
 <translation id="8098591350844501178">Dừng truyền màn hình tới <ph name="RECEIVER_NAME" /></translation>
-<translation id="8113423164597455979">Đang bật trên tất cả ứng dụng</translation>
+<translation id="8113423164597455979">Bật, tất cả</translation>
 <translation id="8131740175452115882">Xác nhận</translation>
 <translation id="8132793192354020517">Đã kết nối với <ph name="NAME" /></translation>
 <translation id="813913629614996137">Đang khởi chạy...</translation>
@@ -586,11 +603,14 @@
 <translation id="8190698733819146287">Tùy chỉnh ngôn ngữ và dữ liệu nhập...</translation>
 <translation id="8192202700944119416">Đã ẩn thông báo.</translation>
 <translation id="8196787716797768628">Dùng cử chỉ để chuyển đổi nhanh giữa các ứng dụng và tương tác với Chromebook ở chế độ máy tính bảng.</translation>
+<translation id="8200772114523450471">Tiếp tục</translation>
 <translation id="8203795194971602413">Nhấp chuột phải</translation>
+<translation id="8219451629189078428">Bạn cần phải luôn bật và kết nối Chromebook với nguồn điện trong thời gian này. Hãy đảm bảo bạn đã cắm chắc chắn cáp bộ sạc hoặc bộ đổi nguồn vào cả Chromebook lẫn ổ cắm điện. Không tắt Chromebook.</translation>
 <translation id="8236042855478648955">Giờ nghỉ giải lao</translation>
 <translation id="8247060538831475781"><ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />, Pin điện thoại <ph name="BATTERY_STATUS" /></translation>
 <translation id="826107067893790409">Nhấn Enter để mở khóa cho <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8261506727792406068">Xóa</translation>
+<translation id="828708037801473432">Đang tắt</translation>
 <translation id="8297006494302853456">Yếu</translation>
 <translation id="8308637677604853869">Menu trước</translation>
 <translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" />  <ph name="GET_STARTED" /></translation>
@@ -600,6 +620,7 @@
 <translation id="8388750414311082622">Không thể xóa không gian làm việc gần đây nhất.</translation>
 <translation id="8392451568018454956">Menu tùy chọn dành cho <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8394567579869570560">Cha mẹ của bạn đã khóa thiết bị này</translation>
+<translation id="8412677897383510995">Hiển thị các tùy chọn cài đặt màn hình</translation>
 <translation id="8425213833346101688">Thay đổi</translation>
 <translation id="8427213022735114808">Tính năng nhập bằng giọng nói gửi giọng nói của bạn tới Google để cho phép nhập liệu bằng giọng nói vào bất kỳ trường văn bản nào.</translation>
 <translation id="8428213095426709021">Cài đặt</translation>
@@ -616,10 +637,12 @@
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> của bạn có thể không sạc khi được bật.</translation>
 <translation id="8563862697512465947">Cài đặt Thông báo</translation>
 <translation id="857201607579416096">Đã di chuyển trình đơn vào góc dưới cùng bên phải màn hình.</translation>
+<translation id="8594115950068821369">-<ph name="FORMATTED_TIME" /></translation>
 <translation id="8627191004499078455">Đã kết nối với <ph name="DEVICE_NAME" /></translation>
 <translation id="8631727435199967028">Cài đặt hỗ trợ tiếp cận</translation>
 <translation id="8637598503828012618"><ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />, Do quản trị viên của bạn quản lý</translation>
 <translation id="8639760480004882931">Còn <ph name="PERCENTAGE" /></translation>
+<translation id="8646417893960517480">Đồng hồ hẹn giờ <ph name="TOTAL_TIME" /></translation>
 <translation id="8649101189709089199">Chọn để nói</translation>
 <translation id="8652175077544655965">Đóng cài đặt</translation>
 <translation id="8653151467777939995">Hiển thị các tùy chọn cài đặt thông báo. Thông báo đang bật</translation>
@@ -646,7 +669,6 @@
 <translation id="8877788021141246043">Đặt lời nhắc</translation>
 <translation id="8878886163241303700">Mở rộng màn hình</translation>
 <translation id="890616557918890486">Thay đổi nguồn</translation>
-<translation id="8908312332415978740"><ph name="DISPLAY_NAME" /> không hỗ trợ<ph name="SPECIFIED_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" /> Hz). Độ phân giải đã được đổi thành <ph name="FALLBACK_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" />). Hãy nhấp vào xác nhận để lưu các thay đổi. Các tùy chọn cài đặt trước sẽ được khôi phục sau <ph name="TIMEOUT_SECONDS" /> nữa.</translation>
 <translation id="8909138438987180327">Pin ở mức <ph name="PERCENTAGE" />%.</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">Trợ lý Google không hỗ trợ ngôn ngữ này.</translation>
@@ -684,7 +706,7 @@
 <translation id="9220525904950070496">Xóa tài khoản</translation>
 <translation id="923686485342484400">Nhấn Control Shift Q hai lần để đăng xuất.</translation>
 <translation id="938963181863597773">Trên lịch của tôi có sự kiện gì?</translation>
-<translation id="945522503751344254">Gửi phản hồi</translation>
+<translation id="945522503751344254">Gửi phản hồi</translation>
 <translation id="98515147261107953">Khổ ngang</translation>
 <translation id="990277280839877440">Đã đóng cửa sổ <ph name="WINDOW_TITILE" />.</translation>
 </translationbundle>

@@ -10,6 +10,7 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
+#include "base/feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_info.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/views/widget/widget.h"
 
@@ -115,6 +117,9 @@ void AppServiceAppWindowArcTracker::OnTaskCreated(
       arc::ArcAppShelfId::FromIntentAndAppId(intent, arc_app_id);
   task_id_to_arc_app_window_info_[task_id] = std::make_unique<ArcAppWindowInfo>(
       arc_app_shelf_id, intent, package_name);
+  // Hide from shelf if there already is some task representing the window.
+  if (GetTaskIdSharingLogicalWindow(task_id) != arc::kNoTaskId)
+    task_id_to_arc_app_window_info_[task_id]->set_hidden_from_shelf(true);
 
   CheckAndAttachControllers();
 
@@ -163,6 +168,12 @@ void AppServiceAppWindowArcTracker::OnTaskDestroyed(int task_id) {
   auto it = task_id_to_arc_app_window_info_.find(task_id);
   if (it == task_id_to_arc_app_window_info_.end())
     return;
+
+  if (!it->second->logical_window_id().empty()) {
+    const int other_id = GetTaskIdSharingLogicalWindow(task_id);
+    if (other_id != arc::kNoTaskId)
+      task_id_to_arc_app_window_info_[other_id]->set_hidden_from_shelf(false);
+  }
 
   aura::Window* const window = it->second.get()->window();
   if (window) {
@@ -296,6 +307,10 @@ void AppServiceAppWindowArcTracker::AttachControllerToWindow(
   window->SetProperty(ash::kArcPackageNameKey,
                       new std::string(info->package_name()));
   window->SetProperty(ash::kAppIDKey, new std::string(shelf_id.app_id));
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kArcPreImeKeyEventSupport)) {
+    window->SetProperty(aura::client::kSkipImeProcessing, true);
+  }
 
   if (info->app_shelf_id().app_id() == arc::kPlayStoreAppId)
     HandlePlayStoreLaunch(info);
@@ -405,6 +420,25 @@ void AppServiceAppWindowArcTracker::HandlePlayStoreLaunch(
     DCHECK_GE(launch_time, base::TimeDelta());
     arc::UpdatePlayStoreLaunchTime(launch_time);
   }
+}
+
+int AppServiceAppWindowArcTracker::GetTaskIdSharingLogicalWindow(int task_id) {
+  auto fixed_it = task_id_to_arc_app_window_info_.find(task_id);
+  if (fixed_it == task_id_to_arc_app_window_info_.end())
+    return arc::kNoTaskId;
+  if (fixed_it->second->logical_window_id().empty())
+    return arc::kNoTaskId;
+  for (auto it = task_id_to_arc_app_window_info_.begin();
+       it != task_id_to_arc_app_window_info_.end(); it++) {
+    if (task_id == it->first)
+      continue;
+    if (fixed_it->second->logical_window_id() ==
+            it->second->logical_window_id() &&
+        fixed_it->second->shelf_id() == it->second->shelf_id()) {
+      return it->first;
+    }
+  }
+  return arc::kNoTaskId;
 }
 
 std::vector<int> AppServiceAppWindowArcTracker::GetTaskIdsForApp(

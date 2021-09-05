@@ -586,13 +586,10 @@ NotificationViewMD::NotificationViewMD(const Notification& notification)
 
   AddChildView(ink_drop_container_);
 
-  control_buttons_view_ =
-      std::make_unique<NotificationControlButtonsView>(this);
-  control_buttons_view_->set_owned_by_client();
-
   // |header_row_| contains app_icon, app_name, control buttons, etc...
   header_row_ = new NotificationHeaderView(this);
-  header_row_->AddChildView(control_buttons_view_.get());
+  control_buttons_view_ = header_row_->AddChildView(
+      std::make_unique<NotificationControlButtonsView>(this));
   AddChildView(header_row_);
 
   // |content_row_| contains title, message, image, progressbar, etc...
@@ -864,9 +861,8 @@ void NotificationViewMD::OnNotificationInputSubmit(size_t index,
 
 void NotificationViewMD::CreateOrUpdateContextTitleView(
     const Notification& notification) {
-  header_row_->SetAccentColor(notification.accent_color() == SK_ColorTRANSPARENT
-                                  ? kNotificationDefaultAccentColor
-                                  : notification.accent_color());
+  if (notification.accent_color() != SK_ColorTRANSPARENT)
+    header_row_->SetAccentColor(notification.accent_color());
   header_row_->SetTimestamp(notification.timestamp());
   header_row_->SetAppNameElideBehavior(gfx::ELIDE_TAIL);
   header_row_->SetSummaryText(base::string16());
@@ -1090,9 +1086,11 @@ void NotificationViewMD::CreateOrUpdateSmallIconView(
   // TODO(knollr): figure out if this has a performance impact and
   // cache images if so. (crbug.com/768748)
   gfx::Image masked_small_icon = notification.GenerateMaskedSmallIcon(
-      kSmallImageSizeMD, notification.accent_color() == SK_ColorTRANSPARENT
-                             ? message_center::kNotificationDefaultAccentColor
-                             : notification.accent_color());
+      kSmallImageSizeMD,
+      notification.accent_color() == SK_ColorTRANSPARENT
+          ? GetNativeTheme()->GetSystemColor(
+                ui::NativeTheme::kColorId_NotificationDefaultAccentColor)
+          : notification.accent_color());
 
   if (masked_small_icon.IsEmpty()) {
     header_row_->ClearAppIcon();
@@ -1395,7 +1393,7 @@ void NotificationViewMD::UpdateCornerRadius(int top_radius, int bottom_radius) {
 
 NotificationControlButtonsView* NotificationViewMD::GetControlButtonsView()
     const {
-  return control_buttons_view_.get();
+  return control_buttons_view_;
 }
 
 bool NotificationViewMD::IsExpanded() const {
@@ -1436,6 +1434,11 @@ void NotificationViewMD::OnThemeChanged() {
       inline_settings_visible
           ? ui::NativeTheme::kColorId_NotificationInlineSettingsBackground
           : ui::NativeTheme::kColorId_NotificationDefaultBackground));
+
+  auto* notification =
+      MessageCenter::Get()->FindVisibleNotificationById(notification_id());
+  if (notification)
+    CreateOrUpdateSmallIconView(*notification);
 }
 
 void NotificationViewMD::Activate() {

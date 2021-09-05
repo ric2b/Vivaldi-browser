@@ -18,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -56,7 +57,11 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
+#include "content/public/browser/device_service.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -67,6 +72,9 @@ namespace chromeos {
 namespace {
 
 bool g_skip_force_online_signin_for_testing = false;
+
+const char kWakeLockReason[] = "TPMLockedIssue";
+const int kWaitingOvertimeInSeconds = 1;
 
 // User dictionary keys.
 const char kKeyUsername[] = "username";
@@ -375,9 +383,117 @@ class UserSelectionScreen::DircryptoMigrationChecker {
   DISALLOW_COPY_AND_ASSIGN(DircryptoMigrationChecker);
 };
 
+// Helper class to call cryptohome to check whether tpm is locked and update
+// UI with time left to unlocking.
+class UserSelectionScreen::TpmLockedChecker {
+ public:
+  explicit TpmLockedChecker(UserSelectionScreen* owner) : owner_(owner) {}
+  TpmLockedChecker(const TpmLockedChecker&) = delete;
+  TpmLockedChecker& operator=(const TpmLockedChecker&) = delete;
+  ~TpmLockedChecker() = default;
+
+  void Check() {
+    CryptohomeClient::Get()->WaitForServiceToBeAvailable(base::BindOnce(
+        &TpmLockedChecker::RunCryptohomeCheck, weak_ptr_factory_.GetWeakPtr()));
+  }
+
+ private:
+  void RunCryptohomeCheck(bool service_is_ready) {
+    if (!service_is_ready) {
+      LOG(ERROR) << "Cryptohome is not available.";
+      return;
+    }
+
+    chromeos::CryptohomeClient::Get()->GetTpmStatus(
+        cryptohome::GetTpmStatusRequest(),
+        base::BindOnce(&TpmLockedChecker::OnGetTpmStatus,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  // Callback invoked when GetTpmStatus call is finished.
+  void OnGetTpmStatus(base::Optional<cryptohome::BaseReply> reply) {
+    check_finised_ = base::TimeTicks::Now();
+
+    if (!reply.has_value()) {
+      return;
+    }
+    if (reply->has_error() &&
+        reply->error() != cryptohome::CRYPTOHOME_ERROR_NOT_SET) {
+      return;
+    }
+    if (!reply->HasExtension(cryptohome::GetTpmStatusReply::reply)) {
+      return;
+    }
+    auto reply_proto =
+        reply->GetExtension(cryptohome::GetTpmStatusReply::reply);
+
+    if (reply_proto.dictionary_attack_lockout_in_effect()) {
+      int time_remaining =
+          reply_proto.dictionary_attack_lockout_seconds_remaining();
+      // Add `kWaitingOvertimeInSeconds` for safetiness, i.e hiding UI and
+      // releasing `wake_lock_` happens after TPM becomes unlocked.
+      dictionary_attack_lockout_time_remaining_ = base::TimeDelta::FromSeconds(
+          time_remaining + kWaitingOvertimeInSeconds);
+      OnTpmIsLocked();
+    } else {
+      TpmIsUnlocked();
+    }
+  }
+
+  void OnTpmIsLocked() {
+    AcquireWakeLock();
+    clock_ticking_animator_.Start(FROM_HERE, base::TimeDelta::FromSeconds(1),
+                                  this, &TpmLockedChecker::UpdateUI);
+    tpm_recheck_.Start(FROM_HERE, base::TimeDelta::FromMinutes(1), this,
+                       &TpmLockedChecker::Check);
+  }
+
+  void UpdateUI() {
+    const base::TimeDelta time_spent = base::TimeTicks::Now() - check_finised_;
+    if (time_spent > dictionary_attack_lockout_time_remaining_) {
+      Check();
+    } else {
+      owner_->SetTpmLockedState(
+          true, dictionary_attack_lockout_time_remaining_ - time_spent);
+    }
+  }
+
+  void TpmIsUnlocked() {
+    clock_ticking_animator_.Stop();
+    tpm_recheck_.Stop();
+    owner_->SetTpmLockedState(false, base::TimeDelta());
+  }
+
+  void AcquireWakeLock() {
+    if (!wake_lock_) {
+      mojo::Remote<device::mojom::WakeLockProvider> provider;
+      content::GetDeviceService().BindWakeLockProvider(
+          provider.BindNewPipeAndPassReceiver());
+      provider->GetWakeLockWithoutContext(
+          device::mojom::WakeLockType::kPreventDisplaySleep,
+          device::mojom::WakeLockReason::kOther, kWakeLockReason,
+          wake_lock_.BindNewPipeAndPassReceiver());
+    }
+    wake_lock_->RequestWakeLock();
+  }
+
+  UserSelectionScreen* const owner_;
+
+  base::TimeTicks check_finised_;
+  base::TimeDelta dictionary_attack_lockout_time_remaining_;
+
+  base::RepeatingTimer clock_ticking_animator_;
+  base::RepeatingTimer tpm_recheck_;
+
+  mojo::Remote<device::mojom::WakeLock> wake_lock_;
+
+  base::WeakPtrFactory<TpmLockedChecker> weak_ptr_factory_{this};
+};
+
 UserSelectionScreen::UserSelectionScreen(const std::string& display_type)
     : BaseScreen(UserBoardView::kScreenId, OobeScreenPriority::DEFAULT),
       display_type_(display_type) {
+  session_manager::SessionManager::Get()->AddObserver(this);
   if (display_type_ != OobeUI::kLoginDisplay)
     return;
   allowed_input_methods_subscription_ =
@@ -393,10 +509,18 @@ UserSelectionScreen::~UserSelectionScreen() {
   ui::UserActivityDetector* activity_detector = ui::UserActivityDetector::Get();
   if (activity_detector && activity_detector->HasObserver(this))
     activity_detector->RemoveObserver(this);
+  session_manager::SessionManager::Get()->RemoveObserver(this);
 }
 
 void UserSelectionScreen::InitEasyUnlock() {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(this);
+}
+
+void UserSelectionScreen::SetTpmLockedState(bool is_locked,
+                                            base::TimeDelta time_left) {
+  for (user_manager::User* user : users_) {
+    view_->SetTpmLockedState(user->GetAccountId(), is_locked, time_left);
+  }
 }
 
 // static
@@ -581,6 +705,12 @@ void UserSelectionScreen::Init(const user_manager::UserList& users) {
     activity_detector->AddObserver(this);
   if (!ime_state_.get())
     ime_state_ = input_method::InputMethodManager::Get()->GetActiveIMEState();
+
+  if (tpm_locked_checker_)
+    return;
+
+  tpm_locked_checker_ = std::make_unique<TpmLockedChecker>(this);
+  tpm_locked_checker_->Check();
 }
 
 void UserSelectionScreen::OnBeforeUserRemoved(const AccountId& account_id) {
@@ -692,6 +822,14 @@ void UserSelectionScreen::CheckUserStatus(const AccountId& account_id) {
 }
 
 void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
+  DCHECK(!pending_focused_account_id_.has_value());
+  const session_manager::SessionState session_state =
+      session_manager::SessionManager::Get()->session_state();
+  if (session_state == session_manager::SessionState::ACTIVE) {
+    // Wait for the session state change before actual work.
+    pending_focused_account_id_ = account_id;
+    return;
+  }
   proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(account_id);
   if (focused_pod_account_id_ == account_id)
     return;
@@ -832,6 +970,16 @@ void UserSelectionScreen::AttemptEasySignin(const AccountId& account_id,
   }
 }
 
+void UserSelectionScreen::OnSessionStateChanged() {
+  if (!pending_focused_account_id_.has_value())
+    return;
+  DCHECK(session_manager::SessionManager::Get()->IsUserSessionBlocked());
+
+  AccountId focused_pod(pending_focused_account_id_.value());
+  pending_focused_account_id_.reset();
+  HandleFocusPod(focused_pod);
+}
+
 void UserSelectionScreen::ShowImpl() {}
 
 void UserSelectionScreen::HideImpl() {}
@@ -921,6 +1069,15 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     ash::LoginUserInfo user_info;
     user_info.basic_user_info.type = user->GetType();
     user_info.basic_user_info.account_id = user->GetAccountId();
+
+    if (!user_manager::known_user::GetBooleanPref(
+            account_id, ::prefs::kUse24HourClock,
+            &user_info.use_24hour_clock)) {
+      // Fallback to system default in case pref was not found.
+      user_info.use_24hour_clock =
+          base::GetHourClockType() == base::k24HourClock;
+    }
+
     user_info.basic_user_info.display_name =
         base::UTF16ToUTF8(user->GetDisplayName());
     user_info.basic_user_info.display_email = user->display_email();

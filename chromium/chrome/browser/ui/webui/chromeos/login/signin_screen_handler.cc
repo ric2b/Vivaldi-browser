@@ -71,7 +71,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
-#include "chrome/browser/ui/webui/chromeos/login/native_window_delegate.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
@@ -158,12 +157,6 @@ class CallOnReturn {
 
   DISALLOW_COPY_AND_ASSIGN(CallOnReturn);
 };
-
-policy::MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
-  return g_browser_process->platform_part()
-      ->browser_policy_connector_chromeos()
-      ->GetMinimumVersionPolicyHandler();
-}
 
 }  // namespace
 
@@ -323,10 +316,6 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("offlineLogin", IDS_OFFLINE_LOGIN_HTML);
   builder->Add("ownerUserPattern", IDS_LOGIN_POD_OWNER_USER);
   builder->Add("removeUser", IDS_LOGIN_POD_REMOVE_USER);
-  builder->Add("errorTpmFailureTitle", IDS_LOGIN_ERROR_TPM_FAILURE_TITLE);
-  builder->Add("errorTpmFailureReboot", IDS_LOGIN_ERROR_TPM_FAILURE_REBOOT);
-  builder->Add("errorTpmFailureRebootButton",
-               IDS_LOGIN_ERROR_TPM_FAILURE_REBOOT_BUTTON);
 
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -349,20 +338,9 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("multiProfilesOwnerPrimaryOnlyMsg",
                IDS_MULTI_PROFILES_OWNER_PRIMARY_ONLY_MSG);
 
-  // Strings used by password changed dialog.
-  builder->Add("oldPasswordHint", IDS_LOGIN_PASSWORD_CHANGED_OLD_PASSWORD_HINT);
-  builder->Add("oldPasswordIncorrect",
-               IDS_LOGIN_PASSWORD_CHANGED_INCORRECT_OLD_PASSWORD);
-  builder->Add("proceedAnywayButton",
-               IDS_LOGIN_PASSWORD_CHANGED_PROCEED_ANYWAY_BUTTON);
+  // Used by SAML password dialog.
   builder->Add("nextButtonText", IDS_OFFLINE_LOGIN_NEXT_BUTTON_TEXT);
-  builder->Add("forgotOldPasswordButtonText",
-               IDS_LOGIN_PASSWORD_CHANGED_FORGOT_PASSWORD);
-  builder->AddF("passwordChangedTitle", IDS_LOGIN_PASSWORD_CHANGED_TITLE,
-                ui::GetChromeOSDeviceName());
-  builder->Add("passwordChangedProceedAnywayTitle",
-               IDS_LOGIN_PASSWORD_CHANGED_PROCEED_ANYWAY);
-  builder->Add("passwordChangedTryAgain", IDS_LOGIN_PASSWORD_CHANGED_TRY_AGAIN);
+
   builder->Add("publicAccountInfoFormat", IDS_LOGIN_PUBLIC_ACCOUNT_INFO_FORMAT);
   builder->Add("publicAccountReminder",
                IDS_LOGIN_PUBLIC_ACCOUNT_SIGNOUT_REMINDER);
@@ -439,7 +417,6 @@ void SigninScreenHandler::RegisterMessages() {
               &SigninScreenHandler::HandleLaunchSAMLPublicSession);
   AddRawCallback("offlineLogin", &SigninScreenHandler::HandleOfflineLogin);
   AddCallback("rebootSystem", &SigninScreenHandler::HandleRebootSystem);
-  AddCallback("removeUser", &SigninScreenHandler::HandleRemoveUser);
   AddCallback("toggleEnrollmentScreen",
               &SigninScreenHandler::HandleToggleEnrollmentScreen);
   AddCallback("toggleEnableDebuggingScreen",
@@ -451,11 +428,7 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("openInternetDetailDialog",
               &SigninScreenHandler::HandleOpenInternetDetailDialog);
   AddCallback("loginVisible", &SigninScreenHandler::HandleLoginVisible);
-  AddCallback("cancelPasswordChangedFlow",
-              &SigninScreenHandler::HandleCancelPasswordChangedFlow);
   AddCallback("cancelUserAdding", &SigninScreenHandler::HandleCancelUserAdding);
-  AddCallback("migrateUserData", &SigninScreenHandler::HandleMigrateUserData);
-  AddCallback("resyncUserData", &SigninScreenHandler::HandleResyncUserData);
   AddCallback("loginUIStateChanged",
               &SigninScreenHandler::HandleLoginUIStateChanged);
   AddCallback("showLoadingTimeoutError",
@@ -490,11 +463,6 @@ void SigninScreenHandler::SetDelegate(SigninScreenHandlerDelegate* delegate) {
   delegate_ = delegate;
   if (delegate_)
     delegate_->SetWebUIHandler(this);
-}
-
-void SigninScreenHandler::SetNativeWindowDelegate(
-    NativeWindowDelegate* native_window_delegate) {
-  native_window_delegate_ = native_window_delegate;
 }
 
 void SigninScreenHandler::OnNetworkReady() {
@@ -931,24 +899,8 @@ void SigninScreenHandler::ShowError(int login_attempts,
                                    help_topic_id);
 }
 
-void SigninScreenHandler::ShowErrorScreen(LoginDisplay::SigninError error_id) {
-  switch (error_id) {
-    case LoginDisplay::TPM_ERROR:
-      core_oobe_view_->ShowTpmError();
-      break;
-    default:
-      NOTREACHED() << "Unknown sign in error";
-      break;
-  }
-}
-
 void SigninScreenHandler::ShowSigninUI(const std::string& email) {
   core_oobe_view_->ShowSignInUI(email);
-}
-
-void SigninScreenHandler::ShowPasswordChangedDialog(bool show_password_error,
-                                                    const std::string& email) {
-  core_oobe_view_->ShowPasswordChangedScreen(show_password_error, email);
 }
 
 void SigninScreenHandler::ShowWhitelistCheckFailedError() {
@@ -1138,20 +1090,6 @@ void SigninScreenHandler::HandleRebootSystem() {
       power_manager::REQUEST_RESTART_FOR_USER, "WebUI signin screen");
 }
 
-void SigninScreenHandler::HandleRemoveUser(const AccountId& account_id) {
-  if (delegate_ &&
-      (delegate_->IsUserSigninCompleted() || delegate_->IsSigninInProgress())) {
-    return;
-  }
-
-  ProfileMetrics::LogProfileDeleteUser(
-      ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
-
-  if (!delegate_)
-    return;
-  delegate_->RemoveUser(account_id);
-}
-
 void SigninScreenHandler::HandleToggleEnrollmentScreen() {
   if (delegate_)
     delegate_->ShowEnterpriseEnrollmentScreen();
@@ -1201,12 +1139,6 @@ void SigninScreenHandler::HandleAccountPickerReady() {
     return;
   }
 
-  if (delegate_ && !oobe_ui_ && GetMinimumVersionPolicyHandler() &&
-      !GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied()) {
-    delegate_->ShowUpdateRequiredScreen();
-    return;
-  }
-
   is_account_picker_showing_first_time_ = true;
 
   // The wallpaper may have been set before the instance is initialized, so make
@@ -1250,30 +1182,9 @@ void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
     OnPreferencesChanged();
 }
 
-void SigninScreenHandler::HandleCancelPasswordChangedFlow(
-    const AccountId& account_id) {
-  if (account_id.is_valid()) {
-    RecordReauthReason(account_id, ReauthReason::PASSWORD_UPDATE_SKIPPED);
-  }
-  gaia_screen_handler_->StartClearingCookies(
-      base::Bind(&SigninScreenHandler::CancelPasswordChangedFlowInternal,
-                 weak_factory_.GetWeakPtr()));
-}
-
 void SigninScreenHandler::HandleCancelUserAdding() {
   if (delegate_)
     delegate_->CancelUserAdding();
-}
-
-void SigninScreenHandler::HandleMigrateUserData(
-    const std::string& old_password) {
-  if (LoginDisplayHost::default_host())
-    LoginDisplayHost::default_host()->MigrateUserData(old_password);
-}
-
-void SigninScreenHandler::HandleResyncUserData() {
-  if (LoginDisplayHost::default_host())
-    LoginDisplayHost::default_host()->ResyncUserData();
 }
 
 void SigninScreenHandler::HandleLoginUIStateChanged(const std::string& source,
@@ -1430,14 +1341,6 @@ bool SigninScreenHandler::AllWhitelistedUsersPresent() {
     }
   }
   return true;
-}
-
-void SigninScreenHandler::CancelPasswordChangedFlowInternal() {
-  if (delegate_)
-    ShowImpl();
-
-  if (LoginDisplayHost::default_host())
-    LoginDisplayHost::default_host()->CancelPasswordChangedFlow();
 }
 
 bool SigninScreenHandler::IsGaiaVisible() const {

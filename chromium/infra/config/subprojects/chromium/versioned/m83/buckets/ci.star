@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'builder_name', 'cpu', 'goma', 'os')
 load('//lib/ci.star', 'ci')
 # Load this using relative path so that the load statement doesn't
@@ -9,6 +13,7 @@ ci.set_defaults(
     vars,
     bucketed_triggers = True,
     main_console_view = vars.main_console_name,
+    cq_mirrors_console_view = vars.cq_mirrors_console_name,
 )
 
 ci.declare_bucket(vars)
@@ -218,21 +223,6 @@ ci.chromiumos_builder(
     console_view_entry = ci.console_view_entry(
         category = 'simple|release',
         short_name = 'arm',
-    ),
-)
-
-ci.chromiumos_builder(
-    name = 'chromeos-kevin-rel',
-    console_view_entry = ci.console_view_entry(
-        category = 'simple|release',
-        short_name = 'kvn',
-    ),
-)
-
-ci.fyi_builder(
-    name = 'chromeos-kevin-rel-hw-tests',
-    console_view_entry = ci.console_view_entry(
-        category = 'chromeos',
     ),
 )
 
@@ -704,6 +694,7 @@ ci.mac_ios_builder(
         category = 'ios|default',
         short_name = 'sim',
     ),
+    executable = 'recipe:ios/unified_builder_tester'
 )
 
 ci.mac_ios_builder(
@@ -712,6 +703,7 @@ ci.mac_ios_builder(
         category = 'ios|default',
         short_name = 'ful',
     ),
+    executable = 'recipe:ios/unified_builder_tester',
 )
 
 

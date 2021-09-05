@@ -14,6 +14,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/event_client.h"
@@ -52,7 +53,7 @@ bool IsNonClientLocation(Window* target, const gfx::Point& location) {
 }
 
 Window* ConsumerToWindow(ui::GestureConsumer* consumer) {
-  return consumer ? static_cast<Window*>(consumer) : NULL;
+  return consumer ? static_cast<Window*>(consumer) : nullptr;
 }
 
 bool IsEventCandidateForHold(const ui::Event& event) {
@@ -149,7 +150,7 @@ void WindowEventDispatcher::DispatchCancelModeEvent() {
   ui::CancelModeEvent event;
   Window* focused_window = client::GetFocusClient(window())->GetFocusedWindow();
   if (focused_window && !window()->Contains(focused_window))
-    focused_window = NULL;
+    focused_window = nullptr;
   DispatchDetails details =
       DispatchEvent(focused_window ? focused_window : window(), &event);
   if (details.dispatcher_destroyed)
@@ -245,8 +246,8 @@ gfx::Point WindowEventDispatcher::GetLastMouseLocationInRoot() const {
 }
 
 void WindowEventDispatcher::OnHostLostMouseGrab() {
-  mouse_pressed_handler_ = NULL;
-  mouse_moved_handler_ = NULL;
+  mouse_pressed_handler_ = nullptr;
+  mouse_moved_handler_ = nullptr;
 }
 
 void WindowEventDispatcher::OnCursorMovedToRootLocation(
@@ -357,9 +358,9 @@ void WindowEventDispatcher::OnWindowHidden(Window* invisible,
   // If the window the mouse was pressed in becomes invisible, it should no
   // longer receive mouse events.
   if (invisible->Contains(mouse_pressed_handler_))
-    mouse_pressed_handler_ = NULL;
+    mouse_pressed_handler_ = nullptr;
   if (invisible->Contains(mouse_moved_handler_))
-    mouse_moved_handler_ = NULL;
+    mouse_moved_handler_ = nullptr;
   if (invisible->Contains(touchpad_pinch_handler_))
     touchpad_pinch_handler_ = nullptr;
 
@@ -368,7 +369,7 @@ void WindowEventDispatcher::OnWindowHidden(Window* invisible,
   // dispatching events in the inner loop, then reset the target for the outer
   // loop.
   if (invisible->Contains(old_dispatch_target_))
-    old_dispatch_target_ = NULL;
+    old_dispatch_target_ = nullptr;
 
   invisible->CleanupGestureState();
 
@@ -383,10 +384,10 @@ void WindowEventDispatcher::OnWindowHidden(Window* invisible,
     client::CaptureClient* capture_client =
         client::GetCaptureClient(host_->window());
     Window* capture_window =
-        capture_client ? capture_client->GetCaptureWindow() : NULL;
+        capture_client ? capture_client->GetCaptureWindow() : nullptr;
 
     if (invisible->Contains(event_dispatch_target_))
-      event_dispatch_target_ = NULL;
+      event_dispatch_target_ = nullptr;
 
     // If the ancestor of the capture window is hidden, release the capture.
     // Note that this may delete the window so do not use capture_window
@@ -410,7 +411,7 @@ void WindowEventDispatcher::UpdateCapture(Window* old_capture,
   // (see below). Clear it here to ensure we don't end up referencing a stale
   // Window.
   if (mouse_moved_handler_ && !window()->Contains(mouse_moved_handler_))
-    mouse_moved_handler_ = NULL;
+    mouse_moved_handler_ = nullptr;
 
   if (old_capture && old_capture->GetRootWindow() == window() &&
       old_capture->delegate()) {
@@ -438,7 +439,7 @@ void WindowEventDispatcher::UpdateCapture(Window* old_capture,
     if (details.dispatcher_destroyed)
       return;
   }
-  mouse_pressed_handler_ = NULL;
+  mouse_pressed_handler_ = nullptr;
 }
 
 void WindowEventDispatcher::OnOtherRootGotCapture() {
@@ -460,8 +461,8 @@ void WindowEventDispatcher::OnOtherRootGotCapture() {
   }
 #endif
 
-  mouse_moved_handler_ = NULL;
-  mouse_pressed_handler_ = NULL;
+  mouse_moved_handler_ = nullptr;
+  mouse_pressed_handler_ = nullptr;
 }
 
 void WindowEventDispatcher::SetNativeCapture() {
@@ -539,7 +540,7 @@ ui::EventDispatchDetails WindowEventDispatcher::PreDispatchEvent(
   } else if (event->IsTouchEvent()) {
     details = PreDispatchTouchEvent(target_window, event->AsTouchEvent());
   } else if (event->IsKeyEvent()) {
-    details = PreDispatchKeyEvent(event->AsKeyEvent());
+    details = PreDispatchKeyEvent(target_window, event->AsKeyEvent());
   } else if (event->IsPinchEvent()) {
     details = PreDispatchPinchEvent(target_window, event->AsGestureEvent());
   }
@@ -558,7 +559,7 @@ ui::EventDispatchDetails WindowEventDispatcher::PostDispatchEvent(
   if (!target || target != event_dispatch_target_)
     details.target_destroyed = true;
   event_dispatch_target_ = old_dispatch_target_;
-  old_dispatch_target_ = NULL;
+  old_dispatch_target_ = nullptr;
 #ifndef NDEBUG
   DCHECK(!event_dispatch_target_ || window()->Contains(event_dispatch_target_));
 #endif
@@ -920,7 +921,7 @@ DispatchDetails WindowEventDispatcher::PreDispatchMouseEvent(
           event->SetHandled();
           return details;
         }
-        mouse_moved_handler_ = NULL;
+        mouse_moved_handler_ = nullptr;
       }
       break;
     case ui::ET_MOUSE_MOVED:
@@ -949,7 +950,7 @@ DispatchDetails WindowEventDispatcher::PreDispatchMouseEvent(
           return target_details;
         }
         if (details.target_destroyed || target_details.target_destroyed) {
-          mouse_moved_handler_ = NULL;
+          mouse_moved_handler_ = nullptr;
           event->SetHandled();
           return target_details;
         }
@@ -973,7 +974,7 @@ DispatchDetails WindowEventDispatcher::PreDispatchMouseEvent(
         mouse_pressed_handler_ = target;
       break;
     case ui::ET_MOUSE_RELEASED:
-      mouse_pressed_handler_ = NULL;
+      mouse_pressed_handler_ = nullptr;
       break;
     default:
       break;
@@ -1035,10 +1036,12 @@ DispatchDetails WindowEventDispatcher::PreDispatchTouchEvent(
 }
 
 DispatchDetails WindowEventDispatcher::PreDispatchKeyEvent(
+    Window* target,
     ui::KeyEvent* event) {
   if (skip_ime_ || !host_->has_input_method() ||
       (event->flags() & ui::EF_IS_SYNTHESIZED) ||
-      !host_->ShouldSendKeyEventToIme()) {
+      !host_->ShouldSendKeyEventToIme() ||
+      target->GetProperty(aura::client::kSkipImeProcessing)) {
     return DispatchDetails();
   }
 

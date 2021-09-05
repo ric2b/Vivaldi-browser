@@ -5,9 +5,10 @@
 package org.chromium.content.browser.input;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
 
-import org.junit.Assert;
+import androidx.test.filters.LargeTest;
+
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -15,9 +16,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
@@ -53,7 +54,8 @@ public class SelectPopupTest {
 
     private void verifyPopupShownState(boolean shown) {
         CriteriaHelper.pollUiThread(() -> {
-            Assert.assertEquals(shown, mActivityTestRule.getSelectPopup().isVisibleForTesting());
+            Criteria.checkThat(
+                    mActivityTestRule.getSelectPopup().isVisibleForTesting(), Matchers.is(shown));
         });
     }
 
@@ -71,7 +73,6 @@ public class SelectPopupTest {
     @LargeTest
     @Feature({"Browser"})
     @RerunWithUpdatedContainerView
-    @RetryOnFailure
     public void testReloadWhilePopupShowing() throws Exception, Throwable {
         // The popup should be hidden before the click.
         verifyPopupShownState(false);

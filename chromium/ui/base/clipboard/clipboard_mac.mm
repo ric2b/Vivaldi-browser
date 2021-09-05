@@ -24,6 +24,7 @@
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/clipboard/clipboard_metrics.h"
 #include "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/gfx/canvas.h"
@@ -85,6 +86,27 @@ bool ClipboardMac::IsFormatAvailable(const ClipboardFormatType& format,
   return [types containsObject:format.ToNSString()];
 }
 
+bool ClipboardMac::IsMarkedByOriginatorAsConfidential() const {
+  DCHECK(CalledOnValidThread());
+
+  NSPasteboard* pb = GetPasteboard();
+  NSPasteboardType type =
+      [pb availableTypeFromArray:@[ kUTTypeConfidentialData ]];
+
+  if (type)
+    return true;
+
+  return false;
+}
+
+void ClipboardMac::MarkAsConfidential() {
+  DCHECK(CalledOnValidThread());
+
+  NSPasteboard* pb = GetPasteboard();
+  [pb addTypes:@[ kUTTypeConfidentialData ] owner:nil];
+  [pb setData:nil forType:kUTTypeConfidentialData];
+}
+
 void ClipboardMac::Clear(ClipboardBuffer buffer) {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
@@ -138,6 +160,7 @@ void ClipboardMac::ReadText(ClipboardBuffer buffer,
                             base::string16* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kText);
   NSPasteboard* pb = GetPasteboard();
   NSString* contents = [pb stringForType:NSPasteboardTypeString];
 
@@ -148,6 +171,7 @@ void ClipboardMac::ReadAsciiText(ClipboardBuffer buffer,
                                  std::string* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kText);
   NSPasteboard* pb = GetPasteboard();
   NSString* contents = [pb stringForType:NSPasteboardTypeString];
 
@@ -164,6 +188,7 @@ void ClipboardMac::ReadHTML(ClipboardBuffer buffer,
                             uint32_t* fragment_end) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kHtml);
 
   // TODO(avi): src_url?
   markup->clear();
@@ -191,12 +216,14 @@ void ClipboardMac::ReadHTML(ClipboardBuffer buffer,
 void ClipboardMac::ReadRTF(ClipboardBuffer buffer, std::string* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kRtf);
 
   return ReadData(ClipboardFormatType::GetRtfType(), result);
 }
 
 void ClipboardMac::ReadImage(ClipboardBuffer buffer,
                              ReadImageCallback callback) const {
+  RecordRead(ClipboardFormatMetric::kImage);
   std::move(callback).Run(ReadImageInternal(buffer, GetPasteboard()));
 }
 
@@ -205,6 +232,7 @@ void ClipboardMac::ReadCustomData(ClipboardBuffer buffer,
                                   base::string16* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kCustomData);
 
   NSPasteboard* pb = GetPasteboard();
   if ([[pb types] containsObject:kWebCustomDataPboardType]) {
@@ -216,6 +244,7 @@ void ClipboardMac::ReadCustomData(ClipboardBuffer buffer,
 
 void ClipboardMac::ReadBookmark(base::string16* title, std::string* url) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kBookmark);
   NSPasteboard* pb = GetPasteboard();
 
   if (title) {
@@ -235,6 +264,7 @@ void ClipboardMac::ReadBookmark(base::string16* title, std::string* url) const {
 void ClipboardMac::ReadData(const ClipboardFormatType& format,
                             std::string* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kData);
   NSPasteboard* pb = GetPasteboard();
   NSData* data = [pb dataForType:format.ToNSString()];
   if ([data length])

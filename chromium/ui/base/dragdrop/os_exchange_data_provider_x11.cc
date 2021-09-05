@@ -11,11 +11,12 @@
 #include "ui/base/x/selection_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/x/x11_atom_cache.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace ui {
 
 OSExchangeDataProviderX11::OSExchangeDataProviderX11(
-    XID x_window,
+    x11::Window x_window,
     const SelectionFormatMap& selection)
     : XOSExchangeDataProvider(x_window, selection) {}
 
@@ -69,8 +70,9 @@ void OSExchangeDataProviderX11::SetFileContents(
                  base::RefCountedString::TakeString(&file_contents_copy)));
 }
 
-bool OSExchangeDataProviderX11::DispatchXEvent(XEvent* xev) {
-  if (xev->type == SelectionRequest && xev->xany.window == x_window()) {
+bool OSExchangeDataProviderX11::DispatchXEvent(x11::Event* xev) {
+  auto* selection = xev->As<x11::SelectionRequestEvent>();
+  if (selection && selection->owner == x_window()) {
     selection_owner().OnSelectionRequest(*xev);
     return true;
   }

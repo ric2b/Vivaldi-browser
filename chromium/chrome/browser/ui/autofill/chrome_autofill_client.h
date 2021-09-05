@@ -128,17 +128,14 @@ class ChromeAutofillClient
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
   void ShowAutofillPopup(
-      const gfx::RectF& element_bounds,
-      base::i18n::TextDirection text_direction,
-      const std::vector<Suggestion>& suggestions,
-      bool autoselect_first_suggestion,
-      PopupType popup_type,
+      const PopupOpenArgs& open_args,
       base::WeakPtr<AutofillPopupDelegate> delegate) override;
   void UpdateAutofillPopupDataListValues(
       const std::vector<base::string16>& values,
       const std::vector<base::string16>& labels) override;
   base::span<const Suggestion> GetPopupSuggestions() const override;
   void PinPopupView() override;
+  PopupOpenArgs GetReopenPopupArgs() const override;
   void UpdatePopup(const std::vector<Suggestion>& suggestions,
                    PopupType popup_type) override;
   void HideAutofillPopup(PopupHidingReason reason) override;
@@ -161,8 +158,6 @@ class ChromeAutofillClient
   // content::WebContentsObserver implementation.
   void MainFrameWasResized(bool width_changed) override;
   void WebContentsDestroyed() override;
-  // Hide autofill popup if an interstitial is shown.
-  void DidAttachInterstitialPage() override;
 
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_for_testing() {
     return popup_controller_;

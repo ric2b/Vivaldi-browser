@@ -9,22 +9,32 @@
 #include "base/auto_reset.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/task/post_task.h"
+#include "base/no_destructor.h"
 #include "base/task/thread_pool.h"
+#include "base/time/default_tick_clock.h"
 #include "cc/layers/layer.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_provider.h"
+#include "components/blocked_content/popup_blocker.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/blocked_content/popup_opener_tab_helper.h"
+#include "components/blocked_content/popup_tracker.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/client_hints/browser/client_hints.h"
 #include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
+#include "components/js_injection/browser/js_communication_host.h"
+#include "components/js_injection/browser/web_message_host.h"
+#include "components/js_injection/browser/web_message_host_factory.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_result.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/translate/core/browser/translate_manager.h"
+#include "components/ukm/content/source_url_recorder.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -38,23 +48,32 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/web_preferences.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/window_open_disposition.h"
 #include "weblayer/browser/autofill_client_impl.h"
+#include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_impl.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/content_browser_client_impl.h"
 #include "weblayer/browser/file_select_helper.h"
 #include "weblayer/browser/host_content_settings_map_factory.h"
 #include "weblayer/browser/i18n_util.h"
+#include "weblayer/browser/infobar_service.h"
+#include "weblayer/browser/js_communication/web_message_host_factory_wrapper.h"
 #include "weblayer/browser/navigation_controller_impl.h"
 #include "weblayer/browser/page_load_metrics_initialize.h"
+#include "weblayer/browser/password_manager_driver_factory.h"
 #include "weblayer/browser/permissions/permission_manager_factory.h"
 #include "weblayer/browser/persistence/browser_persister.h"
+#include "weblayer/browser/popup_navigation_delegate_impl.h"
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/browser/tab_specific_content_settings_delegate.h"
 #include "weblayer/browser/translate_client_impl.h"
+#include "weblayer/browser/weblayer_features.h"
 #include "weblayer/common/isolated_world_ids.h"
 #include "weblayer/public/fullscreen_delegate.h"
+#include "weblayer/public/js_communication/web_message.h"
+#include "weblayer/public/js_communication/web_message_host_factory.h"
 #include "weblayer/public/new_tab_delegate.h"
 #include "weblayer/public/tab_observer.h"
 
@@ -64,10 +83,11 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/callback_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/json/json_writer.h"
 #include "base/trace_event/trace_event.h"
-#include "components/autofill/android/autofill_provider_android.h"
+#include "components/autofill/android/provider/autofill_provider_android.h"
 #include "components/embedder_support/android/contextmenu/context_menu_builder.h"
 #include "components/embedder_support/android/delegate/color_chooser_android.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"  // nogncheck
@@ -76,8 +96,10 @@
 #include "weblayer/browser/browser_controls_container_view.h"
 #include "weblayer/browser/browser_controls_navigation_state_handler.h"
 #include "weblayer/browser/controls_visibility_reason.h"
+#include "weblayer/browser/http_auth_handler_impl.h"
 #include "weblayer/browser/java/jni/TabImpl_jni.h"
 #include "weblayer/browser/javascript_tab_modal_dialog_manager_delegate_android.h"
+#include "weblayer/browser/js_communication/web_message_host_factory_proxy.h"
 #include "weblayer/browser/weblayer_factory_impl_android.h"
 #include "weblayer/browser/webrtc/media_stream_manager.h"
 #endif
@@ -97,6 +119,9 @@ using base::android::ScopedJavaLocalRef;
 namespace weblayer {
 
 namespace {
+
+// Maximum size of data when calling SetData().
+constexpr int kMaxDataSize = 4096;
 
 #if defined(OS_ANDROID)
 bool g_system_autofill_disabled_for_testing = false;
@@ -127,16 +152,11 @@ NewTabType NewTabTypeFromWindowDisposition(WindowOpenDisposition disposition) {
 // Opens a captive portal login page in |web_contents|.
 void OpenCaptivePortalLoginTabInWebContents(
     content::WebContents* web_contents) {
-  // In Chrome this opens in a new tab, but WebLayer's TabImpl has no support
-  // for opening new tabs (its OpenURLFromTab() method DCHECKs if the
-  // disposition is not |CURRENT_TAB|).
-  // TODO(crbug.com/1047130): Revisit if TabImpl gets support for opening URLs
-  // in new tabs.
   content::OpenURLParams params(
       CaptivePortalServiceFactory::GetForBrowserContext(
           web_contents->GetBrowserContext())
           ->test_url(),
-      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
+      content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_LINK, false);
   web_contents->OpenURL(params);
 }
@@ -147,12 +167,10 @@ void OpenCaptivePortalLoginTabInWebContents(
 constexpr int kWebContentsUserDataKey = 0;
 
 struct UserData : public base::SupportsUserData::Data {
-  TabImpl* controller = nullptr;
+  TabImpl* tab = nullptr;
 };
 
 #if defined(OS_ANDROID)
-Tab* g_last_tab;
-
 void HandleJavaScriptResult(const ScopedJavaGlobalRef<jobject>& callback,
                             base::Value result) {
   std::string json;
@@ -179,8 +197,8 @@ void ConvertToJavaBitmapBackgroundThread(
   // Make sure to only pass ScopedJavaGlobalRef between threads.
   ScopedJavaGlobalRef<jobject> java_bitmap = ScopedJavaGlobalRef<jobject>(
       gfx::ConvertToJavaBitmap(&bitmap, gfx::OomBehavior::kReturnNullOnOom));
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(std::move(callback), std::move(java_bitmap)));
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(java_bitmap)));
 }
 
 void OnScreenShotCaptured(const ScopedJavaGlobalRef<jobject>& value_callback,
@@ -204,9 +222,26 @@ void OnScreenShotCaptured(const ScopedJavaGlobalRef<jobject>& value_callback,
 
 #endif  // OS_ANDROID
 
+std::set<TabImpl*>& GetTabs() {
+  static base::NoDestructor<std::set<TabImpl*>> s_all_tab_impl;
+  return *s_all_tab_impl;
+}
+
 }  // namespace
 
 #if defined(OS_ANDROID)
+
+static ScopedJavaLocalRef<jobject> JNI_TabImpl_FromWebContents(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  TabImpl* tab = TabImpl::FromWebContents(web_contents);
+  if (tab)
+    return ScopedJavaLocalRef<jobject>(tab->GetJavaTab());
+  return nullptr;
+}
+
 TabImpl::TabImpl(ProfileImpl* profile, const JavaParamRef<jobject>& java_impl)
     : TabImpl(profile) {
   java_impl_ = java_impl;
@@ -219,9 +254,7 @@ TabImpl::TabImpl(ProfileImpl* profile,
     : profile_(profile),
       web_contents_(std::move(web_contents)),
       guid_(guid.empty() ? base::GenerateGUID() : guid) {
-#if defined(OS_ANDROID)
-  g_last_tab = this;
-#endif
+  GetTabs().insert(this);
   if (web_contents_) {
     // This code path is hit when the page requests a new tab, which should
     // only be possible from the same profile.
@@ -245,7 +278,7 @@ TabImpl::TabImpl(ProfileImpl* profile,
           &TabImpl::UpdateRendererPrefs, base::Unretained(this), true));
 
   std::unique_ptr<UserData> user_data = std::make_unique<UserData>();
-  user_data->controller = this;
+  user_data->tab = this;
   web_contents_->SetUserData(&kWebContentsUserDataKey, std::move(user_data));
 
   web_contents_->SetDelegate(this);
@@ -253,13 +286,14 @@ TabImpl::TabImpl(ProfileImpl* profile,
 
   navigation_controller_ = std::make_unique<NavigationControllerImpl>(this);
 
+#if defined(OS_ANDROID)
+  InfoBarService::CreateForWebContents(web_contents_.get());
+#endif
+
   find_in_page::FindTabHelper::CreateForWebContents(web_contents_.get());
   GetFindTabHelper()->AddObserver(this);
 
-  // TODO(crbug.com/1072334): Resolve incorporation of translate in incognito
-  // mode.
-  if (!web_contents_->GetBrowserContext()->IsOffTheRecord())
-    TranslateClientImpl::CreateForWebContents(web_contents_.get());
+  TranslateClientImpl::CreateForWebContents(web_contents_.get());
 
   sessions::SessionTabHelper::CreateForWebContents(
       web_contents_.get(),
@@ -278,10 +312,19 @@ TabImpl::TabImpl(ProfileImpl* profile,
   content_settings::TabSpecificContentSettings::CreateForWebContents(
       web_contents_.get(), std::make_unique<TabSpecificContentSettingsDelegate>(
                                web_contents_.get()));
+  blocked_content::PopupBlockerTabHelper::CreateForWebContents(
+      web_contents_.get());
+  blocked_content::PopupOpenerTabHelper::CreateForWebContents(
+      web_contents_.get(), base::DefaultTickClock::GetInstance(),
+      HostContentSettingsMapFactory::GetForBrowserContext(
+          web_contents_->GetBrowserContext()));
+  PasswordManagerDriverFactory::CreateForWebContents(web_contents_.get());
 
   InitializePageLoadMetricsForWebContents(web_contents_.get());
+  ukm::InitializeSourceUrlRecorderForWebContents(web_contents_.get());
 
 #if defined(OS_ANDROID)
+  InfoBarService::CreateForWebContents(web_contents_.get());
   javascript_dialogs::TabModalDialogManager::CreateForWebContents(
       web_contents_.get(),
       std::make_unique<JavaScriptTabModalDialogManagerDelegateAndroid>(
@@ -318,6 +361,7 @@ TabImpl::~TabImpl() {
   Observe(nullptr);
   web_contents_->SetDelegate(nullptr);
   web_contents_.reset();
+  GetTabs().erase(this);
 }
 
 // static
@@ -325,9 +369,22 @@ TabImpl* TabImpl::FromWebContents(content::WebContents* web_contents) {
   if (!web_contents)
     return nullptr;
 
-  return reinterpret_cast<UserData*>(
-             web_contents->GetUserData(&kWebContentsUserDataKey))
-      ->controller;
+  UserData* user_data = reinterpret_cast<UserData*>(
+      web_contents->GetUserData(&kWebContentsUserDataKey));
+  return user_data ? user_data->tab : nullptr;
+}
+
+// static
+std::set<TabImpl*> TabImpl::GetAllTabImpl() {
+  return GetTabs();
+}
+
+void TabImpl::AddDataObserver(DataObserver* observer) {
+  data_observers_.AddObserver(observer);
+}
+
+void TabImpl::RemoveDataObserver(DataObserver* observer) {
+  data_observers_.RemoveObserver(observer);
 }
 
 void TabImpl::SetErrorPageDelegate(ErrorPageDelegate* delegate) {
@@ -388,6 +445,35 @@ const std::string& TabImpl::GetGuid() {
   return guid_;
 }
 
+void TabImpl::SetData(const std::map<std::string, std::string>& data) {
+  bool result = SetDataInternal(data);
+  DCHECK(result) << "Data given to SetData() was too large.";
+}
+
+const std::map<std::string, std::string>& TabImpl::GetData() {
+  return data_;
+}
+
+base::string16 TabImpl::AddWebMessageHostFactory(
+    std::unique_ptr<WebMessageHostFactory> factory,
+    const base::string16& js_object_name,
+    const std::vector<std::string>& allowed_origin_rules) {
+  if (!js_communication_host_) {
+    js_communication_host_ =
+        std::make_unique<js_injection::JsCommunicationHost>(
+            web_contents_.get());
+  }
+  return js_communication_host_->AddWebMessageHostFactory(
+      std::make_unique<WebMessageHostFactoryWrapper>(std::move(factory)),
+      js_object_name, allowed_origin_rules);
+}
+
+void TabImpl::RemoveWebMessageHostFactory(
+    const base::string16& js_object_name) {
+  if (js_communication_host_)
+    js_communication_host_->RemoveWebMessageHostFactory(js_object_name);
+}
+
 void TabImpl::ExecuteScriptWithUserGestureForTests(
     const base::string16& script) {
   web_contents_->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
@@ -430,6 +516,28 @@ void TabImpl::ShowContextMenu(const content::ContextMenuParams& params) {
 #endif
 }
 
+void TabImpl::ShowHttpAuthPrompt(HttpAuthHandlerImpl* auth_handler) {
+  CHECK(!auth_handler_);
+  auth_handler_ = auth_handler;
+#if defined(OS_ANDROID)
+  JNIEnv* env = AttachCurrentThread();
+  GURL url = auth_handler_->url();
+  Java_TabImpl_showHttpAuthPrompt(
+      env, java_impl_, base::android::ConvertUTF8ToJavaString(env, url.host()),
+      base::android::ConvertUTF8ToJavaString(env, url.spec()));
+#endif
+}
+
+void TabImpl::CloseHttpAuthPrompt() {
+  if (!auth_handler_)
+    return;
+  auth_handler_ = nullptr;
+#if defined(OS_ANDROID)
+  JNIEnv* env = AttachCurrentThread();
+  Java_TabImpl_closeHttpAuthPrompt(env, java_impl_);
+#endif
+}
+
 #if defined(OS_ANDROID)
 // static
 void TabImpl::DisableAutofillSystemIntegrationForTesting() {
@@ -444,13 +552,10 @@ static jlong JNI_TabImpl_CreateTab(JNIEnv* env,
 }
 
 static void JNI_TabImpl_DeleteTab(JNIEnv* env, jlong tab) {
-  std::unique_ptr<Tab> owned_tab;
   TabImpl* tab_impl = reinterpret_cast<TabImpl*>(tab);
   DCHECK(tab_impl);
-  if (tab_impl->browser())
-    owned_tab = tab_impl->browser()->RemoveTab(tab_impl);
-  else
-    owned_tab.reset(tab_impl);
+  DCHECK(tab_impl->browser());
+  tab_impl->browser()->DestroyTab(tab_impl);
 }
 
 ScopedJavaLocalRef<jobject> TabImpl::GetWebContents(JNIEnv* env) {
@@ -571,6 +676,8 @@ void TabImpl::UpdateBrowserControlsStateImpl(
     content::BrowserControlsState old_state,
     bool animate) {
   current_browser_controls_state_ = new_state;
+  if (base::FeatureList::IsEnabled(kImmediatelyHideBrowserControlsForTest))
+    animate = false;
   web_contents_->GetMainFrame()->UpdateBrowserControlsState(new_state,
                                                             old_state, animate);
 }
@@ -588,6 +695,7 @@ void TabImpl::CaptureScreenShot(
     Java_TabImpl_runCaptureScreenShotCallback(
         env, ScopedJavaLocalRef<jobject>(value_callback),
         ScopedJavaLocalRef<jobject>(), static_cast<int>(error));
+    return;
   }
 
   rwhv->CopyFromSurface(
@@ -595,24 +703,116 @@ void TabImpl::CaptureScreenShot(
       base::BindOnce(&OnScreenShotCaptured,
                      ScopedJavaGlobalRef<jobject>(value_callback)));
 }
+
+jboolean TabImpl::SetData(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobjectArray>& data) {
+  std::vector<std::string> flattened_map;
+  base::android::AppendJavaStringArrayToStringVector(env, data, &flattened_map);
+  std::map<std::string, std::string> data_map;
+  for (size_t i = 0; i < flattened_map.size(); i += 2) {
+    data_map.insert({flattened_map[i], flattened_map[i + 1]});
+  }
+  return SetDataInternal(data_map);
+}
+
+base::android::ScopedJavaLocalRef<jobjectArray> TabImpl::GetData(JNIEnv* env) {
+  std::vector<std::string> flattened_map;
+  for (const auto& kv : data_) {
+    flattened_map.push_back(kv.first);
+    flattened_map.push_back(kv.second);
+  }
+  return base::android::ToJavaArrayOfStrings(env, flattened_map);
+}
+
 jboolean TabImpl::IsRendererControllingBrowserControlsOffsets(JNIEnv* env) {
   return browser_controls_navigation_state_handler_
       ->IsRendererControllingOffsets();
 }
 
+void TabImpl::SetHttpAuth(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& username,
+    const base::android::JavaParamRef<jstring>& password) {
+  auth_handler_->Proceed(
+      base::android::ConvertJavaStringToUTF16(env, username),
+      base::android::ConvertJavaStringToUTF16(env, password));
+  CloseHttpAuthPrompt();
+}
+
+void TabImpl::CancelHttpAuth(JNIEnv* env) {
+  auth_handler_->Cancel();
+  CloseHttpAuthPrompt();
+}
+
+base::android::ScopedJavaLocalRef<jstring> TabImpl::RegisterWebMessageCallback(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& js_object_name,
+    const base::android::JavaParamRef<jobjectArray>& js_origins,
+    const base::android::JavaParamRef<jobject>& client) {
+  auto proxy = std::make_unique<WebMessageHostFactoryProxy>(client);
+  std::vector<std::string> origins;
+  base::android::AppendJavaStringArrayToStringVector(env, js_origins, &origins);
+  base::string16 result = AddWebMessageHostFactory(
+      std::move(proxy),
+      base::android::ConvertJavaStringToUTF16(env, js_object_name), origins);
+  return base::android::ConvertUTF16ToJavaString(env, result);
+}
+
+void TabImpl::UnregisterWebMessageCallback(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& js_object_name) {
+  base::string16 name;
+  base::android::ConvertJavaStringToUTF16(env, js_object_name, &name);
+  RemoveWebMessageHostFactory(name);
+}
+
+jboolean TabImpl::CanTranslate(JNIEnv* env) {
+  return TranslateClientImpl::FromWebContents(web_contents())
+      ->GetTranslateManager()
+      ->CanManuallyTranslate();
+}
+
+void TabImpl::ShowTranslateUi(JNIEnv* env) {
+  TranslateClientImpl::FromWebContents(web_contents())
+      ->ManualTranslateWhenReady();
+}
 #endif  // OS_ANDROID
 
 content::WebContents* TabImpl::OpenURLFromTab(
     content::WebContents* source,
     const content::OpenURLParams& params) {
-  if (params.disposition != WindowOpenDisposition::CURRENT_TAB) {
-    NOTIMPLEMENTED();
-    return nullptr;
+  if (blocked_content::ConsiderForPopupBlocking(params.disposition)) {
+    bool blocked = blocked_content::MaybeBlockPopup(
+                       source, nullptr,
+                       std::make_unique<PopupNavigationDelegateImpl>(
+                           params, source, nullptr),
+                       &params, blink::mojom::WindowFeatures(),
+                       HostContentSettingsMapFactory::GetForBrowserContext(
+                           source->GetBrowserContext())) == nullptr;
+    if (blocked)
+      return nullptr;
   }
 
-  source->GetController().LoadURLWithParams(
+  if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
+    source->GetController().LoadURLWithParams(
+        content::NavigationController::LoadURLParams(params));
+    return source;
+  }
+
+  // All URLs not opening in the current tab will get a new tab.
+  std::unique_ptr<content::WebContents> new_tab_contents =
+      content::WebContents::Create(content::WebContents::CreateParams(
+          web_contents()->GetBrowserContext()));
+  content::WebContents* new_tab_contents_raw = new_tab_contents.get();
+  bool was_blocked = false;
+  AddNewContents(web_contents(), std::move(new_tab_contents), params.url,
+                 params.disposition, {}, params.user_gesture, &was_blocked);
+  if (was_blocked)
+    return nullptr;
+  new_tab_contents_raw->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
-  return source;
+  return new_tab_contents_raw;
 }
 
 void TabImpl::ShowRepostFormWarningDialog(content::WebContents* source) {
@@ -680,10 +880,9 @@ void TabImpl::RunFileChooser(
 
 int TabImpl::GetTopControlsHeight() {
 #if defined(OS_ANDROID)
-  int height = top_controls_container_view_
-                   ? top_controls_container_view_->GetControlsHeight()
-                   : 0;
-  return height;
+  return top_controls_container_view_
+             ? top_controls_container_view_->GetControlsHeight()
+             : 0;
 #else
   return 0;
 #endif
@@ -746,8 +945,7 @@ bool TabImpl::CheckMediaAccessPermission(
 }
 
 void TabImpl::EnterFullscreenModeForTab(
-    content::WebContents* web_contents,
-    const GURL& origin,
+    content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
   // TODO: support |options|.
   is_fullscreen_ = true;
@@ -790,12 +988,19 @@ void TabImpl::AddNewContents(content::WebContents* source,
                              const gfx::Rect& initial_rect,
                              bool user_gesture,
                              bool* was_blocked) {
-  if (!new_tab_delegate_)
+  if (!new_tab_delegate_) {
+    *was_blocked = true;
     return;
+  }
 
-  std::unique_ptr<Tab> tab =
-      std::make_unique<TabImpl>(profile_, std::move(new_contents));
-  new_tab_delegate_->OnNewTab(std::move(tab),
+  // At this point the |new_contents| is beyond the popup blocker, but we use
+  // the same logic for determining if the popup tracker needs to be attached.
+  if (source && blocked_content::ConsiderForPopupBlocking(disposition)) {
+    blocked_content::PopupTracker::CreateForWebContents(new_contents.get(),
+                                                        source, disposition);
+  }
+
+  new_tab_delegate_->OnNewTab(browser_->CreateTab(std::move(new_contents)),
                               NewTabTypeFromWindowDisposition(disposition));
 }
 
@@ -819,7 +1024,7 @@ void TabImpl::CloseContents(content::WebContents* source) {
     // return.
   }
 #else
-  browser_->RemoveTab(this);
+  browser_->DestroyTab(this);
 #endif
 }
 
@@ -951,16 +1156,6 @@ void TabImpl::SetBrowserControlsConstraint(
 }
 #endif
 
-std::unique_ptr<Tab> Tab::Create(Profile* profile) {
-  return std::make_unique<TabImpl>(static_cast<ProfileImpl*>(profile));
-}
-
-#if defined(OS_ANDROID)
-Tab* Tab::GetLastTabForTesting() {
-  return g_last_tab;
-}
-#endif
-
 void TabImpl::InitializeAutofillForTests(
     std::unique_ptr<autofill::AutofillProvider> provider) {
   DCHECK(!autofill_provider_);
@@ -992,6 +1187,18 @@ sessions::SessionTabHelperDelegate* TabImpl::GetSessionServiceTabHelperDelegate(
     content::WebContents* web_contents) {
   DCHECK_EQ(web_contents, web_contents_.get());
   return browser_ ? browser_->browser_persister() : nullptr;
+}
+
+bool TabImpl::SetDataInternal(const std::map<std::string, std::string>& data) {
+  int total_size = 0;
+  for (const auto& kv : data)
+    total_size += kv.first.size() + kv.second.size();
+  if (total_size > kMaxDataSize)
+    return false;
+  data_ = data;
+  for (auto& observer : data_observers_)
+    observer.OnDataChanged(this, data_);
+  return true;
 }
 
 }  // namespace weblayer

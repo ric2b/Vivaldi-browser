@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,14 +19,13 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
 import android.test.mock.MockPackageManager;
 
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -34,14 +33,15 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.components.external_intents.ExternalNavigationDelegate.StartActivityIfNeededResult;
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.Origin;
 
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -56,11 +56,9 @@ import java.util.regex.Pattern;
 // clang-format off
 @DisableIf.Build(message = "Flaky on K - see https://crbug.com/851444",
         sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
+@Batch(Batch.UNIT_TESTS)
 public class ExternalNavigationHandlerTest {
     // clang-format on
-    @Rule
-    public final NativeLibraryTestRule mNativeLibraryTestRule = new NativeLibraryTestRule();
-
     // Expectations
     private static final int IGNORE = 0x0;
     private static final int START_INCOGNITO = 0x1;
@@ -162,7 +160,7 @@ public class ExternalNavigationHandlerTest {
         mContext = new TestContext(InstrumentationRegistry.getTargetContext(), mDelegate);
         ContextUtils.initApplicationContextForTests(mContext);
 
-        mNativeLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
     }
 
     @Test
@@ -331,16 +329,13 @@ public class ExternalNavigationHandlerTest {
     @SmallTest
     public void testIgnore() {
         // Ensure the following URLs are not broadcast for external navigation.
-        String urlsToIgnore[] = new String[] {
-                "about:test",
+        String urlsToIgnore[] = new String[] {"about:test",
                 "content:test", // Content URLs should not be exposed outside of Chrome.
-                "chrome://history",
-                "chrome-native://newtab",
-                "devtools://foo",
+                "chrome://history", "chrome-native://newtab", "devtools://foo",
                 "intent:chrome-urls#Intent;package=com.android.chrome;scheme=about;end;",
                 "intent:chrome-urls#Intent;package=com.android.chrome;scheme=chrome;end;",
                 "intent://com.android.chrome.FileProvider/foo.html#Intent;scheme=content;end;",
-        };
+                "intent:///x.mhtml#Intent;package=com.android.chrome;action=android.intent.action.VIEW;scheme=file;end;"};
         for (String url : urlsToIgnore) {
             checkUrl(url).expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
             checkUrl(url).withIsIncognito(true).expecting(
@@ -945,16 +940,52 @@ public class ExternalNavigationHandlerTest {
 
     @Test
     @SmallTest
+    public void testFallbackUrl_SubframeFallbackToMarketApp() {
+        mDelegate.setCanResolveActivityForExternalSchemes(false);
+
+        RedirectHandler redirectHandler = RedirectHandler.create();
+        redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
+        String intent = "intent:///name/nm0000158#Intent;scheme=imdb;package=com.imdb.mobile;"
+                + "S." + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL + "="
+                + "https://play.google.com/store/apps/details?id=com.imdb.mobile"
+                + "&referrer=mypage;end";
+        checkUrl(intent)
+                .withIsMainFrame(false)
+                .withHasUserGesture(true)
+                .withRedirectHandler(redirectHandler)
+                .withPageTransition(PageTransition.LINK)
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+        Assert.assertEquals("market://details?id=com.imdb.mobile&referrer=mypage",
+                mDelegate.startActivityIntent.getDataString());
+
+        redirectHandler = RedirectHandler.create();
+        redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
+        String intentBadUrl = "intent:///name/nm0000158#Intent;scheme=imdb;package=com.imdb.mobile;"
+                + "S." + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL + "="
+                + "https://play.google.com/store/search?q=pub:imdb;end";
+        checkUrl(intentBadUrl)
+                .withIsMainFrame(false)
+                .withHasUserGesture(true)
+                .withRedirectHandler(redirectHandler)
+                .withPageTransition(PageTransition.LINK)
+                .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
+    }
+
+    @Test
+    @SmallTest
     public void testFallbackUrl_RedirectToIntentToMarket() {
+        mDelegate.setCanResolveActivityForExternalSchemes(false);
+
         RedirectHandler redirectHandler = RedirectHandler.create();
 
-        redirectHandler.updateNewUrlLoading(PageTransition.TYPED, false, false, 0, 0);
+        redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
         checkUrl("http://goo.gl/abcdefg")
-                .withPageTransition(PageTransition.TYPED)
+                .withPageTransition(PageTransition.LINK)
                 .withRedirectHandler(redirectHandler)
                 .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
 
-        redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 0);
+        redirectHandler.updateNewUrlLoading(PageTransition.LINK, true, true, 0, 0);
         String realIntent = "intent:///name/nm0000158#Intent;scheme=imdb;package=com.imdb.mobile;"
                 + "S." + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL + "="
                 + "https://play.google.com/store/apps/details?id=com.imdb.mobile"
@@ -969,6 +1000,44 @@ public class ExternalNavigationHandlerTest {
 
         Assert.assertEquals("market://details?id=com.imdb.mobile&referrer=mypage",
                 mDelegate.startActivityIntent.getDataString());
+    }
+
+    @Test
+    @SmallTest
+    public void testFallbackUrl_DontFallbackForAutoSubframe() {
+        // IMDB app isn't installed.
+        mDelegate.setCanResolveActivityForExternalSchemes(false);
+
+        mDelegate.add(new IntentActivity(IMDB_WEBPAGE_FOR_TOM_HANKS, WEBAPK_PACKAGE_NAME)
+                              .withIsWebApk(true));
+
+        RedirectHandler redirectHandler = RedirectHandler.create();
+        redirectHandler.updateNewUrlLoading(PageTransition.AUTO_SUBFRAME, true, true, 0, 0);
+
+        checkUrl(INTENT_URL_WITH_FALLBACK_URL)
+                .withIsMainFrame(false)
+                .withHasUserGesture(true)
+                .withRedirectHandler(redirectHandler)
+                .withPageTransition(PageTransition.AUTO_SUBFRAME)
+                .withReferrer(SEARCH_RESULT_URL_FOR_TOM_HANKS)
+                .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
+    }
+
+    @Test
+    @SmallTest
+    public void testFallbackUrl_NoExternalFallbackWithoutGesture() {
+        mDelegate.add(new IntentActivity(IMDB_WEBPAGE_FOR_TOM_HANKS, WEBAPK_PACKAGE_NAME)
+                              .withIsWebApk(true));
+
+        RedirectHandler redirectHandler = RedirectHandler.create();
+        redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 0);
+
+        checkUrl(INTENT_URL_WITH_FALLBACK_URL)
+                .withHasUserGesture(false)
+                .withRedirectHandler(redirectHandler)
+                .withPageTransition(PageTransition.LINK)
+                .withReferrer(SEARCH_RESULT_URL_FOR_TOM_HANKS)
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_CLOBBERING_TAB, IGNORE);
     }
 
     @Test
@@ -1255,6 +1324,37 @@ public class ExternalNavigationHandlerTest {
 
     @Test
     @SmallTest
+    public void testIntentWithFileSchemeFiltered() {
+        checkUrl("intent://#Intent;package=com.test.package;scheme=file;end;")
+                .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
+    }
+
+    @Test
+    @SmallTest
+    public void testIntentWithNoSchemeLaunched() {
+        checkUrl("intent://#Intent;package=com.test.package;end;")
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+    }
+
+    @Test
+    @SmallTest
+    public void testIntentWithEmptySchemeLaunched() {
+        checkUrl("intent://#Intent;package=com.test.package;scheme=;end;")
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+    }
+
+    @Test
+    @SmallTest
+    public void testIntentWithWeirdSchemeLaunched() {
+        checkUrl("intent://#Intent;package=com.test.package;scheme=w3irD;end;")
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+    }
+
+    @Test
+    @SmallTest
     public void testIntentWithMissingReferrer() {
         mDelegate.add(new IntentActivity("http://refertest.com", "refertest"));
         mDelegate.add(new IntentActivity("https://refertest.com", "refertest"));
@@ -1528,7 +1628,7 @@ public class ExternalNavigationHandlerTest {
                 .withHasUserGesture(true)
                 .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
                         START_OTHER_ACTIVITY);
-        Assert.assertTrue(mDelegate.maybeSetUserGestureCalled);
+        Assert.assertTrue(mDelegate.maybeSetRequestMetadataCalled);
         Assert.assertFalse(mDelegate.startIncognitoIntentCalled);
     }
 
@@ -1544,8 +1644,22 @@ public class ExternalNavigationHandlerTest {
                 .withIsIncognito(true)
                 .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_ASYNC_ACTION,
                         START_INCOGNITO | START_OTHER_ACTIVITY);
-        Assert.assertTrue(mDelegate.maybeSetUserGestureCalled);
+        Assert.assertTrue(mDelegate.maybeSetRequestMetadataCalled);
         Assert.assertTrue(mDelegate.startIncognitoIntentCalled);
+    }
+
+    @Test
+    @SmallTest
+    public void testRendererInitiated() {
+        // IMDB app is installed.
+        mDelegate.add(new IntentActivity("imdb:", INTENT_APP_PACKAGE_NAME));
+
+        checkUrl(INTENT_URL_WITH_FALLBACK_URL)
+                .withReferrer(SEARCH_RESULT_URL_FOR_TOM_HANKS)
+                .withIsRendererInitiated(true)
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+        Assert.assertTrue(mDelegate.maybeSetRequestMetadataCalled);
     }
 
     @Test
@@ -2046,8 +2160,9 @@ public class ExternalNavigationHandlerTest {
         }
 
         @Override
-        public void maybeSetUserGesture(Intent intent) {
-            maybeSetUserGestureCalled = true;
+        public void maybeSetRequestMetadata(Intent intent, boolean hasUserGesture,
+                boolean isRendererInitiated, Origin initiatorOrigin) {
+            maybeSetRequestMetadataCalled = true;
         }
 
         @Override
@@ -2172,7 +2287,7 @@ public class ExternalNavigationHandlerTest {
         public Intent startActivityIntent;
         public boolean startIncognitoIntentCalled;
         public boolean handleIncognitoIntentTargetingSelfCalled;
-        public boolean maybeSetUserGestureCalled;
+        public boolean maybeSetRequestMetadataCalled;
 
         private String mReferrerWebappPackageName;
 
@@ -2212,6 +2327,8 @@ public class ExternalNavigationHandlerTest {
         private boolean mIsBackgroundTabNavigation;
         private boolean mHasUserGesture;
         private RedirectHandler mRedirectHandler;
+        private boolean mIsRendererInitiated;
+        private boolean mIsMainFrame = true;
 
         private ExternalNavigationTestParams(String url) {
             mUrl = url;
@@ -2259,6 +2376,16 @@ public class ExternalNavigationHandlerTest {
             return this;
         }
 
+        public ExternalNavigationTestParams withIsRendererInitiated(boolean isRendererInitiated) {
+            mIsRendererInitiated = isRendererInitiated;
+            return this;
+        }
+
+        public ExternalNavigationTestParams withIsMainFrame(boolean isMainFrame) {
+            mIsMainFrame = isMainFrame;
+            return this;
+        }
+
         public void expecting(
                 @OverrideUrlLoadingResult int expectedOverrideResult, int otherExpectation) {
             boolean expectStartIncognito = (otherExpectation & START_INCOGNITO) != 0;
@@ -2279,9 +2406,10 @@ public class ExternalNavigationHandlerTest {
                             .setApplicationMustBeInForeground(mChromeAppInForegroundRequired)
                             .setRedirectHandler(mRedirectHandler)
                             .setIsBackgroundTabNavigation(mIsBackgroundTabNavigation)
-                            .setIsMainFrame(true)
+                            .setIsMainFrame(mIsMainFrame)
                             .setNativeClientPackageName(mDelegate.getReferrerWebappPackageName())
                             .setHasUserGesture(mHasUserGesture)
+                            .setIsRendererInitiated(mIsRendererInitiated)
                             .build();
             @OverrideUrlLoadingResult
             int result = mUrlHandler.shouldOverrideUrlLoading(params);

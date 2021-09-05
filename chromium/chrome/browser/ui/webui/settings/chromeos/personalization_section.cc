@@ -48,7 +48,7 @@ const std::vector<SearchConcept>& GetPersonalizationSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_CHANGE_DEVICE_ACCOUNT_IMAGE,
        mojom::kChangePictureSubpagePath,
        mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kLow,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kChangePicture},
        {IDS_OS_SETTINGS_TAG_CHANGE_DEVICE_ACCOUNT_IMAGE_ALT1,
@@ -60,6 +60,7 @@ const std::vector<SearchConcept>& GetPersonalizationSearchConcepts() {
   return *tags;
 }
 
+// TODO(b/159766700): Add search concepts for |kAmbientModePhotosSubpagePath|.
 const std::vector<SearchConcept>& GetAmbientModeSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_AMBIENT_MODE,
@@ -122,10 +123,11 @@ PersonalizationSection::PersonalizationSection(
   if (features::IsGuestModeActive())
     return;
 
-  registry()->AddSearchTags(GetPersonalizationSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetPersonalizationSearchConcepts());
 
   if (IsAmbientModeAllowed()) {
-    registry()->AddSearchTags(GetAmbientModeSearchConcepts());
+    updater.AddSearchTags(GetAmbientModeSearchConcepts());
 
     pref_change_registrar_.Init(pref_service_);
     pref_change_registrar_.Add(
@@ -197,13 +199,69 @@ void PersonalizationSection::AddHandlers(content::WebUI* web_ui) {
   }
 }
 
+int PersonalizationSection::GetSectionNameMessageId() const {
+  return IDS_OS_SETTINGS_PERSONALIZATION;
+}
+
+mojom::Section PersonalizationSection::GetSection() const {
+  return mojom::Section::kPersonalization;
+}
+
+mojom::SearchResultIcon PersonalizationSection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kPaintbrush;
+}
+
+std::string PersonalizationSection::GetSectionPath() const {
+  return mojom::kPersonalizationSectionPath;
+}
+
+void PersonalizationSection::RegisterHierarchy(
+    HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kOpenWallpaper);
+
+  // Change picture.
+  generator->RegisterTopLevelSubpage(
+      IDS_OS_SETTINGS_CHANGE_PICTURE_TITLE, mojom::Subpage::kChangePicture,
+      mojom::SearchResultIcon::kAvatar, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kChangePictureSubpagePath);
+  generator->RegisterNestedSetting(mojom::Setting::kChangeDeviceAccountImage,
+                                   mojom::Subpage::kChangePicture);
+
+  // Ambient mode.
+  generator->RegisterTopLevelSubpage(
+      IDS_OS_SETTINGS_AMBIENT_MODE_TITLE, mojom::Subpage::kAmbientMode,
+      mojom::SearchResultIcon::kWallpaper,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kAmbientModeSubpagePath);
+  static constexpr mojom::Setting kAmbientModeSettings[] = {
+      mojom::Setting::kAmbientModeOnOff,
+      mojom::Setting::kAmbientModeSource,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kAmbientMode, kAmbientModeSettings,
+                            generator);
+
+  // Note: The subpage name in the UI is updated dynamically based on the topic
+  // source.
+  // TODO(b/159766700): Create a string for the page title and strings for the
+  // search.
+  generator->RegisterNestedSubpage(
+      IDS_OS_SETTINGS_AMBIENT_MODE_TITLE, mojom::Subpage::kAmbientModePhotos,
+      mojom::Subpage::kAmbientMode, mojom::SearchResultIcon::kWallpaper,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kAmbientModePhotosSubpagePath);
+  generator->RegisterNestedSetting(
+      mojom::Setting::kAmbientModeUpdatePhotosContainers,
+      mojom::Subpage::kAmbientModePhotos);
+}
+
 void PersonalizationSection::OnAmbientModeEnabledStateChanged() {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (pref_service_->GetBoolean(ash::ambient::prefs::kAmbientModeEnabled)) {
-    registry()->AddSearchTags(GetAmbientModeOnSearchConcepts());
-    registry()->RemoveSearchTags(GetAmbientModeOffSearchConcepts());
+    updater.AddSearchTags(GetAmbientModeOnSearchConcepts());
+    updater.RemoveSearchTags(GetAmbientModeOffSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetAmbientModeOnSearchConcepts());
-    registry()->AddSearchTags(GetAmbientModeOffSearchConcepts());
+    updater.RemoveSearchTags(GetAmbientModeOnSearchConcepts());
+    updater.AddSearchTags(GetAmbientModeOffSearchConcepts());
   }
 }
 

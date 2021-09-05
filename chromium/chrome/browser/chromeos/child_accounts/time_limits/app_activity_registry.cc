@@ -19,11 +19,11 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 
 namespace chromeos {
 namespace app_time {
@@ -33,26 +33,6 @@ namespace {
 constexpr base::TimeDelta kFiveMinutes = base::TimeDelta::FromMinutes(5);
 constexpr base::TimeDelta kOneMinute = base::TimeDelta::FromMinutes(1);
 constexpr base::TimeDelta kZeroMinutes = base::TimeDelta::FromMinutes(0);
-
-enterprise_management::App::AppType AppTypeForReporting(
-    apps::mojom::AppType type) {
-  switch (type) {
-    case apps::mojom::AppType::kArc:
-      return enterprise_management::App::ARC;
-    case apps::mojom::AppType::kBuiltIn:
-      return enterprise_management::App::BUILT_IN;
-    case apps::mojom::AppType::kCrostini:
-      return enterprise_management::App::CROSTINI;
-    case apps::mojom::AppType::kExtension:
-      return enterprise_management::App::EXTENSION;
-    case apps::mojom::AppType::kPluginVm:
-      return enterprise_management::App::PLUGIN_VM;
-    case apps::mojom::AppType::kWeb:
-      return enterprise_management::App::WEB;
-    default:
-      return enterprise_management::App::UNKNOWN;
-  }
-}
 
 enterprise_management::AppActivity::AppState AppStateForReporting(
     AppState state) {
@@ -225,6 +205,13 @@ void AppActivityRegistry::OnAppAvailable(const AppId& app_id) {
     OnAppReinstalled(app_id);
   }
 
+  if (IsWebAppOrExtension(app_id) && app_id != GetChromeAppId() &&
+      base::Contains(activity_registry_, GetChromeAppId()) &&
+      GetAppState(app_id) == AppState::kBlocked) {
+    SetAppState(app_id, GetAppState(GetChromeAppId()));
+    return;
+  }
+
   SetAppState(app_id, AppState::kAvailable);
 }
 
@@ -261,7 +248,8 @@ void AppActivityRegistry::OnAppActive(const AppId& app_id,
     return;
   }
 
-  DCHECK(IsAppAvailable(app_id));
+  if (!IsAppAvailable(app_id))
+    return;
 
   std::set<aura::Window*>& active_windows = app_details.active_windows;
 
@@ -393,6 +381,21 @@ base::Optional<base::TimeDelta> AppActivityRegistry::GetTimeLimit(
 void AppActivityRegistry::SetReportingEnabled(base::Optional<bool> value) {
   if (value.has_value())
     activity_reporting_enabled_ = value.value();
+}
+
+void AppActivityRegistry::GenerateHiddenApps(
+    enterprise_management::ChildStatusReportRequest* report) {
+  const std::vector<AppId> hidden_arc_apps =
+      app_service_wrapper_->GetHiddenArcApps();
+  for (const auto& app_id : hidden_arc_apps) {
+    enterprise_management::App* app_info = report->add_hidden_app();
+    app_info->set_app_id(app_id.app_id());
+    app_info->set_app_type(AppTypeForReporting(app_id.app_type()));
+    if (app_id.app_type() == apps::mojom::AppType::kArc) {
+      app_info->add_additional_app_id(
+          app_service_wrapper_->GetAppServiceId(app_id));
+    }
+  }
 }
 
 AppActivityReportInterface::ReportParams

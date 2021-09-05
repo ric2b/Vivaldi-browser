@@ -22,7 +22,9 @@ public final class ProductionSupportedFlagList {
     private ProductionSupportedFlagList() {}
 
     /**
-     * A list of commandline flags supported on user devices.
+     * A list of commandline flags supported on user devices. If updating this list, please also
+     * update enums.xml. See android_webview/docs/developer-ui.md
+     * (https://chromium.googlesource.com/chromium/src/+/HEAD/android_webview/docs/developer-ui.md#Adding-your-flags-and-features-to-the-UI).
      */
     public static final Flag[] sFlagList = {
             Flag.commandLine(AwSwitches.HIGHLIGHT_ALL_WEBVIEWS,
@@ -61,14 +63,15 @@ public final class ProductionSupportedFlagList {
                             + "rendering engine)."),
             Flag.baseFeature("EnableSharedImageForWebview", "Enables shared images for WebView."),
             Flag.baseFeature("VizForWebView", "Enables Viz for WebView."),
-            Flag.baseFeature("WebViewConnectionlessSafeBrowsing",
+            Flag.baseFeature(AwFeatures.WEBVIEW_CONNECTIONLESS_SAFE_BROWSING,
                     "Uses GooglePlayService's 'connectionless' APIs for Safe Browsing "
                             + "security checks."),
             Flag.baseFeature(
                     "WebViewBrotliSupport", "Enables brotli compression support in WebView."),
-            Flag.baseFeature("SafeBrowsingCommittedInterstitials",
-                    "Commits Safe Browsing warning pages like page navigations."),
             Flag.baseFeature(
                     "AppCache", "Controls AppCache to facilitate testing against future removal."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
+                    "Only allow extra headers added via loadUrl() to be sent to the same origin "
+                            + "as the original request."),
     };
 }

@@ -41,6 +41,8 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
@@ -54,7 +56,11 @@ HTMLPortalElement::HTMLPortalElement(
     mojo::PendingAssociatedRemote<mojom::blink::Portal> remote_portal,
     mojo::PendingAssociatedReceiver<mojom::blink::PortalClient>
         portal_client_receiver)
-    : HTMLFrameOwnerElement(html_names::kPortalTag, document) {
+    : HTMLFrameOwnerElement(html_names::kPortalTag, document),
+      feature_handle_for_scheduler_(
+          document.GetExecutionContext()->GetScheduler()->RegisterFeature(
+              SchedulingPolicy::Feature::kPortal,
+              {SchedulingPolicy::RecordMetricsForBackForwardCache()})) {
   if (remote_portal) {
     was_just_adopted_ = true;
     DCHECK(CanHaveGuestContents())
@@ -64,13 +70,12 @@ HTMLPortalElement::HTMLPortalElement(
         *this, portal_token, std::move(remote_portal),
         std::move(portal_client_receiver));
   }
-
   UseCounter::Count(document, WebFeature::kHTMLPortalElement);
 }
 
 HTMLPortalElement::~HTMLPortalElement() {}
 
-void HTMLPortalElement::Trace(Visitor* visitor) {
+void HTMLPortalElement::Trace(Visitor* visitor) const {
   HTMLFrameOwnerElement::Trace(visitor);
   visitor->Trace(portal_);
 }
@@ -97,31 +102,53 @@ void HTMLPortalElement::PortalContentsWillBeDestroyed(PortalContents* portal) {
   portal_ = nullptr;
 }
 
-bool HTMLPortalElement::CheckPortalsEnabledOrWarn() const {
-  Document& document = GetDocument();
-  if (RuntimeEnabledFeatures::PortalsEnabled(&document))
+bool HTMLPortalElement::IsCurrentlyWithinFrameLimit() const {
+  auto* frame = GetDocument().GetFrame();
+  if (!frame)
+    return false;
+  auto* page = frame->GetPage();
+  if (!page)
+    return false;
+  return page->SubframeCount() < Page::MaxNumberOfFrames();
+}
+
+bool HTMLPortalElement::CheckWithinFrameLimitOrWarn() const {
+  if (IsCurrentlyWithinFrameLimit())
     return true;
 
-  // TODO(jbroman): Consider linking to origin trial info if applicable.
+  Document& document = GetDocument();
   document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::blink::ConsoleMessageSource::kRendering,
       mojom::blink::ConsoleMessageLevel::kWarning,
+      "An operation was prevented due to too many frames and portals present "
+      "on the page."));
+  return false;
+}
+
+bool HTMLPortalElement::CheckPortalsEnabledOrWarn() const {
+  ExecutionContext* context = GetExecutionContext();
+  if (RuntimeEnabledFeatures::PortalsEnabled(context))
+    return true;
+
+  context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::blink::ConsoleMessageSource::kRendering,
+      mojom::blink::ConsoleMessageLevel::kWarning,
       "An operation was prevented because a <portal> was moved to a document "
-      "where it is not enabled."));
+      "where it is not enabled. See "
+      "https://www.chromium.org/blink/origin-trials/portals."));
   return false;
 }
 
 bool HTMLPortalElement::CheckPortalsEnabledOrThrow(
     ExceptionState& exception_state) const {
-  Document& document = GetDocument();
-  if (RuntimeEnabledFeatures::PortalsEnabled(&document))
+  if (RuntimeEnabledFeatures::PortalsEnabled(GetExecutionContext()))
     return true;
 
-  // TODO(jbroman): Consider linking to origin trial info if applicable.
   exception_state.ThrowDOMException(
       DOMExceptionCode::kNotSupportedError,
       "An operation was prevented because a <portal> was moved to a document "
-      "where it is not enabled.");
+      "where it is not enabled. See "
+      "https://www.chromium.org/blink/origin-trials/portals.");
   return false;
 }
 
@@ -141,6 +168,13 @@ HTMLPortalElement::GetGuestContentsEligibility() const {
   if (!is_top_level)
     return GuestContentsEligibility::kNotTopLevel;
 
+  // TODO(crbug.com/1051639): We need to find a long term solution to when/how
+  // portals should work in sandboxed documents.
+  if (GetDocument().GetSandboxFlags() !=
+      network::mojom::blink::WebSandboxFlags::kNone) {
+    return GuestContentsEligibility::kSandboxed;
+  }
+
   if (!GetDocument().Url().ProtocolIsInHTTPFamily())
     return GuestContentsEligibility::kNotHTTPFamily;
 
@@ -151,10 +185,16 @@ void HTMLPortalElement::Navigate() {
   if (!CheckPortalsEnabledOrWarn())
     return;
 
-  if (portal_) {
-    portal_->Navigate(GetNonEmptyURLAttribute(html_names::kSrcAttr),
-                      ReferrerPolicyAttribute());
-  }
+  if (!CheckWithinFrameLimitOrWarn())
+    return;
+
+  auto url = GetNonEmptyURLAttribute(html_names::kSrcAttr);
+
+  if (url.PotentiallyDanglingMarkup())
+    return;
+
+  if (portal_)
+    portal_->Navigate(url, ReferrerPolicyAttribute());
 }
 
 namespace {
@@ -238,6 +278,13 @@ ScriptPromise HTMLPortalElement::activate(ScriptState* script_state,
         "Cannot activate a portal that is inside another portal.");
     return ScriptPromise();
   }
+  if (GetDocument().BeforeUnloadStarted()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Cannot activate portal while document is in beforeunload or has "
+        "started unloading.");
+    return ScriptPromise();
+  }
 
   BlinkTransferableMessage data =
       ActivateDataAsMessage(script_state, options, exception_state);
@@ -317,6 +364,9 @@ Node::InsertionNotificationRequest HTMLPortalElement::InsertedInto(
   if (!CheckPortalsEnabledOrWarn())
     return result;
 
+  if (!CheckWithinFrameLimitOrWarn())
+    return result;
+
   if (!SubframeLoadingDisabler::CanLoadFrame(*this))
     return result;
 
@@ -329,6 +379,13 @@ Node::InsertionNotificationRequest HTMLPortalElement::InsertedInto(
           mojom::ConsoleMessageSource::kRendering,
           mojom::ConsoleMessageLevel::kWarning,
           "Cannot use <portal> in a nested browsing context."));
+      return result;
+
+    case GuestContentsEligibility::kSandboxed:
+      GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::ConsoleMessageSource::kRendering,
+          mojom::ConsoleMessageLevel::kWarning,
+          "Cannot use <portal> in a sandboxed browsing context."));
       return result;
 
     case GuestContentsEligibility::kNotHTTPFamily:

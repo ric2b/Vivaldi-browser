@@ -44,29 +44,11 @@ std::string ExtractGNBuildCommands(const base::FilePath& build_ninja_file) {
   return result;
 }
 
-}  // namespace
-
-namespace commands {
-
-const char kClean[] = "clean";
-const char kClean_HelpShort[] = "clean: Cleans the output directory.";
-const char kClean_Help[] =
-    "gn clean <out_dir>\n"
-    "\n"
-    "  Deletes the contents of the output directory except for args.gn and\n"
-    "  creates a Ninja build environment sufficient to regenerate the build.\n";
-
-int RunClean(const std::vector<std::string>& args) {
-  if (args.size() != 1) {
-    Err(Location(), "You're holding it wrong.", "Usage: \"gn clean <out_dir>\"")
-        .PrintToStdout();
-    return 1;
-  }
-
+bool CleanOneDir(const std::string& dir) {
   // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
-  if (!setup->DoSetup(args[0], false))
-    return 1;
+  if (!setup->DoSetup(dir, false))
+    return false;
 
   base::FilePath build_dir(setup->build_settings().GetFullPath(
       SourceDir(setup->build_settings().build_dir().value())));
@@ -80,7 +62,7 @@ int RunClean(const std::vector<std::string>& args) {
             "%s does not look like a build directory.\n",
             FilePathToUTF8(build_ninja_d_file.DirName().value()).c_str()))
         .PrintToStdout();
-    return 1;
+    return false;
   }
 
   // Erase everything but the args file, and write a dummy build.ninja file that
@@ -92,7 +74,7 @@ int RunClean(const std::vector<std::string>& args) {
     Err(Location(), "Couldn't read build.ninja in this directory.",
         "Try running \"gn gen\" on it and then re-running \"gn clean\".")
         .PrintToStdout();
-    return 1;
+    return false;
   }
 
   base::FileEnumerator traversal(
@@ -111,7 +93,7 @@ int RunClean(const std::vector<std::string>& args) {
                       static_cast<int>(build_commands.size())) == -1) {
     Err(Location(), std::string("Failed to write build.ninja."))
         .PrintToStdout();
-    return 1;
+    return false;
   }
 
   // Write a .d file for the build which references a nonexistant file.
@@ -121,7 +103,34 @@ int RunClean(const std::vector<std::string>& args) {
                       static_cast<int>(dummy_content.size())) == -1) {
     Err(Location(), std::string("Failed to write build.ninja.d."))
         .PrintToStdout();
+    return false;
+  }
+
+  return true;
+}
+
+}  // namespace
+
+namespace commands {
+
+const char kClean[] = "clean";
+const char kClean_HelpShort[] = "clean: Cleans the output directory.";
+const char kClean_Help[] =
+    "gn clean <out_dir>...\n"
+    "\n"
+    "  Deletes the contents of the output directory except for args.gn and\n"
+    "  creates a Ninja build environment sufficient to regenerate the build.\n";
+
+int RunClean(const std::vector<std::string>& args) {
+  if (args.empty()) {
+    Err(Location(), "Missing argument.", "Usage: \"gn clean <out_dir>...\"")
+        .PrintToStdout();
     return 1;
+  }
+
+  for (const auto& dir : args) {
+    if (!CleanOneDir(dir))
+      return 1;
   }
 
   return 0;

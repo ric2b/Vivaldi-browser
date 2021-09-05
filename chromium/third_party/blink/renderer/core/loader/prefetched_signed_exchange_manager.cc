@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/loader/prefetched_signed_exchange_manager.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -186,7 +188,7 @@ PrefetchedSignedExchangeManager::PrefetchedSignedExchangeManager(
 
 PrefetchedSignedExchangeManager::~PrefetchedSignedExchangeManager() {}
 
-void PrefetchedSignedExchangeManager::Trace(Visitor* visitor) {
+void PrefetchedSignedExchangeManager::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
 }
 
@@ -234,7 +236,7 @@ PrefetchedSignedExchangeManager::CreatePrefetchedSignedExchangeURLLoader(
     mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
         loader_factory) {
   return Platform::Current()
-      ->WrapURLLoaderFactory(loader_factory.PassPipe())
+      ->WrapURLLoaderFactory(std::move(loader_factory))
       ->CreateURLLoader(
           request,
           frame_->GetFrameScheduler()->CreateResourceLoadingTaskRunnerHandle());
@@ -300,16 +302,13 @@ void PrefetchedSignedExchangeManager::TriggerLoad() {
       continue;
     auto* prefetched_exchange = maching_prefetched_exchanges.at(i);
     mojo::Remote<network::mojom::blink::URLLoaderFactory> loader_factory(
-        mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>(
-            std::move(prefetched_exchange->loader_factory_handle),
-            network::mojom::URLLoaderFactory::Version_));
+        std::move(prefetched_exchange->loader_factory));
     mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
         loader_factory_clone;
     loader_factory->Clone(
         loader_factory_clone.InitWithNewPipeAndPassReceiver());
     // Reset loader_factory_handle to support loading the same resource again.
-    prefetched_exchange->loader_factory_handle =
-        loader_factory_clone.PassPipe();
+    prefetched_exchange->loader_factory = std::move(loader_factory_clone);
     loader->SetURLLoader(CreatePrefetchedSignedExchangeURLLoader(
         loader->request(), loader_factory.Unbind()));
   }

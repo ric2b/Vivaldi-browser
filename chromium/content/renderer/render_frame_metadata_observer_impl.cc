@@ -58,10 +58,19 @@ void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
     send_metadata |= force_send;
   }
 
-  // Allways cache the full metadata, so that it can correctly be sent upon
-  // ReportAllFrameSubmissionsForTesting or
-  // ReportAllRootScrollsForAccessibility. This must only be done after we've
-  // compared the two for changes.
+#if defined(OS_ANDROID)
+  const bool send_root_scroll_offset_changed =
+      report_all_root_scrolls_enabled_ && !send_metadata &&
+      render_frame_metadata_observer_client_ && last_render_frame_metadata_ &&
+      last_render_frame_metadata_->root_scroll_offset !=
+          render_frame_metadata.root_scroll_offset &&
+      render_frame_metadata.root_scroll_offset.has_value();
+#endif
+
+  // Always cache the full metadata, so that it can correctly be sent upon
+  // ReportAllFrameSubmissionsForTesting or on android, which notifies on any
+  // root scroll offset change. This must only be done after we've compared the
+  // two for changes.
   last_render_frame_metadata_ = render_frame_metadata;
 
   // If the metadata is different, updates all the observers; or the metadata is
@@ -99,6 +108,13 @@ void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
             : "null");
   }
 
+#if defined(OS_ANDROID)
+  if (send_root_scroll_offset_changed) {
+    render_frame_metadata_observer_client_->OnRootScrollOffsetChanged(
+        *render_frame_metadata.root_scroll_offset);
+  }
+#endif
+
   // Always cache the initial frame token, so that if a test connects later on
   // it can be notified of the initial state.
   if (!last_frame_token_) {
@@ -109,9 +125,8 @@ void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
 }
 
 #if defined(OS_ANDROID)
-void RenderFrameMetadataObserverImpl::ReportAllRootScrollsForAccessibility(
-    bool enabled) {
-  report_all_root_scrolls_for_accessibility_enabled_ = enabled;
+void RenderFrameMetadataObserverImpl::ReportAllRootScrolls(bool enabled) {
+  report_all_root_scrolls_enabled_ = enabled;
 
   if (enabled)
     SendLastRenderFrameMetadata();
@@ -147,6 +162,7 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
       rfm1.page_scale_factor != rfm2.page_scale_factor ||
       rfm1.external_page_scale_factor != rfm2.external_page_scale_factor ||
       rfm1.is_mobile_optimized != rfm2.is_mobile_optimized ||
+      rfm1.has_delegated_ink_metadata != rfm2.has_delegated_ink_metadata ||
       rfm1.device_scale_factor != rfm2.device_scale_factor ||
       rfm1.viewport_size_in_pixels != rfm2.viewport_size_in_pixels ||
       rfm1.top_controls_height != rfm2.top_controls_height ||
@@ -159,9 +175,6 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
   }
 
 #if defined(OS_ANDROID)
-  bool need_send_root_scroll =
-      report_all_root_scrolls_for_accessibility_enabled_ &&
-      rfm1.root_scroll_offset != rfm2.root_scroll_offset;
   if (rfm1.bottom_controls_height != rfm2.bottom_controls_height ||
       rfm1.bottom_controls_shown_ratio != rfm2.bottom_controls_shown_ratio ||
       rfm1.top_controls_min_height_offset !=
@@ -173,8 +186,7 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
       rfm1.root_overflow_y_hidden != rfm2.root_overflow_y_hidden ||
       rfm1.scrollable_viewport_size != rfm2.scrollable_viewport_size ||
       rfm1.root_layer_size != rfm2.root_layer_size ||
-      rfm1.has_transparent_background != rfm2.has_transparent_background ||
-      need_send_root_scroll) {
+      rfm1.has_transparent_background != rfm2.has_transparent_background) {
     *needs_activation_notification = true;
     return true;
   }

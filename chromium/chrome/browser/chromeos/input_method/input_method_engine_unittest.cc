@@ -15,15 +15,15 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
+#include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_manager_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
-#include "chrome/browser/ui/input_method/input_method_engine_base.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/chromeos/mock_component_extension_ime_manager_delegate.h"
-#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/mock_ime_input_context_handler.h"
 #include "ui/base/ime/text_input_flags.h"
@@ -31,8 +31,6 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/rect.h"
-
-using input_method::InputMethodEngineBase;
 
 namespace chromeos {
 
@@ -122,6 +120,10 @@ class TestObserver : public InputMethodEngineBase::Observer {
     calls_bitmap_ |= ONCOMPOSITIONBOUNDSCHANGED;
   }
   void OnScreenProjectionChanged(bool is_projected) override {}
+
+  void OnSuggestionsChanged(
+      const std::vector<std::string>& suggestions) override {}
+
   void OnReset(const std::string& engine_id) override {
     calls_bitmap_ |= RESET;
     engine_id_ = engine_id;
@@ -341,7 +343,7 @@ TEST_F(InputMethodEngineTest, TestSetSelectionRange) {
   CreateEngine(true);
   const int context = engine_->GetContextIdForTesting();
   std::string error;
-  engine_->::input_method::InputMethodEngineBase::SetSelectionRange(
+  engine_->chromeos::InputMethodEngineBase::SetSelectionRange(
       context, /* start */ 0, /* end */ 0, &error);
   EXPECT_EQ(kErrorNotActive, error);
   EXPECT_EQ(0,
@@ -349,21 +351,21 @@ TEST_F(InputMethodEngineTest, TestSetSelectionRange) {
   error = "";
 
   engine_->Enable(kTestImeComponentId);
-  engine_->::input_method::InputMethodEngineBase::SetSelectionRange(
+  engine_->chromeos::InputMethodEngineBase::SetSelectionRange(
       context, /* start */ 0, /* end */ 0, &error);
   EXPECT_EQ("", error);
   EXPECT_EQ(1,
             mock_ime_input_context_handler_->set_selection_range_call_count());
   error = "";
 
-  engine_->::input_method::InputMethodEngineBase::SetSelectionRange(
+  engine_->chromeos::InputMethodEngineBase::SetSelectionRange(
       context, /* start */ -1, /* end */ 0, &error);
   EXPECT_EQ(base::StringPrintf(kErrorInvalidValue, "start", -1), error);
   EXPECT_EQ(1,
             mock_ime_input_context_handler_->set_selection_range_call_count());
   error = "";
 
-  engine_->::input_method::InputMethodEngineBase::SetSelectionRange(
+  engine_->chromeos::InputMethodEngineBase::SetSelectionRange(
       context, /* start */ 0, /* end */ -1, &error);
   EXPECT_EQ(base::StringPrintf(kErrorInvalidValue, "end", -1), error);
   EXPECT_EQ(1,
@@ -385,8 +387,8 @@ TEST_F(InputMethodEngineTest, TestDisableAfterSetCompositionRange) {
   EXPECT_EQ("text", mock_ime_input_context_handler_->last_commit_text());
 
   // Change composition range to include "text".
-  engine_->::input_method::InputMethodEngineBase::SetCompositionRange(
-      context, 0, 4, {}, &error);
+  engine_->chromeos::InputMethodEngineBase::SetCompositionRange(context, 0, 4,
+                                                                {}, &error);
   EXPECT_EQ("", error);
 
   // Disable to commit

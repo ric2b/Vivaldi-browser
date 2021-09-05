@@ -501,12 +501,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method seek
 [Worker]     method truncate
 [Worker]     method write
-[Worker] interface FileSystemWriter
-[Worker]     attribute @@toStringTag
-[Worker]     method close
-[Worker]     method constructor
-[Worker]     method truncate
-[Worker]     method write
 [Worker] interface FontFace
 [Worker]     attribute @@toStringTag
 [Worker]     getter display
@@ -737,6 +731,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method getColorSettings
 [Worker] interface ImageDecoder
+[Worker]     static method canDecodeType
 [Worker]     attribute @@toStringTag
 [Worker]     getter complete
 [Worker]     getter frameCount
@@ -744,6 +739,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter type
 [Worker]     method constructor
 [Worker]     method decode
+[Worker]     method decodeMetadata
 [Worker] interface Lock
 [Worker]     attribute @@toStringTag
 [Worker]     getter mode
@@ -878,6 +874,8 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method getAllSync
 [Worker]     method open
 [Worker]     method openSync
+[Worker]     method rename
+[Worker]     method renameSync
 [Worker] interface NavigationPreloadManager
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -1306,6 +1304,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter writable
 [Worker]     method close
 [Worker]     method constructor
+[Worker]     method getInfo
 [Worker]     method getSignals
 [Worker]     method open
 [Worker]     method setSignals
@@ -3800,6 +3799,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute @@toStringTag
 [Worker]     getter addressSpace
 [Worker]     getter caches
+[Worker]     getter crossOriginIsolated
 [Worker]     getter crypto
 [Worker]     getter fonts
 [Worker]     getter indexedDB
@@ -3823,6 +3823,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method createImageBitmap
 [Worker]     method fetch
+[Worker]     method getOriginPrivateDirectory
 [Worker]     method importScripts
 [Worker]     method queueMicrotask
 [Worker]     method setInterval

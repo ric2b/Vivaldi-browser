@@ -47,6 +47,25 @@ using chrome_test_util::SettingsDoneButton;
 
 @implementation GoogleServicesSettingsTestCase
 
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  AppLaunchConfiguration config;
+
+  // Features are enabled or disabled based on the name of the test that is
+  // running. This is done because it is inefficient to use
+  // ensureAppLaunchedWithConfiguration for each test.
+  if ([self isRunningTest:@selector(testToggleSafeBrowsing)] ||
+      [self isRunningTest:@selector
+            (testTogglePasswordLeakCheckWhenSafeBrowsingAvailable)]) {
+    config.features_enabled.push_back(
+        safe_browsing::kSafeBrowsingAvailableOnIOS);
+  } else if ([self isRunningTest:@selector
+                   (testTogglePasswordLeakCheckWhenSafeBrowsingNotAvailable)]) {
+    config.features_disabled.push_back(
+        safe_browsing::kSafeBrowsingAvailableOnIOS);
+  }
+  return config;
+}
+
 // Opens the Google services settings view, and closes it.
 - (void)testOpenGoogleServicesSettings {
   [self openGoogleServicesSettings];
@@ -132,6 +151,8 @@ using chrome_test_util::SettingsDoneButton;
   [[self elementInteractionWithGreyMatcher:dataFromChromeSyncMatcher
                          scrollViewMatcher:manageSyncScrollViewMatcher]
       performAction:grey_tap()];
+  // Needs to wait until the sign-in dialog is fully dismissed to continue.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [self openGoogleServicesSettings];
   // Verify the sync is not confirmed yet.
   [self assertCellWithTitleID:IDS_IOS_SYNC_SETUP_NOT_CONFIRMED_TITLE
@@ -162,14 +183,49 @@ using chrome_test_util::SettingsDoneButton;
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
 
+// Tests that the Safe Browsing toggle reflects the current value of the
+// Safe Browsing preference, and updating the toggle also updates the
+// preference.
+- (void)testToggleSafeBrowsing {
+  // Start in the default (opted-in) state for Safe Browsing.
+  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kSafeBrowsingEnabled];
+
+  [self openGoogleServicesSettings];
+
+  // Check that Safe Browsing is enabled, and toggle it off.
+  [[self elementInteractionWithGreyMatcher:
+             chrome_test_util::SettingsSwitchCell(
+                 kSafeBrowsingItemAccessibilityIdentifier,
+                 /*is_toggled_on=*/YES,
+                 /*enabled=*/YES)]
+      performAction:chrome_test_util::TurnSettingsSwitchOn(NO)];
+
+  // Check the underlying pref value.
+  GREYAssertFalse([ChromeEarlGrey userBooleanPref:prefs::kSafeBrowsingEnabled],
+                  @"Failed to toggle-off Safe Browsing");
+
+  // Close settings.
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
+
+  // Open settings again, verify Safe Browsing is still disabled, and re-enable
+  // it.
+  [self openGoogleServicesSettings];
+  [[self elementInteractionWithGreyMatcher:
+             chrome_test_util::SettingsSwitchCell(
+                 kSafeBrowsingItemAccessibilityIdentifier,
+                 /*is_toggled_on=*/NO,
+                 /*enabled=*/YES)]
+      performAction:chrome_test_util::TurnSettingsSwitchOn(YES)];
+
+  // Check the underlying pref value.
+  GREYAssertTrue([ChromeEarlGrey userBooleanPref:prefs::kSafeBrowsingEnabled],
+                 @"Failed to toggle-on Safe Browsing");
+}
+
 // Tests that password leak detection can be toggled when Safe Browsing isn't
 // available.
 - (void)testTogglePasswordLeakCheckWhenSafeBrowsingNotAvailable {
-  AppLaunchConfiguration config;
-  config.features_disabled.push_back(
-      safe_browsing::kSafeBrowsingAvailableOnIOS);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
   // Ensure that Safe Browsing and password leak detection opt-outs start in
   // their default (opted-in) state.
   [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kSafeBrowsingEnabled];
@@ -230,10 +286,6 @@ using chrome_test_util::SettingsDoneButton;
 // Tests that when Safe Browsing is available, password leak detection can only
 // be toggled if Safe Browsing is enabled.
 - (void)testTogglePasswordLeakCheckWhenSafeBrowsingAvailable {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(safe_browsing::kSafeBrowsingAvailableOnIOS);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
   // Ensure that Safe Browsing and password leak detection opt-outs start in
   // their default (opted-in) state.
   [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kSafeBrowsingEnabled];

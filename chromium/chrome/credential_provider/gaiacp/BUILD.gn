@@ -17,6 +17,10 @@ import("//tools/grit/grit_rule.gni")
 # This static library is shared with the setup program.
 source_set("common") {
   sources = [
+    "device_policies.cc",
+    "device_policies.h",
+    "device_policies_manager.cc",
+    "device_policies_manager.h",
     "gcp_crash_reporter_client.cc",
     "gcp_crash_reporter_client.h",
     "gcp_crash_reporting_utils.cc",
@@ -25,12 +29,22 @@ source_set("common") {
     "gcp_utils.h",
     "gcpw_strings.cc",
     "gcpw_strings.h",
+    "gcpw_version.cc",
+    "gcpw_version.h",
     "logging.cc",
     "logging.h",
     "mdm_utils.cc",
     "mdm_utils.h",
+    "os_user_manager.cc",
+    "os_user_manager.h",
     "reg_utils.cc",
     "reg_utils.h",
+    "user_policies.cc",
+    "user_policies.h",
+    "user_policies_manager.cc",
+    "user_policies_manager.h",
+    "win_http_url_fetcher.cc",
+    "win_http_url_fetcher.h",
   ]
   public_configs = [ ":common_config" ]
   public_deps = [ "//chrome/credential_provider/common:common_constants" ]
@@ -44,6 +58,7 @@ source_set("common") {
     "//components/crash/core/common",
     "//components/version_info",
     "//google_apis:google_apis",
+    "//third_party/re2",
   ]
 }
 
@@ -55,7 +70,9 @@ config("common_config") {
   libs = [
     "secur32.lib",  # For LsaXXX functions
     "wbemuuid.lib",  # For CLSID_WbemLocator
+    "netapi32.lib",  # For NetUserXXX()
     "iphlpapi.lib",  # For GetAdaptersInfo
+    "userenv.lib",  # For GetUserProfileDirectoryW()
   ]
 }
 
@@ -69,6 +86,8 @@ source_set("gaiacp_lib") {
     "auth_utils.h",
     "chrome_availability_checker.cc",
     "chrome_availability_checker.h",
+    "credential_provider_broker_win.cc",
+    "credential_provider_broker_win.h",
     "event_logging_api_manager.cc",
     "event_logging_api_manager.h",
     "event_logs_upload_manager.cc",
@@ -94,8 +113,6 @@ source_set("gaiacp_lib") {
     "internet_availability_checker.h",
     "os_process_manager.cc",
     "os_process_manager.h",
-    "os_user_manager.cc",
-    "os_user_manager.h",
     "password_recovery_manager.cc",
     "password_recovery_manager.h",
     "reauth_credential.cc",
@@ -106,8 +123,6 @@ source_set("gaiacp_lib") {
     "scoped_user_profile.cc",
     "scoped_user_profile.h",
     "stdafx.h",
-    "win_http_url_fetcher.cc",
-    "win_http_url_fetcher.h",
   ]
   public_configs = [ ":gaiacp_config" ]
   public_deps = [ ":common" ]
@@ -118,6 +133,7 @@ source_set("gaiacp_lib") {
     "//build:branding_buildflags",
     "//chrome/common:non_code_constants",
     "//chrome/common:version_header",
+    "//chrome/credential_provider/gaiacp/mojom",
     "//chrome/installer/launcher_support",
     "//components/crash/core/app:app",
     "//components/crash/core/app:crash_export_thunks",
@@ -130,7 +146,11 @@ source_set("gaiacp_lib") {
   } else {
     deps += [ "//content/public/common:static_switches" ]
   }
-  libs = [ "wevtapi.lib" ]
+  libs = [
+    "hid.lib",
+    "setupapi.lib",
+    "wevtapi.lib",
+  ]
 }
 
 config("gaiacp_config") {

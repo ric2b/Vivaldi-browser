@@ -40,7 +40,8 @@ class MockFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      ResourceRequest::RedirectStatus redirect_status) const override {
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info)
+      const override {
     return base::nullopt;
   }
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
@@ -49,6 +50,7 @@ class MockFetchContext : public FetchContext {
       const KURL& url,
       const ResourceLoaderOptions& options,
       ReportingDisposition reporting_disposition,
+      const KURL& url_before_redirects,
       ResourceRequest::RedirectStatus redirect_status) const override {
     return base::nullopt;
   }

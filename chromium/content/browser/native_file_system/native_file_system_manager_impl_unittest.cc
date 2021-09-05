@@ -76,17 +76,15 @@ class NativeFileSystemManagerImplTest : public testing::Test {
 
   mojo::Remote<blink::mojom::NativeFileSystemDirectoryHandle>
   GetHandleForDirectory(const base::FilePath& path) {
-    EXPECT_CALL(
-        permission_context_,
-        GetReadPermissionGrant(
-            kTestOrigin, path, /*is_directory=*/true, kProcessId, kFrameId,
-            NativeFileSystemPermissionContext::UserAction::kOpen))
+    EXPECT_CALL(permission_context_,
+                GetReadPermissionGrant(
+                    kTestOrigin, path, /*is_directory=*/true,
+                    NativeFileSystemPermissionContext::UserAction::kOpen))
         .WillOnce(testing::Return(allow_grant_));
-    EXPECT_CALL(
-        permission_context_,
-        GetWritePermissionGrant(
-            kTestOrigin, path, /*is_directory=*/true, kProcessId, kFrameId,
-            NativeFileSystemPermissionContext::UserAction::kOpen))
+    EXPECT_CALL(permission_context_,
+                GetWritePermissionGrant(
+                    kTestOrigin, path, /*is_directory=*/true,
+                    NativeFileSystemPermissionContext::UserAction::kOpen))
         .WillOnce(testing::Return(allow_grant_));
 
     blink::mojom::NativeFileSystemEntryPtr entry =
@@ -128,9 +126,10 @@ class NativeFileSystemManagerImplTest : public testing::Test {
   const GURL kTestURL = GURL("https://example.com/test");
   const url::Origin kTestOrigin = url::Origin::Create(kTestURL);
   const int kProcessId = 1;
-  const int kFrameId = 2;
+  const int kFrameRoutingId = 2;
+  const GlobalFrameRoutingId kFrameId{kProcessId, kFrameRoutingId};
   const NativeFileSystemManagerImpl::BindingContext kBindingContext = {
-      kTestOrigin, kTestURL, kProcessId, kFrameId};
+      kTestOrigin, kTestURL, kFrameId};
 
   base::test::ScopedFeatureList scoped_feature_list_;
   BrowserTaskEnvironment task_environment_;
@@ -180,17 +179,15 @@ TEST_F(NativeFileSystemManagerImplTest, GetSandboxedFileSystem_Permissions) {
 TEST_F(NativeFileSystemManagerImplTest, CreateFileEntryFromPath_Permissions) {
   const base::FilePath kTestPath(dir_.GetPath().AppendASCII("foo"));
 
-  EXPECT_CALL(
-      permission_context_,
-      GetReadPermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(allow_grant_));
-  EXPECT_CALL(
-      permission_context_,
-      GetWritePermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(ask_grant_));
 
   blink::mojom::NativeFileSystemEntryPtr entry =
@@ -208,17 +205,15 @@ TEST_F(NativeFileSystemManagerImplTest,
        CreateWritableFileEntryFromPath_Permissions) {
   const base::FilePath kTestPath(dir_.GetPath().AppendASCII("foo"));
 
-  EXPECT_CALL(
-      permission_context_,
-      GetReadPermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kSave))
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kSave))
       .WillOnce(testing::Return(allow_grant_));
-  EXPECT_CALL(
-      permission_context_,
-      GetWritePermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kSave))
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kSave))
       .WillOnce(testing::Return(allow_grant_));
 
   blink::mojom::NativeFileSystemEntryPtr entry =
@@ -236,17 +231,15 @@ TEST_F(NativeFileSystemManagerImplTest,
        CreateDirectoryEntryFromPath_Permissions) {
   const base::FilePath kTestPath(dir_.GetPath().AppendASCII("foo"));
 
-  EXPECT_CALL(
-      permission_context_,
-      GetReadPermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/true, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/true,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(allow_grant_));
-  EXPECT_CALL(
-      permission_context_,
-      GetWritePermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/true, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/true,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(ask_grant_));
 
   blink::mojom::NativeFileSystemEntryPtr entry =
@@ -346,16 +339,17 @@ TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_SandboxedFile) {
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(test_file_url, token->url());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  EXPECT_EQ(test_file_url, *token->GetAsFileSystemURL());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kFile,
             token->type());
 
   // Deserialized sandboxed filesystem handles should always be readable and
   // writable.
-  EXPECT_EQ(PermissionStatus::GRANTED,
-            token->shared_handle_state().read_grant->GetStatus());
-  EXPECT_EQ(PermissionStatus::GRANTED,
-            token->shared_handle_state().write_grant->GetStatus());
+  ASSERT_TRUE(token->GetReadGrant());
+  EXPECT_EQ(PermissionStatus::GRANTED, token->GetReadGrant()->GetStatus());
+  ASSERT_TRUE(token->GetWriteGrant());
+  EXPECT_EQ(PermissionStatus::GRANTED, token->GetWriteGrant()->GetStatus());
 }
 
 TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_SandboxedDirectory) {
@@ -372,33 +366,32 @@ TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_SandboxedDirectory) {
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(test_file_url, token->url());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  EXPECT_EQ(test_file_url, *token->GetAsFileSystemURL());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kDirectory,
             token->type());
 
   // Deserialized sandboxed filesystem handles should always be readable and
   // writable.
-  EXPECT_EQ(PermissionStatus::GRANTED,
-            token->shared_handle_state().read_grant->GetStatus());
-  EXPECT_EQ(PermissionStatus::GRANTED,
-            token->shared_handle_state().write_grant->GetStatus());
+  ASSERT_TRUE(token->GetReadGrant());
+  EXPECT_EQ(PermissionStatus::GRANTED, token->GetReadGrant()->GetStatus());
+  ASSERT_TRUE(token->GetWriteGrant());
+  EXPECT_EQ(PermissionStatus::GRANTED, token->GetWriteGrant()->GetStatus());
 }
 
 TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_Native_SingleFile) {
   const base::FilePath kTestPath(dir_.GetPath().AppendASCII("foo"));
 
   // Expect calls to get grants when creating the initial handle.
-  EXPECT_CALL(
-      permission_context_,
-      GetReadPermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(allow_grant_));
-  EXPECT_CALL(
-      permission_context_,
-      GetWritePermissionGrant(
-          kTestOrigin, kTestPath, /*is_directory=*/false, kProcessId, kFrameId,
-          NativeFileSystemPermissionContext::UserAction::kOpen))
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, kTestPath, /*is_directory=*/false,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
       .WillOnce(testing::Return(allow_grant_));
 
   blink::mojom::NativeFileSystemEntryPtr entry =
@@ -414,30 +407,28 @@ TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_Native_SingleFile) {
       permission_context_,
       GetReadPermissionGrant(
           kTestOrigin, kTestPath, /*is_directory=*/false,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant_));
   EXPECT_CALL(
       permission_context_,
       GetWritePermissionGrant(
           kTestOrigin, kTestPath, /*is_directory=*/false,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant2_));
 
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(kTestOrigin, token->url().origin());
-  EXPECT_EQ(kTestPath, token->url().path());
-  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, token->url().type());
-  EXPECT_EQ(storage::kFileSystemTypeIsolated, token->url().mount_type());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  const storage::FileSystemURL& url = *token->GetAsFileSystemURL();
+  EXPECT_EQ(kTestOrigin, url.origin());
+  EXPECT_EQ(kTestPath, url.path());
+  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, url.type());
+  EXPECT_EQ(storage::kFileSystemTypeIsolated, url.mount_type());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kFile,
             token->type());
-  EXPECT_EQ(ask_grant_, token->shared_handle_state().read_grant);
-  EXPECT_EQ(ask_grant2_, token->shared_handle_state().write_grant);
+  EXPECT_EQ(ask_grant_, token->GetReadGrant());
+  EXPECT_EQ(ask_grant2_, token->GetWriteGrant());
 }
 
 TEST_F(NativeFileSystemManagerImplTest,
@@ -454,30 +445,28 @@ TEST_F(NativeFileSystemManagerImplTest,
       permission_context_,
       GetReadPermissionGrant(
           kTestOrigin, kTestPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant_));
   EXPECT_CALL(
       permission_context_,
       GetWritePermissionGrant(
           kTestOrigin, kTestPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant2_));
 
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(kTestOrigin, token->url().origin());
-  EXPECT_EQ(kTestPath, token->url().path());
-  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, token->url().type());
-  EXPECT_EQ(storage::kFileSystemTypeIsolated, token->url().mount_type());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  const storage::FileSystemURL& url = *token->GetAsFileSystemURL();
+  EXPECT_EQ(kTestOrigin, url.origin());
+  EXPECT_EQ(kTestPath, url.path());
+  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, url.type());
+  EXPECT_EQ(storage::kFileSystemTypeIsolated, url.mount_type());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kDirectory,
             token->type());
-  EXPECT_EQ(ask_grant_, token->shared_handle_state().read_grant);
-  EXPECT_EQ(ask_grant2_, token->shared_handle_state().write_grant);
+  EXPECT_EQ(ask_grant_, token->GetReadGrant());
+  EXPECT_EQ(ask_grant2_, token->GetWriteGrant());
 }
 
 TEST_F(NativeFileSystemManagerImplTest,
@@ -513,31 +502,29 @@ TEST_F(NativeFileSystemManagerImplTest,
       permission_context_,
       GetReadPermissionGrant(
           kTestOrigin, kDirectoryPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant_));
   EXPECT_CALL(
       permission_context_,
       GetWritePermissionGrant(
           kTestOrigin, kDirectoryPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant2_));
 
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(kTestOrigin, token->url().origin());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  const storage::FileSystemURL& url = *token->GetAsFileSystemURL();
+  EXPECT_EQ(kTestOrigin, url.origin());
   EXPECT_EQ(kDirectoryPath.Append(base::FilePath::FromUTF8Unsafe(kTestName)),
-            token->url().path());
-  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, token->url().type());
-  EXPECT_EQ(storage::kFileSystemTypeIsolated, token->url().mount_type());
+            url.path());
+  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, url.type());
+  EXPECT_EQ(storage::kFileSystemTypeIsolated, url.mount_type());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kFile,
             token->type());
-  EXPECT_EQ(ask_grant_, token->shared_handle_state().read_grant);
-  EXPECT_EQ(ask_grant2_, token->shared_handle_state().write_grant);
+  EXPECT_EQ(ask_grant_, token->GetReadGrant());
+  EXPECT_EQ(ask_grant2_, token->GetWriteGrant());
 }
 
 TEST_F(NativeFileSystemManagerImplTest,
@@ -573,30 +560,28 @@ TEST_F(NativeFileSystemManagerImplTest,
       permission_context_,
       GetReadPermissionGrant(
           kTestOrigin, kDirectoryPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant_));
   EXPECT_CALL(
       permission_context_,
       GetWritePermissionGrant(
           kTestOrigin, kDirectoryPath, /*is_directory=*/true,
-          /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-          /*frame_id=*/MSG_ROUTING_NONE,
           NativeFileSystemPermissionContext::UserAction::kLoadFromStorage))
       .WillOnce(testing::Return(ask_grant2_));
 
   NativeFileSystemTransferTokenImpl* token =
       SerializeAndDeserializeToken(std::move(token_remote));
   ASSERT_TRUE(token);
-  EXPECT_EQ(kTestOrigin, token->url().origin());
-  EXPECT_EQ(kDirectoryPath.AppendASCII(kTestName), token->url().path());
-  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, token->url().type());
-  EXPECT_EQ(storage::kFileSystemTypeIsolated, token->url().mount_type());
+  ASSERT_TRUE(token->GetAsFileSystemURL());
+  const storage::FileSystemURL& url = *token->GetAsFileSystemURL();
+  EXPECT_EQ(kTestOrigin, url.origin());
+  EXPECT_EQ(kDirectoryPath.AppendASCII(kTestName), url.path());
+  EXPECT_EQ(storage::kFileSystemTypeNativeLocal, url.type());
+  EXPECT_EQ(storage::kFileSystemTypeIsolated, url.mount_type());
   EXPECT_EQ(NativeFileSystemTransferTokenImpl::HandleType::kDirectory,
             token->type());
-  EXPECT_EQ(ask_grant_, token->shared_handle_state().read_grant);
-  EXPECT_EQ(ask_grant2_, token->shared_handle_state().write_grant);
+  EXPECT_EQ(ask_grant_, token->GetReadGrant());
+  EXPECT_EQ(ask_grant2_, token->GetWriteGrant());
 }
 
 }  // namespace content

@@ -101,6 +101,7 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
      * Signals that native initialization has completed.
      */
     public void onNativeInitialized() {
+        mMediator.updateLocationBarIcon();
         mMediator.setStatusClickListener(this);
         if (ChromeApplication.isVivaldi()) {
             SearchEngineIconHandler.get().initialize();

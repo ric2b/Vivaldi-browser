@@ -43,7 +43,7 @@ import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -160,7 +160,7 @@ public class ToolbarTablet extends ToolbarLayout
                 getContext(), R.drawable.btn_close, R.color.default_icon_color_tint_list);
         reloadIcon.addLevel(stopLevel, stopLevel, stopLevelDrawable);
         mReloadButton.setImageDrawable(reloadIcon);
-        mShowTabStack = AccessibilityUtil.isAccessibilityEnabled()
+        mShowTabStack = ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 && isAccessibilityTabSwitcherPreferenceEnabled();
 
         mAccessibilitySwitcherButton = findViewById(R.id.tab_switcher_button);
@@ -651,6 +651,7 @@ public class ToolbarTablet extends ToolbarLayout
         mOptionalButton.setContentDescription(
                 getContext().getResources().getString(buttonData.contentDescriptionResId));
         mOptionalButton.setVisibility(View.VISIBLE);
+        mOptionalButton.setEnabled(buttonData.isEnabled);
     }
 
     @Override

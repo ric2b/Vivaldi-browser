@@ -82,15 +82,19 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
   void OnHideManualFallbackForSaving() override;
   bool OnChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
-      const GURL& origin,
+      const url::Origin& origin,
       const ManagePasswordsState::CredentialsCallback& callback) override;
   void OnPasswordAutofilled(
       const std::vector<const autofill::PasswordForm*>& password_forms,
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<const autofill::PasswordForm*>* federated_matches)
       override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+
+  // ManagePasswordsUIController:
+  void NotifyUnsyncedCredentialsWillBeDeleted(
+      const std::vector<autofill::PasswordForm>& unsynced_credentials) override;
 
   // Should not be used for manual fallback events.
   bool IsTargetStateObserved(
@@ -206,7 +210,7 @@ void CustomManagePasswordsUIController::OnHideManualFallbackForSaving() {
 
 bool CustomManagePasswordsUIController::OnChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
-    const GURL& origin,
+    const url::Origin& origin,
     const ManagePasswordsState::CredentialsCallback& callback) {
   ProcessStateExpectations(password_manager::ui::CREDENTIAL_REQUEST_STATE);
   return ManagePasswordsUIController::OnChooseCredentials(
@@ -215,7 +219,7 @@ bool CustomManagePasswordsUIController::OnChooseCredentials(
 
 void CustomManagePasswordsUIController::OnPasswordAutofilled(
     const std::vector<const autofill::PasswordForm*>& password_forms,
-    const GURL& origin,
+    const url::Origin& origin,
     const std::vector<const autofill::PasswordForm*>* federated_matches) {
   ProcessStateExpectations(password_manager::ui::MANAGE_STATE);
   return ManagePasswordsUIController::OnPasswordAutofilled(
@@ -231,6 +235,15 @@ void CustomManagePasswordsUIController::DidFinishNavigation(
     was_prompt_automatically_shown_ = false;
   }
   ProcessStateExpectations(GetState());
+}
+
+void CustomManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
+    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
+  ManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
+      unsynced_credentials);
+  was_prompt_automatically_shown_ = true;
+  ProcessStateExpectations(
+      password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
 }
 
 bool CustomManagePasswordsUIController::IsTargetStateObserved(
@@ -272,10 +285,8 @@ enum ReturnCodes {  // Possible results of the JavaScript code.
 }  // namespace
 
 NavigationObserver::NavigationObserver(content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents),
-      quit_on_entry_committed_(false) {}
-NavigationObserver::~NavigationObserver() {
-}
+    : content::WebContentsObserver(web_contents) {}
+NavigationObserver::~NavigationObserver() = default;
 
 void NavigationObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -344,6 +355,14 @@ void BubbleObserver::AcceptSavePrompt() const {
   EXPECT_FALSE(IsSavePromptAvailable());
 }
 
+void BubbleObserver::AcceptSaveUnsyncedCredentialsPrompt() const {
+  ASSERT_EQ(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE,
+            passwords_ui_controller_->GetState());
+  passwords_ui_controller_->SaveUnsyncedCredentialsInProfileStore();
+  EXPECT_NE(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE,
+            passwords_ui_controller_->GetState());
+}
+
 void BubbleObserver::AcceptUpdatePrompt() const {
   ASSERT_TRUE(IsUpdatePromptAvailable());
   passwords_ui_controller_->SavePassword(
@@ -387,6 +406,13 @@ bool BubbleObserver::WaitForFallbackForSaving(
   CustomManagePasswordsUIController* controller =
       static_cast<CustomManagePasswordsUIController*>(passwords_ui_controller_);
   return controller->WaitForFallbackForSaving(timeout);
+}
+
+void BubbleObserver::WaitForSaveUnsyncedCredentialsPrompt() const {
+  CustomManagePasswordsUIController* controller =
+      static_cast<CustomManagePasswordsUIController*>(passwords_ui_controller_);
+  controller->WaitForState(
+      password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
 }
 
 PasswordStoreResultsObserver::PasswordStoreResultsObserver() = default;

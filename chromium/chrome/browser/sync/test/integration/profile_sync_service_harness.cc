@@ -42,13 +42,7 @@
 using syncer::ProfileSyncService;
 using syncer::SyncCycleSnapshot;
 
-#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
-namespace {
-#endif
 const char* kSyncUrlClearServerDataKey = "sync-url-clear-server-data";
-#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
-} // namespace
-#endif
 
 namespace {
 
@@ -177,9 +171,6 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
   return false;
 }
 
-#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
-namespace {
-#endif
 // Same as reset on chrome.google.com/sync.
 // This function will wait until the reset is done. If error occurs,
 // it will log error messages.
@@ -224,9 +215,6 @@ void ResetAccount(network::SharedURLLoaderFactory* url_loader_factory,
                << ". The account will remain dirty and may cause test fail.";
   }
 }
-#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
-} // namespace
-#endif  // VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
 
 void ProfileSyncServiceHarness::ResetSyncForPrimaryAccount() {
   syncer::SyncPrefs sync_prefs(profile_->GetPrefs());

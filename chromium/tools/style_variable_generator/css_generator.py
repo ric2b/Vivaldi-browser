@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from base_generator import Color, Modes, BaseGenerator
+from base_generator import Color, Modes, BaseGenerator, VariableType
+import collections
 
 
 class CSSStyleGenerator(BaseGenerator):
@@ -14,9 +15,30 @@ class CSSStyleGenerator(BaseGenerator):
                                   self.GetParameters())
 
     def GetParameters(self):
+        def BuildColorsForMode(mode, resolve_missing=False):
+            '''Builds a name to Color dictionary for |mode|.
+            If |resolve_missing| is true, colors that aren't specified in |mode|
+            will be resolved to their default mode value.'''
+            colors = collections.OrderedDict()
+            for name, mode_values in self.model[VariableType.COLOR].items():
+                if resolve_missing:
+                    colors[name] = self.model[VariableType.COLOR].Resolve(
+                        name, mode)
+                else:
+                    if mode in mode_values:
+                        colors[name] = mode_values[mode]
+            return colors
+
+        if self.generate_single_mode:
+            return {
+                'light_colors':
+                BuildColorsForMode(self.generate_single_mode,
+                                   resolve_missing=True)
+            }
+
         return {
-            'light_variables': self._mode_variables[Modes.LIGHT],
-            'dark_variables': self._mode_variables[Modes.DARK],
+            'light_colors': BuildColorsForMode(Modes.LIGHT),
+            'dark_colors': BuildColorsForMode(Modes.DARK),
         }
 
     def GetFilters(self):
@@ -29,6 +51,7 @@ class CSSStyleGenerator(BaseGenerator):
     def GetGlobals(self):
         return {
             'css_color_from_rgb_var': self._CssColorFromRGBVar,
+            'in_files': self.in_files,
         }
 
     def _ToVarName(self, var_name):

@@ -37,7 +37,6 @@ import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.protocol.AutofillWalletSpecifics;
 import org.chromium.components.sync.protocol.EntitySpecifics;
@@ -152,6 +151,7 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
             FakeServerHelper.deleteFakeServer();
         });
         SigninTestUtil.tearDownAuthForTesting();
+        ProfileSyncService.resetForTests();
     }
 
     public SyncTestRule() {
@@ -229,8 +229,9 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
     public void signOut() throws InterruptedException {
         final Semaphore s = new Semaphore(0);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityServicesProvider.get().getSigninManager().signOut(
-                    SignoutReason.SIGNOUT_TEST, s::release, false);
+            IdentityServicesProvider.get()
+                    .getSigninManager(Profile.getLastUsedRegularProfile())
+                    .signOut(SignoutReason.SIGNOUT_TEST, s::release, false);
         });
         Assert.assertTrue(s.tryAcquire(SyncTestUtil.TIMEOUT_MS, TimeUnit.MILLISECONDS));
         Assert.assertNull(SigninTestUtil.getCurrentAccount());
@@ -413,8 +414,9 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
 
     private void signinAndEnableSyncInternal(final Account account, boolean setFirstSetupComplete) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityServicesProvider.get().getSigninManager().signIn(
-                    SigninAccessPoint.UNKNOWN, account, new SigninManager.SignInCallback() {
+            IdentityServicesProvider.get()
+                    .getSigninManager(Profile.getLastUsedRegularProfile())
+                    .signIn(SigninAccessPoint.UNKNOWN, account, new SigninManager.SignInCallback() {
                         @Override
                         public void onSignInComplete() {
                             if (setFirstSetupComplete) {

@@ -9,6 +9,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "storage/common/file_system/file_system_types.h"
 
 namespace content {
 
@@ -26,66 +27,42 @@ NativeFileSystemHandleBase::NativeFileSystemHandleBase(
   DCHECK_EQ(url_.mount_type() == storage::kFileSystemTypeIsolated,
             handle_state_.file_system.is_valid())
       << url_.mount_type();
-  // For now only support sandboxed file system and native file system.
+
+  // We support sandboxed file system and native file systems on all platforms.
   DCHECK(url_.type() == storage::kFileSystemTypeNativeLocal ||
-         url_.type() == storage::kFileSystemTypePersistent ||
          url_.type() == storage::kFileSystemTypeTemporary ||
+#if defined(OS_CHROMEOS)
+         // On Chrome OS, we additionally support File System Provider API, and
+         // file systems available to platform Apps.
+         url_.type() == storage::kFileSystemTypeNativeForPlatformApp ||
+         url_.type() == storage::kFileSystemTypeProvided ||
+#endif
          url_.type() == storage::kFileSystemTypeTest)
       << url_.type();
 
   if (ShouldTrackUsage()) {
-    DCHECK_EQ(url_.type(), storage::kFileSystemTypeNativeLocal);
+    DCHECK(url_.type() == storage::kFileSystemTypeNativeLocal ||
+           url_.type() == storage::kFileSystemTypeNativeForPlatformApp ||
+           url_.type() == storage::kFileSystemTypeProvided)
+        << url.type();
     DCHECK_EQ(url_.mount_type(), storage::kFileSystemTypeIsolated);
 
-    handle_state_.read_grant->AddObserver(this);
-    // In some cases we use the same grant for read and write access. In that
-    // case only add an observer once.
-    if (handle_state_.read_grant != handle_state_.write_grant)
-      handle_state_.write_grant->AddObserver(this);
-
-    Observe(WebContentsImpl::FromRenderFrameHostID(context_.process_id,
-                                                   context_.frame_id));
+    Observe(WebContentsImpl::FromRenderFrameHostID(context_.frame_id));
 
     // Disable back-forward cache as native file system's usage of
     // RenderFrameHost::IsCurrent at the moment is not compatible with bfcache.
-    BackForwardCache::DisableForRenderFrameHost(
-        GlobalFrameRoutingId(context_.process_id, context_.frame_id),
-        "NativeFileSystem");
-
-    if (is_directory) {
-      // For usage reporting purposes try to get the root path of the isolated
-      // file system, i.e. the path the user picked in a directory picker.
-      auto* isolated_context = storage::IsolatedContext::GetInstance();
-      if (!isolated_context->GetRegisteredPath(
-              handle_state_.file_system.id(), &directory_for_usage_tracking_)) {
-        // If for some reason the isolated file system no longer exists, fall
-        // back to the path of the handle itself, which could be a child of
-        // the originally picked path.
-        directory_for_usage_tracking_ = url.path();
-      }
-    }
-
+    BackForwardCache::DisableForRenderFrameHost(context_.frame_id,
+                                                "NativeFileSystem");
     if (web_contents())
       web_contents()->IncrementNativeFileSystemHandleCount();
-    UpdateUsage();
   }
 }
 
 NativeFileSystemHandleBase::~NativeFileSystemHandleBase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // It is fine to remove an observer that never was added, so no need to check
-  // for URL type and/or the same grant being used for read and write access.
-  handle_state_.read_grant->RemoveObserver(this);
-  handle_state_.write_grant->RemoveObserver(this);
 
   if (ShouldTrackUsage() && web_contents()) {
     web_contents()->DecrementNativeFileSystemHandleCount();
-    if (!directory_for_usage_tracking_.empty() && was_readable_at_last_check_) {
-      web_contents()->RemoveNativeFileSystemDirectoryHandle(
-          directory_for_usage_tracking_);
-    }
-    if (was_writable_at_last_check_)
-      web_contents()->DecrementWritableNativeFileSystemHandleCount();
   }
 }
 
@@ -98,7 +75,6 @@ NativeFileSystemHandleBase::GetReadPermissionStatus() {
 NativeFileSystemHandleBase::PermissionStatus
 NativeFileSystemHandleBase::GetWritePermissionStatus() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UpdateUsage();
   // It is not currently possible to have write only handles, so first check the
   // read permission status. See also:
   // http://wicg.github.io/native-file-system/#api-filesystemhandle-querypermission
@@ -138,7 +114,7 @@ void NativeFileSystemHandleBase::DoRequestPermission(
   }
   if (!writable) {
     handle_state_.read_grant->RequestPermission(
-        context().process_id, context().frame_id,
+        context().frame_id,
         base::BindOnce(&NativeFileSystemHandleBase::DidRequestPermission,
                        AsWeakPtr(), writable, std::move(callback)));
     return;
@@ -151,12 +127,12 @@ void NativeFileSystemHandleBase::DoRequestPermission(
     // the write permission request probably fails the same way. And we check
     // the final permission status after the permission request completes
     // anyway.
-    handle_state_.read_grant->RequestPermission(
-        context().process_id, context().frame_id, base::DoNothing());
+    handle_state_.read_grant->RequestPermission(context().frame_id,
+                                                base::DoNothing());
   }
 
   handle_state_.write_grant->RequestPermission(
-      context().process_id, context().frame_id,
+      context().frame_id,
       base::BindOnce(&NativeFileSystemHandleBase::DidRequestPermission,
                      AsWeakPtr(), writable, std::move(callback)));
 }
@@ -196,42 +172,6 @@ void NativeFileSystemHandleBase::DidRequestPermission(
       return;
   }
   NOTREACHED();
-}
-
-void NativeFileSystemHandleBase::UpdateUsage() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!ShouldTrackUsage() || !web_contents())
-    return;
-
-  bool is_readable =
-      handle_state_.read_grant->GetStatus() == PermissionStatus::GRANTED;
-  if (is_readable != was_readable_at_last_check_) {
-    was_readable_at_last_check_ = is_readable;
-    if (!directory_for_usage_tracking_.empty()) {
-      if (is_readable) {
-        web_contents()->AddNativeFileSystemDirectoryHandle(
-            directory_for_usage_tracking_);
-      } else {
-        web_contents()->RemoveNativeFileSystemDirectoryHandle(
-            directory_for_usage_tracking_);
-      }
-    }
-  }
-
-  bool is_writable = is_readable && handle_state_.write_grant->GetStatus() ==
-                                        PermissionStatus::GRANTED;
-  if (is_writable != was_writable_at_last_check_) {
-    was_writable_at_last_check_ = is_writable;
-    if (is_writable)
-      web_contents()->IncrementWritableNativeFileSystemHandleCount();
-    else
-      web_contents()->DecrementWritableNativeFileSystemHandleCount();
-  }
-}
-
-void NativeFileSystemHandleBase::OnPermissionStatusChanged() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UpdateUsage();
 }
 
 }  // namespace content

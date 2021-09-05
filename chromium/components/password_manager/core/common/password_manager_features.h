@@ -18,6 +18,7 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 
 extern const base::Feature kBiometricTouchToFill;
+extern const base::Feature kCompromisedPasswordsReengagement;
 extern const base::Feature kEditPasswordsInDesktopSettings;
 extern const base::Feature kDeleteCorruptedPasswords;
 extern const base::Feature kEnableOverwritingPlaceholderUsernames;
@@ -32,6 +33,7 @@ extern const base::Feature kPasswordImport;
 extern const base::Feature kPasswordManagerOnboardingAndroid;
 extern const base::Feature kRecoverFromNeverSaveAndroid;
 extern const base::Feature kUsernameFirstFlow;
+extern const base::Feature kWellKnownChangePassword;
 
 // Field trial and corresponding parameters.
 // To manually override this, start Chrome with the following parameters:
@@ -44,6 +46,12 @@ extern const char kGenerationRequirementsFieldTrial[];
 extern const char kGenerationRequirementsVersion[];
 extern const char kGenerationRequirementsPrefixLength[];
 extern const char kGenerationRequirementsTimeout[];
+
+// Password change feature variation.
+// The new variation will allow showing credential leaked dialog after
+// every form submission (helpful for testing).
+extern const char
+    kPasswordChangeWithForcedDialogAfterEverySuccessfulSubmission[];
 
 }  // namespace features
 

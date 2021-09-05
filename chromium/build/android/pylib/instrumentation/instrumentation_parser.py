@@ -20,6 +20,8 @@ STATUS_CODE_SKIP = -3
 # http://junit.org/junit4/javadoc/4.12/org/junit/AssumptionViolatedException.html
 STATUS_CODE_ASSUMPTION_FAILURE = -4
 
+STATUS_CODE_TEST_DURATION = 1337
+
 # http://developer.android.com/reference/android/app/Activity.html
 RESULT_CODE_OK = -1
 RESULT_CODE_CANCELED = 0

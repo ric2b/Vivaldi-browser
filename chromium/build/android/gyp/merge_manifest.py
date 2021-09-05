@@ -22,8 +22,8 @@ _MANIFEST_MERGER_JARS = [
     os.path.join('common', 'common.jar'),
     os.path.join('sdk-common', 'sdk-common.jar'),
     os.path.join('sdklib', 'sdklib.jar'),
-    os.path.join('external', 'com', 'google', 'guava', 'guava', '27.1-jre',
-                 'guava-27.1-jre.jar'),
+    os.path.join('external', 'com', 'google', 'guava', 'guava', '28.1-jre',
+                 'guava-28.1-jre.jar'),
     os.path.join('external', 'kotlin-plugin-ij', 'Kotlin', 'kotlinc', 'lib',
                  'kotlin-stdlib.jar'),
     os.path.join('external', 'com', 'google', 'code', 'gson', 'gson', '2.8.5',
@@ -137,8 +137,7 @@ def main(argv):
 
   if args.depfile:
     inputs = extras + classpath.split(':')
-    build_utils.WriteDepfile(args.depfile, args.output, inputs=inputs,
-                             add_pydeps=False)
+    build_utils.WriteDepfile(args.depfile, args.output, inputs=inputs)
 
 
 if __name__ == '__main__':

@@ -41,6 +41,7 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -133,9 +134,6 @@ class DiscardsDetailsProviderImpl : public discards::mojom::DetailsProvider {
           GetLifecycleUnitVisibility(lifecycle_unit->GetVisibility());
       info->loading_state = lifecycle_unit->GetLoadingState();
       info->state = lifecycle_unit->GetState();
-      resource_coordinator::DecisionDetails freeze_details;
-      info->can_freeze = lifecycle_unit->CanFreeze(&freeze_details);
-      info->cannot_freeze_reasons = freeze_details.GetFailureReasonStrings();
       resource_coordinator::DecisionDetails discard_details;
       info->cannot_discard_reasons = discard_details.GetFailureReasonStrings();
       info->discard_reason = lifecycle_unit->GetDiscardReason();
@@ -193,12 +191,6 @@ class DiscardsDetailsProviderImpl : public discards::mojom::DetailsProvider {
     std::move(callback).Run();
   }
 
-  void FreezeById(int32_t id) override {
-    auto* lifecycle_unit = GetLifecycleUnitById(id);
-    if (lifecycle_unit)
-      lifecycle_unit->Freeze();
-  }
-
   void LoadById(int32_t id) override {
     auto* lifecycle_unit = GetLifecycleUnitById(id);
     if (lifecycle_unit)
@@ -225,7 +217,8 @@ DiscardsUI::DiscardsUI(content::WebUI* web_ui)
   std::unique_ptr<content::WebUIDataSource> source(
       content::WebUIDataSource::Create(chrome::kChromeUIDiscardsHost));
 
-  source->OverrideContentSecurityPolicyScriptSrc(
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
 
   source->AddResourcePath("discards.js", IDR_DISCARDS_JS);

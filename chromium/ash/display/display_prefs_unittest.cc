@@ -473,7 +473,7 @@ TEST_F(DisplayPrefsTest, BasicStores) {
   EXPECT_FALSE(property->GetInteger("width", &width));
   EXPECT_FALSE(property->GetInteger("height", &height));
 
-  display::ManagedDisplayMode mode(gfx::Size(300, 200), 60.0f, false, true,
+  display::ManagedDisplayMode mode(gfx::Size(300, 200), 60.0f, false, false,
                                    1.25f /* device_scale_factor */);
   display_manager()->SetDisplayMode(id2, mode);
 
@@ -605,7 +605,6 @@ TEST_F(DisplayPrefsTest, BasicStores) {
 }
 
 TEST_F(DisplayPrefsTest, PreventStore) {
-  ResolutionNotificationController::SuppressTimerForTest();
   LoggedInAsUser();
   UpdateDisplay("400x300#500x400|400x300|300x200");
   int64_t id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
@@ -613,8 +612,9 @@ TEST_F(DisplayPrefsTest, PreventStore) {
   // display preferences should not stored meanwhile.
   Shell* shell = Shell::Get();
 
-  display::ManagedDisplayMode old_mode(gfx::Size(400, 300));
-  display::ManagedDisplayMode new_mode(gfx::Size(500, 400));
+  display::ManagedDisplayMode old_mode(gfx::Size(400, 300), 60.0f, false,
+                                       false);
+  display::ManagedDisplayMode new_mode(gfx::Size(500, 400), 60.0f, false, true);
   EXPECT_TRUE(shell->resolution_notification_controller()
                   ->PrepareNotificationAndSetDisplayMode(
                       id, old_mode, new_mode, mojom::DisplayConfigSource::kUser,

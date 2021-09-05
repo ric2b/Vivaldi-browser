@@ -6,6 +6,7 @@
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/base/x/x11_display_util.h"
+#include "ui/gfx/x/randr.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gl/egl_util.h"
@@ -17,12 +18,12 @@ namespace {
 class XrandrIntervalOnlyVSyncProvider : public gfx::VSyncProvider {
  public:
   explicit XrandrIntervalOnlyVSyncProvider(Display* display)
-      : display_(display), interval_(base::TimeDelta::FromSeconds(1 / 60.)) {}
+      : interval_(base::TimeDelta::FromSeconds(1 / 60.)) {}
 
   void GetVSyncParameters(UpdateVSyncCallback callback) override {
     if (++calls_since_last_update_ >= kCallsBetweenUpdates) {
       calls_since_last_update_ = 0;
-      interval_ = ui::GetPrimaryDisplayRefreshIntervalFromXrandr(display_);
+      interval_ = ui::GetPrimaryDisplayRefreshIntervalFromXrandr();
     }
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
@@ -37,7 +38,6 @@ class XrandrIntervalOnlyVSyncProvider : public gfx::VSyncProvider {
   bool IsHWClock() const override { return false; }
 
  private:
-  Display* const display_ = nullptr;
   base::TimeDelta interval_;
   static const int kCallsBetweenUpdates = 100;
   int calls_since_last_update_ = kCallsBetweenUpdates;
@@ -45,8 +45,8 @@ class XrandrIntervalOnlyVSyncProvider : public gfx::VSyncProvider {
 
 }  // namespace
 
-NativeViewGLSurfaceEGLX11::NativeViewGLSurfaceEGLX11(EGLNativeWindowType window)
-    : NativeViewGLSurfaceEGL(window, nullptr) {}
+NativeViewGLSurfaceEGLX11::NativeViewGLSurfaceEGLX11(x11::Window window)
+    : NativeViewGLSurfaceEGL(static_cast<uint32_t>(window), nullptr) {}
 
 bool NativeViewGLSurfaceEGLX11::Initialize(GLSurfaceFormat format) {
   if (!NativeViewGLSurfaceEGL::Initialize(format))
@@ -104,7 +104,8 @@ NativeViewGLSurfaceEGLX11::CreateVsyncProviderInternal() {
   return std::make_unique<XrandrIntervalOnlyVSyncProvider>(GetXNativeDisplay());
 }
 
-bool NativeViewGLSurfaceEGLX11::DispatchXEvent(XEvent* x_event) {
+bool NativeViewGLSurfaceEGLX11::DispatchXEvent(x11::Event* x11_event) {
+  XEvent* x_event = &x11_event->xlib_event();
   // When ANGLE is used for EGL, it creates an X11 child window. Expose events
   // from this window need to be forwarded to this class.
   bool can_dispatch =

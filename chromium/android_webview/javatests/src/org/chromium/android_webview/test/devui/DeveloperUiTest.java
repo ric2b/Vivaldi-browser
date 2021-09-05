@@ -4,22 +4,22 @@
 
 package org.chromium.android_webview.test.devui;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.intent.Intents.assertNoUnverifiedIntents;
-import static android.support.test.espresso.intent.Intents.intended;
-import static android.support.test.espresso.intent.Intents.intending;
-import static android.support.test.espresso.intent.matcher.UriMatchers.hasHost;
-import static android.support.test.espresso.intent.matcher.UriMatchers.hasParamWithValue;
-import static android.support.test.espresso.intent.matcher.UriMatchers.hasPath;
-import static android.support.test.espresso.intent.matcher.UriMatchers.hasScheme;
-import static android.support.test.espresso.matcher.ViewMatchers.hasTextColor;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.intent.Intents.assertNoUnverifiedIntents;
+import static androidx.test.espresso.intent.Intents.intended;
+import static androidx.test.espresso.intent.Intents.intending;
+import static androidx.test.espresso.intent.matcher.UriMatchers.hasHost;
+import static androidx.test.espresso.intent.matcher.UriMatchers.hasParamWithValue;
+import static androidx.test.espresso.intent.matcher.UriMatchers.hasPath;
+import static androidx.test.espresso.intent.matcher.UriMatchers.hasScheme;
+import static androidx.test.espresso.matcher.ViewMatchers.hasTextColor;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.not;
@@ -30,9 +30,10 @@ import android.content.Intent;
 import android.os.Build;
 import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.intent.matcher.IntentMatchers;
-import android.support.test.espresso.intent.rule.IntentsTestRule;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.espresso.intent.matcher.IntentMatchers;
+import androidx.test.espresso.intent.rule.IntentsTestRule;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assume;
@@ -189,5 +190,21 @@ public class DeveloperUiTest {
                 IntentMatchers.hasData(hasScheme("market")),
                 IntentMatchers.hasData(hasHost("details")),
                 IntentMatchers.hasData(hasParamWithValue("id", TEST_WEBVIEW_PACKAGE_NAME))));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMenuOptions_aboutDevTools() throws Throwable {
+        openActionBarOverflowOrOptionsMenu(
+                InstrumentationRegistry.getInstrumentation().getTargetContext());
+
+        onView(withText("About WebView DevTools")).check(matches(isDisplayed()));
+        onView(withText("About WebView DevTools")).perform(click());
+        intended(allOf(IntentMatchers.hasAction(Intent.ACTION_VIEW),
+                IntentMatchers.hasData(hasScheme("https")),
+                IntentMatchers.hasData(hasHost("chromium.googlesource.com")),
+                IntentMatchers.hasData(
+                        hasPath("/chromium/src/+/HEAD/android_webview/docs/developer-ui.md"))));
     }
 }

@@ -39,8 +39,6 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="1873233029667955273">Google Chrome er ekki sjálfgefinn vafri</translation>
 <translation id="1874309113135274312">Google Chrome Beta (mDNS-inn)</translation>
 <translation id="1877026089748256423">Chrome er úrelt</translation>
-<translation id="1900795423379050516">Ef stilling sést ekki á þessari síðu skaltu athuga <ph name="LINK_BEGIN" />
-      stillingar Chrome vafrans<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Leyfa innskráningu í Chrome</translation>
 <translation id="2063848847527508675">Endurræsa þarf Chrome OS til að nota uppfærsluna.</translation>
 <translation id="2094919256425865063">Viltu samt loka Chrome?</translation>
@@ -116,6 +114,7 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="4251615635259297716">Tengja Chrome gögnin þín við þennan reikning?</translation>
 <translation id="4281844954008187215">Þjónustuskilmálar</translation>
 <translation id="4293420128516039005">Skráðu þig inn til að samstilla Chrome í tækjunum þínum og gera það að þínu</translation>
+<translation id="4325083532956419387">Útgáfa Chrome OS</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-inn)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome getur veitt þér vernd gegn öryggisbrotum, hættulegum viðbótum og fleira</translation>

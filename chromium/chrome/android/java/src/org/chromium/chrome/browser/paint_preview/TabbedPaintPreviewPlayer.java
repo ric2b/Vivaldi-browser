@@ -4,11 +4,16 @@
 
 package org.chromium.chrome.browser.paint_preview;
 
-import org.chromium.base.Callback;
+import android.view.View;
+
+import androidx.annotation.Nullable;
+
+import org.chromium.base.UserData;
 import org.chromium.chrome.browser.paint_preview.services.PaintPreviewTabService;
 import org.chromium.chrome.browser.paint_preview.services.PaintPreviewTabServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
+import org.chromium.chrome.browser.tab.TabViewProvider;
 import org.chromium.components.paintpreview.player.PlayerManager;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.url.GURL;
@@ -17,66 +22,99 @@ import org.chromium.url.GURL;
  * Responsible for checking for and displaying Paint Previews that are associated with a
  * {@link Tab} by overlaying the content view.
  */
-public class TabbedPaintPreviewPlayer {
+public class TabbedPaintPreviewPlayer implements TabViewProvider, UserData {
+    public static final Class<TabbedPaintPreviewPlayer> USER_DATA_KEY =
+            TabbedPaintPreviewPlayer.class;
+
     private Tab mTab;
     private PaintPreviewTabService mPaintPreviewTabService;
     private PlayerManager mPlayerManager;
+    private Runnable mOnDismissed;
+    private Boolean mInitializing;
+
+    public static TabbedPaintPreviewPlayer get(Tab tab) {
+        if (tab.getUserDataHost().getUserData(USER_DATA_KEY) == null) {
+            tab.getUserDataHost().setUserData(USER_DATA_KEY, new TabbedPaintPreviewPlayer(tab));
+        }
+        return tab.getUserDataHost().getUserData(USER_DATA_KEY);
+    }
+
+    private TabbedPaintPreviewPlayer(Tab tab) {
+        mTab = tab;
+        mPaintPreviewTabService = PaintPreviewTabServiceFactory.getServiceInstance();
+    }
 
     /**
-     * Shows a Paint Preview for the provided tab if it exists.
-     * @param tab The tab to show.
-     * @param shownCallback returns true once the Paint Preview is shown or false if showing failed.
-     * @return a boolean indicating whether a Paint Preview exists for the tab.
+     * Shows a Paint Preview for the provided tab if it exists and has not been displayed for this
+     * Tab before.
+     * @param onShown The callback for when the Paint Preview is shown.
+     * @param onDismissed The callback for when the Paint Preview is dismissed.
+     * @return Whether the Paint Preview started to initialize or is already initializating.
+     * Note that if the Paint Preview is already showing, this will return false.
      */
-    public boolean showIfExistsForTab(Tab tab, Callback<Boolean> shownCallback) {
-        if (mTab != null) removePaintPreview();
-
-        mTab = tab;
-        if (mPaintPreviewTabService == null) {
-            mPaintPreviewTabService = PaintPreviewTabServiceFactory.getServiceInstance();
-        }
+    public boolean maybeShow(@Nullable Runnable onShown, @Nullable Runnable onDismissed) {
+        if (mInitializing != null) return mInitializing;
 
         // Check if a capture exists. This is a quick check using a cache.
-        boolean hasCapture = mPaintPreviewTabService.hasCaptureForTab(tab.getId());
-        if (hasCapture) {
-            mPlayerManager = new PlayerManager(mTab.getUrl(), mTab.getContext(),
-                    mPaintPreviewTabService, String.valueOf(mTab.getId()),
-                    TabbedPaintPreviewPlayer.this::onLinkClicked, safeToShow -> {
-                        addPlayerView(safeToShow, shownCallback);
-                    }, TabThemeColorHelper.getBackgroundColor(mTab));
-        }
+        boolean hasCapture = mPaintPreviewTabService.hasCaptureForTab(mTab.getId());
+        mInitializing = hasCapture;
+        if (!hasCapture) return false;
 
-        return hasCapture;
+        mPlayerManager = new PlayerManager(mTab.getUrl(), mTab.getContext(),
+                mPaintPreviewTabService, String.valueOf(mTab.getId()), this::onLinkClicked,
+                this::removePaintPreview, () -> {
+                    mInitializing = false;
+                    onShown.run();
+                }, TabThemeColorHelper.getBackgroundColor(mTab), this::removePaintPreview,
+                /*ignoreInitialScrollOffset=*/false);
+        mOnDismissed = onDismissed;
+        mTab.getTabViewManager().addTabViewProvider(this);
+        return true;
     }
 
     /**
      * Removes the view containing the Paint Preview from the most recently shown {@link Tab}. Does
      * nothing if there is no view showing.
      */
-    public void removePaintPreview() {
+    private void removePaintPreview() {
+        mOnDismissed = null;
+        mInitializing = false;
         if (mTab == null || mPlayerManager == null) return;
 
-        mTab.getContentView().removeView(mPlayerManager.getView());
+        mTab.getTabViewManager().removeTabViewProvider(this);
         mPlayerManager.destroy();
         mPlayerManager = null;
-        mTab = null;
     }
 
-    private void addPlayerView(boolean safeToShow, Callback<Boolean> shownCallback) {
-        if (safeToShow) {
-            mTab.getContentView().addView(mPlayerManager.getView());
-        } else {
-            mTab = null;
-            mPlayerManager = null;
-        }
-
-        shownCallback.onResult(safeToShow);
+    public boolean isShowing() {
+        return mTab.getTabViewManager().isShowing(this);
     }
 
     private void onLinkClicked(GURL url) {
         if (mTab == null || !url.isValid() || url.isEmpty()) return;
 
-        mTab.loadUrl(new LoadUrlParams(url.getSpec()));
         removePaintPreview();
+        mTab.loadUrl(new LoadUrlParams(url.getSpec()));
+    }
+
+    @Override
+    public int getTabViewProviderType() {
+        return Type.PAINT_PREVIEW;
+    }
+
+    @Override
+    public View getView() {
+        return mPlayerManager == null ? null : mPlayerManager.getView();
+    }
+
+    @Override
+    public void onHidden() {
+        if (mOnDismissed != null) mOnDismissed.run();
+    }
+
+    @Override
+    public void destroy() {
+        removePaintPreview();
+        mTab = null;
     }
 }

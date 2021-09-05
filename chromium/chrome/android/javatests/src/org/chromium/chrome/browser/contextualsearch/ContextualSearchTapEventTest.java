@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.contextualsearch;
 
 import android.content.Context;
-import android.support.test.filters.SmallTest;
 import android.widget.LinearLayout;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,7 +39,6 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.TestSelectionPopupController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
-import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.touch_selection.SelectionEventType;
@@ -100,10 +100,10 @@ public class ContextualSearchTapEventTest {
             super(activity, null);
             setSelectionController(new MockCSSelectionController(activity, this));
             WebContents webContents = WebContentsFactory.createWebContents(false, false);
-            ContentView cv = ContentView.createContentView(activity, webContents);
+            ContentView cv = ContentView.createContentView(
+                    activity, null /* eventOffsetHandler */, webContents);
             webContents.initialize(null, ViewAndroidDelegate.createBasicDelegate(cv), null,
-                    new ActivityWindowAndroid(activity),
-                    WebContents.createDefaultInternalsHolder());
+                    activity.getWindowAndroid(), WebContents.createDefaultInternalsHolder());
             SelectionPopupController selectionPopupController =
                     WebContentsUtils.createSelectionPopupController(webContents);
             selectionPopupController.setSelectionClient(this.getContextualSearchSelectionClient());

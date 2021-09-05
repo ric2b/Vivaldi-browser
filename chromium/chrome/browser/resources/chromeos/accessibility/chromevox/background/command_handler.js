@@ -49,10 +49,10 @@ CommandHandler.smartStickyMode_ = new SmartStickyMode();
  * @return {boolean} True if the command should propagate.
  */
 CommandHandler.onCommand = function(command) {
-  // Check for a command disallowed in incognito contexts and kiosk.
+  // Check for a command denied in incognito contexts and kiosk.
   if ((CommandHandler.isIncognito_ || CommandHandler.isKioskSession_) &&
-      CommandStore.CMD_WHITELIST[command] &&
-      CommandStore.CMD_WHITELIST[command].disallowOOBE) {
+      CommandStore.CMD_ALLOWLIST[command] &&
+      CommandStore.CMD_ALLOWLIST[command].denyOOBE) {
     return true;
   }
 
@@ -201,8 +201,8 @@ CommandHandler.onCommand = function(command) {
       return false;
     case 'reportIssue':
       let url = 'https://code.google.com/p/chromium/issues/entry?' +
-          'labels=Type-Bug,Pri-2,cvox2,OS-Chrome&' +
-          'components=UI>accessibility&' +
+          'labels=Type-Bug,Pri-2,OS-Chrome&' +
+          'components=OS>Accessibility>ChromeVox&' +
           'description=';
 
       const description = {};
@@ -1333,7 +1333,7 @@ CommandHandler.viewGraphicAsBraille_ = function(current) {
   CommandHandler.imageNode_ = imageNode;
   if (imageNode.imageDataUrl) {
     const event = new CustomAutomationEvent(
-        EventType.IMAGE_FRAME_UPDATED, imageNode, 'page');
+        EventType.IMAGE_FRAME_UPDATED, imageNode, 'page', []);
     CommandHandler.onImageFrameUpdated_(event);
   } else {
     imageNode.getImageData(0, 0);

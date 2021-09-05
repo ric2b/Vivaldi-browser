@@ -4,6 +4,8 @@
 
 package org.chromium.weblayer_private.interfaces;
 
+import java.util.List;
+
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFindInPageCallbackClient;
@@ -13,6 +15,7 @@ import org.chromium.weblayer_private.interfaces.INavigationController;
 import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ITabClient;
+import org.chromium.weblayer_private.interfaces.IWebMessageCallbackClient;
 
 interface ITab {
   void setClient(in ITabClient client) = 0;
@@ -51,4 +54,16 @@ interface ITab {
 
   // Added in 84
   void captureScreenShot(in float scale, in IObjectWrapper resultCallback) = 16;
+
+  // Added in 85
+  boolean setData(in Map data) = 17;
+
+  // Added in 85
+  Map getData() = 18;
+  void registerWebMessageCallback(in String jsObjectName,
+                                  in List<String> allowedOrigins,
+                                  in IWebMessageCallbackClient client) = 19;
+  void unregisterWebMessageCallback(in String jsObjectName) = 20;
+  boolean canTranslate() = 21;
+  void showTranslateUi() = 22;
 }

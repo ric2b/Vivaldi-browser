@@ -16,7 +16,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/google_chrome_strings.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
@@ -51,7 +50,9 @@ void ProfilePicker::Hide() {
 
 ProfilePickerView::ProfilePickerView()
     : web_view_(nullptr), initialized_(InitState::kNotInitialized) {
+  SetHasWindowSizeControls(true);
   SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetTitle(IDS_PRODUCT_NAME);
   set_use_custom_frame(false);
   // TODO(crbug.com/1063856): Add |RecordDialogCreation|.
 }
@@ -117,22 +118,6 @@ void ProfilePickerView::Init(Profile* system_profile) {
 
 gfx::Size ProfilePickerView::CalculatePreferredSize() const {
   return gfx::Size(kWindowWidth, kWindowHeight);
-}
-
-bool ProfilePickerView::CanResize() const {
-  return true;
-}
-
-bool ProfilePickerView::CanMaximize() const {
-  return true;
-}
-
-bool ProfilePickerView::CanMinimize() const {
-  return true;
-}
-
-base::string16 ProfilePickerView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
 }
 
 void ProfilePickerView::WindowClosing() {

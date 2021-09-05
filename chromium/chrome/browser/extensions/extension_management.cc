@@ -21,8 +21,8 @@
 #include "chrome/browser/extensions/extension_management_internal.h"
 #include "chrome/browser/extensions/external_policy_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
-#include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
-#include "chrome/browser/extensions/forced_extensions/installation_reporter_factory.h"
+#include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
+#include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
 #include "chrome/browser/extensions/permissions_based_management_policy_provider.h"
 #include "chrome/browser/extensions/standard_management_policy_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -217,16 +217,22 @@ bool ExtensionManagement::IsAllowedManifestType(
 
 APIPermissionSet ExtensionManagement::GetBlockedAPIPermissions(
     const Extension* extension) const {
+  std::string update_url;
+  if (extension->manifest()->GetString(manifest_keys::kUpdateURL, &update_url))
+    return GetBlockedAPIPermissions(extension->id(), update_url);
+  return GetBlockedAPIPermissions(extension->id(), std::string());
+}
+
+APIPermissionSet ExtensionManagement::GetBlockedAPIPermissions(
+    const ExtensionId& extension_id,
+    const std::string& update_url) const {
   // Fetch per-extension blocked permissions setting.
-  auto iter_id = settings_by_id_.find(extension->id());
+  auto iter_id = settings_by_id_.find(extension_id);
 
   // Fetch per-update-url blocked permissions setting.
-  std::string update_url;
   auto iter_update_url = settings_by_update_url_.end();
-  if (extension->manifest()->GetString(manifest_keys::kUpdateURL,
-                                       &update_url)) {
+  if (!update_url.empty())
     iter_update_url = settings_by_update_url_.find(update_url);
-  }
 
   if (iter_id != settings_by_id_.end() &&
       iter_update_url != settings_by_update_url_.end()) {
@@ -295,7 +301,18 @@ std::unique_ptr<const PermissionSet> ExtensionManagement::GetBlockedPermissions(
 bool ExtensionManagement::IsPermissionSetAllowed(
     const Extension* extension,
     const PermissionSet& perms) const {
-  for (auto* blocked_api : GetBlockedAPIPermissions(extension)) {
+  std::string update_url;
+  if (extension->manifest()->GetString(manifest_keys::kUpdateURL, &update_url))
+    return IsPermissionSetAllowed(extension->id(), update_url, perms);
+  return IsPermissionSetAllowed(extension->id(), std::string(), perms);
+}
+
+bool ExtensionManagement::IsPermissionSetAllowed(
+    const ExtensionId& extension_id,
+    const std::string& update_url,
+    const PermissionSet& perms) const {
+  for (const extensions::APIPermission* blocked_api :
+       GetBlockedAPIPermissions(extension_id, update_url)) {
     if (perms.HasAPIPermission(blocked_api->id()))
       return false;
   }
@@ -475,8 +492,8 @@ void ExtensionManagement::Refresh() {
       } else {
         std::vector<std::string> extension_ids = base::SplitString(
             iter.key(), ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-        InstallationReporter* installation_reporter =
-            InstallationReporter::Get(profile_);
+        InstallStageTracker* install_stage_tracker =
+            InstallStageTracker::Get(profile_);
         for (const auto& extension_id : extension_ids) {
           if (!crx_file::id_util::IdIsValid(extension_id)) {
             SYSLOG(WARNING) << "Invalid extension ID : " << extension_id << ".";
@@ -486,8 +503,8 @@ void ExtensionManagement::Refresh() {
           if (!by_id->Parse(subdict,
                             internal::IndividualSettings::SCOPE_INDIVIDUAL)) {
             settings_by_id_.erase(extension_id);
-            installation_reporter->ReportFailure(
-                extension_id, InstallationReporter::FailureReason::
+            install_stage_tracker->ReportFailure(
+                extension_id, InstallStageTracker::FailureReason::
                                   MALFORMED_EXTENSION_SETTINGS);
             SYSLOG(WARNING) << "Malformed Extension Management settings for "
                             << extension_id << ".";
@@ -521,16 +538,16 @@ void ExtensionManagement::OnExtensionPrefChanged() {
 }
 
 void ExtensionManagement::NotifyExtensionManagementPrefChanged() {
-  InstallationReporter* installation_reporter =
-      InstallationReporter::Get(profile_);
+  InstallStageTracker* install_stage_tracker =
+      InstallStageTracker::Get(profile_);
   for (const auto& entry : settings_by_id_) {
     if (entry.second->installation_mode == INSTALLATION_FORCED) {
-      installation_reporter->ReportInstallationStage(
-          entry.first, InstallationReporter::Stage::NOTIFIED_FROM_MANAGEMENT);
+      install_stage_tracker->ReportInstallationStage(
+          entry.first, InstallStageTracker::Stage::NOTIFIED_FROM_MANAGEMENT);
     } else {
-      installation_reporter->ReportInstallationStage(
+      install_stage_tracker->ReportInstallationStage(
           entry.first,
-          InstallationReporter::Stage::NOTIFIED_FROM_MANAGEMENT_NOT_FORCED);
+          InstallStageTracker::Stage::NOTIFIED_FROM_MANAGEMENT_NOT_FORCED);
     }
   }
   for (auto& observer : observer_list_)
@@ -556,13 +573,13 @@ void ExtensionManagement::UpdateForcedExtensions(
     return;
 
   std::string update_url;
-  InstallationReporter* installation_reporter =
-      InstallationReporter::Get(profile_);
+  InstallStageTracker* install_stage_tracker =
+      InstallStageTracker::Get(profile_);
   for (base::DictionaryValue::Iterator it(*extension_dict); !it.IsAtEnd();
        it.Advance()) {
     if (!crx_file::id_util::IdIsValid(it.key())) {
-      installation_reporter->ReportFailure(
-          it.key(), InstallationReporter::FailureReason::INVALID_ID);
+      install_stage_tracker->ReportFailure(
+          it.key(), InstallStageTracker::FailureReason::INVALID_ID);
       continue;
     }
     const base::DictionaryValue* dict_value = nullptr;
@@ -572,11 +589,11 @@ void ExtensionManagement::UpdateForcedExtensions(
       internal::IndividualSettings* by_id = AccessById(it.key());
       by_id->installation_mode = INSTALLATION_FORCED;
       by_id->update_url = update_url;
-      installation_reporter->ReportInstallationStage(
-          it.key(), InstallationReporter::Stage::CREATED);
+      install_stage_tracker->ReportInstallationStage(
+          it.key(), InstallStageTracker::Stage::CREATED);
     } else {
-      installation_reporter->ReportFailure(
-          it.key(), InstallationReporter::FailureReason::NO_UPDATE_URL);
+      install_stage_tracker->ReportFailure(
+          it.key(), InstallStageTracker::FailureReason::NO_UPDATE_URL);
     }
   }
 }
@@ -620,7 +637,7 @@ ExtensionManagementFactory::ExtensionManagementFactory()
     : BrowserContextKeyedServiceFactory(
           "ExtensionManagement",
           BrowserContextDependencyManager::GetInstance()) {
-  DependsOn(InstallationReporterFactory::GetInstance());
+  DependsOn(InstallStageTrackerFactory::GetInstance());
 }
 
 ExtensionManagementFactory::~ExtensionManagementFactory() {

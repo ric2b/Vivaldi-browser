@@ -13,10 +13,11 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 import android.util.Base64;
+
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -28,7 +29,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -97,6 +97,10 @@ public class UrlOverridingTest {
             BASE_PATH + "navigation_from_java_redirection.html";
     private static final String NAVIGATION_TO_CCT_FROM_INTENT_URI =
             BASE_PATH + "navigation_to_cct_via_intent_uri.html";
+    private static final String NAVIGATION_TO_FILE_SCHEME_FROM_INTENT_URI =
+            BASE_PATH + "navigation_to_file_scheme_via_intent_uri.html";
+    private static final String SUBFRAME_REDIRECT_WITH_PLAY_FALLBACK =
+            BASE_PATH + "subframe_navigation_with_play_fallback.html";
 
     private static class TestTabObserver extends EmptyTabObserver {
         private final CallbackHelper mFinishCallback;
@@ -298,7 +302,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromTimer() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PAGE), false, false);
@@ -306,7 +309,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromTimerInSubFrame() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -315,7 +317,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromUserGesture() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -332,7 +333,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromXHRCallback() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -341,7 +341,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromXHRCallbackInSubFrame() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -350,7 +349,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromXHRCallbackAndShortTimeout() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -360,7 +358,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationFromXHRCallbackAndLongTimeout() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -370,7 +367,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationWithFallbackURL() {
         mActivityTestRule.startMainActivityOnBlankPage();
         String fallbackUrl = mTestServer.getURL(FALLBACK_LANDING_PATH);
@@ -385,7 +381,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNavigationWithFallbackURLInSubFrame() {
         mActivityTestRule.startMainActivityOnBlankPage();
         // The replace_text parameters for NAVIGATION_WITH_FALLBACK_URL_PAGE, which is loaded in
@@ -414,7 +409,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testOpenWindowFromUserGesture() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_USER_GESTURE_PAGE), true,
@@ -423,7 +417,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testOpenWindowFromLinkUserGesture() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_LINK_USER_GESTURE_PAGE),
@@ -432,7 +425,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testOpenWindowFromSvgUserGesture() {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_SVG_USER_GESTURE_PAGE), true,
@@ -441,7 +433,6 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testRedirectionFromIntent() {
         // Test cold-start.
         Intent intent = new Intent(Intent.ACTION_VIEW,
@@ -489,5 +480,46 @@ public class UrlOverridingTest {
                         Base64.URL_SAFE));
 
         loadUrlAndWaitForIntentUrl(originalUrl, true, false, false, fallbackUrl, true);
+    }
+
+    @Test
+    @LargeTest
+    public void testIntentURIWithFileSchemeDoesNothing() throws TimeoutException {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        String originalUrl = mTestServer.getURL(NAVIGATION_TO_FILE_SCHEME_FROM_INTENT_URI);
+        loadUrlAndWaitForIntentUrl(originalUrl, true, false, false, null, false, "scheme_file");
+    }
+
+    @Test
+    @LargeTest
+    public void testIntentURIWithMixedCaseFileSchemeDoesNothing() throws TimeoutException {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        String originalUrl = mTestServer.getURL(NAVIGATION_TO_FILE_SCHEME_FROM_INTENT_URI);
+        loadUrlAndWaitForIntentUrl(
+                originalUrl, true, false, false, null, false, "scheme_mixed_case_file");
+    }
+
+    @Test
+    @LargeTest
+    public void testIntentURIWithNoSchemeDoesNothing() throws TimeoutException {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        String originalUrl = mTestServer.getURL(NAVIGATION_TO_FILE_SCHEME_FROM_INTENT_URI);
+        loadUrlAndWaitForIntentUrl(originalUrl, true, false, false, null, false, "null_scheme");
+    }
+
+    @Test
+    @LargeTest
+    public void testIntentURIWithEmptySchemeDoesNothing() throws TimeoutException {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        String originalUrl = mTestServer.getURL(NAVIGATION_TO_FILE_SCHEME_FROM_INTENT_URI);
+        loadUrlAndWaitForIntentUrl(originalUrl, true, false, false, null, false, "empty_scheme");
+    }
+
+    @Test
+    @LargeTest
+    public void testSubframeLoadCannotLaunchPlayApp() throws TimeoutException {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        loadUrlAndWaitForIntentUrl(
+                mTestServer.getURL(SUBFRAME_REDIRECT_WITH_PLAY_FALLBACK), false, false);
     }
 }

@@ -23,6 +23,7 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate_utils_win.h"
+#include "ui/accessibility/platform/uia_registrar_win.h"
 #include "ui/base/win/atl_module.h"
 
 namespace content {
@@ -95,24 +96,11 @@ void BrowserAccessibilityManagerWin::FireBlinkEvent(
       if (node->GetData().IsInvocable())
         FireUiaAccessibilityEvent(UIA_Invoke_InvokedEventId, node);
       break;
-    case ax::mojom::Event::kEndOfTest: {
-      if (::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) {
-        // Event tests use kEndOfTest as a sentinel to mark the end of the test.
-        Microsoft::WRL::ComPtr<IUIAutomationRegistrar> registrar;
-        CoCreateInstance(CLSID_CUIAutomationRegistrar, NULL,
-                         CLSCTX_INPROC_SERVER, IID_IUIAutomationRegistrar,
-                         &registrar);
-        CHECK(registrar.Get());
-        UIAutomationEventInfo custom_event = {kUiaTestCompleteSentinelGuid,
-                                              kUiaTestCompleteSentinel};
-        EVENTID custom_event_id = 0;
-        CHECK(SUCCEEDED(
-            registrar->RegisterEvent(&custom_event, &custom_event_id)));
-
-        FireUiaAccessibilityEvent(custom_event_id, node);
-      }
+    case ax::mojom::Event::kEndOfTest:
+      // Event tests use kEndOfTest as a sentinel to mark the end of the test.
+      FireUiaAccessibilityEvent(
+          ui::UiaRegistrarWin::GetInstance().GetUiaTestCompleteEventId(), node);
       break;
-    }
     case ax::mojom::Event::kLocationChanged:
       FireWinAccessibilityEvent(IA2_EVENT_VISIBLE_DATA_CHANGED, node);
       break;
@@ -171,8 +159,8 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       aria_properties_events_.insert(node);
       break;
     case ui::AXEventGenerator::Event::CHILDREN_CHANGED: {
-      // If this node is ignored, notify from the platform parent if available,
-      // since it will be unignored.
+      // If this node is ignored, fire the event on the platform parent since
+      // ignored nodes cannot raise events.
       BrowserAccessibility* target_node =
           node->IsIgnored() ? node->PlatformGetParent() : node;
       if (target_node) {
@@ -264,17 +252,6 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       FireUiaAccessibilityEvent(UIA_LiveRegionChangedEventId, node);
       break;
     case ui::AXEventGenerator::Event::LIVE_REGION_CHANGED:
-      // This will force ATs that synchronously call get_newText (e.g., NVDA) to
-      // read the entire live region hypertext.
-      ToBrowserAccessibilityWin(node)->GetCOM()->ForceNewHypertext();
-      // TODO(accessibility) Technically this should only be fired if the new
-      // text is non-empty. Also, IA2_EVENT_TEXT_REMOVED should be fired if
-      // there was non-empty old text. However, this does not known to affect
-      // any current screen reader behavior either way. It could affect
-      // the aria-relevant="removals" case, but that in general is poorly
-      // supported markup across browser-AT combinations, and not recommended.
-      FireWinAccessibilityEvent(IA2_EVENT_TEXT_INSERTED, node);
-
       // This event is redundant with the IA2_EVENT_TEXT_INSERTED events;
       // however, JAWS 2018 and earlier do not process the text inserted
       // events when "virtual cursor mode" is turned off (Insert+Z).
@@ -310,11 +287,9 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       break;
     case ui::AXEventGenerator::Event::NAME_CHANGED:
       FireUiaPropertyChangedEvent(UIA_NamePropertyId, node);
-      // Only fire name changes when the name comes from an attribute, and is
-      // not contained within an active live-region; otherwise name changes are
-      // redundant with text removed/inserted events.
-      if (node->GetData().GetNameFrom() != ax::mojom::NameFrom::kContents &&
-          !node->GetData().IsContainedInActiveLiveRegion())
+      // Only fire name changes when the name comes from an attribute, otherwise
+      // name changes are redundant with text removed/inserted events.
+      if (node->GetData().GetNameFrom() != ax::mojom::NameFrom::kContents)
         FireWinAccessibilityEvent(EVENT_OBJECT_NAMECHANGE, node);
       break;
     case ui::AXEventGenerator::Event::PLACEHOLDER_CHANGED:
@@ -424,10 +399,13 @@ void BrowserAccessibilityManagerWin::FireWinAccessibilityEvent(
   // Suppress events when |IGNORED_CHANGED| except for related SHOW / HIDE.
   // Also include MENUPOPUPSTART / MENUPOPUPEND since a change in the ignored
   // state may show / hide a popup by exposing it to the tree or not.
+  // Also include focus events since a node may become visible at the same time
+  // it receives focus It's never good to suppress a po
   if (base::Contains(ignored_changed_nodes_, node)) {
     switch (win_event_type) {
       case EVENT_OBJECT_HIDE:
       case EVENT_OBJECT_SHOW:
+      case EVENT_OBJECT_FOCUS:
       case EVENT_SYSTEM_MENUPOPUPEND:
       case EVENT_SYSTEM_MENUPOPUPSTART:
         break;
@@ -499,7 +477,7 @@ void BrowserAccessibilityManagerWin::FireUiaPropertyChangedEvent(
   auto* provider = ToBrowserAccessibilityWin(node)->GetCOM();
   base::win::ScopedVariant new_value;
   if (SUCCEEDED(
-          provider->GetPropertyValue(uia_property, new_value.Receive()))) {
+          provider->GetPropertyValueImpl(uia_property, new_value.Receive()))) {
     ::UiaRaiseAutomationPropertyChangedEvent(provider, uia_property, old_value,
                                              new_value);
   }

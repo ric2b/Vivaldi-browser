@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 37
+// Next MinVersion: 39
 
 module arc.mojom;
 
@@ -82,6 +82,7 @@ struct IntentFilter {
   [MinVersion=10] array<PatternMatcher>? data_paths;
   [MinVersion=10] array<PatternMatcher>? deprecated_data_scheme_specific_parts;
   [MinVersion=21] string? package_name; // Package which registered the filter.
+  [MinVersion=38] array<string>? mime_types; // Intent filer mime types.
 };
 
 // Describes a package that can handle an intent.
@@ -147,7 +148,7 @@ enum ChromePage {
   ABOUTBLANK,
   ABOUTDOWNLOADS,
   ABOUTHISTORY,
-  CROSTINIDISKRESIZE,
+  DEPRECATED_CROSTINIDISKRESIZE,
   ACCESSIBILITY,
   ACCOUNTMANAGER,
   ANDROIDAPPSDETAILS,
@@ -314,7 +315,7 @@ interface IntentHelperHost {
 };
 
 // Sends intents to ARC on behalf of Chrome.
-// Next method ID: 19
+// Next method ID: 20
 interface IntentHelperInstance {
   // Sets the given package as a preferred package. The next time an ACTION_VIEW
   // intent is sent with a URL that requires disambiguation, instead of opening
@@ -354,10 +355,10 @@ interface IntentHelperInstance {
                                            ActionType action_type);
 
   // DEPRECATED: Please use Init@13 instead.
-  InitDeprecated@0(IntentHelperHost host_ptr);
+  InitDeprecated@0(pending_remote<IntentHelperHost> host_remote);
 
   // Establishes full-duplex communication with the host.
-  [MinVersion=19] Init@13(IntentHelperHost host_ptr) => ();
+  [MinVersion=19] Init@13(pending_remote<IntentHelperHost> host_remote) => ();
 
   // DEPRECATED. Use FileSystemInstance.OpenFileToRead() instead.
   [MinVersion=15] OpenFileToReadDeprecated@12(string url) => (handle? fd);
@@ -413,4 +414,8 @@ interface IntentHelperInstance {
                                         CameraIntentAction action,
                                         array<uint8> data)
       => (bool is_success);
+
+  // Request ARC to send the domain verification status update for all packages
+  // to Chrome OS.
+  [MinVersion=37] RequestDomainVerificationStatusUpdate@19();
 };

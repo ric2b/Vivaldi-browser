@@ -15,49 +15,23 @@ namespace syncer {
 FakeSyncEncryptionHandler::FakeSyncEncryptionHandler()
     : encrypted_types_(AlwaysEncryptedUserTypes()),
       encrypt_everything_(false),
-      passphrase_type_(PassphraseType::kImplicitPassphrase) {}
-FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() {}
+      passphrase_type_(PassphraseType::kImplicitPassphrase),
+      cryptographer_(CryptographerImpl::CreateEmpty()) {}
+
+FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() = default;
 
 bool FakeSyncEncryptionHandler::Init() {
   // Set up a basic cryptographer.
-  KeyParams keystore_params = {KeyDerivationParams::CreateForPbkdf2(),
-                               "keystore_key"};
-  cryptographer_.AddKey(keystore_params);
+  const std::string keystore_key = "keystore_key";
+  cryptographer_->EmplaceKey(keystore_key,
+                             KeyDerivationParams::CreateForPbkdf2());
   return true;
 }
 
 bool FakeSyncEncryptionHandler::ApplyNigoriUpdate(
     const sync_pb::NigoriSpecifics& nigori,
     syncable::BaseTransaction* const trans) {
-  if (nigori.encrypt_everything())
-    EnableEncryptEverything();
-  if (nigori.keybag_is_frozen())
-    passphrase_type_ = PassphraseType::kCustomPassphrase;
-
-  // TODO(zea): consider adding fake support for migration.
-  if (cryptographer_.CanDecrypt(nigori.encryption_keybag()))
-    cryptographer_.InstallKeys(nigori.encryption_keybag());
-  else if (nigori.has_encryption_keybag())
-    cryptographer_.SetPendingKeys(nigori.encryption_keybag());
-
-  if (cryptographer_.has_pending_keys()) {
-    DVLOG(1) << "OnPassPhraseRequired Sent";
-    sync_pb::EncryptedData pending_keys = cryptographer_.GetPendingKeys();
-    for (auto& observer : observers_)
-      observer.OnPassphraseRequired(REASON_DECRYPTION,
-                                    KeyDerivationParams::CreateForPbkdf2(),
-                                    pending_keys);
-  } else if (!cryptographer_.CanEncrypt()) {
-    DVLOG(1) << "OnPassphraseRequired sent because cryptographer is not "
-             << "ready";
-    for (auto& observer : observers_) {
-      observer.OnPassphraseRequired(REASON_ENCRYPTION,
-                                    KeyDerivationParams::CreateForPbkdf2(),
-                                    sync_pb::EncryptedData());
-    }
-  }
-
-  return true;
+  return false;
 }
 
 void FakeSyncEncryptionHandler::UpdateNigoriFromEncryptedTypes(
@@ -90,13 +64,7 @@ bool FakeSyncEncryptionHandler::SetKeystoreKeys(
 
 const Cryptographer* FakeSyncEncryptionHandler::GetCryptographer(
     const syncable::BaseTransaction* const trans) const {
-  return &cryptographer_;
-}
-
-const DirectoryCryptographer*
-FakeSyncEncryptionHandler::GetDirectoryCryptographer(
-    const syncable::BaseTransaction* const trans) const {
-  return &cryptographer_;
+  return cryptographer_.get();
 }
 
 ModelTypeSet FakeSyncEncryptionHandler::GetEncryptedTypes(
@@ -151,10 +119,6 @@ base::Time FakeSyncEncryptionHandler::GetKeystoreMigrationTime() const {
 
 KeystoreKeysHandler* FakeSyncEncryptionHandler::GetKeystoreKeysHandler() {
   return this;
-}
-
-DirectoryCryptographer* FakeSyncEncryptionHandler::GetMutableCryptographer() {
-  return &cryptographer_;
 }
 
 }  // namespace syncer

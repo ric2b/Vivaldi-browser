@@ -323,6 +323,41 @@ def check_css_globally_unique(repo_root, paths):
     return errors
 
 
+def check_unique_testharness_basenames(repo_root, paths):
+    # type: (str, List[str]) -> List[rules.Error]
+    """
+    Checks that all testharness files have unique basename paths.
+
+    The 'basename path' refers to the entire path excluding the extension. For
+    example, 'foo/bar/baz.html' and 'foo/bar/baz.xhtml' have the same basename
+    path, but 'foo/bar/baz.html' and 'foo/qux/baz.html' do not.
+
+    Testharness files with identical basenames have caused issues in downstream
+    infrastructure (see https://github.com/web-platform-tests/wpt/issues/7570),
+    and may cause confusion in general.
+
+    :param repo_root: the repository root
+    :param paths: list of all paths
+    :returns: a list of errors found in ``paths``
+    """
+
+    errors = []
+    file_dict = defaultdict(list)
+    for path in paths:
+        source_file = SourceFile(repo_root, path, "/")
+        if source_file.type != "testharness":
+            continue
+        file_name, file_extension = os.path.splitext(path)
+        file_dict[file_name].append(file_extension)
+    for k, v in file_dict.items():
+        if len(v) == 1:
+            continue
+        context = (', '.join(v),)
+        for extension in v:
+            errors.append(rules.DuplicateBasenamePath.error(k + extension, context))
+    return errors
+
+
 def parse_ignorelist(f):
     # type: (IO[bytes]) -> Tuple[Ignorelist, Set[Text]]
     """
@@ -432,6 +467,7 @@ def check_parsed(repo_root, path, f):
 
         if (source_file.type != "support" and
             not source_file.name_is_reference and
+            not source_file.name_is_tentative and
             not source_file.spec_links):
             return [rules.MissingLink.error(path)]
 
@@ -617,7 +653,7 @@ broken_python_metadata = re.compile(br"#\s*META:")
 
 def check_global_metadata(value):
     # type: (str) -> Iterable[Tuple[Type[rules.Rule], Tuple[Any, ...]]]
-    global_values = {item.strip() for item in value.split(b",") if item.strip()}
+    global_values = {item.strip().decode("utf8") for item in value.split(b",") if item.strip()}
 
     # TODO: this could check for duplicates and such
     for global_value in global_values:
@@ -930,7 +966,7 @@ def lint(repo_root, paths, output_format, ignore_glob=str()):
 
 path_lints = [check_file_type, check_path_length, check_worker_collision, check_ahem_copy,
               check_gitignore_file]
-all_paths_lints = [check_css_globally_unique]
+all_paths_lints = [check_css_globally_unique, check_unique_testharness_basenames]
 file_lints = [check_regexp_line, check_parsed, check_python_ast, check_script_metadata,
               check_ahem_system_font]
 

@@ -16,7 +16,7 @@ const char kAutomaticSettingsResetLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ui_automatic_settings_reset";
 
 const char kAdvancedProtectionDownloadLearnMoreURL[] =
-    "https://support.google.com/accounts/?p=ap_faq";
+    "https://support.google.com/accounts/accounts?p=safe-browsing";
 
 const char kBluetoothAdapterOffHelpURL[] =
     "https://support.google.com/chrome?p=bluetooth";
@@ -280,6 +280,8 @@ const char kUpgradeHelpCenterBaseURL[] =
 const char kWhoIsMyAdministratorHelpURL[] =
     "https://support.google.com/chrome?p=your_administrator";
 
+const char kChromeFlashRoadmapURL[] = "https://www.chromium.org/flash-roadmap/";
+
 #if defined(OS_ANDROID)
 const char kAndroidAppScheme[] = "android-app";
 #endif
@@ -329,9 +331,6 @@ const char kChromeOSGestureEducationHelpURL[] =
 const char kChromePaletteHelpURL[] =
     "https://support.google.com/chromebook?p=stylus_help";
 
-const char kClassroomSigninLearnMoreURL[] =
-    "https://support.google.com/chromebook/?p=familylink_accounts";
-
 const char kCrosScheme[] = "cros";
 
 const char kCupsPrintLearnMoreURL[] =
@@ -379,9 +378,6 @@ const char kLinuxAppsLearnMoreURL[] =
 const char kLinuxExportImportHelpURL[] =
     "https://support.google.com/chromebook?p=linux_backup_restore";
 
-const char kLinuxCreditsPath[] =
-    "/opt/google/chrome/resources/linux_credits.html";
-
 const char kNaturalScrollHelpURL[] =
     "https://support.google.com/chromebook/?p=simple_scrolling";
 
@@ -404,6 +400,9 @@ const char kTimeZoneSettingsLearnMoreURL[] =
 
 const char kSmbSharesLearnMoreURL[] =
     "https://support.google.com/chromebook?p=network_file_shares";
+
+const char kSuggestedContentLearnMoreURL[] =
+    "https://support.google.com/chromebook/?p=explorecontent";
 
 const char kTabletModeGesturesLearnMoreURL[] =
     "https://support.google.com/chromebook?p=tablet_mode_gestures";

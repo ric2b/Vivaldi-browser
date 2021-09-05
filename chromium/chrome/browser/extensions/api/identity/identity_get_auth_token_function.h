@@ -28,6 +28,7 @@ struct AccessTokenInfo;
 }  // namespace signin
 
 namespace extensions {
+class IdentityGetAuthTokenError;
 
 // identity.getAuthToken fetches an OAuth 2 function for the
 // caller. The request has three sub-flows: non-interactive,
@@ -155,6 +156,11 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   void OnPrimaryAccountSet(
       const CoreAccountInfo& primary_account_info) override;
 
+  // Attempts to show the signin UI after the service auth error if this error
+  // isn't transient.
+  // Returns true iff the signin flow was triggered.
+  bool TryRecoverFromServiceAuthError(const GoogleServiceAuthError& error);
+
   // ExtensionFunction:
   ResponseAction Run() override;
 
@@ -162,7 +168,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   void StartAsyncRun();
   void CompleteAsyncRun(ResponseValue response);
   void CompleteFunctionWithResult(const std::string& access_token);
-  void CompleteFunctionWithError(const std::string& error);
+  void CompleteFunctionWithError(const IdentityGetAuthTokenError& error);
 
   // Whether a signin flow should be initiated in the user's current state.
   bool ShouldStartSigninFlow();
@@ -202,10 +208,6 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   // Checks if there is a master login token to mint tokens for the extension.
   bool HasRefreshTokenForTokenKeyAccount() const;
 
-  // Maps OAuth2 protocol errors to an error message returned to the
-  // developer in chrome.runtime.lastError.
-  std::string MapOAuth2ErrorToDescription(const std::string& error);
-
   std::string GetOAuth2ClientId() const;
 
   // Returns true if extensions are restricted to the primary account.
@@ -231,6 +233,8 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   RemoteConsentResolutionData resolution_data_;
   std::unique_ptr<GaiaRemoteConsentFlow> gaia_remote_consent_flow_;
   std::string consent_result_;
+  // Added for debugging https://crbug.com/1091423.
+  bool remote_consent_approved_ = false;
 
   // Invoked when IdentityAPI is shut down.
   std::unique_ptr<base::CallbackList<void()>::Subscription>

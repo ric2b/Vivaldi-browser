@@ -36,6 +36,8 @@ source_set("adblock_filter") {
     "adblock_known_sources_handler.h",
     "adblock_request_filter.cc",
     "adblock_request_filter.h",
+    "adblock_resources.h",
+    "adblock_resources.cc",
     "adblock_rule_pattern_matcher.cc",
     "adblock_rule_pattern_matcher.h",
     "adblock_rule_service_factory.cc",
@@ -66,6 +68,7 @@ source_set("adblock_filter") {
 
   deps = [
     ":adblock_parser",
+    ":package_ublock_data",
     "//base:base",
     "//base:i18n",
     "//base/util/values:values_util",
@@ -92,5 +95,41 @@ source_set("unit_tests") {
     ":adblock_parser",
      "//base",
     "//testing/gtest",
+  ]
+}
+
+ublock_dir = "//vivaldi/thirdparty/ublock"
+ublock_output = "$root_out_dir/resources/vivaldi/ublock_resources"
+
+copy("ublock_license") {
+  sources = [
+    "$ublock_dir/LICENSE.txt",
+  ]
+  outputs = [
+    "$ublock_output/{{source_file_part}}",
+  ]
+}
+
+action("package_ublock_data") {
+  resources = "$ublock_output/resources.json"
+
+  # Ensures the output directory exists
+  deps= [
+    ":ublock_license"
+  ]
+
+  sources = [
+    ublock_dir,
+  ]
+
+  outputs = [
+    resources
+  ]
+
+  script = "//vivaldi/tools/ublock_resources_packager/ublock_resources_packager.py"
+
+  args = [
+    "--ublock_dir=" + rebase_path(ublock_dir, root_build_dir),
+    "--output=" + rebase_path(resources, root_build_dir)
   ]
 }

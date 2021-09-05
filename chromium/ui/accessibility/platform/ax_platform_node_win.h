@@ -28,6 +28,7 @@
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/accessibility/platform/ax_platform_node_base.h"
 #include "ui/accessibility/platform/ax_platform_text_boundary.h"
+#include "ui/accessibility/platform/ichromeaccessible.h"
 #include "ui/gfx/range/range.h"
 
 // IMPORTANT!
@@ -280,6 +281,11 @@ enum {
   UMA_API_WINDOW_GET_WINDOWVISUALSTATE = 243,
   UMA_API_WINDOW_GET_WINDOWINTERACTIONSTATE = 244,
   UMA_API_WINDOW_GET_ISTOPMOST = 245,
+  UMA_API_ELEMENT_PROVIDER_FROM_POINT = 246,
+  UMA_API_GET_FOCUS = 247,
+  UMA_API_ADVISE_EVENT_ADDED = 248,
+  UMA_API_ADVISE_EVENT_REMOVED = 249,
+  UMA_API_ITEMCONTAINER_FINDITEMBYPROPERTY = 250,
 
   // This must always be the last enum. It's okay for its value to
   // increase, but none of the other enum values may change.
@@ -358,6 +364,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                         public IToggleProvider,
                         public IValueProvider,
                         public IWindowProvider,
+                        public IChromeAccessible,
                         public AXPlatformNodeBase {
   using IDispatchImpl::Invoke;
 
@@ -381,6 +388,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
     COM_INTERFACE_ENTRY(IAccessibleTable2)
     COM_INTERFACE_ENTRY(IAccessibleTableCell)
     COM_INTERFACE_ENTRY(IAccessibleValue)
+    COM_INTERFACE_ENTRY(IChromeAccessible)
     COM_INTERFACE_ENTRY(IExpandCollapseProvider)
     COM_INTERFACE_ENTRY(IGridItemProvider)
     COM_INTERFACE_ENTRY(IGridProvider)
@@ -408,8 +416,6 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // Clear any AXPlatformRelationWin nodes owned by this node.
   void ClearOwnRelations();
 
-  void ForceNewHypertext();
-
   // AXPlatformNode overrides.
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void NotifyAccessibilityEvent(ax::mojom::Event event_type) override;
@@ -417,6 +423,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // AXPlatformNodeBase overrides.
   void Destroy() override;
   base::string16 GetValue() const override;
+  bool IsPlatformCheckable() const override;
 
   //
   // IAccessible methods.
@@ -1023,6 +1030,19 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP ShowContextMenu() override;
 
   //
+  // IChromeAccessible methods.
+  //
+
+  IFACEMETHODIMP get_bulkFetch(BSTR input_json,
+                               LONG request_id,
+                               IChromeAccessibleDelegate* delegate) override;
+
+  IFACEMETHODIMP get_hitTest(LONG screen_physical_pixel_x,
+                             LONG screen_physical_pixel_y,
+                             LONG request_id,
+                             IChromeAccessibleDelegate* delegate) override;
+
+  //
   // IServiceProvider methods.
   //
 
@@ -1045,6 +1065,16 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
 
   // IRawElementProviderSimple support method.
   bool IsPatternProviderSupported(PATTERNID pattern_id);
+
+  // Prefer GetPatternProviderImpl when calling internally. We should avoid
+  // calling external APIs internally as it will cause the histograms to become
+  // innaccurate.
+  HRESULT GetPatternProviderImpl(PATTERNID pattern_id, IUnknown** result);
+
+  // Prefer GetPropertyValueImpl when calling internally. We should avoid
+  // calling external APIs internally as it will cause the histograms to become
+  // innaccurate.
+  HRESULT GetPropertyValueImpl(PROPERTYID property_id, VARIANT* result);
 
   // Helper to return the runtime id (without going through a SAFEARRAY)
   using RuntimeIdArray = std::array<int, 2>;
@@ -1123,7 +1153,6 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   std::vector<Microsoft::WRL::ComPtr<AXPlatformRelationWin>> relations_;
 
   AXHypertext old_hypertext_;
-  bool force_new_hypertext_;
 
   // These protected methods are still used by BrowserAccessibilityComWin. At
   // some point post conversion, we can probably move these to be private

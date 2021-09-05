@@ -20,7 +20,6 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/media_router/presentation_receiver_window_delegate.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/ui/views/media_router/presentation_receiver_window_frame.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
 #include "content/public/browser/web_contents.h"
@@ -111,6 +111,7 @@ PresentationReceiverWindowView::PresentationReceiverWindowView(
                                                  content::kMaxURLDisplayChars)),
       command_updater_(this),
       exclusive_access_manager_(this) {
+  SetHasWindowSizeControls(true);
   DCHECK(frame);
   DCHECK(delegate);
 }
@@ -162,7 +163,7 @@ void PresentationReceiverWindowView::Init() {
   ChromeSubresourceFilterClient::CreateForWebContents(web_contents);
   InfoBarService::CreateForWebContents(web_contents);
   MixedContentSettingsTabHelper::CreateForWebContents(web_contents);
-  PopupBlockerTabHelper::CreateForWebContents(web_contents);
+  blocked_content::PopupBlockerTabHelper::CreateForWebContents(web_contents);
   content_settings::TabSpecificContentSettings::CreateForWebContents(
       web_contents,
       std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
@@ -254,18 +255,6 @@ void PresentationReceiverWindowView::ExecuteCommandWithDisposition(
 
 WebContents* PresentationReceiverWindowView::GetActiveWebContents() const {
   return delegate_->web_contents();
-}
-
-bool PresentationReceiverWindowView::CanResize() const {
-  return true;
-}
-
-bool PresentationReceiverWindowView::CanMaximize() const {
-  return true;
-}
-
-bool PresentationReceiverWindowView::CanMinimize() const {
-  return true;
 }
 
 void PresentationReceiverWindowView::DeleteDelegate() {

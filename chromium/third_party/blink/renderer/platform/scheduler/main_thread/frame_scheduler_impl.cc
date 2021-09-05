@@ -8,6 +8,8 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/sequence_manager/lazy_now.h"
+#include "base/time/time.h"
 #include "base/trace_event/blame_context.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
@@ -95,17 +97,16 @@ FrameSchedulerImpl::PauseSubresourceLoadingHandleImpl::
     frame_scheduler_->RemovePauseSubresourceLoadingHandle();
 }
 
-std::unique_ptr<FrameSchedulerImpl> FrameSchedulerImpl::Create(
+FrameSchedulerImpl::FrameSchedulerImpl(
     PageSchedulerImpl* parent_page_scheduler,
     FrameScheduler::Delegate* delegate,
     base::trace_event::BlameContext* blame_context,
-    FrameScheduler::FrameType frame_type) {
-  std::unique_ptr<FrameSchedulerImpl> frame_scheduler(new FrameSchedulerImpl(
-      parent_page_scheduler->GetMainThreadScheduler(), parent_page_scheduler,
-      delegate, blame_context, frame_type));
-  parent_page_scheduler->RegisterFrameSchedulerImpl(frame_scheduler.get());
-  return frame_scheduler;
-}
+    FrameScheduler::FrameType frame_type)
+    : FrameSchedulerImpl(parent_page_scheduler->GetMainThreadScheduler(),
+                         parent_page_scheduler,
+                         delegate,
+                         blame_context,
+                         frame_type) {}
 
 FrameSchedulerImpl::FrameSchedulerImpl(
     MainThreadSchedulerImpl* main_thread_scheduler,
@@ -154,7 +155,13 @@ FrameSchedulerImpl::FrameSchedulerImpl(
           this,
           &tracing_controller_,
           YesNoStateToString),
-      aggressive_throttling_opt_out_count(0),
+      all_throttling_opt_out_count_(0),
+      aggressive_throttling_opt_out_count_(0),
+      opted_out_from_all_throttling_(false,
+                                     "FrameScheduler.AllThrottlingDisabled",
+                                     this,
+                                     &tracing_controller_,
+                                     YesNoStateToString),
       opted_out_from_aggressive_throttling_(
           false,
           "FrameScheduler.AggressiveThrottlingDisabled",
@@ -227,8 +234,7 @@ FrameSchedulerImpl::~FrameSchedulerImpl() {
   for (const auto& task_queue_and_voter :
        frame_task_queue_controller_->GetAllTaskQueuesAndVoters()) {
     if (task_queue_and_voter.first->CanBeThrottled()) {
-      RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool(
-          task_queue_and_voter.first);
+      RemoveThrottleableQueueFromBudgetPools(task_queue_and_voter.first);
     }
     CleanUpQueue(task_queue_and_voter.first);
   }
@@ -236,8 +242,10 @@ FrameSchedulerImpl::~FrameSchedulerImpl() {
   if (parent_page_scheduler_) {
     parent_page_scheduler_->Unregister(this);
 
-    if (opted_out_from_aggressive_throttling())
-      parent_page_scheduler_->OnAggressiveThrottlingStatusUpdated();
+    if (opted_out_from_all_throttling() ||
+        opted_out_from_aggressive_throttling()) {
+      parent_page_scheduler_->OnThrottlingStatusUpdated();
+    }
   }
 
   // Can be null in tests.
@@ -249,15 +257,14 @@ void FrameSchedulerImpl::DetachFromPageScheduler() {
   for (const auto& task_queue_and_voter :
        frame_task_queue_controller_->GetAllTaskQueuesAndVoters()) {
     if (task_queue_and_voter.first->CanBeThrottled()) {
-      RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool(
-          task_queue_and_voter.first);
+      RemoveThrottleableQueueFromBudgetPools(task_queue_and_voter.first);
     }
   }
 
   parent_page_scheduler_ = nullptr;
 }
 
-void FrameSchedulerImpl::RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool(
+void FrameSchedulerImpl::RemoveThrottleableQueueFromBudgetPools(
     MainThreadTaskQueue* task_queue) {
   DCHECK(task_queue);
   DCHECK(task_queue->CanBeThrottled());
@@ -265,20 +272,22 @@ void FrameSchedulerImpl::RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool(
   if (!parent_page_scheduler_)
     return;
 
-  CPUTimeBudgetPool* time_budget_pool =
-      parent_page_scheduler_->BackgroundCPUTimeBudgetPool();
-
-  if (!time_budget_pool)
-    return;
+  CPUTimeBudgetPool* cpu_time_budget_pool =
+      parent_page_scheduler_->background_cpu_time_budget_pool();
 
   // On tests, the scheduler helper might already be shut down and tick is not
   // available.
-  base::TimeTicks now;
-  if (main_thread_scheduler_->tick_clock())
-    now = main_thread_scheduler_->tick_clock()->NowTicks();
-  else
-    now = base::TimeTicks::Now();
-  time_budget_pool->RemoveQueue(now, task_queue);
+  base::sequence_manager::LazyNow lazy_now =
+      main_thread_scheduler_->tick_clock()
+          ? base::sequence_manager::LazyNow(
+                main_thread_scheduler_->tick_clock())
+          : base::sequence_manager::LazyNow(base::TimeTicks::Now());
+
+  if (cpu_time_budget_pool)
+    cpu_time_budget_pool->RemoveQueue(lazy_now.Now(), task_queue);
+
+  parent_page_scheduler_->RemoveQueueFromWakeUpBudgetPool(
+      task_queue, frame_origin_type_, &lazy_now);
 }
 
 void FrameSchedulerImpl::SetFrameVisible(bool frame_visible) {
@@ -300,11 +309,40 @@ void FrameSchedulerImpl::SetCrossOriginToMainFrame(bool cross_origin) {
     DCHECK(!cross_origin);
     return;
   }
+
+  base::sequence_manager::LazyNow lazy_now(
+      main_thread_scheduler_->tick_clock());
+
+  // Remove throttleable TaskQueues from their current WakeUpBudgetPool.
+  //
+  // The WakeUpBudgetPool is selected based on origin. TaskQueues are reinserted
+  // in the appropriate WakeUpBudgetPool at the end of this method, after the
+  // |frame_origin_type_| is updated.
+  for (const auto& task_queue_and_voter :
+       frame_task_queue_controller_->GetAllTaskQueuesAndVoters()) {
+    if (task_queue_and_voter.first->CanBeThrottled()) {
+      parent_page_scheduler_->RemoveQueueFromWakeUpBudgetPool(
+          task_queue_and_voter.first, frame_origin_type_, &lazy_now);
+    }
+  }
+
+  // Update the FrameOriginType.
   if (cross_origin) {
     frame_origin_type_ = FrameOriginType::kCrossOriginToMainFrame;
   } else {
     frame_origin_type_ = FrameOriginType::kSameOriginToMainFrame;
   }
+
+  // Add throttleable TaskQueues to WakeUpBudgetPool that corresponds to the
+  // updated |frame_origin_type_|.
+  for (const auto& task_queue_and_voter :
+       frame_task_queue_controller_->GetAllTaskQueuesAndVoters()) {
+    if (task_queue_and_voter.first->CanBeThrottled()) {
+      parent_page_scheduler_->AddQueueToWakeUpBudgetPool(
+          task_queue_and_voter.first, frame_origin_type_, &lazy_now);
+    }
+  }
+
   UpdatePolicy();
 }
 
@@ -353,7 +391,8 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
       return ThrottleableTaskQueueTraits().SetPrioritisationType(
             QueueTraits::PrioritisationType::kBestEffort);
     case TaskType::kJavascriptTimer:
-      return ThrottleableTaskQueueTraits();
+      return ThrottleableTaskQueueTraits().SetPrioritisationType(
+          QueueTraits::PrioritisationType::kJavaScriptTimer);
     case TaskType::kInternalLoading:
     case TaskType::kNetworking:
     case TaskType::kNetworkingWithURLLoaderAnnotation:
@@ -555,12 +594,24 @@ void FrameSchedulerImpl::DidCommitProvisionalLoad(
     bool is_web_history_inert_commit,
     NavigationType navigation_type) {
   bool is_main_frame = GetFrameType() == FrameType::kMainFrame;
-  if (is_main_frame && navigation_type != NavigationType::kSameDocument)
+  bool is_same_document = navigation_type == NavigationType::kSameDocument;
+
+  if (!is_same_document) {
+    waiting_for_contentful_paint_ = true;
+    waiting_for_meaningful_paint_ = true;
+  }
+  if (is_main_frame && !is_same_document) {
     task_time_ = base::TimeDelta();
+    // Ignore result here, based on the assumption that
+    // MTSI::DidCommitProvisionalLoad will trigger an update policy.
+    ignore_result(main_thread_scheduler_->agent_scheduling_strategy()
+                      .OnDocumentChangedInMainFrame(*this));
+  }
+
   main_thread_scheduler_->DidCommitProvisionalLoad(
       is_web_history_inert_commit, navigation_type == NavigationType::kReload,
       is_main_frame);
-  if (navigation_type != NavigationType::kSameDocument)
+  if (!is_same_document)
     ResetForNavigation();
 }
 
@@ -590,6 +641,8 @@ void FrameSchedulerImpl::OnStartedUsingFeature(
     const SchedulingPolicy& policy) {
   uint64_t old_mask = GetActiveFeaturesTrackedForBackForwardCacheMetricsMask();
 
+  if (policy.disable_all_throttling)
+    OnAddedAllThrottlingOptOut();
   if (policy.disable_aggressive_throttling)
     OnAddedAggressiveThrottlingOptOut();
   if (policy.disable_back_forward_cache) {
@@ -613,6 +666,8 @@ void FrameSchedulerImpl::OnStoppedUsingFeature(
     const SchedulingPolicy& policy) {
   uint64_t old_mask = GetActiveFeaturesTrackedForBackForwardCacheMetricsMask();
 
+  if (policy.disable_all_throttling)
+    OnRemovedAllThrottlingOptOut();
   if (policy.disable_aggressive_throttling)
     OnRemovedAggressiveThrottlingOptOut();
   if (policy.disable_back_forward_cache)
@@ -655,21 +710,42 @@ base::WeakPtr<FrameScheduler> FrameSchedulerImpl::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void FrameSchedulerImpl::OnAddedAggressiveThrottlingOptOut() {
-  ++aggressive_throttling_opt_out_count;
-  opted_out_from_aggressive_throttling_ =
-      static_cast<bool>(aggressive_throttling_opt_out_count);
+base::WeakPtr<const FrameSchedulerImpl> FrameSchedulerImpl::GetWeakPtr() const {
+  return weak_factory_.GetWeakPtr();
+}
+
+void FrameSchedulerImpl::OnAddedAllThrottlingOptOut() {
+  ++all_throttling_opt_out_count_;
+  opted_out_from_all_throttling_ =
+      static_cast<bool>(all_throttling_opt_out_count_);
   if (parent_page_scheduler_)
-    parent_page_scheduler_->OnAggressiveThrottlingStatusUpdated();
+    parent_page_scheduler_->OnThrottlingStatusUpdated();
+}
+
+void FrameSchedulerImpl::OnRemovedAllThrottlingOptOut() {
+  DCHECK_GT(all_throttling_opt_out_count_, 0);
+  --all_throttling_opt_out_count_;
+  opted_out_from_all_throttling_ =
+      static_cast<bool>(all_throttling_opt_out_count_);
+  if (parent_page_scheduler_)
+    parent_page_scheduler_->OnThrottlingStatusUpdated();
+}
+
+void FrameSchedulerImpl::OnAddedAggressiveThrottlingOptOut() {
+  ++aggressive_throttling_opt_out_count_;
+  opted_out_from_aggressive_throttling_ =
+      static_cast<bool>(aggressive_throttling_opt_out_count_);
+  if (parent_page_scheduler_)
+    parent_page_scheduler_->OnThrottlingStatusUpdated();
 }
 
 void FrameSchedulerImpl::OnRemovedAggressiveThrottlingOptOut() {
-  DCHECK_GT(aggressive_throttling_opt_out_count, 0);
-  --aggressive_throttling_opt_out_count;
+  DCHECK_GT(aggressive_throttling_opt_out_count_, 0);
+  --aggressive_throttling_opt_out_count_;
   opted_out_from_aggressive_throttling_ =
-      static_cast<bool>(aggressive_throttling_opt_out_count);
+      static_cast<bool>(aggressive_throttling_opt_out_count_);
   if (parent_page_scheduler_)
-    parent_page_scheduler_->OnAggressiveThrottlingStatusUpdated();
+    parent_page_scheduler_->OnThrottlingStatusUpdated();
 }
 
 void FrameSchedulerImpl::OnAddedBackForwardCacheOptOut(
@@ -728,11 +804,6 @@ void FrameSchedulerImpl::SetPageVisibilityForTracing(
 bool FrameSchedulerImpl::IsPageVisible() const {
   return parent_page_scheduler_ ? parent_page_scheduler_->IsPageVisible()
                                 : true;
-}
-
-bool FrameSchedulerImpl::IsAudioPlaying() const {
-  return parent_page_scheduler_ ? parent_page_scheduler_->IsAudioPlaying()
-                                : false;
 }
 
 void FrameSchedulerImpl::SetPaused(bool frame_paused) {
@@ -823,7 +894,8 @@ SchedulingLifecycleState FrameSchedulerImpl::CalculateLifecycleState(
       parent_page_scheduler_->OptedOutFromAggressiveThrottling()) {
     return SchedulingLifecycleState::kNotThrottled;
   }
-  if (parent_page_scheduler_->IsThrottled())
+  // Note: The scheduling lifecycle state ignores wake up rate throttling.
+  if (parent_page_scheduler_->IsCPUTimeThrottled())
     return SchedulingLifecycleState::kThrottled;
   if (!parent_page_scheduler_->IsPageVisible())
     return SchedulingLifecycleState::kHidden;
@@ -833,13 +905,31 @@ SchedulingLifecycleState FrameSchedulerImpl::CalculateLifecycleState(
 void FrameSchedulerImpl::OnFirstContentfulPaint() {
   waiting_for_contentful_paint_ = false;
   if (GetFrameType() == FrameScheduler::FrameType::kMainFrame)
-    main_thread_scheduler_->OnMainFramePaint();
+    main_thread_scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
 }
 
 void FrameSchedulerImpl::OnFirstMeaningfulPaint() {
   waiting_for_meaningful_paint_ = false;
-  if (GetFrameType() == FrameScheduler::FrameType::kMainFrame)
-    main_thread_scheduler_->OnMainFramePaint();
+
+  bool force_policy_update = false;
+  if (GetFrameType() == FrameScheduler::FrameType::kMainFrame) {
+    if (main_thread_scheduler_->agent_scheduling_strategy()
+            .OnMainFrameFirstMeaningfulPaint(*this) ==
+        AgentSchedulingStrategy::ShouldUpdatePolicy::kYes) {
+      force_policy_update = true;
+    }
+  }
+
+  main_thread_scheduler_->OnMainFramePaint(force_policy_update);
+}
+
+void FrameSchedulerImpl::OnLoad() {
+  if (GetFrameType() == FrameScheduler::FrameType::kMainFrame) {
+    // TODO(talp): Once MTSI::UpdatePolicyLocked is refactored, this can notify
+    // the agent strategy directly and, if necessary, trigger the queue priority
+    // update.
+    main_thread_scheduler_->OnMainFrameLoad(*this);
+  }
 }
 
 bool FrameSchedulerImpl::IsWaitingForContentfulPaint() const {
@@ -850,6 +940,12 @@ bool FrameSchedulerImpl::IsWaitingForMeaningfulPaint() const {
   return waiting_for_meaningful_paint_;
 }
 
+bool FrameSchedulerImpl::IsOrdinary() const {
+  if (!parent_page_scheduler_)
+    return true;
+  return parent_page_scheduler_->IsOrdinary();
+}
+
 bool FrameSchedulerImpl::ShouldThrottleTaskQueues() const {
   // TODO(crbug.com/1078387): Convert the CHECK to a DCHECK once enough time has
   // passed to confirm that it is correct. (November 2020).
@@ -858,6 +954,8 @@ bool FrameSchedulerImpl::ShouldThrottleTaskQueues() const {
   if (!RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled())
     return false;
   if (parent_page_scheduler_->IsAudioPlaying())
+    return false;
+  if (parent_page_scheduler_->OptedOutFromAllThrottling())
     return false;
   if (!parent_page_scheduler_->IsPageVisible())
     return true;
@@ -998,6 +1096,14 @@ TaskQueue::QueuePriority FrameSchedulerImpl::ComputePriority(
     }
   }
 
+  // Consult per-agent scheduling strategy to see if it wants to affect queue
+  // priority. Done here to avoid interfering with other policy decisions.
+  base::Optional<TaskQueue::QueuePriority> per_agent_priority =
+      main_thread_scheduler_->agent_scheduling_strategy().QueuePriority(
+          *task_queue);
+  if (per_agent_priority.has_value())
+    return per_agent_priority.value();
+
   if (task_queue->GetPrioritisationType() ==
       MainThreadTaskQueue::QueueTraits::PrioritisationType::kLoadingControl) {
     return main_thread_scheduler_
@@ -1079,12 +1185,18 @@ void FrameSchedulerImpl::OnTaskQueueCreated(
   UpdateQueuePolicy(task_queue, voter);
 
   if (task_queue->CanBeThrottled()) {
-    CPUTimeBudgetPool* time_budget_pool =
-        parent_page_scheduler_->BackgroundCPUTimeBudgetPool();
-    if (time_budget_pool) {
-      time_budget_pool->AddQueue(
-          main_thread_scheduler_->tick_clock()->NowTicks(), task_queue);
+    base::sequence_manager::LazyNow lazy_now(
+        main_thread_scheduler_->tick_clock());
+
+    CPUTimeBudgetPool* cpu_time_budget_pool =
+        parent_page_scheduler_->background_cpu_time_budget_pool();
+    if (cpu_time_budget_pool) {
+      cpu_time_budget_pool->AddQueue(lazy_now.Now(), task_queue);
     }
+
+    parent_page_scheduler_->AddQueueToWakeUpBudgetPool(
+        task_queue, frame_origin_type_, &lazy_now);
+
     if (task_queues_throttled_) {
       UpdateTaskQueueThrottling(task_queue, true);
     }

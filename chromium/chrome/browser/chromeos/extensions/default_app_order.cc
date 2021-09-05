@@ -54,6 +54,8 @@ const char* const kDefaultAppOrder[] = {
     arc::kGoogleCalendarAppId,
     extension_misc::kYoutubeAppId,
     arc::kYoutubeAppId,
+    arc::kYoutubeMusicAppId,                 // Youtube Music ARC app
+    default_web_apps::kYoutubeMusicAppId,    // Youtube Music Web app
     arc::kPlayMoviesAppId,                   // Play Movies & TV ARC app
     extension_misc::kGooglePlayMoviesAppId,  // Play Movies & TV Chrome app
     arc::kPlayMusicAppId,                    // Play Music ARC app

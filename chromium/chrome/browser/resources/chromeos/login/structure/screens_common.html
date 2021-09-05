@@ -1,0 +1,38 @@
+<!-- Copyright 2020 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<!-- Screens that can appear both in OOBE and Login modes. -->
+<oobe-reset id="reset" class="step" hidden></oobe-reset>
+<include src="../oobe_screen_autolaunch.html">
+<oobe-adb-sideloading-screen id="adb-sideloading" class="step hidden">
+</oobe-adb-sideloading-screen>
+<kiosk-enable id="kiosk-enable" class="step hidden">
+</kiosk-enable>
+<include src="../oobe_screen_assistant_optin_flow.html">
+<include src="../../../../../../ui/login/account_picker/chromeos_screen_account_picker.html">
+<include src="../screen_error_message.html">
+<include src="../screen_arc_terms_of_service.html">
+<gaia-signin id="gaia-signin" class="step hidden" hidden>
+</gaia-signin>
+<tpm-error-message id="tpm-error-message" class="step hidden">
+</tpm-error-message>
+<wrong-hwid id="wrong-hwid" class="step hidden"></wrong-hwid>
+<include src="../screen_app_launch_splash.html">
+<saml-confirm-password id="saml-confirm-password" class="step hidden" hidden>
+</saml-confirm-password>
+<include src="../screen_fatal_error.html">
+<device-disabled id="device-disabled" class="step hidden">
+</device-disabled>
+<include src="../screen_sync_consent.html">
+<fingerprint-setup id="fingerprint-setup" class="step hidden" hidden>
+</fingerprint-setup>
+<recommend-apps id="recommend-apps" class="step hidden" hidden>
+</recommend-apps>
+<include src="../screen_app_downloading.html">
+<include src="../screen_discover.html">
+<include src="../screen_multidevice_setup.html">
+<gesture-navigation id="gesture-navigation" class="step hidden">
+</gesture-navigation>
+<marketing-opt-in id="marketing-opt-in" class="step hidden">
+</marketing-opt-in>

@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser;
 
-import static org.chromium.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
+import static org.chromium.components.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
 
 import android.app.Activity;
 import android.app.KeyguardManager;
@@ -37,10 +37,12 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
-import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
+import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
+import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -55,6 +57,7 @@ import org.chromium.content_public.common.Referrer;
 import org.chromium.net.HttpUtil;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.url.Origin;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -221,6 +224,8 @@ public class IntentHandler {
     private static final String FACEBOOK_INTERNAL_BROWSER_REFERRER = "http://m.facebook.com";
     private static final String TWITTER_LINK_PREFIX = "http://t.co/";
     private static final String NEWS_LINK_PREFIX = "http://news.google.com/news/url?";
+    private static final String YOUTUBE_LINK_PREFIX_HTTPS = "https://www.youtube.com/redirect?";
+    private static final String YOUTUBE_LINK_PREFIX_HTTP = "http://www.youtube.com/redirect?";
 
     /**
      * Represents popular external applications that can load a page in Chrome via intent.
@@ -231,7 +236,8 @@ public class IntentHandler {
     @IntDef({ExternalAppId.OTHER, ExternalAppId.GMAIL, ExternalAppId.FACEBOOK, ExternalAppId.PLUS,
             ExternalAppId.TWITTER, ExternalAppId.CHROME, ExternalAppId.HANGOUTS,
             ExternalAppId.MESSENGER, ExternalAppId.NEWS, ExternalAppId.LINE, ExternalAppId.WHATSAPP,
-            ExternalAppId.GSA, ExternalAppId.WEBAPK, ExternalAppId.YAHOO_MAIL, ExternalAppId.VIBER})
+            ExternalAppId.GSA, ExternalAppId.WEBAPK, ExternalAppId.YAHOO_MAIL, ExternalAppId.VIBER,
+            ExternalAppId.YOUTUBE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ExternalAppId {
         int OTHER = 0;
@@ -249,8 +255,9 @@ public class IntentHandler {
         int WEBAPK = 12;
         int YAHOO_MAIL = 13;
         int VIBER = 14;
+        int YOUTUBE = 15;
         // Update ClientAppId in enums.xml when adding new items.
-        int NUM_ENTRIES = 15;
+        int NUM_ENTRIES = 16;
     }
 
     private static ComponentName getFakeComponentName(String packageName) {
@@ -319,7 +326,8 @@ public class IntentHandler {
          */
         void processUrlViewIntent(String url, String referer, String headers,
                 @TabOpenType int tabOpenType, String externalAppId, int tabIdToBringToFront,
-                boolean hasUserGesture, Intent intent);
+                boolean hasUserGesture, boolean isRendererInitiated, Origin initiatorOrigin,
+                Intent intent);
 
         void processWebSearchIntent(String query);
     }
@@ -354,6 +362,10 @@ public class IntentHandler {
                 externalId = ExternalAppId.FACEBOOK;
             } else if (url != null && url.startsWith(NEWS_LINK_PREFIX)) {
                 externalId = ExternalAppId.NEWS;
+            } else if (url != null
+                    && (url.startsWith(YOUTUBE_LINK_PREFIX_HTTPS)
+                            || url.startsWith(YOUTUBE_LINK_PREFIX_HTTP))) {
+                externalId = ExternalAppId.YOUTUBE;
             } else {
                 Bundle headers = IntentUtils.safeGetBundleExtra(intent, Browser.EXTRA_HEADERS);
                 if (headers != null
@@ -442,8 +454,8 @@ public class IntentHandler {
 
         assert intentHasValidUrl(intent);
         String url = getUrlFromIntent(intent);
-        boolean hasUserGesture =
-                IntentWithGesturesHandler.getInstance().getUserGestureAndClear(intent);
+        RequestMetadata metadata =
+                IntentWithRequestMetadataHandler.getInstance().getRequestMetadataAndClear(intent);
         @TabOpenType
         int tabOpenType = getTabOpenType(intent);
         int tabIdToBringToFront = IntentUtils.safeGetIntExtra(
@@ -464,19 +476,22 @@ public class IntentHandler {
 
         processUrlViewIntent(url, referrerUrl, extraHeaders, tabOpenType,
                 IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID),
-                tabIdToBringToFront, hasUserGesture, intent);
+                tabIdToBringToFront, metadata == null ? false : metadata.hasUserGesture(),
+                metadata == null ? false : metadata.isRendererInitiated(),
+                metadata == null ? null : metadata.getInitiatorOrigin(), intent);
         return true;
     }
 
     private void processUrlViewIntent(String url, String referrerUrl, String extraHeaders,
             @TabOpenType int tabOpenType, String externalAppId, int tabIdToBringToFront,
-            boolean hasUserGesture, Intent intent) {
+            boolean hasUserGesture, boolean isRendererInitiated, Origin initiatorOrigin,
+            Intent intent) {
         extraHeaders = maybeAddAdditionalExtraHeaders(intent, url, extraHeaders);
 
         // TODO(joth): Presumably this should check the action too.
         mDelegate.processUrlViewIntent(url, referrerUrl, extraHeaders, tabOpenType,
                 IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID),
-                tabIdToBringToFront, hasUserGesture, intent);
+                tabIdToBringToFront, hasUserGesture, isRendererInitiated, initiatorOrigin, intent);
         recordExternalIntentSourceUMA(intent);
         recordAppHandlersForIntent(intent);
     }
@@ -657,8 +672,8 @@ public class IntentHandler {
     private void handleMhtmlFileOrContentIntent(final String url, final Intent intent) {
         OfflinePageUtils.getLoadUrlParamsForOpeningMhtmlFileOrContent(url, (loadUrlParams) -> {
             processUrlViewIntent(loadUrlParams.getUrl(), null, loadUrlParams.getVerbatimHeaders(),
-                    TabOpenType.OPEN_NEW_TAB, null, 0, false, intent);
-        });
+                    TabOpenType.OPEN_NEW_TAB, null, 0, false, false, null, intent);
+        }, Profile.getLastUsedRegularProfile());
     }
 
     private static PendingIntent getAuthenticationToken() {

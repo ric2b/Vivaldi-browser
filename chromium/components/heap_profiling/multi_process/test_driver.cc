@@ -15,7 +15,6 @@
 #include "base/run_loop.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/stl_util.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/heap_profiler_event_filter.h"
@@ -332,14 +331,21 @@ bool ValidateProcessMmaps(base::Value* process_mmaps,
   return true;
 }
 
+void HandleOOM(size_t unsued_size) {
+  LOG(FATAL) << "Out of memory.";
+}
+
 }  // namespace
 
 TestDriver::TestDriver()
     : wait_for_ui_thread_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                           base::WaitableEvent::InitialState::NOT_SIGNALED) {
+  base::PartitionAllocGlobalInit(HandleOOM);
   partition_allocator_.init();
 }
-TestDriver::~TestDriver() = default;
+TestDriver::~TestDriver() {
+  base::PartitionAllocGlobalUninitForTesting();
+}
 
 bool TestDriver::RunTest(const Options& options) {
   options_ = options;
@@ -352,8 +358,8 @@ bool TestDriver::RunTest(const Options& options) {
     if (running_on_ui_thread_) {
       has_started_ = Supervisor::GetInstance()->HasStarted();
     } else {
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     base::BindOnce(&TestDriver::GetHasStartedOnUIThread,
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&TestDriver::GetHasStartedOnUIThread,
                                     base::Unretained(this)));
       wait_for_ui_thread_.Wait();
     }
@@ -373,16 +379,16 @@ bool TestDriver::RunTest(const Options& options) {
       MakeTestAllocations();
     CollectResults(true);
   } else {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&TestDriver::CheckOrStartProfilingOnUIThreadAndSignal,
                        base::Unretained(this)));
     wait_for_ui_thread_.Wait();
     if (!initialization_success_)
       return false;
     if (ShouldProfileRenderer()) {
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(
               &TestDriver::
                   WaitForProfilingToStartForAllRenderersUIThreadAndSignal,
@@ -390,12 +396,12 @@ bool TestDriver::RunTest(const Options& options) {
       wait_for_ui_thread_.Wait();
     }
     if (ShouldProfileBrowser()) {
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     base::BindOnce(&TestDriver::MakeTestAllocations,
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&TestDriver::MakeTestAllocations,
                                     base::Unretained(this)));
     }
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(&TestDriver::CollectResults,
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&TestDriver::CollectResults,
                                   base::Unretained(this), false));
     wait_for_ui_thread_.Wait();
   }

@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+#include "third_party/blink/renderer/core/html/canvas/ukm_parameters.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
@@ -43,7 +44,8 @@ namespace blink {
 
 OffscreenCanvas::OffscreenCanvas(ExecutionContext* context, const IntSize& size)
     : CanvasRenderingContextHost(
-          CanvasRenderingContextHost::HostType::kOffscreenCanvasHost),
+          CanvasRenderingContextHost::HostType::kOffscreenCanvasHost,
+          base::make_optional<UkmParameters>()),
       execution_context_(context),
       size_(size) {
   // Other code in Blink watches for destruction of the context; be
@@ -150,7 +152,7 @@ void OffscreenCanvas::setHeight(unsigned height) {
 void OffscreenCanvas::SetSize(const IntSize& size) {
   // Setting size of a canvas also resets it.
   if (size == size_) {
-    if (context_ && context_->Is2d()) {
+    if (context_ && context_->IsRenderingContext2D()) {
       context_->Reset();
       origin_clean_ = true;
     }
@@ -166,7 +168,7 @@ void OffscreenCanvas::SetSize(const IntSize& size) {
   if (context_) {
     if (context_->Is3d()) {
       context_->Reshape(size_.Width(), size_.Height());
-    } else if (context_->Is2d()) {
+    } else if (context_->IsRenderingContext2D()) {
       context_->Reset();
       origin_clean_ = true;
     }
@@ -214,7 +216,6 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
 
 scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     SourceImageStatus* status,
-    AccelerationHint hint,
     const FloatSize& size) {
   if (!context_) {
     *status = kInvalidSourceImageStatus;
@@ -228,7 +229,7 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     *status = kZeroSizeCanvasSourceImageStatus;
     return nullptr;
   }
-  scoped_refptr<Image> image = context_->GetImage(hint);
+  scoped_refptr<Image> image = context_->GetImage();
   if (!image)
     image = CreateTransparentImage(Size());
   *status = image ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
@@ -379,14 +380,14 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
     provider = CanvasResourceProvider::CreateSharedImageProvider(
         surface_size, SharedGpuContext::ContextProviderWrapper(),
         FilterQuality(), context_->ColorParams(), false /*is_origin_top_left*/,
-        CanvasResourceProvider::RasterMode::kGPU, shared_image_usage_flags);
+        RasterMode::kGPU, shared_image_usage_flags);
   } else if (HasPlaceholderCanvas() && composited_mode) {
     // Only try a SoftwareComposited SharedImage if the context has Placeholder
     // canvas and the composited mode is enabled.
     provider = CanvasResourceProvider::CreateSharedImageProvider(
         surface_size, SharedGpuContext::ContextProviderWrapper(),
         FilterQuality(), context_->ColorParams(), false /*is_origin_top_left*/,
-        CanvasResourceProvider::RasterMode::kCPU, shared_image_usage_flags);
+        RasterMode::kCPU, shared_image_usage_flags);
   }
 
   if (!provider && HasPlaceholderCanvas()) {
@@ -396,8 +397,7 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
     base::WeakPtr<CanvasResourceDispatcher> dispatcher_weakptr =
         GetOrCreateResourceDispatcher()->GetWeakPtr();
     provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-        surface_size, SharedGpuContext::ContextProviderWrapper(),
-        FilterQuality(), context_->ColorParams(),
+        surface_size, FilterQuality(), context_->ColorParams(),
         std::move(dispatcher_weakptr));
   }
 
@@ -512,7 +512,7 @@ void OffscreenCanvas::UpdateMemoryUsage() {
   memory_usage_ = new_memory_usage;
 }
 
-void OffscreenCanvas::Trace(Visitor* visitor) {
+void OffscreenCanvas::Trace(Visitor* visitor) const {
   visitor->Trace(context_);
   visitor->Trace(execution_context_);
   EventTargetWithInlineData::Trace(visitor);

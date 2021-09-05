@@ -23,10 +23,12 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "ui/base/models/list_model_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
+#include "ui/compositor/throughput_tracker.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/animation/bounds_animator.h"
@@ -116,6 +118,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Returns the maximum size of the entire tile grid.
   gfx::Size GetMaximumTileGridSize(int cols, int rows_per_page) const;
+
+  // Returns the padding between each page of the apps grid.
+  int GetPaddingBetweenPages() const;
 
   // This resets the grid view to a fresh state for showing the app list.
   void ResetForShowApps();
@@ -292,12 +297,22 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // view hierarchy.
   const AppListConfig& GetAppListConfig() const;
 
-  // Helper functions to toggle the Apps Grid Cardified state. The cardified
-  // state scales down apps and is shown when the user drags an app in the
-  // AppList.
+  // Helper functions to start the Apps Grid Cardified state.
+  // The cardified state scales down apps and is shown when the user drags an
+  // app in the AppList.
   void StartAppsGridCardifiedView();
+  // Ends the Apps Grid Cardified state and sets it to normal.
   void EndAppsGridCardifiedView();
+  // Animates individual elements of the apps grid to and from cardified state.
   void AnimateCardifiedState();
+  // Translates the items container view to center the current page in the apps
+  // grid.
+  void RecenterItemsContainer();
+  // Appends a background card to the back of |background_cards_| with a defined
+  // |opacity|.
+  void AppendBackgroundCard(float opacity);
+  // Removes the background card at the end of |background_cards_|.
+  void RemoveBackgroundCard();
 
   // Return the view model.
   views::ViewModelT<AppListItemView>* view_model() { return &view_model_; }
@@ -305,6 +320,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   bool FirePageFlipTimerForTest();
   bool FireFolderItemReparentTimerForTest();
   bool FireFolderDroppingTimerForTest();
+  bool FireDragToShelfTimerForTest();
 
   // For test: Return if the drag and drop handler was set.
   bool has_drag_and_drop_host_for_test() {
@@ -710,6 +726,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   void BeginHideCurrentGhostImageView();
 
+  // Invoked when |host_drag_start_timer_| fires.
+  void OnHostDragStartTimerFired();
+
   // Indicates whether the drag event (from the gesture or mouse) should be
   // handled by AppsGridView.
   bool ShouldHandleDragEvent(const ui::LocatedEvent& event);
@@ -791,6 +810,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Timer for dragging a folder item out of folder container ink bubble.
   base::OneShotTimer folder_item_reparent_timer_;
 
+  // Timer for |drag_and_drop_host_| to start handling drag operations.
+  base::OneShotTimer host_drag_start_timer_;
+
   // An application target drag and drop host which accepts dnd operations.
   ApplicationDragAndDropHost* drag_and_drop_host_ = nullptr;
 
@@ -862,9 +884,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   bool cardified_state_ = false;
 
   // Records smoothness of pagination animation.
-  std::unique_ptr<AppListAnimationMetricsRecorder> pagination_metrics_recorder_;
-  std::unique_ptr<PaginationTransitionAnimationReporter>
-      pagination_metrics_reporter_;
+  base::Optional<ui::ThroughputTracker> pagination_metrics_tracker_;
 
   // Records the presentation time for apps grid dragging.
   std::unique_ptr<PresentationTimeRecorder> presentation_time_recorder_;
@@ -880,6 +900,10 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // |last_drag_point_|, |last_mouse_drag_point_| is the location of the most
   // recent drag on AppsGridView instead of the app icon.
   gfx::PointF last_mouse_drag_point_;
+
+  // Layer array for apps grid background cards. Used to display the background
+  // card during cardified state.
+  std::vector<std::unique_ptr<ui::Layer>> background_cards_;
 
   DISALLOW_COPY_AND_ASSIGN(AppsGridView);
 };

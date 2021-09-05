@@ -6,6 +6,7 @@ import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/protobuf/proto_library.gni")
 import("//third_party/webrtc/webrtc.gni")
 
 if (is_android) {
@@ -50,8 +51,6 @@ jumbo_source_set("browser_sources") {
     "audio_service_info.cc",
     "audio_service_info.h",
     "authenticator_environment.h",
-    "authenticator_request_client_delegate.cc",
-    "authenticator_request_client_delegate.h",
     "ax_event_notification_details.cc",
     "ax_event_notification_details.h",
     "back_forward_cache.h",
@@ -130,8 +129,6 @@ jumbo_source_set("browser_sources") {
     "cookie_access_details.cc",
     "cookie_access_details.h",
     "cookie_store_factory.h",
-    "cors_exempt_headers.cc",
-    "cors_exempt_headers.h",
     "cors_origin_pattern_setter.cc",
     "cors_origin_pattern_setter.h",
     "dedicated_worker_id.h",
@@ -238,6 +235,7 @@ jumbo_source_set("browser_sources") {
     "navigation_entry.h",
     "navigation_handle.cc",
     "navigation_handle.h",
+    "navigation_handle_timing.h",
     "navigation_throttle.cc",
     "navigation_throttle.h",
     "navigation_type.h",
@@ -320,6 +318,8 @@ jumbo_source_set("browser_sources") {
     "service_process_host.h",
     "service_process_info.cc",
     "service_process_info.h",
+    "service_worker_client_info.cc",
+    "service_worker_client_info.h",
     "service_worker_context.h",
     "service_worker_context_observer.h",
     "service_worker_external_request_result.h",
@@ -351,6 +351,8 @@ jumbo_source_set("browser_sources") {
     "startup_data.h",
     "storage_notification_service.h",
     "storage_partition.h",
+    "storage_partition_config.cc",
+    "storage_partition_config.h",
     "storage_usage_info.h",
     "stored_payment_app.cc",
     "stored_payment_app.h",
@@ -365,12 +367,12 @@ jumbo_source_set("browser_sources") {
     "tracing_delegate.h",
     "tracing_service.h",
     "tts_controller.h",
-    "tts_controller_delegate.h",
     "tts_platform.h",
     "tts_utterance.h",
     "url_data_source.cc",
     "url_data_source.h",
     "url_loader_request_interceptor.h",
+    "url_loader_throttles.h",
     "video_capture_device_launcher.cc",
     "video_capture_device_launcher.h",
     "video_capture_service.h",
@@ -434,6 +436,7 @@ jumbo_source_set("browser_sources") {
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//services/audio/public/mojom",
+    "//services/cert_verifier/public/mojom",
     "//services/content/public/mojom",
     "//services/data_decoder/public/mojom",
     "//services/device/public/mojom:device_service",
@@ -504,23 +507,30 @@ jumbo_source_set("browser_sources") {
     sources += [ "remote_cocoa.h" ]
   }
 
+  if (is_linux) {
+    sources += [ "zygote_host/zygote_host_linux.h" ]
+  }
+
   if (!is_android) {
     sources += [
+      "authenticator_request_client_delegate.cc",
+      "authenticator_request_client_delegate.h",
       "host_zoom_map.h",
       "zoom_level_delegate.h",
     ]
   }
 
   if (is_chromeos) {
-    sources +=
-        [ "chromeos/delegate_to_browser_gpu_service_accelerator_factory.h" ]
+    sources += [
+      "chromeos/delegate_to_browser_gpu_service_accelerator_factory.h",
+      "tts_controller_delegate.cc",
+      "tts_controller_delegate.h",
+    ]
   }
 
   if (enable_vr) {
     sources += [
       "browser_xr_runtime.h",
-      "xr_consent_helper.h",
-      "xr_consent_prompt_level.h",
       "xr_install_helper.h",
       "xr_integration_client.cc",
       "xr_integration_client.h",
@@ -538,4 +548,8 @@ if (is_android) {
   java_cpp_enum("contacts_picker_properties_requested_javagen") {
     sources = [ "contacts_picker_properties_requested.h" ]
   }
+}
+
+proto_library("proto") {
+  sources = [ "google_streaming_api.proto" ]
 }

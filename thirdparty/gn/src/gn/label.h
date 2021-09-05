@@ -75,9 +75,19 @@ class Label {
   }
   bool operator!=(const Label& other) const { return !operator==(other); }
   bool operator<(const Label& other) const {
-    return std::tie(dir_, name_, toolchain_dir_, toolchain_name_) <
-           std::tie(other.dir_, other.name_, other.toolchain_dir_,
-                    other.toolchain_name_);
+    // This custom comparison function uses the fact that SourceDir and
+    // StringAtom values have very fast equality comparison to avoid
+    // un-necessary string comparisons when components are equal.
+    if (dir_ != other.dir_)
+      return dir_ < other.dir_;
+
+    if (!name_.SameAs(other.name_))
+      return name_ < other.name_;
+
+    if (toolchain_dir_ != other.toolchain_dir_)
+      return toolchain_dir_ < other.toolchain_dir_;
+
+    return toolchain_name_ < other.toolchain_name_;
   }
 
   // Returns true if the toolchain dir/name of this object matches some

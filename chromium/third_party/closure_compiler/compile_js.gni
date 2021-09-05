@@ -3,7 +3,13 @@
 # found in the LICENSE file.
 
 import("//third_party/closure_compiler/closure_args.gni")
-import("//ui/webui/webui_features.gni")
+
+declare_args() {
+  # Enable closure type-checking for Chrome's web technology-based UI. This
+  # enables the webui_closure_compile target which does a no-op without this
+  # flag enabled. Requires Java.
+  enable_js_type_check = is_chromeos || is_linux || is_android
+}
 
 script_path = "//third_party/closure_compiler"
 compiler_path = "$script_path/compiler/compiler.jar"
@@ -256,7 +262,7 @@ template("js_binary") {
 
 # Defines a target that compiles a group of js_library targets.
 template("js_type_check") {
-  if (closure_compile) {
+  if (enable_js_type_check) {
     js_binary(target_name) {
       sources = []
       checks_only = true
@@ -275,3 +281,13 @@ template("js_type_check") {
     }
   }
 }
+
+# These externs files depend on each other (often in a cyclical way), and
+# therefore makes more sense to add all of them as a dependency together.
+chrome_extension_public_externs = [
+  "$externs_path/events.js",
+  "$externs_path/extension_types.js",
+  "$externs_path/runtime.js",
+  "$externs_path/tabs.js",
+  "$externs_path/windows.js",
+]

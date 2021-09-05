@@ -7,6 +7,8 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 #include <vector>
 
 #include "base/bind.h"
@@ -14,16 +16,18 @@
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/i18n/break_iterator.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/math_constants.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/util/ranges/algorithm.h"
+#include "base/util/ranges/functional.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
@@ -58,7 +62,9 @@
 #include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/download_item_utils.h"
-#include "third_party/icu/source/common/unicode/uchar.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkScalar.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
@@ -67,6 +73,7 @@
 #include "ui/base/theme_provider.h"
 #include "ui/events/event.h"
 #include "ui/gfx/animation/slide_animation.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
@@ -74,6 +81,7 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/range/range.h"
+#include "ui/gfx/skia_util.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
@@ -97,7 +105,19 @@
 using download::DownloadItem;
 using MixedContentStatus = download::DownloadItem::MixedContentStatus;
 
+enum class DownloadItemView::Mode {
+  kNormal,             // Showing download item.
+  kDangerous,          // Displaying the dangerous download warning.
+  kMalicious,          // Displaying the malicious download warning.
+  kMixedContentWarn,   // Displaying the mixed-content download warning.
+  kMixedContentBlock,  // Displaying the mixed-content download block error.
+  kDeepScanning,       // Displaying in-progress deep scanning information.
+};
+
 namespace {
+
+// Size of the space used for the progress indicator.
+constexpr int kProgressIndicatorSize = 25;
 
 // The vertical distance between the item's visual upper bound (as delineated
 // by the separator on the right) and the edge of the shelf.
@@ -145,20 +165,6 @@ class SeparatorBorder : public views::Border {
   DISALLOW_COPY_AND_ASSIGN(SeparatorBorder);
 };
 
-base::string16 SplitStringWithNewLineAtPosition(const base::string16& text,
-                                                size_t pos) {
-  base::string16 new_text = text;
-  // This can be a low surrogate codepoint, but u_isUWhiteSpace will
-  // return false and inserting a new line after a surrogate pair
-  // is perfectly ok.
-  base::char16 line_end_char = text[pos - 1];
-  if (u_isUWhiteSpace(line_end_char))
-    new_text.replace(pos - 1, 1, 1, base::char16('\n'));
-  else
-    new_text.insert(pos, 1, base::char16('\n'));
-  return new_text;
-}
-
 // A stub subclass of Button that has no visuals.
 class TransparentButton : public views::Button {
  public:
@@ -200,6 +206,42 @@ class TransparentButton : public views::Button {
   }
 };
 
+int GetFilenameStyle(const views::StyledLabel& label) {
+#if !defined(OS_LINUX)
+  if (base::FeatureList::IsEnabled(safe_browsing::kUseNewDownloadWarnings))
+    return STYLE_EMPHASIZED;
+#endif
+  return label.GetDefaultTextStyle();
+}
+
+void StyleFilename(views::StyledLabel& label, size_t pos, size_t len) {
+  // Ensure the label contains a nonempty filename.
+  if ((pos == base::string16::npos) || (len == 0))
+    return;
+
+  views::StyledLabel::RangeStyleInfo style;
+  style.text_style = GetFilenameStyle(label);
+  label.ClearStyleRanges();
+  label.AddStyleRange(gfx::Range(pos, pos + len), style);
+}
+
+// Whether we are warning about a dangerous/malicious download.
+bool is_download_warning(DownloadItemView::Mode mode) {
+  return (mode == DownloadItemView::Mode::kDangerous) ||
+         (mode == DownloadItemView::Mode::kMalicious);
+}
+
+// Whether we are in the mixed content mode.
+bool is_mixed_content(DownloadItemView::Mode mode) {
+  return (mode == DownloadItemView::Mode::kMixedContentWarn) ||
+         (mode == DownloadItemView::Mode::kMixedContentBlock);
+}
+
+// Whether a warning label is visible.
+bool has_warning_label(DownloadItemView::Mode mode) {
+  return is_download_warning(mode) || is_mixed_content(mode);
+}
+
 }  // namespace
 
 DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr download,
@@ -208,9 +250,8 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr download,
     : AnimationDelegateViews(this),
       shelf_(parent),
       dropdown_state_(NORMAL),
-      mode_(NORMAL_MODE),
+      mode_(Mode::kNormal),
       dragging_(false),
-      starting_drag_(false),
       model_(std::move(download)),
       save_button_(nullptr),
       discard_button_(nullptr),
@@ -240,14 +281,14 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr download,
     file_name_style = STYLE_EMPHASIZED;
 #endif
   auto file_name_label = std::make_unique<views::Label>(
-      ElidedFilename(), views::style::CONTEXT_LABEL, file_name_style);
+      ElidedFilename(), CONTEXT_DOWNLOAD_SHELF, file_name_style);
   file_name_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   file_name_label->GetViewAccessibility().OverrideIsIgnored(true);
   file_name_label_ = AddChildView(std::move(file_name_label));
 
   auto status_label = std::make_unique<views::Label>(
-      l10n_util::GetStringUTF16(IDS_DOWNLOAD_STATUS_STARTING));
-  status_label->SetFontList(status_font_list_);
+      l10n_util::GetStringUTF16(IDS_DOWNLOAD_STATUS_STARTING),
+      CONTEXT_DOWNLOAD_SHELF_STATUS);
   status_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   status_label->GetViewAccessibility().OverrideIsIgnored(true);
   status_label_ = AddChildView(std::move(status_label));
@@ -274,57 +315,221 @@ DownloadItemView::~DownloadItemView() {
   model_->RemoveObserver(this);
 }
 
-// Progress animation handlers.
+// In dangerous mode we have to layout our buttons.
+void DownloadItemView::Layout() {
+  View::Layout();
 
-void DownloadItemView::StartDownloadProgress() {
-  if (progress_timer_.IsRunning())
-    return;
-  progress_start_time_ = base::TimeTicks::Now();
-  progress_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(30),
-                        base::Bind(&DownloadItemView::ProgressTimerFired,
-                                   base::Unretained(this)));
-}
+  UpdateColorsFromTheme();
 
-void DownloadItemView::StopDownloadProgress() {
-  accessible_alert_timer_.AbandonAndStop();
-  if (!progress_timer_.IsRunning())
-    return;
-  previous_progress_elapsed_ += base::TimeTicks::Now() - progress_start_time_;
-  progress_start_time_ = base::TimeTicks();
-  progress_timer_.Stop();
-}
+  open_button_->SetBoundsRect(GetLocalBounds());
 
-// static
-SkColor DownloadItemView::GetTextColorForThemeProvider(
-    const ui::ThemeProvider* theme) {
-  return theme ? theme->GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT)
-               : gfx::kPlaceholderColor;
-}
+  if (is_download_warning(mode_)) {
+    gfx::Point child_origin(
+        kStartPadding + GetWarningIconSize() + kStartPadding,
+        (height() - dangerous_download_label_->height()) / 2);
+    dangerous_download_label_->SetPosition(child_origin);
 
-void DownloadItemView::OnExtractIconComplete(IconLoader::IconSize icon_size,
-                                             gfx::Image icon_bitmap) {
-  if (!icon_bitmap.IsEmpty()) {
-    if (icon_size == IconLoader::IconSize::NORMAL) {
-      // We want a 24x24 icon, but on Windows only 16x16 and 32x32 are
-      // available. So take the NORMAL icon and downsize it.
-      icon_ = gfx::ImageSkiaOperations::CreateResizedImage(
-          *icon_bitmap.ToImageSkia(), skia::ImageOperations::RESIZE_BEST,
-          gfx::Size(kFileIconSize, kFileIconSize));
+    child_origin.Offset(dangerous_download_label_->width() + kLabelPadding, 0);
+    gfx::Size button_size = GetButtonSize();
+    child_origin.set_y((height() - button_size.height()) / 2);
+    if (save_button_) {
+      save_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
+      child_origin.Offset(button_size.width() + kSaveDiscardButtonPadding, 0);
     }
-    shelf_->SchedulePaint();
-  }
-}
+    if (discard_button_)
+      discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
+    if (scan_button_)
+      scan_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
+  } else if (is_mixed_content(mode_)) {
+    gfx::Point child_origin(
+        kStartPadding + GetWarningIconSize() + kStartPadding,
+        (height() - dangerous_download_label_->height()) / 2);
+    dangerous_download_label_->SetPosition(child_origin);
 
-void DownloadItemView::MaybeSubmitDownloadToFeedbackService(
-    DownloadCommands::Command download_command) {
-  if (model_->ShouldAllowDownloadFeedback() &&
-      SubmitDownloadToFeedbackService(download_command)) {
+    child_origin.Offset(dangerous_download_label_->width() + kLabelPadding, 0);
+    gfx::Size button_size = GetButtonSize();
+    child_origin.set_y((height() - button_size.height()) / 2);
+    if (save_button_)
+      save_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
+    if (discard_button_)
+      discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
+  } else if (mode_ == Mode::kDeepScanning) {
+    gfx::Point child_origin(
+        kStartPadding + GetWarningIconSize() + kStartPadding,
+        (height() - deep_scanning_label_->height()) / 2);
+    deep_scanning_label_->SetPosition(child_origin);
+
+    if (open_now_button_) {
+      child_origin.set_y(
+          (height() - open_now_button_->GetPreferredSize().height()) / 2);
+      child_origin.Offset(deep_scanning_label_->width() + kLabelPadding, 0);
+      open_now_button_->SetBoundsRect(
+          gfx::Rect(child_origin, open_now_button_->GetPreferredSize()));
+    }
   } else {
-    DownloadCommands(model_.get()).ExecuteCommand(download_command);
+    int mirrored_x = GetMirroredXWithWidthInView(
+        kStartPadding + kProgressIndicatorSize + kProgressTextPadding,
+        kTextWidth);
+    int file_name_y = GetYForFilenameText();
+    file_name_label_->SetBoundsRect(
+        gfx::Rect(mirrored_x, file_name_y, kTextWidth, font_list_.GetHeight()));
+
+    int status_y = file_name_y + font_list_.GetHeight();
+    bool should_expand_for_status_text =
+        (model_->GetDangerType() ==
+         download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE);
+    int status_width = should_expand_for_status_text
+                           ? status_label_->GetPreferredSize().width()
+                           : kTextWidth;
+    status_label_->SetBoundsRect(gfx::Rect(mirrored_x, status_y, status_width,
+                                           status_font_list_.GetHeight()));
+  }
+
+  if (mode_ != Mode::kDangerous) {
+    dropdown_button_->SizeToPreferredSize();
+    dropdown_button_->SetPosition(
+        gfx::Point(width() - dropdown_button_->width() - kEndPadding,
+                   (height() - dropdown_button_->height()) / 2));
   }
 }
 
-// DownloadObserver interface.
+bool DownloadItemView::OnMouseDragged(const ui::MouseEvent& event) {
+  // Handle drag (file copy) operations.
+
+  // Mouse should not activate us in dangerous mode.
+  if (has_warning_label(mode_))
+    return true;
+
+  if (!drag_start_point_)
+    drag_start_point_ = event.location();
+  if (!dragging_) {
+    dragging_ = ExceededDragThreshold(event.location() - *drag_start_point_);
+  } else if ((model_->GetState() == DownloadItem::COMPLETE) &&
+             model_->download()) {
+    const gfx::Image* const file_icon =
+        g_browser_process->icon_manager()->LookupIconFromFilepath(
+            model_->GetTargetFilePath(), IconLoader::SMALL);
+    const views::Widget* const widget = GetWidget();
+    // TODO(shaktisahu): Make DragDownloadItem work with a model.
+    DragDownloadItem(model_->download(), file_icon,
+                     widget ? widget->GetNativeView() : nullptr);
+    RecordDownloadShelfDragEvent(DownloadShelfDragEvent::STARTED);
+  }
+  return true;
+}
+
+void DownloadItemView::OnMouseCaptureLost() {
+  // Mouse should not activate us in dangerous mode.
+  if (mode_ != Mode::kNormal)
+    return;
+
+  if (dragging_) {
+    // Starting a drag results in a MouseCaptureLost.
+    dragging_ = false;
+    drag_start_point_.reset();
+  }
+}
+
+base::string16 DownloadItemView::GetTooltipText(const gfx::Point& p) const {
+  return has_warning_label(mode_) ? base::string16() : tooltip_text_;
+}
+
+void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->SetName(accessible_name_);
+  node_data->role = ax::mojom::Role::kGroup;
+
+  // Set the description to the empty string, otherwise the tooltip will be
+  // used, which is redundant with the accessible name.
+  node_data->SetDescription(base::string16());
+}
+
+void DownloadItemView::ButtonPressed(views::Button* sender,
+                                     const ui::Event& event) {
+  if (sender == open_now_button_) {
+    OpenDownloadDuringAsyncScanning();
+    return;
+  }
+
+  if (sender == dropdown_button_) {
+    SetDropdownState(PUSHED);
+    ShowContextMenuImpl(dropdown_button_->GetBoundsInScreen(),
+                        ui::GetMenuSourceTypeForEvent(event));
+    return;
+  }
+
+  base::TimeDelta warning_duration;
+  if (!time_download_warning_shown_.is_null())
+    warning_duration = base::Time::Now() - time_download_warning_shown_;
+
+  if (mode_ == Mode::kMixedContentWarn && sender == save_button_) {
+    DownloadCommands(model_.get()).ExecuteCommand(DownloadCommands::KEEP);
+    return;
+  }
+  if (mode_ == Mode::kDangerous && sender == save_button_) {
+    // The user has confirmed a dangerous download.  We'd record how quickly the
+    // user did this to detect whether we're being clickjacked.
+    UMA_HISTOGRAM_LONG_TIMES("clickjacking.save_download", warning_duration);
+    // This will call ValidateDangerousDownload(), change download state and
+    // notify us.
+    MaybeSubmitDownloadToFeedbackService(DownloadCommands::KEEP);
+    return;
+  }
+
+  if (sender == open_button_) {
+    if (mode_ == Mode::kDeepScanning) {
+      content::WebContents* current_web_contents =
+          shelf_->browser()->tab_strip_model()->GetActiveWebContents();
+      open_now_modal_dialog_ = TabModalConfirmDialog::Create(
+          std::make_unique<safe_browsing::DeepScanningModalDialog>(
+              current_web_contents,
+              base::BindOnce(&DownloadItemView::OpenDownloadDuringAsyncScanning,
+                             weak_ptr_factory_.GetWeakPtr())),
+          current_web_contents);
+      return;
+    }
+    if (model_->GetDangerType() ==
+        download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING) {
+      content::WebContents* current_web_contents =
+          shelf_->browser()->tab_strip_model()->GetActiveWebContents();
+      safe_browsing::PromptForScanningModalDialog::ShowForWebContents(
+          current_web_contents, ElidedFilename(),
+          base::BindOnce(&DownloadItemView::ConfirmDeepScanning,
+                         weak_ptr_factory_.GetWeakPtr()),
+          base::BindOnce(&DownloadItemView::BypassDeepScanning,
+                         weak_ptr_factory_.GetWeakPtr()));
+      return;
+    }
+    if (has_warning_label(mode_))
+      return;
+    if (complete_animation_.get() && complete_animation_->is_animating())
+      complete_animation_->End();
+    OpenDownload();
+    return;
+  }
+
+  if (sender == scan_button_) {
+    ConfirmDeepScanning();
+    return;
+  }
+
+  DCHECK_EQ(discard_button_, sender);
+
+  if (is_mixed_content(mode_)) {
+    DownloadCommands(model_.get()).ExecuteCommand(DownloadCommands::DISCARD);
+    return;
+  }
+
+  UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download", warning_duration);
+  MaybeSubmitDownloadToFeedbackService(DownloadCommands::DISCARD);
+  // WARNING: 'this' maybe deleted at this point. Don't access 'this'.
+}
+
+void DownloadItemView::ShowContextMenuForViewImpl(
+    View* source,
+    const gfx::Point& point,
+    ui::MenuSourceType source_type) {
+  ShowContextMenuImpl(gfx::Rect(point, gfx::Size()), source_type);
+}
 
 // Update the progress graphic on the icon and our text status label
 // to reflect our current bytes downloaded, time remaining.
@@ -339,15 +544,15 @@ void DownloadItemView::OnDownloadUpdated() {
       (model_->GetDangerType() ==
        download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING);
   if (model_->IsMixedContent()) {
-    if (!IsShowingMixedContentDialog())
+    if (!is_mixed_content(mode_))
       TransitionToMixedContentDialog();
   } else if (model_->IsDangerous() &&
              model_->GetState() != DownloadItem::CANCELLED) {
-    if (!IsShowingWarningDialog())
+    if (!is_download_warning(mode_))
       TransitionToWarningDialog();
   } else if (is_danger_type_async_scanning &&
              model_->GetState() != DownloadItem::CANCELLED) {
-    if (!IsShowingDeepScanning())
+    if (mode_ != Mode::kDeepScanning)
       TransitionToDeepScanningDialog();
   } else {
     TransitionToNormalMode();
@@ -359,7 +564,7 @@ void DownloadItemView::OnDownloadUpdated() {
     return;
   }
 
-  base::string16 new_tip = model_->GetTooltipText(font_list_, kTooltipMaxWidth);
+  base::string16 new_tip = model_->GetTooltipText();
   if (new_tip != tooltip_text_) {
     tooltip_text_ = new_tip;
     TooltipTextChanged();
@@ -368,19 +573,348 @@ void DownloadItemView::OnDownloadUpdated() {
   UpdateAccessibleName();
 }
 
+void DownloadItemView::OnDownloadOpened() {
+  // First, Calculate the download status opening string width.
+  base::string16 status_string =
+      l10n_util::GetStringFUTF16(IDS_DOWNLOAD_STATUS_OPENING, base::string16());
+  int status_string_width = gfx::GetStringWidth(status_string, font_list_);
+  // Then, elide the file name.
+  base::string16 filename_string =
+      gfx::ElideFilename(model_->GetFileNameToReportUser(), font_list_,
+                         kTextWidth - status_string_width);
+  // Last, concat the whole string to be set on the label.
+  file_name_label_->SetText(
+      l10n_util::GetStringFUTF16(IDS_DOWNLOAD_STATUS_OPENING, filename_string));
+
+  SetEnabled(false);
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&DownloadItemView::Reenable,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::TimeDelta::FromSeconds(3));
+
+  // Notify our parent.
+  shelf_->AutoClose();
+}
+
+void DownloadItemView::OnDownloadDestroyed() {
+  shelf_->RemoveDownloadView(this);  // This will delete us!
+}
+
+void DownloadItemView::AnimationProgressed(const gfx::Animation* animation) {
+  // We don't care if what animation (body button/drop button/complete),
+  // is calling back, as they all have to go through the same paint call.
+  SchedulePaint();
+}
+
+void DownloadItemView::MaybeSubmitDownloadToFeedbackService(
+    DownloadCommands::Command download_command) {
+  if (model_->ShouldAllowDownloadFeedback() &&
+      SubmitDownloadToFeedbackService(download_command)) {
+  } else {
+    DownloadCommands(model_.get()).ExecuteCommand(download_command);
+  }
+}
+
+gfx::Size DownloadItemView::CalculatePreferredSize() const {
+  int width = 0;
+  // We set the height to the height of two rows or text plus margins.
+  int child_height = font_list_.GetHeight() + status_font_list_.GetHeight();
+
+  if (has_warning_label(mode_)) {
+    // Width.
+    width = kStartPadding + GetWarningIconSize() + kStartPadding +
+            dangerous_download_label_->width() + kLabelPadding;
+    gfx::Size button_size = GetButtonSize();
+    if (save_button_ && discard_button_)
+      width += button_size.width() + kSaveDiscardButtonPadding;
+    width += button_size.width() + kEndPadding;
+
+    // Height: make sure the button fits and the warning icon fits.
+    child_height =
+        std::max({child_height, button_size.height(), GetWarningIconSize()});
+  } else if (mode_ == Mode::kDeepScanning) {
+    width = kStartPadding + GetWarningIconSize() + kStartPadding +
+            deep_scanning_label_->width() + kLabelPadding;
+    if (open_now_button_) {
+      width += open_now_button_->GetPreferredSize().width();
+      // Height: make sure the button fits and the warning icon fits.
+      child_height =
+          std::max({child_height, open_now_button_->GetPreferredSize().height(),
+                    GetWarningIconSize()});
+      width += kEndPadding;
+    }
+  } else {
+    int status_width = kTextWidth;
+    if (model_->GetDangerType() ==
+        download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE) {
+      status_width =
+          std::max(status_width, status_label_->GetPreferredSize().width());
+    }
+    width = kStartPadding + kProgressIndicatorSize + kProgressTextPadding +
+            status_width + kEndPadding;
+  }
+
+  if (mode_ != Mode::kDangerous)
+    width += dropdown_button_->GetPreferredSize().width();
+
+  return gfx::Size(width, std::max(kDefaultDownloadItemHeight,
+                                   2 * kMinimumVerticalPadding + child_height));
+}
+
+void DownloadItemView::OnPaint(gfx::Canvas* canvas) {
+  // Make sure to draw |this| opaquely. Since the toolbar color can be partially
+  // transparent, start with a black backdrop (which is the default initialized
+  // color for opaque canvases).
+  canvas->DrawColor(SK_ColorBLACK);
+  canvas->DrawColor(
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF));
+
+  DrawIcon(canvas);
+  OnPaintBorder(canvas);
+}
+
+void DownloadItemView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  UpdateColorsFromTheme();
+  SchedulePaint();
+  UpdateDropdownButton();
+}
+
+void DownloadItemView::OpenDownload() {
+  DCHECK(!is_download_warning(mode_));
+  // We're interested in how long it takes users to open downloads.  If they
+  // open downloads super quickly, we should be concerned about clickjacking.
+  UMA_HISTOGRAM_LONG_TIMES("clickjacking.open_download",
+                           base::Time::Now() - creation_time_);
+
+  // If this is still around for the next status update, it will be read.
+  announce_accessible_alert_soon_ = true;
+
+  // Calling download()->OpenDownload may delete this, so this must be
+  // the last thing we do.
+  model_->OpenDownload();
+}
+
+bool DownloadItemView::SubmitDownloadToFeedbackService(
+    DownloadCommands::Command download_command) {
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
+  if (!sb_service)
+    return false;
+  safe_browsing::DownloadProtectionService* download_protection_service =
+      sb_service->download_protection_service();
+  if (!download_protection_service)
+    return false;
+  // TODO(shaktisahu): Enable feedback service for offline item.
+  if (model_->download()) {
+    return download_protection_service->MaybeBeginFeedbackForDownload(
+        shelf_->browser()->profile(), model_->download(), download_command);
+  }
+  // WARNING: we are deleted at this point.  Don't access 'this'.
+  return true;
+#else
+  NOTREACHED();
+  return false;
+#endif
+}
+
+int DownloadItemView::GetYForFilenameText() const {
+  int text_height = font_list_.GetHeight();
+  if (!status_label_->GetText().empty())
+    text_height += status_font_list_.GetHeight();
+  return (height() - text_height) / 2;
+}
+
+void DownloadItemView::DrawIcon(gfx::Canvas* canvas) {
+  bool use_new_warnings =
+      base::FeatureList::IsEnabled(safe_browsing::kUseNewDownloadWarnings);
+  bool show_warning_icon = mode_ != Mode::kNormal;
+  if (show_warning_icon && !use_new_warnings) {
+    int icon_x =
+        (base::i18n::IsRTL() ? width() - GetWarningIconSize() - kStartPadding
+                             : kStartPadding);
+    int icon_y = (height() - GetWarningIconSize()) / 2;
+    canvas->DrawImageInt(GetWarningIcon(), icon_x, icon_y);
+    return;
+  }
+
+  // Paint download progress.
+  DownloadItem::DownloadState state = model_->GetState();
+  int progress_x = base::i18n::IsRTL()
+                       ? width() - kStartPadding - kProgressIndicatorSize
+                       : kStartPadding;
+  int progress_y = (height() - kProgressIndicatorSize) / 2;
+  const gfx::RectF progress_bounds(
+      progress_x, progress_y, kProgressIndicatorSize, kProgressIndicatorSize);
+
+  const gfx::ImageSkia* current_icon = nullptr;
+  IconManager* im = g_browser_process->icon_manager();
+  gfx::Image* image_ptr = im->LookupIconFromFilepath(
+      model_->GetTargetFilePath(), IconLoader::SMALL);
+  if (image_ptr)
+    current_icon = image_ptr->ToImageSkia();
+
+  if (state == DownloadItem::IN_PROGRESS &&
+      !(use_new_warnings && show_warning_icon)) {
+    base::TimeDelta progress_time = previous_progress_elapsed_;
+    if (!model_->IsPaused())
+      progress_time += base::TimeTicks::Now() - progress_start_time_;
+    PaintDownloadProgress(canvas, progress_bounds, progress_time,
+                          model_->PercentComplete());
+  } else if (complete_animation_.get() && complete_animation_->is_animating()) {
+    DCHECK_EQ(Mode::kNormal, mode_);
+    // Loop back and forth five times.
+    double start = 0, end = 5;
+    if (model_->GetState() == download::DownloadItem::INTERRUPTED)
+      std::swap(start, end);
+    const double value = gfx::Tween::DoubleValueBetween(
+        complete_animation_->GetCurrentValue(), start, end);
+    const double opacity = std::sin((value + 0.5) * base::kPiDouble) / 2 + 0.5;
+    canvas->SaveLayerAlpha(
+        static_cast<uint8_t>(gfx::Tween::IntValueBetween(opacity, 0, 255)));
+    PaintDownloadProgress(canvas, progress_bounds, base::TimeDelta(), 100);
+    canvas->Restore();
+  } else if (use_new_warnings) {
+    current_icon = &icon_;
+  }
+
+  if (!current_icon)
+    return;
+
+  // Draw the icon image.
+  int kFiletypeIconOffset =
+      (kProgressIndicatorSize - current_icon->height()) / 2;
+  int icon_x = progress_x + kFiletypeIconOffset;
+  int icon_y = progress_y + kFiletypeIconOffset;
+  cc::PaintFlags flags;
+  // Use an alpha to make the image look disabled.
+  if (!GetEnabled())
+    flags.setAlpha(120);
+  canvas->DrawImageInt(*current_icon, icon_x, icon_y, flags);
+
+  // Overlay the danger icon if appropriate.
+  if (show_warning_icon && use_new_warnings) {
+    int icon_x =
+        (base::i18n::IsRTL() ? width() - GetWarningIconSize() - kStartPadding
+                             : kStartPadding) +
+        kDangerIconOffset;
+    int icon_y = (height() - GetWarningIconSize()) / 2 + kDangerIconOffset;
+    canvas->DrawImageInt(GetWarningIcon(), icon_x, icon_y);
+  }
+}
+
+void DownloadItemView::LoadIcon() {
+  IconManager* im = g_browser_process->icon_manager();
+  last_download_item_path_ = model_->GetTargetFilePath();
+  im->LoadIcon(
+      last_download_item_path_, IconLoader::SMALL,
+      base::BindOnce(&DownloadItemView::OnExtractIconComplete,
+                     base::Unretained(this), IconLoader::IconSize::SMALL),
+      &cancelable_task_tracker_);
+  im->LoadIcon(last_download_item_path_, IconLoader::NORMAL,
+               base::BindOnce(&DownloadItemView::OnExtractIconComplete,
+                              base::Unretained(this), IconLoader::NORMAL),
+               &cancelable_task_tracker_);
+}
+
+void DownloadItemView::LoadIconIfItemPathChanged() {
+  base::FilePath current_download_path = model_->GetTargetFilePath();
+  if (last_download_item_path_ == current_download_path)
+    return;
+
+  LoadIcon();
+}
+
+void DownloadItemView::UpdateColorsFromTheme() {
+  if (!GetThemeProvider())
+    return;
+
+  open_button_->SetBorder(
+      std::make_unique<SeparatorBorder>(GetThemeProvider()->GetColor(
+          ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR)));
+
+  file_name_label_->SetTextStyle(GetEnabled() ? views::style::STYLE_PRIMARY
+                                              : views::style::STYLE_DISABLED);
+  if (model_->GetDangerType() ==
+      download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE) {
+    status_label_->SetTextStyle(STYLE_GREEN);
+  } else if (model_->GetDangerType() ==
+             download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS) {
+    status_label_->SetTextStyle(STYLE_RED);
+  } else {
+    status_label_->SetTextStyle(views::style::STYLE_PRIMARY);
+  }
+  SkColor background_color =
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF);
+  file_name_label_->SetBackgroundColor(background_color);
+  status_label_->SetBackgroundColor(background_color);
+
+  if (save_button_)
+    shelf_->ConfigureButtonForTheme(save_button_);
+  if (discard_button_)
+    shelf_->ConfigureButtonForTheme(discard_button_);
+  if (open_now_button_)
+    shelf_->ConfigureButtonForTheme(open_now_button_);
+  if (scan_button_)
+    shelf_->ConfigureButtonForTheme(scan_button_);
+}
+
+void DownloadItemView::UpdateDropdownButton() {
+  views::SetImageFromVectorIcon(
+      dropdown_button_,
+      dropdown_state_ == PUSHED ? kCaretDownIcon : kCaretUpIcon,
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT));
+}
+
+void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,
+                                           ui::MenuSourceType source_type) {
+  // Similar hack as in MenuButton.
+  // We're about to show the menu from a mouse press. By showing from the
+  // mouse press event we block RootView in mouse dispatching. This also
+  // appears to cause RootView to get a mouse pressed BEFORE the mouse
+  // release is seen, which means RootView sends us another mouse press no
+  // matter where the user pressed. To force RootView to recalculate the
+  // mouse target during the mouse press we explicitly set the mouse handler
+  // to null.
+  static_cast<views::internal::RootView*>(GetWidget()->GetRootView())
+      ->SetMouseHandler(nullptr);
+
+  if (!context_menu_.get())
+    context_menu_ = std::make_unique<DownloadShelfContextMenuView>(this);
+  context_menu_->Run(GetWidget()->GetTopLevelWidget(), rect, source_type,
+                     base::Bind(&DownloadItemView::ReleaseDropdown,
+                                weak_ptr_factory_.GetWeakPtr()));
+}
+
+void DownloadItemView::SetDropdownState(State new_state) {
+  if (new_state != dropdown_state_) {
+    dropdown_button_->AnimateInkDrop(new_state == PUSHED
+                                         ? views::InkDropState::ACTIVATED
+                                         : views::InkDropState::DEACTIVATED,
+                                     nullptr);
+    dropdown_state_ = new_state;
+    UpdateDropdownButton();
+    SchedulePaint();
+  }
+}
+
+void DownloadItemView::SetMode(Mode mode) {
+  mode_ = mode;
+}
+
 void DownloadItemView::TransitionToNormalMode() {
-  if (IsShowingDeepScanning())
+  if (mode_ == Mode::kDeepScanning)
     ClearDeepScanningDialog();
-  if (IsShowingWarningDialog())
+  if (is_download_warning(mode_))
     ClearWarningDialog();
-  if (IsShowingMixedContentDialog())
+  if (is_mixed_content(mode_))
     ClearMixedContentDialog();
 
   status_label_->SetText(GetStatusText());
   status_label_->GetViewAccessibility().OverrideIsIgnored(
       status_label_->GetText().empty());
-  AdjustTextAndGetSize(status_label_,
-                       base::BindRepeating(&views::Label::SetText));
   file_name_label_->SetY(GetYForFilenameText());
   switch (model_->GetState()) {
     case DownloadItem::IN_PROGRESS:
@@ -443,578 +977,10 @@ void DownloadItemView::TransitionToNormalMode() {
   shelf_->SchedulePaint();
 }
 
-void DownloadItemView::OnDownloadDestroyed() {
-  shelf_->RemoveDownloadView(this);  // This will delete us!
-}
-
-void DownloadItemView::OnDownloadOpened() {
-  // First, Calculate the download status opening string width.
-  base::string16 status_string =
-      l10n_util::GetStringFUTF16(IDS_DOWNLOAD_STATUS_OPENING, base::string16());
-  int status_string_width = gfx::GetStringWidth(status_string, font_list_);
-  // Then, elide the file name.
-  base::string16 filename_string =
-      gfx::ElideFilename(model_->GetFileNameToReportUser(), font_list_,
-                         kTextWidth - status_string_width);
-  // Last, concat the whole string to be set on the label.
-  file_name_label_->SetText(
-      l10n_util::GetStringFUTF16(IDS_DOWNLOAD_STATUS_OPENING, filename_string));
-
-  SetEnabled(false);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&DownloadItemView::Reenable,
-                     weak_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromSeconds(3));
-
-  // Notify our parent.
-  shelf_->OpenedDownload();
-}
-
-// View overrides
-
-// In dangerous mode we have to layout our buttons.
-void DownloadItemView::Layout() {
-  View::Layout();
-
-  UpdateColorsFromTheme();
-
-  open_button_->SetBoundsRect(GetLocalBounds());
-
-  if (IsShowingWarningDialog()) {
-    gfx::Point child_origin(
-        kStartPadding + GetWarningIconSize() + kStartPadding,
-        (height() - dangerous_download_label_->height()) / 2);
-    dangerous_download_label_->SetPosition(child_origin);
-
-    child_origin.Offset(dangerous_download_label_->width() + kLabelPadding, 0);
-    gfx::Size button_size = GetButtonSize();
-    child_origin.set_y((height() - button_size.height()) / 2);
-    if (save_button_) {
-      save_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-      child_origin.Offset(button_size.width() + kSaveDiscardButtonPadding, 0);
-    }
-    if (discard_button_)
-      discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-    if (scan_button_)
-      scan_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-  } else if (IsShowingMixedContentDialog()) {
-    gfx::Point child_origin(
-        kStartPadding + GetWarningIconSize() + kStartPadding,
-        (height() - dangerous_download_label_->height()) / 2);
-    dangerous_download_label_->SetPosition(child_origin);
-
-    child_origin.Offset(dangerous_download_label_->width() + kLabelPadding, 0);
-    gfx::Size button_size = GetButtonSize();
-    child_origin.set_y((height() - button_size.height()) / 2);
-    if (save_button_)
-      save_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-    if (discard_button_)
-      discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-  } else if (IsShowingDeepScanning()) {
-    gfx::Point child_origin(
-        kStartPadding + GetWarningIconSize() + kStartPadding,
-        (height() - deep_scanning_label_->height()) / 2);
-    deep_scanning_label_->SetPosition(child_origin);
-
-    if (open_now_button_) {
-      child_origin.set_y(
-          (height() - open_now_button_->GetPreferredSize().height()) / 2);
-      child_origin.Offset(deep_scanning_label_->width() + kLabelPadding, 0);
-      open_now_button_->SetBoundsRect(
-          gfx::Rect(child_origin, open_now_button_->GetPreferredSize()));
-    }
-  } else {
-    int mirrored_x = GetMirroredXWithWidthInView(
-        kStartPadding + DownloadShelf::kProgressIndicatorSize +
-            kProgressTextPadding,
-        kTextWidth);
-    int file_name_y = GetYForFilenameText();
-    file_name_label_->SetBoundsRect(
-        gfx::Rect(mirrored_x, file_name_y, kTextWidth, font_list_.GetHeight()));
-
-    int status_y =
-        file_name_y + font_list_.GetBaseline() + kVerticalTextPadding;
-    bool should_expand_for_status_text =
-        (model_->GetDangerType() ==
-         download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE);
-    int status_width = should_expand_for_status_text
-                           ? status_label_->GetPreferredSize().width()
-                           : kTextWidth;
-    status_label_->SetBoundsRect(gfx::Rect(mirrored_x, status_y, status_width,
-                                           status_font_list_.GetHeight()));
-  }
-
-  if (mode_ != DANGEROUS_MODE) {
-    dropdown_button_->SizeToPreferredSize();
-    dropdown_button_->SetPosition(
-        gfx::Point(width() - dropdown_button_->width() - kEndPadding,
-                   (height() - dropdown_button_->height()) / 2));
-  }
-}
-
-void DownloadItemView::UpdateDropdownButton() {
-  views::SetImageFromVectorIcon(
-      dropdown_button_,
-      dropdown_state_ == PUSHED ? kCaretDownIcon : kCaretUpIcon,
-      GetTextColor());
-}
-
-gfx::Size DownloadItemView::CalculatePreferredSize() const {
-  int width = 0;
-  // We set the height to the height of two rows or text plus margins.
-  int child_height = font_list_.GetBaseline() + kVerticalTextPadding +
-                     status_font_list_.GetHeight();
-
-  if (IsShowingWarningDialog() || IsShowingMixedContentDialog()) {
-    // Width.
-    width = kStartPadding + GetWarningIconSize() + kStartPadding +
-            dangerous_download_label_->width() + kLabelPadding;
-    gfx::Size button_size = GetButtonSize();
-    if (save_button_ && discard_button_)
-      width += button_size.width() + kSaveDiscardButtonPadding;
-    width += button_size.width() + kEndPadding;
-
-    // Height: make sure the button fits and the warning icon fits.
-    child_height =
-        std::max({child_height, button_size.height(), GetWarningIconSize()});
-  } else if (IsShowingDeepScanning()) {
-    width = kStartPadding + GetWarningIconSize() + kStartPadding +
-            deep_scanning_label_->width() + kLabelPadding;
-    if (open_now_button_) {
-      width += open_now_button_->GetPreferredSize().width();
-      // Height: make sure the button fits and the warning icon fits.
-      child_height =
-          std::max({child_height, open_now_button_->GetPreferredSize().height(),
-                    GetWarningIconSize()});
-      width += kEndPadding;
-    }
-  } else {
-    gfx::Size label_size = file_name_label_->GetPreferredSize();
-    label_size.SetToMax(status_label_->GetPreferredSize());
-    label_size.SetToMax(gfx::Size(kTextWidth, 0));
-    width = kStartPadding + DownloadShelf::kProgressIndicatorSize +
-            kProgressTextPadding + label_size.width() + kEndPadding;
-  }
-
-  if (mode_ != DANGEROUS_MODE)
-    width += dropdown_button_->GetPreferredSize().width();
-
-  return gfx::Size(width, std::max(kDefaultDownloadItemHeight,
-                                   2 * kMinimumVerticalPadding + child_height));
-}
-
-// Handle drag (file copy) operations.
-bool DownloadItemView::OnMouseDragged(const ui::MouseEvent& event) {
-  // Mouse should not activate us in dangerous mode.
-  if (IsShowingWarningDialog() || IsShowingMixedContentDialog())
-    return true;
-
-  if (!starting_drag_) {
-    starting_drag_ = true;
-    drag_start_point_ = event.location();
-  }
-  if (dragging_) {
-    if (model_->GetState() == DownloadItem::COMPLETE) {
-      IconManager* im = g_browser_process->icon_manager();
-      gfx::Image* icon = im->LookupIconFromFilepath(model_->GetTargetFilePath(),
-                                                    IconLoader::SMALL);
-      views::Widget* widget = GetWidget();
-      if (model_->download()) {
-        // TODO(shaktisahu): Make DragDownloadItem work with a model.
-        DragDownloadItem(model_->download(), icon,
-                         widget ? widget->GetNativeView() : nullptr);
-        RecordDownloadShelfDragEvent(DownloadShelfDragEvent::STARTED);
-      }
-    }
-  } else if (ExceededDragThreshold(event.location() - drag_start_point_)) {
-    dragging_ = true;
-  }
-  return true;
-}
-
-void DownloadItemView::OnMouseCaptureLost() {
-  // Mouse should not activate us in dangerous mode.
-  if (mode_ != NORMAL_MODE)
-    return;
-
-  if (dragging_) {
-    // Starting a drag results in a MouseCaptureLost.
-    dragging_ = false;
-    starting_drag_ = false;
-  }
-}
-
-base::string16 DownloadItemView::GetTooltipText(const gfx::Point& p) const {
-  return (IsShowingWarningDialog() || IsShowingMixedContentDialog())
-             ? base::string16()
-             : tooltip_text_;
-}
-
-void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(accessible_name_);
-  node_data->role = ax::mojom::Role::kGroup;
-
-  // Set the description to the empty string, otherwise the tooltip will be
-  // used, which is redundant with the accessible name.
-  node_data->SetDescription(base::string16());
-}
-
-void DownloadItemView::AddedToWidget() {
-  // Only required because OnThemeChanged is not called when a View is added to
-  // a Widget.
-  UpdateDropdownButton();
-}
-
-void DownloadItemView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-  UpdateColorsFromTheme();
-  SchedulePaint();
-  UpdateDropdownButton();
-}
-
-void DownloadItemView::ShowContextMenuForViewImpl(
-    View* source,
-    const gfx::Point& point,
-    ui::MenuSourceType source_type) {
-  ShowContextMenuImpl(gfx::Rect(point, gfx::Size()), source_type);
-}
-
-void DownloadItemView::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  if (sender == open_now_button_) {
-    OpenDownloadDuringAsyncScanning();
-    return;
-  }
-
-  if (sender == dropdown_button_) {
-    // TODO(estade): this is copied from ToolbarActionView but should be shared
-    // one way or another.
-    ui::MenuSourceType type = ui::MENU_SOURCE_NONE;
-    if (event.IsMouseEvent())
-      type = ui::MENU_SOURCE_MOUSE;
-    else if (event.IsKeyEvent())
-      type = ui::MENU_SOURCE_KEYBOARD;
-    else if (event.IsGestureEvent())
-      type = ui::MENU_SOURCE_TOUCH;
-    SetDropdownState(PUSHED);
-    ShowContextMenuImpl(dropdown_button_->GetBoundsInScreen(), type);
-    return;
-  }
-
-  base::TimeDelta warning_duration;
-  if (!time_download_warning_shown_.is_null())
-    warning_duration = base::Time::Now() - time_download_warning_shown_;
-
-  if (mode_ == MIX_DL_WARNING_MODE && sender == save_button_) {
-    DownloadCommands(model_.get()).ExecuteCommand(DownloadCommands::KEEP);
-    return;
-  }
-  if (mode_ == DANGEROUS_MODE && sender == save_button_) {
-    // The user has confirmed a dangerous download.  We'd record how quickly the
-    // user did this to detect whether we're being clickjacked.
-    UMA_HISTOGRAM_LONG_TIMES("clickjacking.save_download", warning_duration);
-    // This will call ValidateDangerousDownload(), change download state and
-    // notify us.
-    MaybeSubmitDownloadToFeedbackService(DownloadCommands::KEEP);
-    return;
-  }
-
-  if (sender == open_button_) {
-    if (IsShowingDeepScanning()) {
-      content::WebContents* current_web_contents =
-          shelf_->browser()->tab_strip_model()->GetActiveWebContents();
-      open_now_modal_dialog_ = TabModalConfirmDialog::Create(
-          std::make_unique<safe_browsing::DeepScanningModalDialog>(
-              current_web_contents,
-              base::BindOnce(&DownloadItemView::OpenDownloadDuringAsyncScanning,
-                             weak_ptr_factory_.GetWeakPtr())),
-          current_web_contents);
-      return;
-    }
-    if (model_->GetDangerType() ==
-        download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING) {
-      content::WebContents* current_web_contents =
-          shelf_->browser()->tab_strip_model()->GetActiveWebContents();
-      safe_browsing::PromptForScanningModalDialog::ShowForWebContents(
-          current_web_contents, ElidedFilename(),
-          base::BindOnce(&DownloadItemView::ConfirmDeepScanning,
-                         weak_ptr_factory_.GetWeakPtr()),
-          base::BindOnce(&DownloadItemView::BypassDeepScanning,
-                         weak_ptr_factory_.GetWeakPtr()));
-      return;
-    }
-    if (IsShowingWarningDialog() || IsShowingMixedContentDialog())
-      return;
-    if (complete_animation_.get() && complete_animation_->is_animating())
-      complete_animation_->End();
-    OpenDownload();
-    return;
-  }
-
-  if (sender == scan_button_) {
-    ConfirmDeepScanning();
-    return;
-  }
-
-  DCHECK_EQ(discard_button_, sender);
-
-  if (mode_ == MIX_DL_BLOCK_MODE || mode_ == MIX_DL_WARNING_MODE) {
-    DownloadCommands(model_.get()).ExecuteCommand(DownloadCommands::DISCARD);
-    return;
-  }
-
-  UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download", warning_duration);
-  MaybeSubmitDownloadToFeedbackService(DownloadCommands::DISCARD);
-  // WARNING: 'this' maybe deleted at this point. Don't access 'this'.
-}
-
-void DownloadItemView::AnimationProgressed(const gfx::Animation* animation) {
-  // We don't care if what animation (body button/drop button/complete),
-  // is calling back, as they all have to go through the same paint call.
-  SchedulePaint();
-}
-
-void DownloadItemView::OnPaint(gfx::Canvas* canvas) {
-  // Make sure to draw |this| opaquely. Since the toolbar color can be partially
-  // transparent, start with a black backdrop (which is the default initialized
-  // color for opaque canvases).
-  canvas->DrawColor(SK_ColorBLACK);
-  canvas->DrawColor(
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF));
-
-  DrawIcon(canvas);
-  OnPaintBorder(canvas);
-}
-
-int DownloadItemView::GetYForFilenameText() const {
-  int text_height = font_list_.GetBaseline();
-  if (!status_label_->GetText().empty())
-    text_height += kVerticalTextPadding + status_font_list_.GetBaseline();
-  return (height() - text_height) / 2;
-}
-
-void DownloadItemView::DrawIcon(gfx::Canvas* canvas) {
-  bool use_new_warnings =
-      base::FeatureList::IsEnabled(safe_browsing::kUseNewDownloadWarnings);
-  bool show_warning_icon = IsShowingWarningDialog() ||
-                           IsShowingMixedContentDialog() ||
-                           IsShowingDeepScanning();
-  if (show_warning_icon && !use_new_warnings) {
-    int icon_x =
-        (base::i18n::IsRTL() ? width() - GetWarningIconSize() - kStartPadding
-                             : kStartPadding);
-    int icon_y = (height() - GetWarningIconSize()) / 2;
-    canvas->DrawImageInt(GetWarningIcon(), icon_x, icon_y);
-    return;
-  }
-
-  // Paint download progress.
-  DownloadItem::DownloadState state = model_->GetState();
-  canvas->Save();
-  int progress_x =
-      base::i18n::IsRTL()
-          ? width() - kStartPadding - DownloadShelf::kProgressIndicatorSize
-          : kStartPadding;
-  int progress_y = (height() - DownloadShelf::kProgressIndicatorSize) / 2;
-  canvas->Translate(gfx::Vector2d(progress_x, progress_y));
-
-  const gfx::ImageSkia* current_icon = nullptr;
-  IconManager* im = g_browser_process->icon_manager();
-  gfx::Image* image_ptr = im->LookupIconFromFilepath(
-      model_->GetTargetFilePath(), IconLoader::SMALL);
-  if (image_ptr)
-    current_icon = image_ptr->ToImageSkia();
-
-  if (state == DownloadItem::IN_PROGRESS &&
-      !(use_new_warnings && show_warning_icon)) {
-    base::TimeDelta progress_time = previous_progress_elapsed_;
-    if (!model_->IsPaused())
-      progress_time += base::TimeTicks::Now() - progress_start_time_;
-    DownloadShelf::PaintDownloadProgress(
-        canvas, *GetThemeProvider(), progress_time, model_->PercentComplete());
-  } else if (complete_animation_.get() && complete_animation_->is_animating()) {
-    if (state == DownloadItem::INTERRUPTED) {
-      DownloadShelf::PaintDownloadInterrupted(
-          canvas, *GetThemeProvider(), complete_animation_->GetCurrentValue());
-    } else {
-      DCHECK_EQ(DownloadItem::COMPLETE, state);
-      DownloadShelf::PaintDownloadComplete(
-          canvas, *GetThemeProvider(), complete_animation_->GetCurrentValue());
-    }
-  } else if (use_new_warnings) {
-    current_icon = &icon_;
-  }
-  canvas->Restore();
-
-  if (!current_icon)
-    return;
-
-  // Draw the icon image.
-  int kFiletypeIconOffset =
-      (DownloadShelf::kProgressIndicatorSize - current_icon->height()) / 2;
-  int icon_x = progress_x + kFiletypeIconOffset;
-  int icon_y = progress_y + kFiletypeIconOffset;
-  cc::PaintFlags flags;
-  // Use an alpha to make the image look disabled.
-  if (!GetEnabled())
-    flags.setAlpha(120);
-  canvas->DrawImageInt(*current_icon, icon_x, icon_y, flags);
-
-  // Overlay the danger icon if appropriate.
-  if (show_warning_icon && use_new_warnings) {
-    int icon_x =
-        (base::i18n::IsRTL() ? width() - GetWarningIconSize() - kStartPadding
-                             : kStartPadding) +
-        kDangerIconOffset;
-    int icon_y = (height() - GetWarningIconSize()) / 2 + kDangerIconOffset;
-    canvas->DrawImageInt(GetWarningIcon(), icon_x, icon_y);
-  }
-}
-
-void DownloadItemView::OpenDownload() {
-  DCHECK(!IsShowingWarningDialog());
-  // We're interested in how long it takes users to open downloads.  If they
-  // open downloads super quickly, we should be concerned about clickjacking.
-  UMA_HISTOGRAM_LONG_TIMES("clickjacking.open_download",
-                           base::Time::Now() - creation_time_);
-
-  // If this is still around for the next status update, it will be read.
-  announce_accessible_alert_soon_ = true;
-
-  // Calling download()->OpenDownload may delete this, so this must be
-  // the last thing we do.
-  model_->OpenDownload();
-}
-
-bool DownloadItemView::SubmitDownloadToFeedbackService(
-    DownloadCommands::Command download_command) {
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-  safe_browsing::SafeBrowsingService* sb_service =
-      g_browser_process->safe_browsing_service();
-  if (!sb_service)
-    return false;
-  safe_browsing::DownloadProtectionService* download_protection_service =
-      sb_service->download_protection_service();
-  if (!download_protection_service)
-    return false;
-  // TODO(shaktisahu): Enable feedback service for offline item.
-  if (model_->download()) {
-    return download_protection_service->MaybeBeginFeedbackForDownload(
-        shelf_->browser()->profile(), model_->download(), download_command);
-  }
-  // WARNING: we are deleted at this point.  Don't access 'this'.
-  return true;
-#else
-  NOTREACHED();
-  return false;
-#endif
-}
-
-void DownloadItemView::LoadIcon() {
-  IconManager* im = g_browser_process->icon_manager();
-  last_download_item_path_ = model_->GetTargetFilePath();
-  im->LoadIcon(
-      last_download_item_path_, IconLoader::SMALL,
-      base::BindOnce(&DownloadItemView::OnExtractIconComplete,
-                     base::Unretained(this), IconLoader::IconSize::SMALL),
-      &cancelable_task_tracker_);
-  im->LoadIcon(last_download_item_path_, IconLoader::NORMAL,
-               base::BindOnce(&DownloadItemView::OnExtractIconComplete,
-                              base::Unretained(this), IconLoader::NORMAL),
-               &cancelable_task_tracker_);
-}
-
-void DownloadItemView::LoadIconIfItemPathChanged() {
-  base::FilePath current_download_path = model_->GetTargetFilePath();
-  if (last_download_item_path_ == current_download_path)
-    return;
-
-  LoadIcon();
-}
-
-void DownloadItemView::UpdateColorsFromTheme() {
-  if (!GetThemeProvider())
-    return;
-
-  open_button_->SetBorder(
-      std::make_unique<SeparatorBorder>(GetThemeProvider()->GetColor(
-          ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR)));
-
-  // Use a slightly dimmed version of the base text color.
-  SkColor dimmed_text_color = SkColorSetA(GetTextColor(), 0xC7);
-  file_name_label_->SetEnabledColor(GetEnabled() ? GetTextColor()
-                                                 : dimmed_text_color);
-  if (model_->GetDangerType() ==
-      download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE) {
-    status_label_->SetEnabledColor(SK_ColorGREEN);
-  } else if (model_->GetDangerType() ==
-             download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS) {
-    status_label_->SetEnabledColor(SK_ColorRED);
-  } else {
-    status_label_->SetEnabledColor(dimmed_text_color);
-  }
-  SkColor background_color =
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF);
-  file_name_label_->SetBackgroundColor(background_color);
-  status_label_->SetBackgroundColor(background_color);
-
-  if (save_button_)
-    shelf_->ConfigureButtonForTheme(save_button_);
-  if (discard_button_)
-    shelf_->ConfigureButtonForTheme(discard_button_);
-  if (open_now_button_)
-    shelf_->ConfigureButtonForTheme(open_now_button_);
-  if (scan_button_)
-    shelf_->ConfigureButtonForTheme(scan_button_);
-}
-
-void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,
-                                           ui::MenuSourceType source_type) {
-  // Similar hack as in MenuButton.
-  // We're about to show the menu from a mouse press. By showing from the
-  // mouse press event we block RootView in mouse dispatching. This also
-  // appears to cause RootView to get a mouse pressed BEFORE the mouse
-  // release is seen, which means RootView sends us another mouse press no
-  // matter where the user pressed. To force RootView to recalculate the
-  // mouse target during the mouse press we explicitly set the mouse handler
-  // to null.
-  static_cast<views::internal::RootView*>(GetWidget()->GetRootView())
-      ->SetMouseHandler(nullptr);
-
-  if (!context_menu_.get())
-    context_menu_ = std::make_unique<DownloadShelfContextMenuView>(this);
-  context_menu_->Run(GetWidget()->GetTopLevelWidget(), rect, source_type,
-                     base::Bind(&DownloadItemView::ReleaseDropdown,
-                                weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DownloadItemView::SetDropdownState(State new_state) {
-  // Avoid extra SchedulePaint()s if the state is going to be the same and
-  // |dropdown_button_| has already been initialized.
-  if (dropdown_state_ == new_state &&
-      !dropdown_button_->GetImage(views::Button::STATE_NORMAL).isNull())
-    return;
-
-  if (new_state != dropdown_state_) {
-    dropdown_button_->AnimateInkDrop(new_state == PUSHED
-                                         ? views::InkDropState::ACTIVATED
-                                         : views::InkDropState::DEACTIVATED,
-                                     nullptr);
-  }
-  dropdown_state_ = new_state;
-  UpdateDropdownButton();
-  SchedulePaint();
-}
-
-void DownloadItemView::SetMode(Mode mode) {
-  mode_ = mode;
-}
-
 void DownloadItemView::TransitionToMixedContentDialog() {
-  if (IsShowingMixedContentDialog())
+  if (is_mixed_content(mode_))
     ClearMixedContentDialog();
-  if (IsShowingDeepScanning())
+  if (mode_ == Mode::kDeepScanning)
     ClearDeepScanningDialog();
 
   ShowMixedContentDialog();
@@ -1028,9 +994,9 @@ void DownloadItemView::TransitionToMixedContentDialog() {
 }
 
 void DownloadItemView::ClearMixedContentDialog() {
-  DCHECK(IsShowingMixedContentDialog());
+  DCHECK(is_mixed_content(mode_));
 
-  SetMode(NORMAL_MODE);
+  SetMode(Mode::kNormal);
   dropdown_state_ = NORMAL;
 
   // Remove the views used by the mixed content dialog.
@@ -1055,32 +1021,36 @@ void DownloadItemView::ClearMixedContentDialog() {
 
 void DownloadItemView::ShowMixedContentDialog() {
   DCHECK(model_->IsMixedContent());
-  DCHECK(!IsShowingMixedContentDialog());
+  DCHECK(!is_mixed_content(mode_));
 
   SetMode(model_->GetMixedContentStatus() == MixedContentStatus::WARN
-              ? MIX_DL_WARNING_MODE
-              : MIX_DL_BLOCK_MODE);
+              ? Mode::kMixedContentWarn
+              : Mode::kMixedContentBlock);
 
   dropdown_state_ = NORMAL;
 
-  if (mode_ == MIX_DL_WARNING_MODE) {
+  if (mode_ == Mode::kMixedContentWarn) {
     auto save_button = views::MdTextButton::Create(
         this, model_->GetWarningConfirmButtonText());
     save_button_ = AddChildView(std::move(save_button));
-  } else {  // MIX_DL_BLOCK_MODE
+  } else {
     auto discard_button = views::MdTextButton::Create(
         this, l10n_util::GetStringUTF16(IDS_DISCARD_DOWNLOAD));
     discard_button_ = AddChildView(std::move(discard_button));
   }
 
-  base::string16 dangerous_label =
-      model_->GetWarningText(font_list_, kTextWidth);
+  const base::string16 filename = ElidedFilename();
+  size_t filename_offset;
   auto dangerous_download_label = std::make_unique<views::StyledLabel>(
-      dangerous_label, /*listener=*/nullptr);
+      model_->GetWarningText(filename, &filename_offset), /*listener=*/nullptr);
+  dangerous_download_label->SetTextContext(CONTEXT_DOWNLOAD_SHELF);
   dangerous_download_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   dangerous_download_label->SetAutoColorReadabilityEnabled(false);
+  dangerous_download_label->set_can_process_events_within_subtree(false);
   dangerous_download_label_ = AddChildView(std::move(dangerous_download_label));
-  SizeLabelToMinWidth();
+  StyleFilename(*dangerous_download_label_, filename_offset, filename.length());
+  dangerous_download_label_->SizeToFit(
+      GetLabelWidth(*dangerous_download_label_));
 
   open_button_->SetEnabled(false);
   file_name_label_->SetVisible(false);
@@ -1089,9 +1059,9 @@ void DownloadItemView::ShowMixedContentDialog() {
 }
 
 void DownloadItemView::TransitionToWarningDialog() {
-  if (IsShowingDeepScanning())
+  if (mode_ == Mode::kDeepScanning)
     ClearDeepScanningDialog();
-  if (IsShowingWarningDialog())
+  if (is_download_warning(mode_))
     ClearWarningDialog();
 
   ShowWarningDialog();
@@ -1104,32 +1074,10 @@ void DownloadItemView::TransitionToWarningDialog() {
   shelf_->SchedulePaint();
 }
 
-void DownloadItemView::TransitionToDeepScanningDialog() {
-  if (IsShowingWarningDialog())
-    ClearWarningDialog();
-  if (IsShowingMixedContentDialog())
-    ClearMixedContentDialog();
-
-  ShowDeepScanningDialog();
-
-  UpdateAccessibleAlert(
-      l10n_util::GetStringFUTF16(
-          IDS_PROMPT_APP_DEEP_SCANNING_ACCESSIBLE_ALERT,
-          model_->GetFileNameToReportUser().LossyDisplayName()),
-      false);
-
-  // We need to load the icon now that the download has the real path.
-  LoadIcon();
-
-  // Force the shelf to layout again as our size has changed.
-  shelf_->Layout();
-  shelf_->SchedulePaint();
-}
-
 void DownloadItemView::ClearWarningDialog() {
-  DCHECK(IsShowingWarningDialog());
+  DCHECK(is_download_warning(mode_));
 
-  SetMode(NORMAL_MODE);
+  SetMode(Mode::kNormal);
   dropdown_state_ = NORMAL;
 
   // Remove the views used by the warning dialog.
@@ -1153,54 +1101,53 @@ void DownloadItemView::ClearWarningDialog() {
 }
 
 void DownloadItemView::ShowWarningDialog() {
-  DCHECK(!IsShowingWarningDialog());
+  DCHECK(!is_download_warning(mode_));
   time_download_warning_shown_ = base::Time::Now();
   download::DownloadDangerType danger_type = model_->GetDangerType();
   RecordDangerousDownloadWarningShown(danger_type);
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-  if (model_->ShouldAllowDownloadFeedback()) {
-    safe_browsing::DownloadFeedbackService::RecordEligibleDownloadShown(
-        danger_type);
-  }
-#endif
-  SetMode(model_->MightBeMalicious() ? MALICIOUS_MODE : DANGEROUS_MODE);
+  SetMode(model_->MightBeMalicious() ? Mode::kMalicious : Mode::kDangerous);
 
   dropdown_state_ = NORMAL;
-  if (mode_ == DANGEROUS_MODE) {
+  if (mode_ == Mode::kDangerous) {
     auto save_button = views::MdTextButton::Create(
         this, model_->GetWarningConfirmButtonText());
     save_button_ = AddChildView(std::move(save_button));
   }
 
-  if (model_->GetDangerType() !=
-          download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED &&
-      model_->GetDangerType() !=
-          download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE &&
-      model_->GetDangerType() !=
-          download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK &&
-      model_->GetDangerType() !=
-          download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING) {
-    auto discard_button = views::MdTextButton::Create(
-        this, l10n_util::GetStringUTF16(IDS_DISCARD_DOWNLOAD));
-    discard_button_ = AddChildView(std::move(discard_button));
-  }
-
-  if (model_->GetDangerType() ==
-      download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING) {
+  const base::string16 unelided_filename =
+      model_->GetFileNameToReportUser().LossyDisplayName();
+  if (danger_type == download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING) {
     auto scan_button = views::MdTextButton::Create(
         this, l10n_util::GetStringUTF16(IDS_SCAN_DOWNLOAD));
     scan_button_ = AddChildView(std::move(scan_button));
+    announce_accessible_alert_soon_ = true;
+    UpdateAccessibleAlert(
+        l10n_util::GetStringFUTF16(
+            IDS_PROMPT_APP_DEEP_SCANNING_ACCESSIBLE_ALERT, unelided_filename),
+        false);
+  } else {
+    if (!ChromeDownloadManagerDelegate::IsDangerTypeBlocked(danger_type)) {
+      auto discard_button = views::MdTextButton::Create(
+          this, l10n_util::GetStringUTF16(IDS_DISCARD_DOWNLOAD));
+      discard_button_ = AddChildView(std::move(discard_button));
+    }
+    size_t ignore;
+    UpdateAccessibleAlert(model_->GetWarningText(unelided_filename, &ignore),
+                          true);
   }
 
-  base::string16 dangerous_label =
-      model_->GetWarningText(font_list_, kTextWidth);
+  const base::string16 filename = ElidedFilename();
+  size_t filename_offset;
   auto dangerous_download_label = std::make_unique<views::StyledLabel>(
-      dangerous_label, /*listener=*/nullptr);
+      model_->GetWarningText(filename, &filename_offset), /*listener=*/nullptr);
+  dangerous_download_label->SetTextContext(CONTEXT_DOWNLOAD_SHELF);
   dangerous_download_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   dangerous_download_label->SetAutoColorReadabilityEnabled(false);
   dangerous_download_label->set_can_process_events_within_subtree(false);
   dangerous_download_label_ = AddChildView(std::move(dangerous_download_label));
-  SizeLabelToMinWidth();
+  StyleFilename(*dangerous_download_label_, filename_offset, filename.length());
+  dangerous_download_label_->SizeToFit(
+      GetLabelWidth(*dangerous_download_label_));
 
   bool open_button_enabled =
       (model_->GetDangerType() ==
@@ -1208,7 +1155,85 @@ void DownloadItemView::ShowWarningDialog() {
   open_button_->SetEnabled(open_button_enabled);
   file_name_label_->SetVisible(false);
   status_label_->SetVisible(false);
-  dropdown_button_->SetVisible(mode_ == MALICIOUS_MODE);
+  dropdown_button_->SetVisible(mode_ == Mode::kMalicious);
+}
+
+void DownloadItemView::TransitionToDeepScanningDialog() {
+  if (is_download_warning(mode_))
+    ClearWarningDialog();
+  if (is_mixed_content(mode_))
+    ClearMixedContentDialog();
+
+  ShowDeepScanningDialog();
+
+  UpdateAccessibleAlert(
+      l10n_util::GetStringFUTF16(
+          IDS_DEEP_SCANNING_ACCESSIBLE_ALERT,
+          model_->GetFileNameToReportUser().LossyDisplayName()),
+      false);
+
+  // We need to load the icon now that the download has the real path.
+  LoadIcon();
+
+  // Force the shelf to layout again as our size has changed.
+  shelf_->Layout();
+  shelf_->SchedulePaint();
+}
+
+void DownloadItemView::ClearDeepScanningDialog() {
+  DCHECK_EQ(Mode::kDeepScanning, mode_);
+
+  SetMode(Mode::kNormal);
+  dropdown_state_ = NORMAL;
+
+  delete deep_scanning_label_;
+  deep_scanning_label_ = nullptr;
+
+  delete open_now_button_;
+  open_now_button_ = nullptr;
+
+  LoadIcon();
+
+  open_button_->SetEnabled(true);
+  file_name_label_->SetVisible(true);
+  status_label_->SetVisible(true);
+}
+
+void DownloadItemView::ShowDeepScanningDialog() {
+  DCHECK_EQ(mode_, Mode::kNormal);
+  SetMode(Mode::kDeepScanning);
+
+  const int id = (model_->download() &&
+                  safe_browsing::DeepScanningRequest::ShouldUploadBinary(
+                      model_->download()))
+                     ? IDS_PROMPT_DEEP_SCANNING_DOWNLOAD
+                     : IDS_PROMPT_DEEP_SCANNING_APP_DOWNLOAD;
+  const base::string16 filename = ElidedFilename();
+  size_t filename_offset;
+  auto deep_scanning_label = std::make_unique<views::StyledLabel>(
+      l10n_util::GetStringFUTF16(id, filename, &filename_offset),
+      /*listener=*/nullptr);
+  deep_scanning_label->SetTextContext(CONTEXT_DOWNLOAD_SHELF);
+  deep_scanning_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  deep_scanning_label->SetAutoColorReadabilityEnabled(false);
+  deep_scanning_label->set_can_process_events_within_subtree(false);
+  deep_scanning_label_ = AddChildView(std::move(deep_scanning_label));
+  StyleFilename(*deep_scanning_label_, filename_offset, filename.length());
+  deep_scanning_label_->SizeToFit(GetLabelWidth(*deep_scanning_label_));
+
+  if (enterprise_connectors::ConnectorsManager::GetInstance()
+          ->DelayUntilVerdict(
+              enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED)) {
+    open_button_->SetEnabled(false);
+  } else {
+    auto open_now_button = views::MdTextButton::Create(
+        this, l10n_util::GetStringUTF16(IDS_OPEN_DOWNLOAD_NOW));
+    open_now_button_ = AddChildView(std::move(open_now_button));
+    open_button_->SetEnabled(true);
+  }
+
+  file_name_label_->SetVisible(false);
+  status_label_->SetVisible(false);
 }
 
 gfx::ImageSkia DownloadItemView::GetWarningIcon() {
@@ -1283,65 +1308,6 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
   return gfx::ImageSkia();
 }
 
-void DownloadItemView::ShowDeepScanningDialog() {
-  DCHECK_EQ(mode_, NORMAL_MODE);
-  SetMode(DEEP_SCANNING_MODE);
-
-  base::string16 elided_filename = gfx::ElideFilename(
-      model_->GetFileNameToReportUser(), font_list_, kTextWidth);
-  base::string16 deep_scanning_text = l10n_util::GetStringFUTF16(
-      IDS_PROMPT_DEEP_SCANNING_DOWNLOAD, elided_filename);
-
-  auto deep_scanning_label = std::make_unique<views::StyledLabel>(
-      deep_scanning_text, /*listener=*/nullptr);
-  deep_scanning_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  deep_scanning_label->SetAutoColorReadabilityEnabled(false);
-  deep_scanning_label->set_can_process_events_within_subtree(false);
-  deep_scanning_label_ = AddChildView(std::move(deep_scanning_label));
-  deep_scanning_label_->SetSize(AdjustTextAndGetSize(
-      deep_scanning_label_,
-      base::BindRepeating(
-          [](DownloadItemView* view, views::StyledLabel* label,
-             const base::string16& text) {
-            label->SetText(text);
-            view->StyleFilenameInLabel(label);
-          },
-          base::Unretained(this))));
-
-  if (enterprise_connectors::ConnectorsManager::GetInstance()
-          ->DelayUntilVerdict(
-              enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED)) {
-    open_button_->SetEnabled(false);
-  } else {
-    auto open_now_button = views::MdTextButton::Create(
-        this, l10n_util::GetStringUTF16(IDS_OPEN_DOWNLOAD_NOW));
-    open_now_button_ = AddChildView(std::move(open_now_button));
-    open_button_->SetEnabled(true);
-  }
-
-  file_name_label_->SetVisible(false);
-  status_label_->SetVisible(false);
-}
-
-void DownloadItemView::ClearDeepScanningDialog() {
-  DCHECK(IsShowingDeepScanning());
-
-  SetMode(NORMAL_MODE);
-  dropdown_state_ = NORMAL;
-
-  delete deep_scanning_label_;
-  deep_scanning_label_ = nullptr;
-
-  delete open_now_button_;
-  open_now_button_ = nullptr;
-
-  LoadIcon();
-
-  open_button_->SetEnabled(true);
-  file_name_label_->SetVisible(true);
-  status_label_->SetVisible(true);
-}
-
 gfx::Size DownloadItemView::GetButtonSize() const {
   gfx::Size size;
   if (discard_button_)
@@ -1353,132 +1319,27 @@ gfx::Size DownloadItemView::GetButtonSize() const {
   return size;
 }
 
-// This method computes the minimum width of the label for displaying its text
-// on 2 lines.  It just breaks the string in 2 lines on the spaces and keeps the
-// configuration with minimum width.
-void DownloadItemView::SizeLabelToMinWidth() {
-  if (dangerous_download_label_sized_)
-    return;
+int DownloadItemView::GetLabelWidth(const views::StyledLabel& label) const {
+  auto lines_for_width = [&label](int width) {
+    return label.GetLayoutSizeInfoForWidth(width).line_sizes.size();
+  };
 
-  dangerous_download_label_->SetSize(AdjustTextAndGetSize(
-      dangerous_download_label_,
-      base::BindRepeating(
-          [](DownloadItemView* view, views::StyledLabel* label,
-             const base::string16& text) {
-            label->SetText(text);
-            view->StyleFilenameInLabel(label);
-          },
-          base::Unretained(this))));
-  dangerous_download_label_sized_ = true;
-}
+  // Return 200 if that much width is sufficient to fit |label| on one line.
+  int width = 200;
+  if (lines_for_width(width) < 2)
+    return width;
 
-// static
-template <typename T>
-gfx::Size DownloadItemView::AdjustTextAndGetSize(
-    T* label,
-    base::RepeatingCallback<void(T*, const base::string16&)>
-        update_text_and_style) {
-  gfx::Size size = label->GetPreferredSize();
+  // Find an upper bound width sufficient to fit |label| on two lines.
+  int min_width = 1, max_width;
+  for (max_width = width; lines_for_width(max_width) > 2; max_width *= 2)
+    min_width = max_width;
 
-  // If the label's width is already narrower than 200, we don't need to
-  // linebreak it, as it will fit on a single line.
-  if (size.width() <= 200)
-    return size;
-
-  base::string16 label_text = label->GetText();
-  base::TrimWhitespace(label_text, base::TRIM_ALL, &label_text);
-  DCHECK_EQ(base::string16::npos, label_text.find('\n'));
-
-  // Make the label big so that GetPreferredSize() is not constrained by the
-  // current width.
-  label->SetBounds(0, 0, 1000, 1000);
-
-  // Use a const string from here. BreakIterator requies that text.data() not
-  // change during its lifetime.
-  const base::string16 original_text(label_text);
-  // Using BREAK_WORD can work in most cases, but it can also break
-  // lines where it should not. Using BREAK_LINE is safer although
-  // slower for Chinese/Japanese. This is not perf-critical at all, though.
-  base::i18n::BreakIterator iter(original_text,
-                                 base::i18n::BreakIterator::BREAK_LINE);
-  bool status = iter.Init();
-  DCHECK(status);
-
-  // Create strings with line break position before and after the mid point, and
-  // compare the width to determine whether the best break position is before or
-  // after them.
-  base::string16 prev_text = original_text;
-  std::vector<size_t> break_points;
-
-  while (iter.pos() < original_text.length() / 2) {
-    iter.Advance();
-    break_points.emplace_back(iter.pos());
-  }
-
-  size_t pos = iter.pos();
-  bool searching_backward = false;
-  gfx::Size min_width_size = size;
-  // First add a line break after the mid point. If there is a very long
-  // word in the text, |pos| could reach the end of the text.
-  if (pos < original_text.length()) {
-    searching_backward = true;
-    prev_text = SplitStringWithNewLineAtPosition(original_text, pos);
-    update_text_and_style.Run(label, prev_text);
-    min_width_size = label->GetPreferredSize();
-  }
-
-  pos = iter.prev();
-  base::string16 current_text;
-  if (pos != 0) {
-    base::string16 current_text =
-        SplitStringWithNewLineAtPosition(original_text, pos);
-    update_text_and_style.Run(label, current_text);
-    size = label->GetPreferredSize();
-
-    if (size.width() == min_width_size.width()) {
-      // We found the best line break position.
-      update_text_and_style.Run(label, prev_text);
-      return size;
-    } else if (size.width() > min_width_size.width()) {
-      // The best line break position is after |pos|.
-      update_text_and_style.Run(label, prev_text);
-    } else {
-      // The best line break position is before |prev|.
-      searching_backward = false;
-      prev_text = current_text;
-      min_width_size = size;
-      break_points.pop_back();
-    }
-  }
-
-  // Go through the string and try each line break (starting with no line break)
-  // searching for the optimal line break position. Stop if we find one that
-  // yields minimum label width.
-  while (true) {
-    if (searching_backward) {
-      iter.Advance();
-      pos = iter.pos();
-      if (pos >= original_text.length())
-        break;
-    } else {
-      break_points.pop_back();
-      if (break_points.empty())
-        break;
-      pos = break_points.back();
-    }
-    current_text = SplitStringWithNewLineAtPosition(original_text, pos);
-    update_text_and_style.Run(label, current_text);
-    size = label->GetPreferredSize();
-
-    // If the width is growing again, it means we passed the optimal width spot.
-    if (size.width() > min_width_size.width()) {
-      update_text_and_style.Run(label, prev_text);
-      return min_width_size;
-    }
-    prev_text = current_text;
-    min_width_size = size;
-  }
-  return size;
+  // Binary-search for the smallest width that fits on two lines.
+  // TODO(pkasting): Can use std::iota_view() when C++20 is available.
+  std::vector<int> widths(max_width + 1 - min_width);
+  std::iota(widths.begin(), widths.end(), min_width);
+  return *util::ranges::lower_bound(widths, 2, util::ranges::greater{},
+                                    std::move(lines_for_width));
 }
 
 void DownloadItemView::Reenable() {
@@ -1492,9 +1353,27 @@ void DownloadItemView::ReleaseDropdown() {
   announce_accessible_alert_soon_ = true;
 }
 
+void DownloadItemView::StartDownloadProgress() {
+  if (progress_timer_.IsRunning())
+    return;
+  progress_start_time_ = base::TimeTicks::Now();
+  progress_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(30),
+                        base::Bind(&DownloadItemView::ProgressTimerFired,
+                                   base::Unretained(this)));
+}
+
+void DownloadItemView::StopDownloadProgress() {
+  accessible_alert_timer_.AbandonAndStop();
+  if (!progress_timer_.IsRunning())
+    return;
+  previous_progress_elapsed_ += base::TimeTicks::Now() - progress_start_time_;
+  progress_start_time_ = base::TimeTicks();
+  progress_timer_.Stop();
+}
+
 void DownloadItemView::UpdateAccessibleName() {
   base::string16 new_name;
-  if (IsShowingWarningDialog() || IsShowingMixedContentDialog()) {
+  if (has_warning_label(mode_)) {
     new_name = dangerous_download_label_->GetText();
   } else {
     new_name = status_label_->GetText() + base::char16(' ') +
@@ -1508,10 +1387,32 @@ void DownloadItemView::UpdateAccessibleName() {
   open_button_->SetAccessibleName(new_name);
 }
 
+void DownloadItemView::UpdateAccessibleAlert(
+    const base::string16& accessible_alert_text,
+    bool is_last_update) {
+  views::ViewAccessibility& ax = accessible_alert_->GetViewAccessibility();
+  ax.OverrideRole(ax::mojom::Role::kAlert);
+  ax.OverrideName(accessible_alert_text);
+  if (is_last_update) {
+    // Last update: stop the announcement interval timer and make the last
+    // announcement immediately.
+    accessible_alert_timer_.AbandonAndStop();
+    AnnounceAccessibleAlert();
+  } else if (!accessible_alert_timer_.IsRunning()) {
+    // First update: start the announcement interval timer and make the first
+    // announcement immediately.
+    accessible_alert_timer_.Start(FROM_HERE, kAccessibleAlertInterval, this,
+                                  &DownloadItemView::AnnounceAccessibleAlert);
+    AnnounceAccessibleAlert();
+  } else if (announce_accessible_alert_soon_) {
+    accessible_alert_timer_.Reset();
+    AnnounceAccessibleAlert();
+  }
+}
+
 base::string16 DownloadItemView::GetInProgressAccessibleAlertText() {
   // If opening when complete or there is a warning, use the full status text.
-  if (model_->GetOpenWhenComplete() || IsShowingWarningDialog() ||
-      IsShowingMixedContentDialog()) {
+  if (model_->GetOpenWhenComplete() || has_warning_label(mode_)) {
     UpdateAccessibleName();
     return accessible_name_;
   }
@@ -1545,32 +1446,60 @@ base::string16 DownloadItemView::GetInProgressAccessibleAlertText() {
       ui::FormatBytes(model_->GetTotalBytes()), file_name);
 }
 
-void DownloadItemView::UpdateAccessibleAlert(
-    const base::string16& accessible_alert_text,
-    bool is_last_update) {
-  views::ViewAccessibility& ax = accessible_alert_->GetViewAccessibility();
-  ax.OverrideRole(ax::mojom::Role::kAlert);
-  ax.OverrideName(accessible_alert_text);
-  if (is_last_update) {
-    // Last update: stop the announcement interval timer and make the last
-    // announcement immediately.
-    accessible_alert_timer_.AbandonAndStop();
-    AnnounceAccessibleAlert();
-  } else if (!accessible_alert_timer_.IsRunning()) {
-    // First update: start the announcement interval timer and make the first
-    // announcement immediately.
-    accessible_alert_timer_.Start(FROM_HERE, kAccessibleAlertInterval, this,
-                                  &DownloadItemView::AnnounceAccessibleAlert);
-    AnnounceAccessibleAlert();
-  } else if (announce_accessible_alert_soon_) {
-    accessible_alert_timer_.Reset();
-    AnnounceAccessibleAlert();
-  }
-}
-
 void DownloadItemView::AnnounceAccessibleAlert() {
   accessible_alert_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
   announce_accessible_alert_soon_ = false;
+}
+
+void DownloadItemView::OnExtractIconComplete(IconLoader::IconSize icon_size,
+                                             gfx::Image icon_bitmap) {
+  if (!icon_bitmap.IsEmpty()) {
+    if (icon_size == IconLoader::IconSize::NORMAL) {
+      // We want a 24x24 icon, but on Windows only 16x16 and 32x32 are
+      // available. So take the NORMAL icon and downsize it.
+      icon_ = gfx::ImageSkiaOperations::CreateResizedImage(
+          *icon_bitmap.ToImageSkia(), skia::ImageOperations::RESIZE_BEST,
+          gfx::Size(kFileIconSize, kFileIconSize));
+    }
+    shelf_->SchedulePaint();
+  }
+}
+
+void DownloadItemView::PaintDownloadProgress(
+    gfx::Canvas* canvas,
+    const gfx::RectF& bounds,
+    const base::TimeDelta& indeterminate_progress_time,
+    int percent_done) const {
+  const SkColor color = GetThemeProvider()->GetColor(
+      ThemeProperties::COLOR_TAB_THROBBER_SPINNING);
+
+  // Draw background.
+  cc::PaintFlags bg_flags;
+  bg_flags.setColor(SkColorSetA(color, 0x33));
+  bg_flags.setStyle(cc::PaintFlags::kFill_Style);
+  bg_flags.setAntiAlias(true);
+  canvas->DrawCircle(bounds.CenterPoint(), bounds.width() / 2, bg_flags);
+
+  // Calculate progress.
+  SkScalar start_pos = SkIntToScalar(270);  // 12 o'clock
+  SkScalar sweep_angle = SkDoubleToScalar(360 * percent_done / 100.0);
+  if (percent_done < 0) {
+    // Download size unknown.  Draw a 50 degree sweep that moves at 80 degrees
+    // per second.
+    start_pos +=
+        SkDoubleToScalar(indeterminate_progress_time.InSecondsF() * 80);
+    sweep_angle = SkIntToScalar(50);
+  }
+
+  // Draw progress.
+  SkPath progress;
+  progress.addArc(gfx::RectFToSkRect(bounds), start_pos, sweep_angle);
+  cc::PaintFlags progress_flags;
+  progress_flags.setColor(color);
+  progress_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  progress_flags.setStrokeWidth(1.7f);
+  progress_flags.setAntiAlias(true);
+  canvas->DrawPath(progress, progress_flags);
 }
 
 void DownloadItemView::AnimateStateTransition(State from,
@@ -1590,10 +1519,6 @@ void DownloadItemView::ProgressTimerFired() {
   // when there's an update notified via OnDownloadUpdated().
   if (model_->PercentComplete() < 0)
     SchedulePaint();
-}
-
-SkColor DownloadItemView::GetTextColor() const {
-  return GetTextColorForThemeProvider(GetThemeProvider());
 }
 
 base::string16 DownloadItemView::GetStatusText() const {
@@ -1630,23 +1555,6 @@ base::string16 DownloadItemView::ElidedFilename() {
 void DownloadItemView::OpenDownloadDuringAsyncScanning() {
   model_->CompleteSafeBrowsingScan();
   model_->SetOpenWhenComplete(true);
-}
-
-void DownloadItemView::StyleFilenameInLabel(views::StyledLabel* label) {
-  if (!base::FeatureList::IsEnabled(safe_browsing::kUseNewDownloadWarnings))
-    return;
-
-#if !defined(OS_LINUX)
-  base::string16 filename = ElidedFilename();
-  size_t file_name_position = label->GetText().find(filename);
-  if (file_name_position != std::string::npos) {
-    views::StyledLabel::RangeStyleInfo style;
-    style.text_style = STYLE_EMPHASIZED;
-    label->AddStyleRange(
-        gfx::Range(file_name_position, file_name_position + filename.size()),
-        style);
-  }
-#endif
 }
 
 // static

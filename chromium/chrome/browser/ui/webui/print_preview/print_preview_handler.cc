@@ -83,7 +83,7 @@
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
-#include "chrome/browser/ui/webui/signin/inline_login_handler_dialog_chromeos.h"
+#include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/signin/public/identity_manager/scope_set.h"
 #endif
@@ -802,9 +802,8 @@ void PrintPreviewHandler::HandleSignin(const base::ListValue* args) {
     // account management flows will go through native UIs and not through a
     // tabbed browser window.
     if (add_account) {
-      chromeos::InlineLoginHandlerDialogChromeOS::Show(
-          chromeos::InlineLoginHandlerDialogChromeOS::Source::
-              kPrintPreviewDialog);
+      chromeos::InlineLoginDialogChromeOS::Show(
+          chromeos::InlineLoginDialogChromeOS::Source::kPrintPreviewDialog);
     } else {
       chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
           profile, chromeos::settings::mojom::kMyAccountsSubpagePath);
@@ -1385,19 +1384,21 @@ void PrintPreviewHandler::SendManipulateSettingsForTest(
 #if defined(OS_CHROMEOS)
 void PrintPreviewHandler::HandleRequestPrinterStatusUpdate(
     const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetList().size());
+  CHECK_EQ(2U, args->GetSize());
+
+  const std::string& callback_id = args->GetList()[0].GetString();
+  const std::string& printer_id = args->GetList()[1].GetString();
+
   PrinterHandler* handler = GetPrinterHandler(PrinterType::kLocal);
   handler->StartPrinterStatusRequest(
-      args->GetList()[0].GetString(),
-      base::BindOnce(&PrintPreviewHandler::OnPrinterStatusUpdated,
-                     weak_factory_.GetWeakPtr()));
+      printer_id, base::BindOnce(&PrintPreviewHandler::OnPrinterStatusUpdated,
+                                 weak_factory_.GetWeakPtr(), callback_id));
 }
 
 void PrintPreviewHandler::OnPrinterStatusUpdated(
+    const std::string& callback_id,
     const base::Value& cups_printer_status) {
-  // "printer-status-update" will also trigger non-PrintPreview UI for
-  // consuming fresh printer statuses.
-  FireWebUIListener("printer-status-update", cups_printer_status);
+  ResolveJavascriptCallback(base::Value(callback_id), cups_printer_status);
 }
 #endif
 

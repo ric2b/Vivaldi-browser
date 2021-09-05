@@ -19,7 +19,7 @@ const base::Feature kExtensionSettingsOverriddenDialogs{
 
 // Enables an extension menu in the toolbar. See https://crbug.com/943702
 const base::Feature kExtensionsToolbarMenu{"ExtensionsToolbarMenu",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables tabs from different browser types (NORMAL vs APP) and different apps
 // to mix via dragging.
@@ -86,6 +86,9 @@ const base::Feature kTabHoverCardImages{"TabHoverCardImages",
 // Enables tab outlines in additional situations for accessibility.
 const base::Feature kTabOutlinesInLowContrastThemes{
     "TabOutlinesInLowContrastThemes", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables searching tabs across multiple windows.
+const base::Feature kTabSearch{"TabSearch", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables showing text next to the 3-dot menu when an update is available.
 // See https://crbug.com/1001731

@@ -25,6 +25,7 @@
 #include "build/build_config.h"
 #include "sandbox/win/src/app_container_profile_base.h"
 #include "sandbox/win/src/sandbox_policy.h"
+#include "sandbox/win/src/sandbox_policy_diagnostic.h"
 #include "sandbox/win/src/sid.h"
 #include "services/service_manager/sandbox/features.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
@@ -38,8 +39,8 @@ namespace {
 constexpr wchar_t kBaseSecurityDescriptor[] = L"D:(A;;GA;;;WD)";
 constexpr char kAppContainerId[] = "SandboxWinTest";
 constexpr wchar_t kPackageSid[] =
-    L"S-1-15-2-2739114418-4250112400-4176314265-1208402406-1880724913-"
-    L"3756377648-2708578895";
+    L"S-1-15-2-1505217662-1870513255-555216753-1864132992-3842232122-"
+    L"1807018979-869957911";
 constexpr wchar_t kChromeInstallFiles[] = L"chromeInstallFiles";
 constexpr wchar_t kLpacChromeInstallFiles[] = L"lpacChromeInstallFiles";
 constexpr wchar_t kRegistryRead[] = L"registryRead";
@@ -160,10 +161,13 @@ class TestTargetPolicy : public sandbox::TargetPolicy {
   }
 
   void SetEffectiveToken(HANDLE token) override {}
-  size_t GetPolicyGlobalSize() const override { return 0; }
 
   const std::vector<std::wstring>& blocklisted_dlls() const {
     return blocklisted_dlls_;
+  }
+
+  std::unique_ptr<sandbox::PolicyInfo> GetPolicyInfo() override {
+    return std::unique_ptr<sandbox::PolicyDiagnostic>();
   }
 
  private:

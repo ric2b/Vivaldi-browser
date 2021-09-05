@@ -59,7 +59,7 @@ class ChromeUpdaterNetworkMacTest : public ::testing::Test {
   }
 
   void DownloadCallback(int net_error, int64_t content_size) {
-    EXPECT_EQ(net_error, 200);
+    EXPECT_EQ(net_error, 0);
     EXPECT_GT(content_size, 0);
     EXPECT_FALSE(testFilePath.empty());
     EXPECT_TRUE(base::PathExists(testFilePath));
@@ -108,7 +108,7 @@ TEST_F(ChromeUpdaterNetworkMacTest, NetworkFetcherMacPostRequest) {
   const GURL url = test_server.GetURL("/echo");
 
   fetcher->PostRequest(
-      url, "", {},
+      url, {}, {}, {},
       base::BindOnce(&ChromeUpdaterNetworkMacTest::StartedCallback,
                      base::Unretained(this)),
       base::BindRepeating(&ChromeUpdaterNetworkMacTest::ProgressCallback,

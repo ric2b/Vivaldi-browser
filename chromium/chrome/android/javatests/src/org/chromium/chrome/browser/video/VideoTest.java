@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.video;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -16,7 +17,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -42,7 +42,6 @@ public class VideoTest {
     @DisableIf.Build(sdk_is_less_than = 19, message = "crbug.com/582067")
     @Feature({"Media", "Media-Video", "Main"})
     @LargeTest
-    @RetryOnFailure
     public void testLoadMediaUrl() throws TimeoutException {
         EmbeddedTestServer testServer =
                 EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());

@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'builder', 'cpu', 'defaults', 'os')
 
 luci.bucket(
@@ -79,7 +83,17 @@ ci_builder(
 
 ## builders using swarming staging instance
 
-ci_builder(
+def ci_builder_staging(**kwargs):
+  return ci_builder(
+      swarming_host = 'chromium-swarm-staging.appspot.com',
+      **kwargs
+  )
+
+ci_builder_staging(
     name = 'linux-rel-swarming-staging',
-    swarming_host = 'chromium-swarm-staging.appspot.com',
+)
+
+ci_builder_staging(
+    name = 'win-rel-swarming-staging',
+    os = os.WINDOWS_DEFAULT,
 )

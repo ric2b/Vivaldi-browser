@@ -22,6 +22,7 @@
 #include "ui/events/x/x11_window_event_manager.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/x/event.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/views/views_export.h"
 
@@ -61,8 +62,7 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
   DesktopDragDropClientAuraX11(
       aura::Window* root_window,
       views::DesktopNativeCursorManager* cursor_manager,
-      Display* xdisplay,
-      XID xwindow);
+      x11::Window xwindow);
   ~DesktopDragDropClientAuraX11() override;
 
   void Init();
@@ -80,7 +80,7 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
   void RemoveObserver(aura::client::DragDropClientObserver* observer) override;
 
   // XEventDispatcher:
-  bool DispatchXEvent(XEvent* event) override;
+  bool DispatchXEvent(x11::Event* event) override;
 
   // aura::WindowObserver:
   void OnWindowDestroyed(aura::Window* window) override;
@@ -118,11 +118,11 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
   int UpdateDrag(const gfx::Point& screen_point) override;
   void UpdateCursor(
       ui::DragDropTypes::DragOperation negotiated_operation) override;
-  void OnBeginForeignDrag(XID window) override;
+  void OnBeginForeignDrag(x11::Window window) override;
   void OnEndForeignDrag() override;
   void OnBeforeDragLeave() override;
   int PerformDrop() override;
-  void EndMoveLoop() override;
+  void EndDragLoop() override;
 
   // A nested run loop that notifies this object of events through the
   // ui::X11MoveLoopDelegate interface.

@@ -25,6 +25,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/permissions/features.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -36,6 +37,51 @@ using content_settings::OriginIdentifierValueMap;
 using content_settings::ResourceIdentifier;
 
 namespace extensions {
+
+namespace {
+
+enum class FilterType {
+  WANT_DISCARDED_PATTERNS,
+  WANT_VALID_PATTERNS,
+};
+
+class FilterRuleIterator : public RuleIterator {
+ public:
+  FilterRuleIterator(std::unique_ptr<RuleIterator> iterator,
+                     const FilterType filter_type)
+      : iterator_(std::move(iterator)), filter_type_(filter_type) {}
+
+  ~FilterRuleIterator() override = default;
+
+  bool HasNext() const override {
+    if (!iterator_)
+      return false;
+    if (current_rule_)
+      return true;
+    while (iterator_->HasNext()) {
+      current_rule_ = iterator_->Next();
+      if (!((filter_type_ == FilterType::WANT_DISCARDED_PATTERNS) ^
+            current_rule_->primary_pattern.HasHostWildcards())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Rule Next() override {
+    DCHECK(current_rule_.has_value());
+    Rule rule = std::move(*current_rule_);
+    current_rule_.reset();
+    return rule;
+  }
+
+ private:
+  std::unique_ptr<RuleIterator> iterator_;
+  const FilterType filter_type_;
+  mutable base::Optional<Rule> current_rule_;
+};
+
+}  // namespace
 
 struct ContentSettingsStore::ExtensionEntry {
   // Extension id.
@@ -60,6 +106,36 @@ ContentSettingsStore::~ContentSettingsStore() {
 }
 
 std::unique_ptr<RuleIterator> ContentSettingsStore::GetRuleIterator(
+    ContentSettingsType type,
+    const content_settings::ResourceIdentifier& identifier,
+    bool incognito) const {
+  if (base::FeatureList::IsEnabled(
+          content_settings::kDisallowWildcardsInPluginContentSettings) &&
+      type == ContentSettingsType::PLUGINS) {
+    return std::make_unique<FilterRuleIterator>(
+        GetAllRulesIterator(type, identifier, incognito),
+        FilterType::WANT_VALID_PATTERNS);
+  } else {
+    return GetAllRulesIterator(type, identifier, incognito);
+  }
+}
+
+std::unique_ptr<RuleIterator> ContentSettingsStore::GetDiscardedRuleIterator(
+    ContentSettingsType type,
+    const content_settings::ResourceIdentifier& identifier,
+    bool incognito) const {
+  if (base::FeatureList::IsEnabled(
+          content_settings::kDisallowWildcardsInPluginContentSettings) &&
+      type == ContentSettingsType::PLUGINS) {
+    return std::make_unique<FilterRuleIterator>(
+        GetAllRulesIterator(type, identifier, incognito),
+        FilterType::WANT_DISCARDED_PATTERNS);
+  } else {
+    return std::make_unique<content_settings::EmptyRuleIterator>();
+  }
+}
+
+std::unique_ptr<RuleIterator> ContentSettingsStore::GetAllRulesIterator(
     ContentSettingsType type,
     const content_settings::ResourceIdentifier& identifier,
     bool incognito) const {

@@ -1058,6 +1058,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   CreditCard credit_card0(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetCreditCardInfo(&credit_card0, "John Dillinger",
                           "4234567890123456" /* Visa */, "01", "2999", "1");
+  credit_card0.SetNickname(base::ASCIIToUTF16("card zero"));
 
   CreditCard credit_card1(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetCreditCardInfo(&credit_card1, "Bonnie Parker",
@@ -1068,6 +1069,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   test::SetCreditCardInfo(&credit_card2, "Clyde Barrow",
                           "378282246310005" /* American Express */, "04",
                           "2999", "1");
+  credit_card2.SetNickname(base::ASCIIToUTF16("card two"));
 
   // Add two test credit cards to the database.
   personal_data_->AddCreditCard(credit_card0);
@@ -1082,6 +1084,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
 
   // Update, remove, and add.
   credit_card0.SetRawInfo(CREDIT_CARD_NAME_FULL, base::ASCIIToUTF16("Joe"));
+  credit_card0.SetNickname(base::ASCIIToUTF16("new card zero"));
   personal_data_->UpdateCreditCard(credit_card0);
   RemoveByGUIDFromPersonalDataManager(credit_card1.guid());
   personal_data_->AddCreditCard(credit_card2);
@@ -1431,136 +1434,6 @@ TEST_F(PersonalDataManagerTest, KeepExistingLocalDataOnSignIn) {
   // Check saved local card should be not lost.
   EXPECT_EQ(1U, personal_data_->GetCreditCards().size());
   EXPECT_EQ(0, local_card.Compare(*personal_data_->GetCreditCards()[0]));
-}
-
-// Makes sure that full cards are re-masked when full PAN storage is off.
-TEST_F(PersonalDataManagerTest, RefuseToStoreFullCard) {
-// On Linux this should be disabled automatically. Elsewhere, only if the
-// flag is passed.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  EXPECT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableOfferStoreUnmaskedWalletCards));
-#else
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisableOfferStoreUnmaskedWalletCards);
-#endif
-
-  std::vector<CreditCard> server_cards;
-  server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "c789"));
-  test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
-                          "378282246310005" /* American Express */, "04",
-                          "2999", "1");
-  SetServerCards(server_cards);
-  personal_data_->Refresh();
-
-  WaitForOnPersonalDataChanged();
-
-  ASSERT_EQ(1U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(CreditCard::MASKED_SERVER_CARD,
-            personal_data_->GetCreditCards()[0]->record_type());
-}
-
-// Makes sure that full cards are only added as masked card when full PAN
-// storage is disabled.
-TEST_F(PersonalDataManagerTest, AddFullCardAsMaskedCard) {
-// On Linux this should be disabled automatically. Elsewhere, only if the
-// flag is passed.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  EXPECT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableOfferStoreUnmaskedWalletCards));
-#else
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisableOfferStoreUnmaskedWalletCards);
-#endif
-
-  CreditCard server_card(CreditCard::FULL_SERVER_CARD, "c789");
-  test::SetCreditCardInfo(&server_card, "Clyde Barrow",
-                          "378282246310005" /* American Express */, "04",
-                          "2999", "1");
-
-  personal_data_->AddFullServerCreditCard(server_card);
-
-  WaitForOnPersonalDataChanged();
-
-  ASSERT_EQ(1U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(CreditCard::MASKED_SERVER_CARD,
-            personal_data_->GetCreditCards()[0]->record_type());
-}
-
-TEST_F(PersonalDataManagerTest, OfferStoreUnmaskedCards) {
-#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MACOSX) || \
-    defined(OS_IOS) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
-  bool should_offer = true;
-#elif defined(OS_LINUX)
-  bool should_offer = false;
-#endif
-  EXPECT_EQ(should_offer, OfferStoreUnmaskedCards(/*is_off_the_record=*/false));
-}
-
-// Tests that OfferStoreUnmaskedCards always returns false if the user is off
-// the record.
-TEST_F(PersonalDataManagerTest, OfferStoreUnmaskedCards_OffTheRecord) {
-  EXPECT_EQ(false, OfferStoreUnmaskedCards(/*is_off_the_record=*/true));
-}
-
-// Tests that UpdateServerCreditCard can be used to mask or unmask server cards.
-TEST_F(PersonalDataManagerTest, UpdateServerCreditCards) {
-  EnableWalletCardImport();
-
-  std::vector<CreditCard> server_cards;
-  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "a123"));
-  test::SetCreditCardInfo(&server_cards.back(), "John Dillinger",
-                          "3456" /* Visa */, "01", "2999", "1");
-  server_cards.back().SetNetworkForMaskedCard(kVisaCard);
-
-  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b456"));
-  test::SetCreditCardInfo(&server_cards.back(), "Bonnie Parker",
-                          "5100" /* Mastercard */, "12", "2999", "1");
-  server_cards.back().SetNetworkForMaskedCard(kMasterCard);
-
-  server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "c789"));
-  test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
-                          "378282246310005" /* American Express */, "04",
-                          "2999", "1");
-
-  SetServerCards(server_cards);
-  personal_data_->Refresh();
-
-  WaitForOnPersonalDataChanged();
-
-  ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  if (!OfferStoreUnmaskedCards(/*is_off_the_record=*/false)) {
-    for (CreditCard* card : personal_data_->GetCreditCards()) {
-      EXPECT_EQ(CreditCard::MASKED_SERVER_CARD, card->record_type());
-    }
-    // The rest of this test doesn't work if we're force-masking all unmasked
-    // cards.
-    return;
-  }
-
-  // The GUIDs will be different, so just compare the data.
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
-
-  CreditCard* unmasked_card = &server_cards.front();
-  unmasked_card->set_record_type(CreditCard::FULL_SERVER_CARD);
-  unmasked_card->SetNumber(base::ASCIIToUTF16("4234567890123456"));
-  personal_data_->UpdateServerCreditCard(*unmasked_card);
-
-  WaitForOnPersonalDataChanged();
-
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
-
-  CreditCard* remasked_card = &server_cards.back();
-  remasked_card->set_record_type(CreditCard::MASKED_SERVER_CARD);
-  remasked_card->SetNumber(base::ASCIIToUTF16("0005"));
-  personal_data_->UpdateServerCreditCard(*remasked_card);
-
-  WaitForOnPersonalDataChanged();
-
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
 }
 
 TEST_F(PersonalDataManagerTest, AddProfilesAndCreditCards) {
@@ -3345,7 +3218,7 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_LocalCardsRanking) {
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(3U, suggestions.size());
 
@@ -3394,7 +3267,7 @@ TEST_F(PersonalDataManagerTest,
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(5U, suggestions.size());
 
@@ -3448,7 +3321,7 @@ TEST_F(PersonalDataManagerTest,
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(0U, suggestions.size());
 }
@@ -3498,7 +3371,7 @@ TEST_F(PersonalDataManagerTest,
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(0U, suggestions.size());
 }
@@ -3563,7 +3436,7 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ExpiredCards) {
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /* include_server_cards= */ true);
   ASSERT_EQ(3U, suggestions.size());
 
@@ -3691,7 +3564,8 @@ TEST_F(PersonalDataManagerTest,
 
 // Test that a card that doesn't have a number is not shown in the suggestions
 // when querying credit cards by their number.
-TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_NumberMissing) {
+TEST_F(PersonalDataManagerTest,
+       GetCreditCardSuggestions_NumberMissing_QueryNumberField) {
   // Create one normal credit card and one credit card with the number missing.
   ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
 
@@ -3723,7 +3597,7 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_NumberMissing) {
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NUMBER),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(1U, suggestions.size());
   EXPECT_EQ(base::UTF8ToUTF16(std::string("Amex  ") +
@@ -3735,6 +3609,36 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_NumberMissing) {
 #else
   EXPECT_EQ(base::ASCIIToUTF16("Expires on 04/99"), suggestions[0].label);
 #endif  // defined (OS_ANDROID) || defined(OS_IOS)
+}
+
+// Test that a card that doesn't have a number is shown in the suggestion list
+// with nickname if a non-number field is queried.
+TEST_F(PersonalDataManagerTest,
+       GetCreditCardSuggestions_NumberMissing_QueryNonNumberField) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillEnableSurfacingServerCardNickname);
+  ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
+
+  CreditCard credit_card("1141084B-72D7-4B73-90CF-3D6AC154673B",
+                         test::kEmptyOrigin);
+  test::SetCreditCardInfo(&credit_card, "John Dillinger", "", "01", "2999",
+                          "1");
+  credit_card.SetNickname(base::UTF8ToUTF16("nickname"));
+  personal_data_->AddCreditCard(credit_card);
+
+  // Make sure everything is set up correctly.
+  WaitForOnPersonalDataChanged();
+  ASSERT_EQ(1U, personal_data_->GetCreditCards().size());
+
+  // Ensures the suggestion label is the card's nickname.
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NAME_FULL),
+          /*field_contents=*/base::string16(),
+          /*include_server_cards=*/true);
+  ASSERT_EQ(1U, suggestions.size());
+  EXPECT_EQ(base::UTF8ToUTF16("nickname"), suggestions[0].label);
 }
 
 // Tests the suggestions of duplicate local and server credit cards.
@@ -3777,7 +3681,7 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ServerDuplicates) {
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(3U, suggestions.size());
   EXPECT_EQ(base::ASCIIToUTF16("John Dillinger"), suggestions[0].value);
@@ -3785,7 +3689,7 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ServerDuplicates) {
   EXPECT_EQ(base::ASCIIToUTF16("Bonnie Parker"), suggestions[2].value);
 
   suggestions = personal_data_->GetCreditCardSuggestions(
-      AutofillType(CREDIT_CARD_NUMBER), /* field_contents= */ base::string16(),
+      AutofillType(CREDIT_CARD_NUMBER), /*field_contents=*/base::string16(),
       /*include_server_cards=*/true);
   ASSERT_EQ(3U, suggestions.size());
   EXPECT_EQ(base::UTF8ToUTF16(std::string("Visa  ") +
@@ -3824,7 +3728,7 @@ TEST_F(PersonalDataManagerTest,
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
           AutofillType(CREDIT_CARD_NAME_FULL),
-          /* field_contents= */ base::string16(),
+          /*field_contents=*/base::string16(),
           /*include_server_cards=*/true);
   ASSERT_EQ(3U, suggestions.size());
 
@@ -3839,7 +3743,7 @@ TEST_F(PersonalDataManagerTest,
 
   suggestions = personal_data_->GetCreditCardSuggestions(
       AutofillType(CREDIT_CARD_NAME_FULL),
-      /* field_contents= */ base::string16(), /*include_server_cards=*/true);
+      /*field_contents=*/base::string16(), /*include_server_cards=*/true);
   ASSERT_EQ(3U, suggestions.size());
 }
 
@@ -4034,120 +3938,6 @@ TEST_F(PersonalDataManagerTest, RecordUseOf) {
   EXPECT_EQ(2U, added_card->use_count());
   EXPECT_EQ(kSomeLaterTime, added_card->use_date());
   EXPECT_EQ(kArbitraryTime, added_card->modification_date());
-}
-
-TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
-  EnableWalletCardImport();
-
-  std::vector<CreditCard> server_cards;
-  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "a123"));
-  test::SetCreditCardInfo(&server_cards.back(), "John Dillinger",
-                          "3456" /* Visa */, "01", "2999", "1");
-  server_cards.back().SetNetworkForMaskedCard(kVisaCard);
-
-  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b456"));
-  test::SetCreditCardInfo(&server_cards.back(), "Bonnie Parker",
-                          "4444" /* Mastercard */, "12", "2999", "1");
-  server_cards.back().SetNetworkForMaskedCard(kMasterCard);
-
-  server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "c789"));
-  test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
-                          "378282246310005" /* American Express */, "04",
-                          "2999", "1");
-
-  // Create the test clock and set the time to a specific value.
-  TestAutofillClock test_clock;
-  test_clock.SetNow(kArbitraryTime);
-
-  SetServerCards(server_cards);
-
-  // Make sure everything is set up correctly.
-  personal_data_->Refresh();
-  WaitForOnPersonalDataChanged();
-  EXPECT_EQ(3U, personal_data_->GetCreditCards().size());
-
-  if (!OfferStoreUnmaskedCards(/*is_off_the_record=*/false)) {
-    for (CreditCard* card : personal_data_->GetCreditCards()) {
-      EXPECT_EQ(CreditCard::MASKED_SERVER_CARD, card->record_type());
-    }
-    // The rest of this test doesn't work if we're force-masking all unmasked
-    // cards.
-    return;
-  }
-
-  // The GUIDs will be different, so just compare the data.
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
-
-  CreditCard* unmasked_card = &server_cards.front();
-  unmasked_card->set_record_type(CreditCard::FULL_SERVER_CARD);
-  unmasked_card->SetNumber(base::ASCIIToUTF16("4234567890123456"));
-  personal_data_->UpdateServerCreditCard(*unmasked_card);
-
-  WaitForOnPersonalDataChanged();
-  ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
-
-  // For an unmasked card, usage data starts out as 2 because of the unmasking
-  // which is considered a use. The use date should now be the specified Now()
-  // time kArbitraryTime.
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[0]->use_count());
-  EXPECT_EQ(kArbitraryTime, personal_data_->GetCreditCards()[0]->use_date());
-
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_NE(kArbitraryTime, personal_data_->GetCreditCards()[1]->use_date());
-
-  // Having unmasked this card, usage stats should be 2 and
-  // kArbitraryTime.
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[2]->use_count());
-  EXPECT_EQ(kArbitraryTime, personal_data_->GetCreditCards()[2]->use_date());
-
-  // Change the Now() value for a second time.
-  test_clock.SetNow(kSomeLaterTime);
-
-  server_cards.back().set_guid(personal_data_->GetCreditCards()[2]->guid());
-  personal_data_->RecordUseOf(server_cards.back());
-
-  WaitForOnPersonalDataChanged();
-  ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[0]->use_count());
-  EXPECT_EQ(kArbitraryTime, personal_data_->GetCreditCards()[0]->use_date());
-
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_NE(kArbitraryTime, personal_data_->GetCreditCards()[1]->use_date());
-
-  // The RecordUseOf call should have incremented the use_count to 3 and set the
-  // use_date to kSomeLaterTime.
-  EXPECT_EQ(3U, personal_data_->GetCreditCards()[2]->use_count());
-  EXPECT_EQ(kSomeLaterTime, personal_data_->GetCreditCards()[2]->use_date());
-
-  // Can record usage stats on masked cards.
-  server_cards[1].set_guid(personal_data_->GetCreditCards()[1]->guid());
-  personal_data_->RecordUseOf(server_cards[1]);
-
-  WaitForOnPersonalDataChanged();
-  ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_EQ(kSomeLaterTime, personal_data_->GetCreditCards()[1]->use_date());
-
-  // Change Now()'s return value for a third time.
-  test_clock.SetNow(kMuchLaterTime);
-
-  // Upgrading to unmasked retains the usage stats (and increments them).
-  CreditCard* unmasked_card2 = &server_cards[1];
-  unmasked_card2->set_record_type(CreditCard::FULL_SERVER_CARD);
-  unmasked_card2->SetNumber(base::ASCIIToUTF16("5555555555554444"));
-  personal_data_->UpdateServerCreditCard(*unmasked_card2);
-
-  server_cards[1].set_guid(personal_data_->GetCreditCards()[1]->guid());
-  personal_data_->RecordUseOf(server_cards[1]);
-
-  WaitForOnPersonalDataChanged();
-  ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(3U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_EQ(kMuchLaterTime, personal_data_->GetCreditCards()[1]->use_date());
 }
 
 TEST_F(PersonalDataManagerTest, ClearAllServerData) {
@@ -6746,21 +6536,6 @@ TEST_F(PersonalDataManagerTest, CreateDataForTest) {
   }
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-// Make sure that it's not possible to add full server cards on Linux.
-TEST_F(PersonalDataManagerTest, CannotAddFullServerCardOnLinux) {
-  SetUpThreeCardTypes();
-
-  // Check that cards were masked and other were untouched.
-  EXPECT_EQ(3U, personal_data_->GetCreditCards().size());
-  std::vector<CreditCard*> server_cards =
-      personal_data_->GetServerCreditCards();
-  EXPECT_EQ(2U, server_cards.size());
-  for (CreditCard* card : server_cards)
-    EXPECT_TRUE(card->record_type() == CreditCard::MASKED_SERVER_CARD);
-}
-#endif  // #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-
 // These tests are not applicable on Linux since it does not support full server
 // cards.
 #if !defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -7884,11 +7659,11 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
   ///////////////////////////////////////////////////////////
   // kSignedInAndWalletSyncTransportEnabled
   ///////////////////////////////////////////////////////////
-  // Make a non-primary account available with both a refresh token and cookie
-  // to be in Sync Transport for Wallet mode.
+  // Make a primary account with no sync consent available to be in Sync
+  // Transport for Wallet mode.
   CoreAccountInfo active_info =
-      identity_test_env_.MakeAccountAvailable(kSyncTransportAccountEmail);
-  identity_test_env_.SetCookieAccounts({{active_info.email, active_info.gaia}});
+      identity_test_env_.MakeUnconsentedPrimaryAccountAvailable(
+          kSyncTransportAccountEmail);
   sync_service_.SetAuthenticatedAccountInfo(active_info);
   sync_service_.SetIsAuthenticatedAccountPrimary(false);
   sync_service_.SetActiveDataTypes(
@@ -7943,12 +7718,11 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
   prefs::ClearSyncTransportOptIns(prefs_.get());
   ASSERT_FALSE(prefs::IsUserOptedInWalletSyncTransport(prefs_.get(),
                                                        active_info.account_id));
-#endif  // !defined(OS_CHROMEOS)
 
   ///////////////////////////////////////////////////////////
   // kSignedOut
   ///////////////////////////////////////////////////////////
-  identity_test_env_.RemoveRefreshTokenForAccount(active_info.account_id);
+  identity_test_env_.ClearPrimaryAccount();
   {
     EXPECT_EQ(AutofillSyncSigninState::kSignedOut,
               personal_data_->GetSyncSigninState());
@@ -7959,6 +7733,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
     EXPECT_FALSE(prefs::IsUserOptedInWalletSyncTransport(
         prefs_.get(), active_info.account_id));
   }
+#endif  // !defined(OS_CHROMEOS)
 
   ///////////////////////////////////////////////////////////
   // kSignedInAndSyncFeature
@@ -8026,6 +7801,134 @@ TEST_F(PersonalDataManagerTest, AddAndGetUpiId) {
   WaitOnceForOnPersonalDataChanged();
   std::vector<std::string> all_upi_ids = personal_data_->GetUpiIds();
   EXPECT_THAT(all_upi_ids, testing::ElementsAre(upi_id));
+}
+
+struct ShareNicknameTestParam {
+  std::string local_nickname;
+  std::string server_nickname;
+  std::string expected_nickname;
+};
+
+const ShareNicknameTestParam kShareNicknameTestParam[] = {
+    {"", "", ""},
+    {"", "server nickname", "server nickname"},
+    {"local nickname", "", "local nickname"},
+    {"local nickname", "server nickname", "local nickname"},
+};
+
+class PersonalDataManagerTestForSharingNickname
+    : public PersonalDataManagerTest,
+      public testing::WithParamInterface<ShareNicknameTestParam> {
+ public:
+  PersonalDataManagerTestForSharingNickname()
+      : local_nickname_(base::UTF8ToUTF16(GetParam().local_nickname)),
+        server_nickname_(base::UTF8ToUTF16(GetParam().server_nickname)),
+        expected_nickname_(base::UTF8ToUTF16(GetParam().expected_nickname)) {}
+
+  CreditCard GetLocalCard() {
+    CreditCard local_card("287151C8-6AB1-487C-9095-28E80BE5DA15",
+                          test::kEmptyOrigin);
+    test::SetCreditCardInfo(&local_card, "Clyde Barrow",
+                            "378282246310005" /* American Express */, "04",
+                            "2999", "1");
+    local_card.set_use_count(3);
+    local_card.set_use_date(AutofillClock::Now() -
+                            base::TimeDelta::FromDays(1));
+    local_card.SetNickname(local_nickname_);
+    return local_card;
+  }
+
+  CreditCard GetServerCard() {
+    CreditCard full_server_card(CreditCard::FULL_SERVER_CARD, "c789");
+    test::SetCreditCardInfo(&full_server_card, "Clyde Barrow",
+                            "378282246310005" /* American Express */, "04",
+                            "2999", "1");
+    full_server_card.SetNickname(server_nickname_);
+    return full_server_card;
+  }
+
+  base::string16 local_nickname_;
+  base::string16 server_nickname_;
+  base::string16 expected_nickname_;
+
+ protected:
+  void SetUp() override {
+    PersonalDataManagerTest::SetUp();
+    EnableWalletCardImport();
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::
+                                  kAutofillEnableSurfacingServerCardNickname,
+                              features::kAutofillEnableCardNicknameManagement},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         PersonalDataManagerTestForSharingNickname,
+                         testing::ValuesIn(kShareNicknameTestParam));
+
+TEST_P(PersonalDataManagerTestForSharingNickname,
+       VerifySuggestion_DuplicateCards) {
+  ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
+  CreditCard local_card = GetLocalCard();
+  personal_data_->AddCreditCard(local_card);
+
+  SetServerCards({GetServerCard()});
+
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  ASSERT_EQ(2U, personal_data_->GetCreditCards().size());
+
+  // Verifies the suggestion shows the right text.
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NUMBER),
+          /*field_contents=*/base::string16(),
+          /*include_server_cards=*/true);
+  ASSERT_EQ(1U, suggestions.size());
+  EXPECT_EQ(suggestions[0].value,
+            (expected_nickname_.empty() ? base::ASCIIToUTF16("Amex")
+                                        : expected_nickname_) +
+                base::UTF8ToUTF16("  ") +
+                local_card.ObfuscatedLastFourDigits());
+}
+
+TEST_P(PersonalDataManagerTestForSharingNickname,
+       VerifySuggestion_UnrelatedCards) {
+  ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
+  CreditCard local_card = GetLocalCard();
+  personal_data_->AddCreditCard(local_card);
+
+  std::vector<CreditCard> server_cards;
+  CreditCard server_card = GetServerCard();
+  // Make sure the cards are different by giving a different card number.
+  server_card.SetNumber(base::ASCIIToUTF16("371449635398431"));
+  server_cards.emplace_back(server_card);
+  SetServerCards(server_cards);
+
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  ASSERT_EQ(2U, personal_data_->GetCreditCards().size());
+
+  // Verifies the suggestion shows the right text.
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NUMBER),
+          /*field_contents=*/base::string16(),
+          /*include_server_cards=*/true);
+  ASSERT_EQ(2U, suggestions.size());
+  EXPECT_THAT(
+      std::vector<base::string16>({suggestions[0].value, suggestions[1].value}),
+      testing::UnorderedElementsAre(
+          (server_nickname_.empty() ? base::ASCIIToUTF16("Amex")
+                                    : server_nickname_) +
+              base::UTF8ToUTF16("  ") + server_card.ObfuscatedLastFourDigits(),
+          (local_nickname_.empty() ? base::ASCIIToUTF16("Amex")
+                                   : local_nickname_) +
+              base::UTF8ToUTF16("  ") + local_card.ObfuscatedLastFourDigits()));
 }
 
 }  // namespace autofill

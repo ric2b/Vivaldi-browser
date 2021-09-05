@@ -82,14 +82,6 @@ class OmniboxResultView : public views::View,
   // If this view has a secondary button, triggers the action and returns true.
   bool MaybeTriggerSecondaryButton(const ui::Event& event);
 
-  // This returns the accessibility label for this result view. This is an
-  // extended version of AutocompleteMatchType::ToAccessibilityLabel() which
-  // also returns narration about the secondary button.
-  base::string16 ToAccessibilityLabelWithSecondaryButton(
-      const base::string16& match_text,
-      size_t total_matches,
-      int* label_prefix_length = nullptr);
-
   OmniboxPartState GetThemeState() const;
 
   // Notification that the match icon has changed and schedules a repaint.
@@ -100,9 +92,6 @@ class OmniboxResultView : public views::View,
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // Called to indicate tab switch button has been focused.
-  void ProvideButtonFocusHint();
 
   // Removes the shown |match_| from history, if possible.
   void RemoveSuggestion() const;
@@ -174,7 +163,7 @@ class OmniboxResultView : public views::View,
 
   // The "X" button at the end of the match cell, used to remove suggestions.
   views::ImageButton* remove_suggestion_button_;
-  std::unique_ptr<views::FocusRing> remove_suggestion_focus_ring_;
+  views::FocusRing* remove_suggestion_focus_ring_ = nullptr;
 
   base::WeakPtrFactory<OmniboxResultView> weak_factory_{this};
 

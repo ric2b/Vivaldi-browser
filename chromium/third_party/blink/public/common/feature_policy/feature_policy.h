@@ -5,13 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_FEATURE_POLICY_FEATURE_POLICY_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_FEATURE_POLICY_FEATURE_POLICY_H_
 
-#include <memory>
-#include <utility>
+#include <map>
 #include <vector>
 
-#include "base/containers/flat_map.h"
-#include "base/containers/flat_set.h"
-#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/common_export.h"
@@ -229,7 +225,7 @@ class BLINK_COMMON_EXPORT FeaturePolicy {
   // the |inherited_policies_| as well as the header policies.
   FeatureState GetFeatureState() const;
 
-  const url::Origin& GetOriginForTest() { return origin_; }
+  const url::Origin& GetOriginForTest() const { return origin_; }
 
   // Returns the list of features which can be controlled by Feature Policy.
   const FeatureList& GetFeatureList() const;

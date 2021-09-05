@@ -95,7 +95,8 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
       base::WeakPtr<ServiceWorkerObjectHost>
           controller_service_worker_object_host,
       blink::mojom::FetchClientSettingsObjectPtr
-          outside_fetch_client_settings_object);
+          outside_fetch_client_settings_object,
+      const GURL& final_response_url);
 
   void AllowFileSystem(const GURL& url,
                        base::OnceCallback<void(bool)> callback);
@@ -131,16 +132,15 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
   // Returns true if this worker is connected to at least one client.
   bool HasClients() const;
 
+  bool started() const { return started_; }
+
+  const GURL& final_response_url() const { return final_response_url_; }
+
   SharedWorkerId id() const { return id_; }
 
   const SharedWorkerInstance& instance() const { return instance_; }
 
-  const base::UnguessableToken& dev_tools_token() const {
-    DCHECK(started_);
-    return dev_tools_token_;
-  }
-
-  bool started() const { return started_; }
+  const base::UnguessableToken& GetDevToolsToken() const;
 
   // Signals the remote worker to terminate and returns the mojo::Remote
   // instance so the caller can be notified when the connection is lost. Should
@@ -223,6 +223,7 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
       scoped_process_host_observer_;
 
   int next_connection_request_id_;
+
   std::unique_ptr<ScopedDevToolsHandle> devtools_handle_;
 
   // This is the set of features that this worker has used.
@@ -247,10 +248,10 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
 
   std::unique_ptr<ServiceWorkerMainResourceHandle> service_worker_handle_;
 
-  base::UnguessableToken dev_tools_token_;
-
   // Indicates if Start() was invoked on this instance.
   bool started_ = false;
+
+  GURL final_response_url_;
 
   base::WeakPtrFactory<SharedWorkerHost> weak_factory_{this};
 

@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/task/post_task.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -17,6 +16,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
@@ -53,7 +53,6 @@ constexpr int kSideIconBetweenChildSpacing = 16;
 
 // These time values are non-const in order to be overridden in test so they
 // complete faster.
-base::TimeDelta initial_ui_delay_ = base::TimeDelta::FromMilliseconds(200);
 base::TimeDelta minimum_pending_dialog_time_ = base::TimeDelta::FromSeconds(2);
 base::TimeDelta success_dialog_timeout_ = base::TimeDelta::FromSeconds(1);
 
@@ -169,11 +168,6 @@ class DeepScanningMessageView : public DeepScanningBaseView,
 };
 
 // static
-base::TimeDelta DeepScanningDialogViews::GetInitialUIDelay() {
-  return initial_ui_delay_;
-}
-
-// static
 base::TimeDelta DeepScanningDialogViews::GetMinimumPendingDialogTime() {
   return minimum_pending_dialog_time_;
 }
@@ -196,11 +190,7 @@ DeepScanningDialogViews::DeepScanningDialogViews(
   if (observer_for_testing)
     observer_for_testing->ConstructorCalled(this, base::TimeTicks::Now());
 
-  // Show the pending dialog after a delay in case the response is fast enough.
-  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::BindOnce(&DeepScanningDialogViews::Show,
-                                       weak_ptr_factory_.GetWeakPtr()),
-                        GetInitialUIDelay());
+  Show();
 }
 
 base::string16 DeepScanningDialogViews::GetWindowTitle() const {
@@ -334,10 +324,11 @@ void DeepScanningDialogViews::ShowResult(
   if (time_shown >= GetMinimumPendingDialogTime()) {
     UpdateDialog();
   } else {
-    base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                          base::BindOnce(&DeepScanningDialogViews::UpdateDialog,
-                                         weak_ptr_factory_.GetWeakPtr()),
-                          GetMinimumPendingDialogTime() - time_shown);
+    content::GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DeepScanningDialogViews::UpdateDialog,
+                       weak_ptr_factory_.GetWeakPtr()),
+        GetMinimumPendingDialogTime() - time_shown);
   }
 }
 
@@ -379,10 +370,11 @@ void DeepScanningDialogViews::UpdateDialog() {
 
   // Schedule the dialog to close itself in the success case.
   if (is_success()) {
-    base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                          base::BindOnce(&DialogDelegate::CancelDialog,
-                                         weak_ptr_factory_.GetWeakPtr()),
-                          GetSuccessDialogTimeout());
+    content::GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DialogDelegate::CancelDialog,
+                       weak_ptr_factory_.GetWeakPtr()),
+        GetSuccessDialogTimeout());
   }
 
   if (observer_for_testing)
@@ -648,12 +640,6 @@ SkColor DeepScanningDialogViews::GetSideImageLogoColor() const {
       // logo should have the same color as the background.
       return GetBackgroundColor(widget);
   }
-}
-
-// static
-void DeepScanningDialogViews::SetInitialUIDelayForTesting(
-    base::TimeDelta delta) {
-  initial_ui_delay_ = delta;
 }
 
 // static

@@ -107,19 +107,23 @@ class CORE_EXPORT FrameLoader final {
 
   // Called before the browser process is asked to navigate this frame, to mark
   // the frame as loading and save some navigation information for later use.
-  bool WillStartNavigation(const WebNavigationInfo& info,
-                           bool is_history_navigation_in_new_frame);
+  bool WillStartNavigation(const WebNavigationInfo& info);
 
   // This runs the "stop document loading" algorithm in HTML:
   // https://html.spec.whatwg.org/C/browsing-the-web.html#stop-document-loading
   // Note, this function only cancels ongoing navigation handled through
-  // FrameLoader. You might also want to call
-  // LocalFrameClient::AbortClientNavigation() if appropriate.
+  // FrameLoader.
+  //
+  // If |abort_client| is true, then the frame's client will have
+  // AbortClientNavigation() called if a navigation was aborted. Normally this
+  // should be passed as true, unless the navigation has been migrated to a
+  // provisional frame, while this frame is going away, so the navigation isn't
+  // actually being aborted.
   //
   // Warning: StopAllLoaders() may detach the LocalFrame to which this
   // FrameLoader belongs. Callers need to be careful about checking the
   // existence of the frame after StopAllLoaders() returns.
-  void StopAllLoaders();
+  void StopAllLoaders(bool abort_client);
 
   // Notifies the client that the initial empty document has been accessed, and
   // thus it is no longer safe to show a provisional URL above the document
@@ -226,15 +230,9 @@ class CORE_EXPORT FrameLoader final {
   // the navigation.
   void CancelClientNavigation();
 
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
   void DidDropNavigation();
-  void MarkAsLoading();
-
-  bool ShouldReuseDefaultView(const scoped_refptr<const SecurityOrigin>&,
-                              const ContentSecurityPolicy*);
-
-  bool IsClientNavigationInitialHistoryLoad();
 
   bool HasAccessedInitialDocument() { return has_accessed_initial_document_; }
 
@@ -308,7 +306,6 @@ class CORE_EXPORT FrameLoader final {
   // is either committed or cancelled.
   struct ClientNavigationState {
     KURL url;
-    bool is_history_navigation_in_new_frame = false;
   };
   std::unique_ptr<ClientNavigationState> client_navigation_;
 

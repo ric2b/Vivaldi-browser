@@ -65,7 +65,7 @@ ExternalPopupMenu::ExternalPopupMenu(LocalFrame& frame,
 
 ExternalPopupMenu::~ExternalPopupMenu() = default;
 
-void ExternalPopupMenu::Trace(Visitor* visitor) {
+void ExternalPopupMenu::Trace(Visitor* visitor) const {
   visitor->Trace(owner_element_);
   visitor->Trace(local_frame_);
   visitor->Trace(receiver_);
@@ -145,8 +145,9 @@ void ExternalPopupMenu::Show() {
 }
 
 void ExternalPopupMenu::DispatchEvent(TimerBase*) {
-  WebLocalFrameImpl::FromFrame(local_frame_->LocalFrameRoot())
-      ->FrameWidgetImpl()
+  static_cast<WebWidget*>(
+      WebLocalFrameImpl::FromFrame(local_frame_->LocalFrameRoot())
+          ->FrameWidgetImpl())
       ->HandleInputEvent(
           blink::WebCoalescedInputEvent(*synthetic_event_, ui::LatencyInfo()));
   synthetic_event_.reset();
@@ -268,10 +269,7 @@ void ExternalPopupMenu::GetPopupMenuInfo(
     }
     popup_item->enabled = !item_element.IsDisabledFormControl();
     const ComputedStyle& style = *owner_element.ItemComputedStyle(item_element);
-    popup_item->text_direction =
-        style.Direction() == TextDirection::kLtr
-            ? mojo_base::mojom::blink::TextDirection::LEFT_TO_RIGHT
-            : mojo_base::mojom::blink::TextDirection::RIGHT_TO_LEFT;
+    popup_item->text_direction = ToBaseTextDirection(style.Direction());
     popup_item->has_text_direction_override =
         IsOverride(style.GetUnicodeBidi());
     menu_items->push_back(std::move(popup_item));

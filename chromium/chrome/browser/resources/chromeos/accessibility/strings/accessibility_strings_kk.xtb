@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Оңға айналдыру</translation>
 <translation id="1781173782405573156">Тікелей өту пернесі</translation>
 <translation id="1787176709638001873">Құпия сөзді енгізетін өріс</translation>
+<translation id="180203835522132923">Search + O, одан кейін W</translation>
 <translation id="1810107444790159527">Тізім терезесі</translation>
 <translation id="1812527064848182527">альбомдық</translation>
 <translation id="1829244130665387512">Беттен табу</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Екі саусағыңызбен солға сырғытыңыз</translation>
 <translation id="2998131015536248178">Алдыңғы таңба</translation>
 <translation id="2999559350546931576">Қадамды азайту</translation>
+<translation id="3009352964623081324">Search + O, одан кейін S. Дауыстарды орнату, басқару және реттеу үшін пайдаланылады.</translation>
 <translation id="3014130421870723208">@ өрісін өңдеу 8 нүкте</translation>
 <translation id="3030432017085518523">Мəзір элементінің радио түймесі</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{дәйекше}other{# дәйекше}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Енгізу</translation>
 <translation id="4511186779140817916">Бозғылт сары</translation>
 <translation id="451510441928265982">Алдыңғы 2-деңгей тақырыбы жоқ.</translation>
+<translation id="4515799157838123044">Фондағы мазмұнға қошқыл реңк беру</translation>
 <translation id="4517854969512651305">Мәнді арттыру</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{қиғаш сызық}other{# қиғаш сызық}}</translation>
 <translation id="4537277403911487429">Келесі ұқсас элемент</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Бөлім</translation>
 <translation id="6637586476836377253">журнал</translation>
 <translation id="6657128831881431364">Орындалу жолағы</translation>
+<translation id="6660819301598582123">аәбвгғдеёжзийкқлмнңоөпрстуұүфхһцчшщъыіьэюя</translation>
 <translation id="667999046851023355">Құжат</translation>
 <translation id="6688209025607531203">Модальді емес терезедегі ескерту</translation>
 <translation id="6689672606256159458">Қоңырқай қызғылт</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Келесі 5-деңгей тақырыбы жоқ.</translation>
 <translation id="6955705049214951590">Боз алқызыл</translation>
 <translation id="696356426651109308">Басына өту</translation>
-<translation id="699159175332639490">Іздеу + O + W</translation>
 <translation id="6994042831499278539">Глоссарий анықтамасы</translation>
 <translation id="6996566555547746822">Келесі тізімді өріс</translation>
 <translation id="6997224546856374593">Бас әріптерді оқығанда:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">Мысал</translation>
 <translation id="7439060726180460871">Каталог</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Элемент түрлерін және тырнақшаға алынған, жойылған, жақшаға алынған, жуан әріптермен не бас әріппен жазылған мәтінді айтқанда, дауысыңыздың жоғарылығын өзгертіңіз.</translation>
 <translation id="7491962110804786152">қойынды</translation>
 <translation id="7505149250476994901">Әріп енгізілер алдында, "бас әріп" деп айту</translation>
 <translation id="7518543783849163354">ChromeVox дауыстық кеңестерінің айтылуын тоқтату үшін Control пернесін басыңыз.</translation>

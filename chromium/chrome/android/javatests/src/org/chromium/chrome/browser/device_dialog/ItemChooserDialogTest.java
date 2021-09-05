@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.device_dialog;
 
 import android.app.Dialog;
 import android.graphics.drawable.Drawable;
-import android.support.test.filters.LargeTest;
 import android.text.SpannableString;
 import android.view.View;
 import android.widget.Button;
@@ -15,6 +14,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.core.util.ObjectsCompat;
+import androidx.test.filters.LargeTest;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.junit.Assert;
@@ -25,7 +25,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -42,7 +41,6 @@ import org.chromium.ui.widget.TextViewWithClickableSpans;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class ItemChooserDialogTest implements ItemChooserDialog.ItemSelectedCallback {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =

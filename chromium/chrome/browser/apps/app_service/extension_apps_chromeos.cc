@@ -22,6 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -55,11 +56,11 @@
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/services/app_service/public/cpp/instance.h"
-#include "chrome/services/app_service/public/cpp/intent_filter_util.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/services/app_service/public/cpp/instance.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/clear_site_data_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/extension_system.h"
@@ -468,6 +469,7 @@ void ExtensionAppsChromeOs::OnExtensionUninstalled(
     return;
   }
 
+  app_notifications_.RemoveNotificationsForApp(extension->id());
   paused_apps_.MaybeRemoveApp(extension->id());
 
   ExtensionAppsBase::OnExtensionUninstalled(browser_context, extension, reason);
@@ -513,14 +515,18 @@ void ExtensionAppsChromeOs::OnNotificationDisplayed(
 
 void ExtensionAppsChromeOs::OnNotificationClosed(
     const std::string& notification_id) {
-  const std::string& app_id =
-      app_notifications_.GetAppIdForNotification(notification_id);
-  if (app_id.empty() || MaybeGetExtension(app_id) == nullptr) {
+  const auto app_ids =
+      app_notifications_.GetAppIdsForNotification(notification_id);
+  if (app_ids.empty()) {
     return;
   }
+
   app_notifications_.RemoveNotification(notification_id);
-  Publish(app_notifications_.GetAppWithHasBadgeStatus(app_type(), app_id),
-          subscribers());
+
+  for (const auto& app_id : app_ids) {
+    Publish(app_notifications_.GetAppWithHasBadgeStatus(app_type(), app_id),
+            subscribers());
+  }
 }
 
 void ExtensionAppsChromeOs::OnNotificationDisplayServiceDestroyed(
@@ -528,16 +534,17 @@ void ExtensionAppsChromeOs::OnNotificationDisplayServiceDestroyed(
   notification_display_service_.Remove(service);
 }
 
-void ExtensionAppsChromeOs::MaybeAddNotification(
+bool ExtensionAppsChromeOs::MaybeAddNotification(
     const std::string& app_id,
     const std::string& notification_id) {
   if (MaybeGetExtension(app_id) == nullptr) {
-    return;
+    return false;
   }
 
   app_notifications_.AddNotification(app_id, notification_id);
   Publish(app_notifications_.GetAppWithHasBadgeStatus(app_type(), app_id),
           subscribers());
+  return true;
 }
 
 void ExtensionAppsChromeOs::MaybeAddWebPageNotifications(
@@ -577,20 +584,24 @@ void ExtensionAppsChromeOs::MaybeAddWebPageNotifications(
     }
 
     auto app_ids = web_app_provider->registrar().FindAppsInScope(url);
+    int count = 0;
     for (const auto& app_id : app_ids) {
-      MaybeAddNotification(app_id, notification.id());
+      if (MaybeAddNotification(app_id, notification.id())) {
+        ++count;
+      }
     }
+    RecordAppsPerNotification(count);
   }
 }
 
 // static
-bool ExtensionAppsChromeOs::IsBlacklisted(const std::string& app_id) {
-  // We blacklist (meaning we don't publish the app, in the App Service sense)
+bool ExtensionAppsChromeOs::IsBlocklisted(const std::string& app_id) {
+  // We blocklist (meaning we don't publish the app, in the App Service sense)
   // some apps that are already published by other app publishers.
   //
-  // This sense of "blacklist" is separate from the extension registry's
-  // kDisabledByBlacklist concept, which is when SafeBrowsing will send out a
-  // blacklist of malicious extensions to disable.
+  // This sense of "blocklist" is separate from the extension registry's
+  // kDisabledByBlocklist concept, which is when SafeBrowsing will send out a
+  // blocklist of malicious extensions to disable.
 
   // The Play Store is conceptually provided by the ARC++ publisher, but
   // because it (the Play Store icon) is also the UI for enabling Android apps,
@@ -672,7 +683,7 @@ void ExtensionAppsChromeOs::OnSystemFeaturesPrefChanged() {
 }
 
 bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
-  if (!extension->is_app() || IsBlacklisted(extension->id())) {
+  if (!extension->is_app() || IsBlocklisted(extension->id())) {
     return false;
   }
 

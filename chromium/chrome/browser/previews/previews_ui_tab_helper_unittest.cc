@@ -15,8 +15,10 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/data_use_measurement/chrome_data_use_measurement.h"
 #include "chrome/browser/previews/previews_https_notification_infobar_decider.h"
 #include "chrome/browser/previews/previews_service.h"
 #include "chrome/browser/previews/previews_service_factory.h"
@@ -70,6 +72,11 @@ class PreviewsUITabHelperUnitTest : public ChromeRenderViewHostTestHarness {
     test_handle_->set_redirect_chain(redirect_chain);
     content::RenderFrameHostTester::For(main_rfh())
         ->InitializeRenderFrameIfNeeded();
+
+    if (!data_use_measurement::ChromeDataUseMeasurement::GetInstance()) {
+      data_use_measurement::ChromeDataUseMeasurement::CreateInstance(
+          g_browser_process->local_state());
+    }
 
     DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile())
         ->InitDataReductionProxySettings(
@@ -179,14 +186,14 @@ TEST_F(PreviewsUITabHelperUnitTest, TestPreviewsIDSet) {
 
   CallDidFinishNavigation();
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(ui_tab_helper->previews_user_data());
-  EXPECT_EQ(id, ui_tab_helper->previews_user_data()->page_id());
+  EXPECT_TRUE(ui_tab_helper->GetPreviewsUserData());
+  EXPECT_EQ(id, ui_tab_helper->GetPreviewsUserData()->page_id());
 
   // Navigate to reset the displayed state.
   content::WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL(kTestUrl));
 
-  EXPECT_FALSE(ui_tab_helper->previews_user_data());
+  EXPECT_FALSE(ui_tab_helper->GetPreviewsUserData());
 }
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)

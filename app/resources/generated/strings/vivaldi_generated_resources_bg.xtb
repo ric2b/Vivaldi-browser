@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(частно)</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Файлови описатели</translation>
-<translation id="1635033183663317347">Инсталирано от попечител.</translation>
 <translation id="1682548588986054654">Създай частен прозорец</translation>
 <translation id="1698122934742150150">Само за текущата частна сесия</translation>
 <translation id="1706625117072057435">Увеличаване</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Разширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Заявка за споделяне на екрана от <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Пост&amp;ави и премини към <ph name="URL" /></translation>
-<translation id="3725367690636977613">страници</translation>
 <translation id="3727187387656390258">Обследвай изскачащия елемент</translation>
 <translation id="3744111561329211289">Фоново сверяване</translation>
 <translation id="3760460896538743390">Обследвай &amp;фоновата страница</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Приеми за групата</translation>
-<translation id="4091434297613116013">листа хартия</translation>
 <translation id="4096508467498758490">Забрани разширенията в развоен режим</translation>
 <translation id="4100839878934973028">Друга програма в компютъра добави приложение, вероятно променящо начина на работа на Vivaldi.</translation>
 <translation id="4109898769411476438">Затворете браузъра преди внасяне</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
 <translation id="7311079019872751559">Неограничен достъп на приставки</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Нещо не е наред при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
@@ -433,7 +429,6 @@
 <translation id="8071432093239591881">Отпечатай като картина</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> КБ</translation>
 <translation id="8137559199583651773">Организирай разширенията</translation>
-<translation id="8180239481735238521">страница</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {изтегляне в ход} one {изтегляне в ход} few {изтегляния в ход} many {изтегляния в ход} other {изтегляния в ход}}</translation>
 <translation id="8230134520748321204">Записване на паролата за <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@
 <translation id="8798099450830957504">фабрични</translation>
 <translation id="8800004011501252845">Показани назначения за</translation>
 <translation id="8808478386290700967">Магазин</translation>
-<translation id="8813811964357448561">лист хартия</translation>
 <translation id="8823514049557262177">Копирай тек&amp;ста на препратката</translation>
 <translation id="8823704566850948458">Предложи парола…</translation>
 <translation id="8859174528519900719">Подрамка: <ph name="SUBFRAME_SITE" /></translation>

@@ -64,6 +64,7 @@ extern const Substitution SubstitutionBundleExecutableDir;
 // Valid for compile_xcassets tool.
 extern const Substitution SubstitutionBundleProductType;
 extern const Substitution SubstitutionBundlePartialInfoPlist;
+extern const Substitution SubstitutionXcassetsCompilerFlags;
 
 // Used only for the args of actions.
 extern const Substitution SubstitutionRspFileName;

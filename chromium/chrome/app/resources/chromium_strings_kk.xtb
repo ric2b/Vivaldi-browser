@@ -127,6 +127,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> – Желіге кіру</translation>
 <translation id="5987687638152509985">Chromium браузерін жаңартып, синхрондауды бастаңыз</translation>
 <translation id="6013050204643758987"><ph name="BEGIN_LINK_LINUX_OSS" />Linux (бета нұсқасы)<ph name="END_LINK_LINUX_OSS" /> сияқты Chromium операциялық жүйесі де қосымша <ph name="BEGIN_LINK_CROS_OSS" />бастапқы коды ашық бағдарлама<ph name="END_LINK_CROS_OSS" /> арқылы жұмыс істейді.</translation>
+<translation id="6039377483953237732">Chromium OS нұсқасы</translation>
 <translation id="6055895534982063517">Жаңа жылдамырақ Chromium нұсқасы қолжетімді.</translation>
 <translation id="6063093106622310249">&amp;Chromium жүйесінде ашу</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> кеңейтімі Chromium браузеріне енгізілді</translation>
@@ -224,8 +225,6 @@ Chromium параметрлеріңізді қалпына келтіре алм
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. Барлық құқықтар қорғалған.</translation>
 <translation id="8619360774459241877">Chromium іске қосылуда…</translation>
 <translation id="8621669128220841554">Орнату анықталмаған қате себебінен сәтсіз аяқталды. Chromium браузерін қайта жүктеңіз.</translation>
-<translation id="8682540261359803721">Егер параметр бұл бетте көрсетілмесе, оны <ph name="LINK_BEGIN" />
-      Chromium браузерінің параметрлері<ph name="LINK_END" /> бөлімінен қарап көріңіз.</translation>
 <translation id="8697124171261953979">Сонымен қатар ол Chromium іске қосқаныңызда немесе Omnibox ішінен іздегеніңізде қайсы бет көрсетілетінін бақылайды.</translation>
 <translation id="8704119203788522458">Сізге арналған Chromium.</translation>
 <translation id="8796602469536043152">Chromium браузеріне бұл сайтта камераны және микрофонды пайдалану үшін рұқсат керек</translation>

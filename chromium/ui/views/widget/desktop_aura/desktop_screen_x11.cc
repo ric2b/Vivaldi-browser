@@ -32,7 +32,9 @@ DesktopScreenX11::DesktopScreenX11() {
     display_scale_factor_observer_.Add(LinuxUI::instance());
 }
 
-DesktopScreenX11::~DesktopScreenX11() = default;
+DesktopScreenX11::~DesktopScreenX11() {
+  display::Screen::SetScreenInstance(old_screen_);
+}
 
 void DesktopScreenX11::Init() {
   if (x11_display_manager_->IsXrandrAvailable() &&
@@ -60,12 +62,11 @@ bool DesktopScreenX11::IsWindowUnderCursor(gfx::NativeWindow window) {
 
 gfx::NativeWindow DesktopScreenX11::GetWindowAtScreenPoint(
     const gfx::Point& point) {
-  auto accelerated_widget =
-      ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
-          gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point), {});
-  return accelerated_widget
+  auto window = ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
+      gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point), {});
+  return window != x11::Window::None
              ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                   static_cast<gfx::AcceleratedWidget>(accelerated_widget))
+                   window)
              : nullptr;
 }
 
@@ -75,13 +76,12 @@ gfx::NativeWindow DesktopScreenX11::GetLocalProcessWindowAtPoint(
   std::set<gfx::AcceleratedWidget> ignore_widgets;
   for (auto* const window : ignore)
     ignore_widgets.emplace(window->GetHost()->GetAcceleratedWidget());
-  auto accelerated_widget =
-      ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
-          gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point),
-          ignore_widgets);
-  return accelerated_widget
+  auto window = ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
+      gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point),
+      ignore_widgets);
+  return window != x11::Window::None
              ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                   static_cast<gfx::AcceleratedWidget>(accelerated_widget))
+                   window)
              : nullptr;
 }
 
@@ -148,7 +148,7 @@ std::string DesktopScreenX11::GetCurrentWorkspace() {
   return x11_display_manager_->GetCurrentWorkspace();
 }
 
-bool DesktopScreenX11::DispatchXEvent(XEvent* event) {
+bool DesktopScreenX11::DispatchXEvent(x11::Event* event) {
   return x11_display_manager_->CanProcessEvent(*event) &&
          x11_display_manager_->ProcessEvent(event);
 }
@@ -174,14 +174,6 @@ float DesktopScreenX11::GetXDisplayScaleFactor() const {
   return display::Display::HasForceDeviceScaleFactor()
              ? display::Display::GetForcedDeviceScaleFactor()
              : 1.0f;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-display::Screen* CreateDesktopScreen() {
-  auto* screen = new DesktopScreenX11;
-  screen->Init();
-  return screen;
 }
 
 }  // namespace views

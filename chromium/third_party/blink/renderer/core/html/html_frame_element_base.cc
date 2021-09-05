@@ -67,7 +67,7 @@ bool HTMLFrameElementBase::IsURLAllowed() const {
     // frame. NB: This check can be invoked without any JS on the stack for some
     // parser operations. In such case, we use the origin of the frame element's
     // containing document as the caller context.
-    v8::Isolate* isolate = GetDocument().GetIsolate();
+    v8::Isolate* isolate = GetExecutionContext()->GetIsolate();
     LocalDOMWindow* accessing_window = isolate->InContext()
                                            ? CurrentDOMWindow(isolate)
                                            : GetDocument().domWindow();
@@ -96,15 +96,12 @@ void HTMLFrameElementBase::OpenURL(bool replace_current_item) {
   // URL at this point, *and* the base URL is a data URL, assume |url_| was
   // relative and give a warning.
   if (!url.IsValid() && GetDocument().BaseURL().ProtocolIsData()) {
-    if (LocalDOMWindow* window = GetDocument().ExecutingWindow()) {
-      if (LocalFrame* frame = window->GetFrame()) {
-        frame->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
             mojom::ConsoleMessageSource::kRendering,
             mojom::ConsoleMessageLevel::kWarning,
             "Invalid relative frame source URL (" + url_ +
                 ") within data URL."));
-      }
-    }
   }
   LoadOrRedirectSubframe(url, frame_name_, replace_current_item);
 }

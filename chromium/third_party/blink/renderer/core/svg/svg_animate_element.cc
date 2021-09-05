@@ -187,7 +187,7 @@ void SVGAnimateElement::ResolveTargetProperty() {
                             AttributeName().LocalName())
             : CSSPropertyID::kInvalid;
   }
-  // Blacklist <script> targets here for now to prevent unpleasantries. This
+  // Disallow <script> targets here for now to prevent unpleasantries. This
   // also disallows the perfectly "valid" animation of 'className' on said
   // element. If SVGScriptElement.href is transitioned off of SVGAnimatedHref,
   // this can be removed.
@@ -586,7 +586,7 @@ void SVGAnimateElement::SetAttributeType(
   AnimationAttributeChanged();
 }
 
-void SVGAnimateElement::Trace(Visitor* visitor) {
+void SVGAnimateElement::Trace(Visitor* visitor) const {
   visitor->Trace(from_property_);
   visitor->Trace(to_property_);
   visitor->Trace(to_at_end_of_duration_property_);

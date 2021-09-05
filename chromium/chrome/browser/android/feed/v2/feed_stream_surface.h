@@ -38,9 +38,10 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jbyteArray>& data);
 
-  int ExecuteEphemeralChange(JNIEnv* env,
-                             const base::android::JavaParamRef<jobject>& obj,
-                             const base::android::JavaParamRef<jobject>& data);
+  int ExecuteEphemeralChange(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jbyteArray>& data);
 
   void CommitEphemeralChange(JNIEnv* env,
                              const base::android::JavaParamRef<jobject>& obj,
@@ -79,9 +80,7 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
   void ReportDownloadAction(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj);
   void ReportNavigationStarted(JNIEnv* env,
-                               const base::android::JavaParamRef<jobject>& obj,
-                               const base::android::JavaParamRef<jstring>& url,
-                               jboolean in_new_tab);
+                               const base::android::JavaParamRef<jobject>& obj);
   void ReportPageLoaded(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj,
                         const base::android::JavaParamRef<jstring>& url,
@@ -99,6 +98,8 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
   void ReportStreamScrolled(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj,
                             int distance_dp);
+  void ReportStreamScrollStart(JNIEnv* env,
+                               const base::android::JavaParamRef<jobject>& obj);
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;

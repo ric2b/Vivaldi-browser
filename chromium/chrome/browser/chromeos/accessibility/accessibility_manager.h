@@ -18,7 +18,6 @@
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
-#include "chrome/browser/chromeos/accessibility/switch_access_panel.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -91,7 +90,6 @@ typedef AccessibilityStatusCallbackList::Subscription
     AccessibilityStatusSubscription;
 
 class AccessibilityPanelWidgetObserver;
-class ChromeVoxDeferredLoader;
 
 enum class PlaySoundOption {
   // The sound is always played.
@@ -276,7 +274,6 @@ class AccessibilityManager
 
   // Called by our widget observer when the respective panel is closing.
   void OnChromeVoxPanelDestroying();
-  void OnSwitchAccessPanelDestroying();
 
   // Profile having the a11y context.
   Profile* profile() { return profile_; }
@@ -291,14 +288,8 @@ class AccessibilityManager
   // Set the keys to be captured by Switch Access.
   void SetSwitchAccessKeys(const std::set<int>& key_codes);
 
-  // Hides the Switch Access menu.
-  void HideSwitchAccessMenu();
-
-  // Shows the Switch Access menu.
-  void ShowSwitchAccessMenu(const gfx::Rect& element_bounds,
-                            int menu_width,
-                            int menu_height,
-                            bool back_button_only = false);
+  // Unloads Switch Access.
+  void OnSwitchAccessDisabled();
 
   // Starts or stops dictation (type what you speak).
   bool ToggleDictation();
@@ -363,8 +354,6 @@ class AccessibilityManager
   ~AccessibilityManager() override;
 
  private:
-  void LoadChromeVox();
-  void UnloadChromeVox();
   void PostLoadChromeVox();
   void PostUnloadChromeVox();
   void PostSwitchChromeVoxProfile();
@@ -375,8 +364,8 @@ class AccessibilityManager
   void PostLoadSwitchAccess();
   void PostUnloadSwitchAccess();
 
-  void PostLoadAutoclick();
-  void PostUnloadAutoclick();
+  void PostLoadAccessibilityCommon();
+  void PostUnloadAccessibilityCommon();
 
   void UpdateAlwaysShowMenuFromPref();
   void OnLargeCursorChanged();
@@ -463,10 +452,6 @@ class AccessibilityManager
   std::unique_ptr<AccessibilityPanelWidgetObserver>
       chromevox_panel_widget_observer_;
 
-  SwitchAccessPanel* switch_access_panel_ = nullptr;
-  std::unique_ptr<AccessibilityPanelWidgetObserver>
-      switch_access_panel_widget_observer_;
-
   std::string keyboard_listener_extension_id_;
   bool keyboard_listener_capture_ = false;
 
@@ -475,7 +460,8 @@ class AccessibilityManager
                  extensions::ExtensionRegistryObserver>
       extension_registry_observer_{this};
 
-  std::unique_ptr<AccessibilityExtensionLoader> autoclick_extension_loader_;
+  std::unique_ptr<AccessibilityExtensionLoader>
+      accessibility_common_extension_loader_;
 
   std::unique_ptr<AccessibilityExtensionLoader> chromevox_loader_;
 
@@ -504,14 +490,10 @@ class AccessibilityManager
   // Used to set the audio focus enforcement type for ChromeVox.
   mojo::Remote<media_session::mojom::AudioFocusManager> audio_focus_manager_;
 
-  // Handles deferred ChromeVox load.
-  std::unique_ptr<ChromeVoxDeferredLoader> chromevox_deferred_loader_;
-
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_{this};
 
   friend class DictationTest;
   friend class SwitchAccessTest;
-  friend class ChromeVoxDeferredLoader;
   DISALLOW_COPY_AND_ASSIGN(AccessibilityManager);
 };
 

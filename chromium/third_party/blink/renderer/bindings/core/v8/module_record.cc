@@ -80,7 +80,7 @@ ModuleRecordProduceCacheData::ModuleRecordProduceCacheData(
   }
 }
 
-void ModuleRecordProduceCacheData::Trace(Visitor* visitor) {
+void ModuleRecordProduceCacheData::Trace(Visitor* visitor) const {
   visitor->Trace(cache_handler_);
   visitor->Trace(unbound_script_.UnsafeCast<v8::Value>());
 }
@@ -114,10 +114,11 @@ v8::Local<v8::Module> ModuleRecord::Compile(
       V8CodeCache::GetCompileOptions(v8_cache_options, cache_handler,
                                      source.length(), source_location_type);
 
-  if (!V8ScriptRunner::CompileModule(isolate, source, cache_handler, source_url,
-                                     text_position, compile_options,
-                                     no_cache_reason,
-                                     ReferrerScriptInfo(base_url, options))
+  if (!V8ScriptRunner::CompileModule(
+           isolate, source, cache_handler, source_url, text_position,
+           compile_options, no_cache_reason,
+           ReferrerScriptInfo(base_url, options,
+                              ReferrerScriptInfo::BaseUrlSource::kOther))
            .ToLocal(&module)) {
     DCHECK(try_catch.HasCaught());
     exception_state.RethrowV8Exception(try_catch.Exception());

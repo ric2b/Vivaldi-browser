@@ -10,6 +10,7 @@
 #include "platform_media/common/platform_ipc_util.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
 
 #include <algorithm>

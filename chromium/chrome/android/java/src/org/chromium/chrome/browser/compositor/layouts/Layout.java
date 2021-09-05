@@ -77,6 +77,8 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     /** Length of the unstalling animation. **/
     public static final long UNSTALLED_ANIMATION_DURATION_MS = 500;
 
+    private static final float SNAP_SPEED = 1.0f; // dp per second
+
     // Drawing area properties.
     private float mWidthDp;
     private float mHeightDp;
@@ -112,6 +114,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
 
     // The ratio of dp to px.
     protected final float mDpToPx;
+    protected final float mPxToDp;
 
     /**
      * The {@link Layout} is not usable until sizeChanged is called.
@@ -133,6 +136,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
 
         mCurrentOrientation = Orientation.UNSET;
         mDpToPx = context.getResources().getDisplayMetrics().density;
+        mPxToDp = 1 / mDpToPx;
     }
 
     /**
@@ -277,6 +281,41 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     }
 
     /**
+     * Update snapping to pixel. To be called once every frame.
+     *
+     * TODO(crbug.com/1070281): Temporary placement. This is some Mediator logic and should move to
+     * the appropriate location when doing MVC.
+     *
+     * @param dt The delta time between update frames in ms.
+     * @param layoutTab The {@link LayoutTab} that needs to be updating.
+     * @return   True if the snapping requests to render at least one more frame.
+     */
+    protected boolean updateSnap(long dt, LayoutTab layoutTab) {
+        final float step = dt * SNAP_SPEED / 1000.0f;
+        final float renderX = layoutTab.get(LayoutTab.RENDER_X);
+        final float renderY = layoutTab.get(LayoutTab.RENDER_Y);
+        final float x = updateSnap(step, renderX, layoutTab.get(LayoutTab.X));
+        final float y = updateSnap(step, renderY, layoutTab.get(LayoutTab.Y));
+        final boolean change = x != renderX || y != renderY;
+        layoutTab.set(LayoutTab.RENDER_X, x);
+        layoutTab.set(LayoutTab.RENDER_Y, y);
+        return change;
+    }
+
+    private float updateSnap(float step, float current, float ref) {
+        if (Math.abs(current - ref) > mPxToDp) return ref;
+        final float refRounded = Math.round(ref * mDpToPx) * mPxToDp;
+        if (refRounded < ref) {
+            current -= step;
+            current = Math.max(refRounded, current);
+        } else {
+            current += step;
+            current = Math.min(refRounded, current);
+        }
+        return current;
+    }
+
+    /**
      * Request that the renderer render a frame (after the current frame). This
      * should be called whenever a new frame should be rendered.
      */
@@ -304,18 +343,17 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
 
     /**
      * Called when the size of the viewport has changed.
-     * @param visibleViewport        The visible viewport that represents the area on the screen
-     *                               this {@link Layout} gets to draw to in px (potentially takes
-     *                               into account browser controls).
-     * @param screenViewport         The viewport of the screen in px.
-     * @param heightMinusBrowserControls The height the {@link Layout} gets excluding the height of
-     *                               the browser controls in px. TODO(dtrainor): Look at getting rid
-     *                               of this.
-     * @param orientation            The new orientation.  Valid values are defined by
-     *                               {@link Orientation}.
+     * @param visibleViewportPx             The visible viewport that represents the area on the
+     *                                      screen this {@link Layout} gets to draw to in px
+     *                                      (potentially takes into account browser controls).
+     * @param screenViewportPx              The viewport of the screen in px.
+     * @param topBrowserControlsHeightPx    The top browser controls height in px.
+     * @param bottomBrowserControlsHeightPx The bottom browser controls height in px.
+     * @param orientation                   The new orientation.  Valid values are defined by
+     *                                      {@link Orientation}.
      */
-    public final void sizeChanged(RectF visibleViewportPx, RectF screenViewportPx,
-            float topBrowserControlsHeightPx, float bottomBrowserControlsHeightPx,
+    final void sizeChanged(RectF visibleViewportPx, RectF screenViewportPx,
+            int topBrowserControlsHeightPx, int bottomBrowserControlsHeightPx,
             @Orientation int orientation) {
         // 1. Pull out this Layout's width and height properties based on the viewport.
         float width = screenViewportPx.width() / mDpToPx;
@@ -512,24 +550,10 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     }
 
     /**
-     * @return The height of the top browser controls in dp.
-     */
-    public float getTopBrowserControlsHeight() {
-        return mTopBrowserControlsHeightDp;
-    }
-
-    /**
      * @return The height of the bottom browser controls in dp.
      */
     public float getBottomBrowserControlsHeight() {
         return mBottomBrowserControlsHeightDp;
-    }
-
-    /**
-     * @return The height of the drawing area minus the browser controls in dp.
-     */
-    public float getHeightMinusBrowserControls() {
-        return getHeight() - (getTopBrowserControlsHeight() + getBottomBrowserControlsHeight());
     }
 
     /**

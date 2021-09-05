@@ -9,7 +9,6 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -76,8 +75,7 @@ void ChromeSubresourceFilterClient::MaybeAppendNavigationThrottles(
     throttles->push_back(
         std::make_unique<subresource_filter::
                              SubresourceFilterSafeBrowsingActivationThrottle>(
-            navigation_handle, this,
-            base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}),
+            navigation_handle, this, content::GetIOThreadTaskRunner({}),
             safe_browsing_service->database_manager()));
   }
 
@@ -86,8 +84,8 @@ void ChromeSubresourceFilterClient::MaybeAppendNavigationThrottles(
 }
 
 void ChromeSubresourceFilterClient::OnReloadRequested() {
-  LogAction(SubresourceFilterAction::kWhitelistedSite);
-  WhitelistByContentSettings(web_contents()->GetLastCommittedURL());
+  LogAction(SubresourceFilterAction::kAllowlistedSite);
+  AllowlistByContentSettings(web_contents()->GetLastCommittedURL());
   web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
 }
 
@@ -128,16 +126,16 @@ ChromeSubresourceFilterClient::OnPageActivationComputed(
   if (settings_manager_->GetSitePermission(url) == CONTENT_SETTING_ALLOW) {
     if (effective_activation_level ==
         subresource_filter::mojom::ActivationLevel::kEnabled) {
-      *decision = subresource_filter::ActivationDecision::URL_WHITELISTED;
+      *decision = subresource_filter::ActivationDecision::URL_ALLOWLISTED;
     }
     return subresource_filter::mojom::ActivationLevel::kDisabled;
   }
   return effective_activation_level;
 }
 
-void ChromeSubresourceFilterClient::WhitelistByContentSettings(
+void ChromeSubresourceFilterClient::AllowlistByContentSettings(
     const GURL& top_level_url) {
-  settings_manager_->WhitelistSite(top_level_url);
+  settings_manager_->AllowlistSite(top_level_url);
 }
 
 void ChromeSubresourceFilterClient::ToggleForceActivationInCurrentWebContents(

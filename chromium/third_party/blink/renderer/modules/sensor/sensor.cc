@@ -109,7 +109,7 @@ bool Sensor::activated() const {
 }
 
 bool Sensor::hasReading() const {
-  if (!IsActivated())
+  if (!activated())
     return false;
   DCHECK(sensor_proxy_);
   return sensor_proxy_->GetReading().timestamp() != 0.0;
@@ -140,7 +140,7 @@ base::Optional<DOMHighResTimeStamp> Sensor::timestamp(
       base::TimeDelta::FromSecondsD(sensor_proxy_->GetReading().timestamp()));
 }
 
-void Sensor::Trace(Visitor* visitor) {
+void Sensor::Trace(Visitor* visitor) const {
   visitor->Trace(sensor_proxy_);
   ActiveScriptWrappable::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
@@ -346,7 +346,12 @@ void Sensor::NotifyActivated() {
   DCHECK_EQ(state_, SensorState::kActivating);
   state_ = SensorState::kActivated;
 
-  if (hasReading()) {
+  // Explicitly call the Sensor implementation of hasReading(). Subclasses may
+  // override the method and introduce additional requirements, but in this case
+  // we are really only interested in whether there is data in the shared
+  // buffer, so that we can then process it possibly for the first time in
+  // OnSensorReadingChanged().
+  if (Sensor::hasReading()) {
     // If reading has already arrived, process the reading values (a subclass
     // may do some filtering, for example) and then send an initial "reading"
     // event right away.

@@ -27,7 +27,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_timeouts.h"
 #include "base/test/thread_test_helper.h"
@@ -39,8 +38,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/network_interfaces.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using content::BrowserThread;
 
 namespace {
 
@@ -77,7 +74,7 @@ class ProcessSingletonPosixTest : public testing::Test {
                     base::WaitableEvent::InitialState::NOT_SIGNALED),
         signal_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
-        process_singleton_on_thread_(NULL) {}
+        process_singleton_on_thread_(nullptr) {}
 
   void SetUp() override {
     testing::Test::SetUp();
@@ -100,8 +97,8 @@ class ProcessSingletonPosixTest : public testing::Test {
   }
 
   void TearDown() override {
-    scoped_refptr<base::ThreadTestHelper> io_helper(new base::ThreadTestHelper(
-        base::CreateSingleThreadTaskRunner({BrowserThread::IO}).get()));
+    scoped_refptr<base::ThreadTestHelper> io_helper(
+        new base::ThreadTestHelper(content::GetIOThreadTaskRunner({}).get()));
     ASSERT_TRUE(io_helper->Run());
 
     // Destruct the ProcessSingleton object before the IO thread so that its
@@ -121,7 +118,7 @@ class ProcessSingletonPosixTest : public testing::Test {
   }
 
   void CreateProcessSingletonOnThread() {
-    ASSERT_EQ(NULL, worker_thread_.get());
+    ASSERT_FALSE(worker_thread_.get());
     worker_thread_.reset(new base::Thread("BlockingThread"));
     worker_thread_->Start();
 
@@ -200,7 +197,7 @@ class ProcessSingletonPosixTest : public testing::Test {
   }
 
   void CheckNotified() {
-    ASSERT_TRUE(process_singleton_on_thread_ != NULL);
+    ASSERT_TRUE(process_singleton_on_thread_);
     ASSERT_EQ(1u, process_singleton_on_thread_->callback_command_lines_.size());
     bool found = false;
     for (size_t i = 0;

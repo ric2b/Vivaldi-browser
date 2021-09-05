@@ -21,7 +21,7 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -48,6 +49,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final ThemeColorProvider mThemeColorProvider;
     private final TabGroupUiToolbarView mToolbarView;
     private final ViewGroup mTabListContainerView;
+    private final ScrimCoordinator mScrimCoordinator;
     private PropertyModelChangeProcessor mModelChangeProcessor;
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
     private TabListCoordinator mTabStripCoordinator;
@@ -58,9 +60,11 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     /**
      * Creates a new {@link TabGroupUiCoordinator}
      */
-    public TabGroupUiCoordinator(ViewGroup parentView, ThemeColorProvider themeColorProvider) {
+    public TabGroupUiCoordinator(ViewGroup parentView, ThemeColorProvider themeColorProvider,
+            ScrimCoordinator scrimCoordinator) {
         mContext = parentView.getContext();
         mThemeColorProvider = themeColorProvider;
+        mScrimCoordinator = scrimCoordinator;
         mModel = new PropertyModel(TabGroupUiProperties.ALL_KEYS);
         mToolbarView = (TabGroupUiToolbarView) LayoutInflater.from(mContext).inflate(
                 R.layout.bottom_tab_strip_toolbar, parentView, false);
@@ -99,10 +103,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         // TODO(crbug.com/972217): find a way to enable interactions between grid tab switcher
         //  and the dialog here.
         TabGridDialogMediator.DialogController dialogController = null;
-        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && mScrimCoordinator != null) {
             mTabGridDialogCoordinator = new TabGridDialogCoordinator(mContext, tabModelSelector,
-                    tabContentManager, activity, activity.getCompositorViewHolder(), null, null,
-                    null, mActivity.getShareDelegateSupplier());
+                    tabContentManager, activity, activity.findViewById(R.id.coordinator), null,
+                    null, null, mActivity.getShareDelegateSupplier(), mScrimCoordinator);
             mTabGridDialogCoordinator.initWithNative(mContext, tabModelSelector, tabContentManager,
                     mTabStripCoordinator.getTabGroupTitleEditor());
             dialogController = mTabGridDialogCoordinator.getDialogController();
@@ -208,13 +212,13 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
             int namedGroupCount = 0;
             for (int i = 0; i < normalFilter.getTabGroupCount(); i++) {
-                int rootId = ((TabImpl) normalFilter.getTabAt(i)).getRootId();
+                int rootId = CriticalPersistedTabData.from(normalFilter.getTabAt(i)).getRootId();
                 if (TabGroupUtils.getTabGroupTitle(rootId) != null) {
                     namedGroupCount += 1;
                 }
             }
             for (int i = 0; i < incognitoFilter.getTabGroupCount(); i++) {
-                int rootId = ((TabImpl) incognitoFilter.getTabAt(i)).getRootId();
+                int rootId = CriticalPersistedTabData.from(incognitoFilter.getTabAt(i)).getRootId();
                 if (TabGroupUtils.getTabGroupTitle(rootId) != null) {
                     namedGroupCount += 1;
                 }

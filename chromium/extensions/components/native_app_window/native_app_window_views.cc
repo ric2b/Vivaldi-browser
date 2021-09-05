@@ -38,6 +38,9 @@ void NativeAppWindowViews::Init(
       create_params.GetContentMaximumSize(gfx::Insets()));
   Observe(app_window_->web_contents());
 
+  web_view_ = AddChildView(std::make_unique<views::WebView>(nullptr));
+  web_view_->SetWebContents(app_window_->web_contents());
+
   widget_ = new views::Widget;
   widget_->AddObserver(this);
   InitializeWindow(app_window, create_params);
@@ -47,6 +50,7 @@ void NativeAppWindowViews::Init(
 
 NativeAppWindowViews::~NativeAppWindowViews() {
   web_view_->SetWebContents(nullptr);
+  CHECK(!IsInObserverList());
 }
 
 void NativeAppWindowViews::OnCanHaveAlphaEnabledChanged() {
@@ -212,14 +216,6 @@ void NativeAppWindowViews::DeleteDelegate() {
   app_window_->OnNativeClose();
 }
 
-views::Widget* NativeAppWindowViews::GetWidget() {
-  return widget_;
-}
-
-const views::Widget* NativeAppWindowViews::GetWidget() const {
-  return widget_;
-}
-
 bool NativeAppWindowViews::ShouldDescendIntoChildForEventHandling(
     gfx::NativeView child,
     const gfx::Point& location) {
@@ -281,15 +277,6 @@ void NativeAppWindowViews::RenderViewHostChanged(
 }
 
 // views::View implementation.
-
-void NativeAppWindowViews::ViewHierarchyChanged(
-    const views::ViewHierarchyChangedDetails& details) {
-  if (details.is_add && details.child == this) {
-    DCHECK(!web_view_);
-    web_view_ = AddChildView(std::make_unique<views::WebView>(nullptr));
-    web_view_->SetWebContents(app_window_->web_contents());
-  }
-}
 
 gfx::Size NativeAppWindowViews::GetMinimumSize() const {
   return size_constraints_.GetMinimumSize();

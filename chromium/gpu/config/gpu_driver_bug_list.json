@@ -2273,12 +2273,13 @@
         }
       },
       "features": [
-        "disable_accelerated_vpx_decode"
+        "disable_accelerated_vp8_decode",
+        "disable_accelerated_vp9_decode"
       ]
     },
     {
       "id": 225,
-      "description": "VPx decoding is too slow on Intel Broadwell, Skylake, and CherryTrail",
+      "description": "VP9 decoding is too slow on Intel Broadwell, Skylake, and CherryTrail",
       "cr_bugs": [616318],
       "os": {
         "type": "win"
@@ -2289,12 +2290,12 @@
         "cherrytrail"
       ],
       "features": [
-        "disable_accelerated_vpx_decode"
+        "disable_accelerated_vp9_decode"
       ]
     },
     {
       "id": 226,
-      "description": "Accelerated VPx decoding is hanging on some videos.",
+      "description": "Accelerated VP9 decoding is hanging on some videos.",
       "cr_bugs": [654111],
       "os": {
         "type": "win"
@@ -2305,7 +2306,7 @@
         "value": "21.20.16.4542"
       },
       "features": [
-        "disable_accelerated_vpx_decode"
+        "disable_accelerated_vp9_decode"
       ]
     },
     {
@@ -3468,11 +3469,16 @@
     {
       "id": 328,
       "cr_bugs": [1041166],
-      "description": "Disable D3D11VideoDecoder due to crashes on NVIDIA",
+      "description": "Disable D3D11VideoDecoder due to crashes on NVIDIA on older drivers",
       "os": {
         "type": "win"
       },
       "vendor_id": "0x10de",
+      "driver_version": {
+        "schema": "nvidia_driver",
+        "op": "<",
+        "value": "451.48"
+      },
       "features": [
         "disable_d3d11_video_decoder"
       ]
@@ -3534,7 +3540,7 @@
     {
       "id": 336,
       "cr_bugs": [625785],
-      "description": "DXVA video decoder crashes on some AMD GPUs",
+      "description": "DXVA video decoder crashes on some AMD GPUs.",
       "os": {
         "type": "win"
       },
@@ -3604,7 +3610,7 @@
     },
     {
       "id": 339,
-      "description": "NV12 textures trigger crash on Intel driver 20.19.15.*",
+      "description": "Array textures trigger crash on Intel driver 20.19.15.*",
       "cr_bugs": [971952],
       "os": {
         "type": "win",
@@ -3623,12 +3629,12 @@
         "value2": "20.19.15.4380"
       },
       "features": [
-        "disable_nv12_dxgi_video"
+        "disable_dxgi_zero_copy_video"
       ]
     },
     {
       "id": 340,
-      "description": "NV12 textures trigger crash on Intel driver 10.18.15.*",
+      "description": "Array textures trigger crash on Intel driver 10.18.15.*",
       "cr_bugs": [971952],
       "os": {
         "type": "win",
@@ -3647,7 +3653,50 @@
         "value2": "10.18.15.4293"
       },
       "features": [
-        "disable_nv12_dxgi_video"
+        "disable_dxgi_zero_copy_video"
+      ]
+    },
+    {
+      "id": 341,
+      "description": "Driver crash deleting FBOs on Mac Intel Broadwell",
+      "cr_bugs": [1090584],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "intel_gpu_series": [
+        "broadwell"
+      ],
+      "features": [
+        "unbind_attachments_on_bound_render_fbo_delete"
+      ]
+    },
+    {
+      "id": 342,
+      "description": "Driver crash deleting FBOs on Mac nVidia 600/700 series",
+      "cr_bugs": [1090584],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x10de",
+      "device_id": ["0x0fe9", "0x0fd5", "0x0fd8", "0x119e", "0x0fea", "0x11a2"],
+      "features": [
+        "unbind_attachments_on_bound_render_fbo_delete"
+      ]
+    },
+    {
+      "id": 344,
+      "description": "VP8 decoding crashes before Windows 10 Fall Creators Update.",
+      "cr_bugs": [1094840],
+      "os": {
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.16299"
+        }
+      },
+      "features": [
+        "disable_accelerated_vp8_decode"
       ]
     }
   ]

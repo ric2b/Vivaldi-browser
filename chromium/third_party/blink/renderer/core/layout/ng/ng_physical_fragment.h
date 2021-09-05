@@ -25,9 +25,9 @@ class FragmentData;
 class Node;
 class NGFragmentBuilder;
 class NGInlineItem;
-class PaintLayer;
-
 class NGPhysicalFragment;
+class PaintLayer;
+struct LogicalRect;
 
 struct CORE_EXPORT NGPhysicalFragmentTraits {
   static void Destruct(const NGPhysicalFragment*);
@@ -98,6 +98,7 @@ class CORE_EXPORT NGPhysicalFragment
   bool IsColumnBox() const {
     return IsBox() && BoxType() == NGBoxType::kColumnBox;
   }
+  bool IsFragmentainerBox() const { return IsColumnBox(); }
   // An atomic inline is represented as a kFragmentBox, such as inline block and
   // replaced elements.
   bool IsAtomicInline() const {
@@ -133,7 +134,7 @@ class CORE_EXPORT NGPhysicalFragment
   //
   // [1] https://www.w3.org/TR/css-display-3/#box-tree
   // [2] https://www.w3.org/TR/css-break-3/#fragmentation-container
-  bool IsCSSBox() const { return !IsLineBox() && !IsColumnBox(); }
+  bool IsCSSBox() const { return !IsLineBox() && !IsFragmentainerBox(); }
 
   bool IsBlockFlow() const;
   bool IsAnonymousBlock() const {
@@ -142,6 +143,7 @@ class CORE_EXPORT NGPhysicalFragment
   bool IsListMarker() const {
     return IsCSSBox() && layout_object_->IsLayoutNGOutsideListMarker();
   }
+  bool IsRubyRun() const { return layout_object_->IsRubyRun(); }
 
   // Return true if this fragment is a container established by a fieldset
   // element. Such a fragment contains an optional rendered legend fragment and
@@ -336,6 +338,11 @@ class CORE_EXPORT NGPhysicalFragment
   // be confused with the CSS 'direction' property.
   TextDirection ResolvedDirection() const;
 
+  // Helper functions to convert between |PhysicalRect| and |LogicalRect| of a
+  // child.
+  LogicalRect ConvertChildToLogical(const PhysicalRect& physical_rect) const;
+  PhysicalRect ConvertChildToPhysical(const LogicalRect& logical_rect) const;
+
   // Utility functions for caret painting. Note that carets are painted as part
   // of the containing block's foreground.
   bool ShouldPaintCursorCaret() const;
@@ -386,14 +393,6 @@ class CORE_EXPORT NGPhysicalFragment
 
   const Vector<NGInlineItem>& InlineItemsOfContainingBlock() const;
 
-  LayoutObject* layout_object_;
-  const PhysicalSize size_;
-
-  const unsigned type_ : 2;      // NGFragmentType
-  const unsigned sub_type_ : 3;  // NGBoxType, NGTextType, or NGLineBoxType
-  const unsigned style_variant_ : 2;  // NGStyleVariant
-  const unsigned is_hidden_for_paint_ : 1;
-
   // The following bitfields are only to be used by NGPhysicalContainerFragment
   // (it's defined here to save memory, since that class has no bitfields).
   unsigned has_floating_descendants_for_paint_ : 1;
@@ -405,8 +404,6 @@ class CORE_EXPORT NGPhysicalFragment
   // The following bitfields are only to be used by NGPhysicalLineBoxFragment
   // (it's defined here to save memory, since that class has no bitfields).
   unsigned has_propagated_descendants_ : 1;
-  // base (line box) or resolve (text) direction
-  unsigned base_or_resolved_direction_ : 1;  // TextDirection
   unsigned has_hanging_ : 1;
 
   // The following bitfields are only to be used by NGPhysicalBoxFragment
@@ -416,8 +413,19 @@ class CORE_EXPORT NGPhysicalFragment
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
   unsigned has_borders_ : 1;
   unsigned has_padding_ : 1;
-  unsigned is_math_fraction_ : 1;
   unsigned is_first_for_node_ : 1;
+  unsigned has_oof_positioned_fragmentainer_descendants_ : 1;
+
+  LayoutObject* layout_object_;
+  const PhysicalSize size_;
+
+  const unsigned type_ : 2;           // NGFragmentType
+  const unsigned sub_type_ : 3;       // NGBoxType, NGTextType, or NGLineBoxType
+  const unsigned style_variant_ : 2;  // NGStyleVariant
+  const unsigned is_hidden_for_paint_ : 1;
+  unsigned is_math_fraction_ : 1;
+  // base (line box) or resolve (text) direction
+  unsigned base_or_resolved_direction_ : 1;  // TextDirection
 
   // The following are only used by NGPhysicalBoxFragment but are initialized
   // for all types to allow methods using them to be inlined.
@@ -429,10 +437,11 @@ class CORE_EXPORT NGPhysicalFragment
 
   // The following bitfields are only to be used by NGPhysicalTextFragment
   // (it's defined here to save memory, since that class has no bitfields).
-  mutable unsigned ink_overflow_computed_ : 1;
+  mutable unsigned ink_overflow_computed_or_mathml_paint_info_ : 1;
 
   // Note: We've used 32-bit bit field. If you need more bits, please think to
-  // share bit fields.
+  // share bit fields, or put them before layout_object_ to fill the gap after
+  // RefCounted on 64-bit systems.
 
  private:
   friend struct NGPhysicalFragmentTraits;

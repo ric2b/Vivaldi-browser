@@ -10,6 +10,8 @@
 #include "platform_media/gpu/pipeline/mac/avf_media_pipeline.h"
 #include "platform_media/gpu/pipeline/mac/avf_media_reader_runner.h"
 
+#include "base/logging.h"
+
 namespace media {
 
 namespace {

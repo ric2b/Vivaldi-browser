@@ -26,7 +26,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -147,7 +146,7 @@ void DumpStackTraceSignalHandler(int signal) {
 void RunTaskOnRendererThread(base::OnceClosure task,
                              base::OnceClosure quit_task) {
   std::move(task).Run();
-  base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(quit_task));
+  GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(quit_task));
 }
 
 void TraceStopTracingComplete(base::OnceClosure quit,
@@ -566,12 +565,17 @@ void BrowserTestBase::WaitUntilJavaIsReady(base::OnceClosure quit_closure) {
 
 namespace {
 
-std::string GetDefaultTraceFilaneme() {
+std::string GetDefaultTraceFileneme() {
   std::string test_suite_name = ::testing::UnitTest::GetInstance()
                                     ->current_test_info()
                                     ->test_suite_name();
   std::string test_name =
       ::testing::UnitTest::GetInstance()->current_test_info()->name();
+  // Parameterised tests might have slashes in their full name — replace them
+  // before using it as a file name to avoid trying to write to an incorrect
+  // location.
+  base::ReplaceChars(test_suite_name, "/", "_", &test_suite_name);
+  base::ReplaceChars(test_name, "/", "_", &test_name);
   // Add random number to the trace file to distinguish traces from different
   // test runs.
   // We don't use timestamp here to avoid collisions with parallel runs of the
@@ -679,7 +683,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     // If there was no file specified, put a hardcoded one in the current
     // working directory.
     if (trace_file.empty())
-      trace_file = base::FilePath().AppendASCII(GetDefaultTraceFilaneme());
+      trace_file = base::FilePath().AppendASCII(GetDefaultTraceFileneme());
 
     // Wait for tracing to collect results from the renderers.
     base::RunLoop run_loop;

@@ -170,8 +170,9 @@ void WebViewFrameWidget::MouseCaptureLost() {
   web_view_->MouseCaptureLost();
 }
 
-void WebViewFrameWidget::SetFocus(bool enable) {
+void WebViewFrameWidget::FocusChanged(bool enable) {
   web_view_->SetFocus(enable);
+  Client()->FocusChanged(enable);
 }
 
 bool WebViewFrameWidget::SelectionBounds(WebRect& anchor,
@@ -181,6 +182,10 @@ bool WebViewFrameWidget::SelectionBounds(WebRect& anchor,
 
 WebURL WebViewFrameWidget::GetURLForDebugTrace() {
   return web_view_->GetURLForDebugTrace();
+}
+
+WebString WebViewFrameWidget::GetLastToolTipTextForTesting() const {
+  return GetPage()->GetChromeClient().GetLastToolTipTextForTesting();
 }
 
 void WebViewFrameWidget::DidDetachLocalFrameTree() {
@@ -220,7 +225,7 @@ void WebViewFrameWidget::ZoomToFindInPageRect(
   web_view_->ZoomToFindInPageRect(rect_in_root_frame);
 }
 
-void WebViewFrameWidget::Trace(Visitor* visitor) {
+void WebViewFrameWidget::Trace(Visitor* visitor) const {
   WebFrameWidgetBase::Trace(visitor);
 }
 

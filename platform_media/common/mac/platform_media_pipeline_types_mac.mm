@@ -11,6 +11,7 @@
 #include <CoreAudio/CoreAudio.h>
 #import <Foundation/Foundation.h>
 
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/platform_logging_util.h"
@@ -31,6 +32,7 @@ VideoRotation AffineTransformToVideoRotation(
         {{1, 0, 0, 1, 0, 0}, VideoRotation::VIDEO_ROTATION_0},
         {{0, 1, -1, 0, size.height(), 0}, VideoRotation::VIDEO_ROTATION_90},
         {{-1, 0, 0, -1, size.width(), size.height()}, VideoRotation::VIDEO_ROTATION_180},
+        {{-1, 0, 0, -1, 0, 0}, VideoRotation::VIDEO_ROTATION_180},
         {{0, -1, 1, 0, 0, size.width()}, VideoRotation::VIDEO_ROTATION_270},
     };
 

@@ -255,16 +255,15 @@ class BlockChildrenLayoutInfo {
   bool IsAtFirstInFlowChild() const { return is_at_first_in_flow_child_; }
   void ClearIsAtFirstInFlowChild() { is_at_first_in_flow_child_ = false; }
 
-  // The page name of the previous sibling. Consecutive siblings with the same
-  // name are allowed on the same page, but if they differ, we need a page
-  // break.
-  const AtomicString& ChildPageName() const { return child_page_name_; }
-  void SetChildPageName(const AtomicString& name) { child_page_name_ = name; }
+  const AtomicString& PreviousEndPage() const { return previous_end_page_; }
+  void SetPreviousEndPage(const AtomicString& name) {
+    previous_end_page_ = name;
+  }
 
  private:
   MultiColumnLayoutState multi_column_layout_state_;
   MarginInfo margin_info_;
-  AtomicString child_page_name_;
+  AtomicString previous_end_page_;
   LayoutUnit previous_float_logical_bottom_;
   EBreakBetween previous_break_after_value_;
   bool is_at_first_in_flow_child_;
@@ -595,6 +594,9 @@ void LayoutBlockFlow::ResetLayout() {
     // [1] https://drafts.csswg.org/css-break/#possible-breaks
     SetBreakBefore(LayoutBlock::BreakBefore());
     SetBreakAfter(LayoutBlock::BreakAfter());
+
+    SetPropagatedStartPageName(AtomicString());
+    SetPropagatedEndPageName(AtomicString());
   }
 }
 
@@ -839,12 +841,49 @@ bool LayoutBlockFlow::PositionAndLayoutOnceIfNeeded(
 void LayoutBlockFlow::InsertForcedBreakBeforeChildIfNeeded(
     LayoutBox& child,
     BlockChildrenLayoutInfo& layout_info) {
+  LayoutState* layout_state = View()->GetLayoutState();
+
+  // If the child has a start/end page name, that's the current name. Otherwise
+  // we'll use the input page name of this block (the name specified by this
+  // block, or by an ancestor). Adjacent siblings with the same page name may be
+  // placed on the same page. Otherwise, if there's a mismatch between the
+  // previous end page name and the current start page name, we need a break,
+  // except before the first in-flow child, since there's no valid class A
+  // breakpoint there.
+  const AtomicString child_start_page = child.StartPageName();
+  const AtomicString child_end_page = child.EndPageName();
+  const AtomicString& current_start_page =
+      child_start_page ? child_start_page : layout_state->InputPageName();
+  const AtomicString& current_end_page =
+      child_end_page ? child_end_page : layout_state->InputPageName();
+  bool page_name_has_changed =
+      current_start_page != layout_info.PreviousEndPage();
+
+  // Page name changes are detected above by comparing the previous end page
+  // name and the current start page name. We're now storing the current *end*
+  // page name, for the next sibling to use in its comparison. This means that
+  // we're not paying any attention to any page name changes within the current
+  // child. That's fine, though. We're done with this child, and we've already
+  // inserted any named page breaks that were needed inside the child. Note that
+  // all of that will be discarded and re-laid out, if it turns out that we need
+  // a break before this child as well. This is how block fragmentation works;
+  // if we insert a break in front of something that we've laid out, we need
+  // another deep layout pass of all subsequent content, since pagination struts
+  // (or the whereabouts of the fragmentation boundary relative to the child)
+  // may change.
+  layout_info.SetPreviousEndPage(current_end_page);
+
   if (layout_info.IsAtFirstInFlowChild()) {
     // There's no class A break point before the first child (only *between*
     // siblings), so steal its break value and join it with what we already have
     // here.
     SetBreakBefore(
         JoinFragmentainerBreakValues(BreakBefore(), child.BreakBefore()));
+
+    // Similarly, since there's no valid class A breakpoint here, if the first
+    // child has a start page name associated, it will be propagated upwards.
+    SetPropagatedStartPageName(child_start_page);
+
     return;
   }
 
@@ -854,21 +893,7 @@ void LayoutBlockFlow::InsertForcedBreakBeforeChildIfNeeded(
   EBreakBetween class_a_break_point_value =
       child.ClassABreakPointValue(layout_info.PreviousBreakAfterValue());
 
-  bool is_named_page_break;
-  if (layout_info.ChildPageName()) {
-    // Adjacent siblings with the same page name may be put on the same
-    // page. Otherwise, we need a break.
-    is_named_page_break =
-        layout_info.ChildPageName() != child.StyleRef().Page();
-  } else {
-    // If the previous sibling (if any) didn't specify a page name, see if one
-    // is specified on an ancestor. If the child specifies a page name, and it
-    // doesn't match what's specified further up (if anything), we need a break.
-    is_named_page_break =
-        child.StyleRef().Page() &&
-        child.StyleRef().Page() != View()->GetLayoutState()->PageName();
-  }
-  if (is_named_page_break)
+  if (page_name_has_changed && IsBreakBetweenControllable(EBreakBetween::kPage))
     class_a_break_point_value = EBreakBetween::kPage;
 
   if (IsForcedFragmentainerBreakValue(class_a_break_point_value)) {
@@ -879,14 +904,13 @@ void LayoutBlockFlow::InsertForcedBreakBeforeChildIfNeeded(
     SetLogicalHeight(new_logical_top);
     LayoutUnit pagination_strut = new_logical_top - old_logical_top;
     child.SetPaginationStrut(pagination_strut);
-    if (is_named_page_break) {
+    if (page_name_has_changed) {
       // This was a forced break because of named pages. We now need to store
       // the page number where this happened, so that we can apply the right
       // descriptors (size, margins, page-orientation, etc.) when printing the
       // page.
-      layout_info.SetChildPageName(child.StyleRef().Page());
       if (NamedPagesMapper* mapper = View()->GetNamedPagesMapper()) {
-        mapper->AddNamedPage(child.StyleRef().Page(),
+        mapper->AddNamedPage(current_start_page,
                              CurrentPageNumber(new_logical_top));
       }
     }
@@ -2266,13 +2290,18 @@ void LayoutBlockFlow::HandleAfterSideOfBlock(LayoutBox* last_child,
   // Update our bottom collapsed margin info.
   SetCollapsedBottomMargin(margin_info);
 
-  // There's no class A break point right after the last child, only *between*
-  // siblings. So propagate the break-after value, and keep looking for a class
-  // A break point (at the next in-flow block-level object), where we'll join
-  // this break-after value with the break-before value there.
-  if (View()->GetLayoutState()->IsPaginated() && last_child)
+  if (View()->GetLayoutState()->IsPaginated() && last_child) {
+    // There's no class A break point right after the last child, only *between*
+    // siblings. So propagate the break-after value, and keep looking for a
+    // class A break point (at the next in-flow block-level object), where we'll
+    // join this break-after value with the break-before value there.
     SetBreakAfter(
         JoinFragmentainerBreakValues(BreakAfter(), last_child->BreakAfter()));
+
+    // Similarly, since there's no valid class A breakpoint here, if the last
+    // child has a end page name associated, it will be propagated upwards.
+    SetPropagatedEndPageName(last_child->EndPageName());
+  }
 }
 
 void LayoutBlockFlow::SetMaxMarginBeforeValues(LayoutUnit pos, LayoutUnit neg) {
@@ -2356,8 +2385,11 @@ EBreakBetween LayoutBlockFlow::BreakAfter() const {
 }
 
 void LayoutBlockFlow::AddVisualOverflowFromFloats() {
-  if (!floating_objects_)
+  if (PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren) ||
+      !floating_objects_)
     return;
+
+  DCHECK(!NeedsLayout());
 
   for (auto& floating_object : floating_objects_->Set()) {
     if (floating_object->IsDescendant()) {
@@ -2371,7 +2403,10 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats() {
 
 void LayoutBlockFlow::AddVisualOverflowFromFloats(
     const NGPhysicalContainerFragment& fragment) {
+  DCHECK(!NeedsLayout());
+  DCHECK(!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
   DCHECK(fragment.HasFloatingDescendantsForPaint());
+
   for (const NGLink& child : fragment.Children()) {
     if (child->HasSelfPaintingLayer())
       continue;
@@ -2391,7 +2426,8 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats(
 }
 
 void LayoutBlockFlow::AddLayoutOverflowFromFloats() {
-  if (!floating_objects_)
+  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren) ||
+      !floating_objects_)
     return;
 
   for (auto& floating_object : floating_objects_->Set()) {
@@ -2416,6 +2452,8 @@ const NGFragmentItems* LayoutBlockFlow::FragmentItems() const {
 
 void LayoutBlockFlow::ComputeVisualOverflow(
     bool recompute_floats) {
+  DCHECK(!SelfNeedsLayout());
+
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   ClearVisualOverflow();
   AddVisualOverflowFromChildren();
@@ -2427,6 +2465,7 @@ void LayoutBlockFlow::ComputeVisualOverflow(
       (recompute_floats || CreatesNewFormattingContext() ||
        HasSelfPaintingLayer()))
     AddVisualOverflowFromFloats();
+
   if (VisualOverflowRect() != previous_visual_overflow_rect) {
     InvalidateIntersectionObserverCachedRects();
     SetShouldCheckForPaintInvalidation();
@@ -3059,8 +3098,7 @@ void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
 
     // If we are an empty anonymous block in the continuation chain,
     // we need to remove ourself and fix the continuation chain.
-    if (!BeingDestroyed() && IsAnonymousBlockContinuation() &&
-        !old_child->IsListMarker()) {
+    if (!BeingDestroyed() && IsAnonymousBlockContinuation()) {
       LayoutObject* containing_block_ignoring_anonymous = ContainingBlock();
       while (containing_block_ignoring_anonymous &&
              containing_block_ignoring_anonymous->IsAnonymous())
@@ -4070,14 +4108,14 @@ bool LayoutBlockFlow::HitTestFloats(HitTestResult& result,
   return false;
 }
 
-PhysicalOffset LayoutBlockFlow::AccumulateInFlowPositionOffsets() const {
+PhysicalOffset LayoutBlockFlow::AccumulateRelativePositionOffsets() const {
   if (!IsAnonymousBlock() || !IsInFlowPositioned())
     return PhysicalOffset();
   PhysicalOffset offset;
   for (const LayoutObject* p = InlineElementContinuation();
        p && p->IsLayoutInline(); p = p->Parent()) {
     if (p->IsInFlowPositioned())
-      offset += ToLayoutInline(p)->OffsetForInFlowPosition();
+      offset += ToLayoutInline(p)->RelativePositionOffset();
   }
   return offset;
 }
@@ -4247,6 +4285,44 @@ void LayoutBlockFlow::SetFirstForcedBreakOffset(LayoutUnit block_offset) {
   rare_data_->first_forced_break_offset_ = block_offset;
 }
 
+const AtomicString LayoutBlockFlow::StartPageName() const {
+  if (const AtomicString& propagated_name = PropagatedStartPageName())
+    return propagated_name;
+  return StyleRef().Page();
+}
+
+const AtomicString LayoutBlockFlow::EndPageName() const {
+  if (const AtomicString& propagated_name = PropagatedEndPageName())
+    return propagated_name;
+  return StyleRef().Page();
+}
+
+const AtomicString LayoutBlockFlow::PropagatedStartPageName() const {
+  if (!rare_data_)
+    return AtomicString();
+  return rare_data_->propagated_start_page_name_;
+}
+
+void LayoutBlockFlow::SetPropagatedStartPageName(const AtomicString& name) {
+  if (name.IsEmpty() && !rare_data_)
+    return;
+  LayoutBlockFlowRareData& rare_data = EnsureRareData();
+  rare_data.propagated_start_page_name_ = name;
+}
+
+const AtomicString LayoutBlockFlow::PropagatedEndPageName() const {
+  if (!rare_data_)
+    return AtomicString();
+  return rare_data_->propagated_end_page_name_;
+}
+
+void LayoutBlockFlow::SetPropagatedEndPageName(const AtomicString& name) {
+  if (name.IsEmpty() && !rare_data_)
+    return;
+  LayoutBlockFlowRareData& rare_data = EnsureRareData();
+  rare_data.propagated_end_page_name_ = name;
+}
+
 void LayoutBlockFlow::PositionSpannerDescendant(
     LayoutMultiColumnSpannerPlaceholder& child) {
   LayoutBox& spanner = *child.LayoutObjectInFlowThread();
@@ -4263,6 +4339,7 @@ bool LayoutBlockFlow::CreatesNewFormattingContext() const {
       IsDocumentElement() || IsGridItem() || IsWritingModeRoot() ||
       IsMathItem() || StyleRef().Display() == EDisplay::kFlowRoot ||
       ShouldApplyPaintContainment() || ShouldApplyLayoutContainment() ||
+      StyleRef().IsDeprecatedWebkitBoxWithVerticalLineClamp() ||
       StyleRef().SpecifiesColumns() ||
       StyleRef().GetColumnSpan() == EColumnSpan::kAll) {
     // The specs require this object to establish a new formatting context.
@@ -4468,7 +4545,7 @@ void LayoutBlockFlow::RecalcFloatingDescendantsVisualOverflow(
     const NGPhysicalContainerFragment& fragment) {
   DCHECK(fragment.HasFloatingDescendantsForPaint());
 
-  for (const NGLink& child : fragment.Children()) {
+  for (const NGLink& child : fragment.PostLayoutChildren()) {
     if (child->IsFloating()) {
       child->GetMutableLayoutObject()
           ->RecalcNormalFlowChildVisualOverflowIfNeeded();
@@ -4574,13 +4651,8 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
     }
   }
 
-  bool move_caret_to_boundary =
-      GetDocument()
-          .GetFrame()
-          ->GetEditor()
-          .Behavior()
-          .ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom();
-
+  const bool move_caret_to_boundary =
+      ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom();
   if (!move_caret_to_boundary && !closest_box && last_root_box_with_children) {
     // y coordinate is below last root line box, pretend we hit it
     closest_box =
@@ -4642,6 +4714,15 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
   // FIXME: This should NOTREACHED(), but clicking on placeholder text
   // seems to hit this code path.
   return CreatePositionWithAffinity(0);
+}
+
+bool LayoutBlockFlow::ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom()
+    const {
+  return GetDocument()
+      .GetFrame()
+      ->GetEditor()
+      .Behavior()
+      .ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom();
 }
 
 #if DCHECK_IS_ON()

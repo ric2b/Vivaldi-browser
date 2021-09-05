@@ -171,7 +171,6 @@ using crash_reporter::ScopedCrashKeyString;
 // static
 void CdmAdapter::Create(
     const std::string& key_system,
-    const url::Origin& security_origin,
     const CdmConfig& cdm_config,
     CreateCdmFunc create_cdm_func,
     std::unique_ptr<CdmAuxiliaryHelper> helper,
@@ -187,8 +186,8 @@ void CdmAdapter::Create(
   DCHECK(session_expiration_update_cb);
 
   scoped_refptr<CdmAdapter> cdm =
-      new CdmAdapter(key_system, security_origin, cdm_config, create_cdm_func,
-                     std::move(helper), session_message_cb, session_closed_cb,
+      new CdmAdapter(key_system, cdm_config, create_cdm_func, std::move(helper),
+                     session_message_cb, session_closed_cb,
                      session_keys_change_cb, session_expiration_update_cb);
 
   // |cdm| ownership passed to the promise.
@@ -198,7 +197,6 @@ void CdmAdapter::Create(
 
 CdmAdapter::CdmAdapter(
     const std::string& key_system,
-    const url::Origin& security_origin,
     const CdmConfig& cdm_config,
     CreateCdmFunc create_cdm_func,
     std::unique_ptr<CdmAuxiliaryHelper> helper,
@@ -207,7 +205,6 @@ CdmAdapter::CdmAdapter(
     const SessionKeysChangeCB& session_keys_change_cb,
     const SessionExpirationUpdateCB& session_expiration_update_cb)
     : key_system_(key_system),
-      origin_string_(security_origin.Serialize()),
       cdm_config_(cdm_config),
       create_cdm_func_(create_cdm_func),
       helper_(std::move(helper)),
@@ -215,6 +212,7 @@ CdmAdapter::CdmAdapter(
       session_closed_cb_(session_closed_cb),
       session_keys_change_cb_(session_keys_change_cb),
       session_expiration_update_cb_(session_expiration_update_cb),
+      cdm_origin_(helper_->GetCdmOrigin().Serialize()),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       pool_(new AudioBufferMemoryPool()) {
   DVLOG(1) << __func__;
@@ -440,10 +438,11 @@ void CdmAdapter::RegisterNewKeyCB(StreamType stream_type,
 void CdmAdapter::Decrypt(StreamType stream_type,
                          scoped_refptr<DecoderBuffer> encrypted,
                          DecryptCB decrypt_cb) {
-  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+  DVLOG(3) << __func__ << ": "
+           << encrypted->AsHumanReadableString(/*verbose=*/true);
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, origin_string_);
+  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, cdm_origin_);
 
   cdm::InputBuffer_2 input_buffer = {};
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -559,10 +558,11 @@ void CdmAdapter::InitializeVideoDecoder(const VideoDecoderConfig& config,
 
 void CdmAdapter::DecryptAndDecodeAudio(scoped_refptr<DecoderBuffer> encrypted,
                                        const AudioDecodeCB& audio_decode_cb) {
-  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+  DVLOG(3) << __func__ << ": "
+           << encrypted->AsHumanReadableString(/*verbose=*/true);
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, origin_string_);
+  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, cdm_origin_);
 
   cdm::InputBuffer_2 input_buffer = {};
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -597,10 +597,11 @@ void CdmAdapter::DecryptAndDecodeAudio(scoped_refptr<DecoderBuffer> encrypted,
 
 void CdmAdapter::DecryptAndDecodeVideo(scoped_refptr<DecoderBuffer> encrypted,
                                        const VideoDecodeCB& video_decode_cb) {
-  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+  DVLOG(3) << __func__ << ": "
+           << encrypted->AsHumanReadableString(/*verbose=*/true);
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, origin_string_);
+  ScopedCrashKeyString scoped_crash_key(&g_origin_crash_key, cdm_origin_);
 
   cdm::InputBuffer_2 input_buffer = {};
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -633,10 +634,7 @@ void CdmAdapter::DecryptAndDecodeVideo(scoped_refptr<DecoderBuffer> encrypted,
     return;
   }
 
-  if (is_video_encrypted_) {
-    decoded_frame->metadata()->SetBoolean(VideoFrameMetadata::PROTECTED_VIDEO,
-                                          true);
-  }
+  decoded_frame->metadata()->protected_video = is_video_encrypted_;
 
   video_decode_cb.Run(Decryptor::kSuccess, decoded_frame);
 }

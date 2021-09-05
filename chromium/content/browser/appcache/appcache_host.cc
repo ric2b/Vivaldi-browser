@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -20,6 +21,7 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/appcache_interfaces.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "net/url_request/url_request.h"
@@ -82,10 +84,12 @@ AppCacheHost::AppCacheHost(
     const base::UnguessableToken& host_id,
     int process_id,
     int render_frame_id,
+    SecurityPolicyHandle security_policy_handle,
     mojo::PendingRemote<blink::mojom::AppCacheFrontend> frontend_remote,
     AppCacheServiceImpl* service)
     : host_id_(host_id),
       process_id_(process_id),
+      security_policy_handle_(std::move(security_policy_handle)),
       pending_main_resource_cache_id_(blink::mojom::kAppCacheNoCacheId),
       pending_selected_cache_id_(blink::mojom::kAppCacheNoCacheId),
       was_select_cache_called_(false),
@@ -99,10 +103,9 @@ AppCacheHost::AppCacheHost(
       main_resource_blocked_(false),
       associated_cache_info_pending_(false) {
   service_->AddObserver(this);
-  if (process_id_ != ChildProcessHost::kInvalidUniqueID) {
-    security_policy_handle_ =
-        ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
-            process_id_);
+  if (process_id_ != ChildProcessHost::kInvalidUniqueID &&
+      !security_policy_handle_.is_valid()) {
+    base::debug::DumpWithoutCrashing();
   }
   is_origin_trial_required_ =
       service_->appcache_policy()->IsOriginTrialRequiredForAppCache();
@@ -633,6 +636,8 @@ void AppCacheHost::SetProcessId(int process_id) {
   process_id_ = process_id;
   security_policy_handle_ =
       ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(process_id_);
+  if (!security_policy_handle_.is_valid())
+    base::debug::DumpWithoutCrashing();
 }
 
 base::WeakPtr<AppCacheHost> AppCacheHost::GetWeakPtr() {
@@ -728,8 +733,8 @@ void AppCacheHost::OnAppCacheAccessed(const GURL& manifest_url, bool blocked) {
   // informing WebContents about this access.
   if (render_frame_id_ != MSG_ROUTING_NONE &&
       BrowserThread::IsThreadInitialized(BrowserThread::UI)) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             [](int process_id, int render_frame_id, const GURL& manifest_url,
                bool blocked) {

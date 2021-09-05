@@ -57,10 +57,13 @@ bool ExpandPropertyFileForTesting(const base::FilePath& input,
                                   const base::FilePath& output,
                                   CrosConfig* config);
 
-// Calls ExpandPropertyFile for {build,default}.prop files in |source_path|.
-// Expanded files are written in |dest_path|. Returns true on success.
+// Calls ExpandPropertyFile for {build,default,vendor_build}.prop files in
+// |source_path|. Expanded files are written in |dest_path|. Returns true on
+// success. When |single_file| is true, only one file (|dest_path| itself) is
+// written. All expanded properties are included in the single file.
 bool ExpandPropertyFiles(const base::FilePath& source_path,
-                         const base::FilePath& dest_path);
+                         const base::FilePath& dest_path,
+                         bool single_file);
 
 }  // namespace arc
 

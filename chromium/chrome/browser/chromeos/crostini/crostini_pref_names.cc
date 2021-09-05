@@ -56,6 +56,10 @@ const char kCrostiniAnsiblePlaybookFilePath[] =
 // successfully configured by kCrostiniAnsiblePlaybook user policy.
 const char kCrostiniDefaultContainerConfigured[] =
     "crostini.default_container_configured";
+// A boolean preference representing a user level enterprise policy to allow
+// port forwarding into Crostini.
+const char kCrostiniPortForwardingAllowedByPolicy[] =
+    "crostini.port_forwarding_allowed_by_policy";
 
 // A boolean preference controlling Crostini usage reporting.
 const char kReportCrostiniUsageEnabled[] = "crostini.usage_reporting_enabled";
@@ -114,6 +118,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                 true);
   registry->RegisterBooleanPref(kVmManagementCliAllowedByPolicy, true);
   registry->RegisterBooleanPref(kUserCrostiniRootAccessAllowedByPolicy, true);
+  registry->RegisterBooleanPref(kCrostiniPortForwardingAllowedByPolicy, true);
   registry->RegisterFilePathPref(kCrostiniAnsiblePlaybookFilePath,
                                  base::FilePath());
   registry->RegisterBooleanPref(kCrostiniDefaultContainerConfigured, false);
@@ -121,9 +126,9 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       kCrostiniTerminalSettings, base::DictionaryValue(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  // TODO(https://crbug.com/1067577, janagrill): Replace hardcoded 0 with a
-  // constant
-  registry->RegisterIntegerPref(kCrostiniArcAdbSideloadingUserPref, 0);
+  registry->RegisterIntegerPref(
+      kCrostiniArcAdbSideloadingUserPref,
+      static_cast<int>(CrostiniArcAdbSideloadingUserAllowanceMode::kDisallow));
 }
 
 }  // namespace prefs

@@ -40,6 +40,12 @@ void AcceleratedVideoEncoder::EncodeJob::AddSetupCallback(
   setup_callbacks_.push(std::move(cb));
 }
 
+void AcceleratedVideoEncoder::EncodeJob::AddPostExecuteCallback(
+    base::OnceClosure cb) {
+  DCHECK(!cb.is_null());
+  post_execute_callbacks_.push(std::move(cb));
+}
+
 void AcceleratedVideoEncoder::EncodeJob::AddReferencePicture(
     scoped_refptr<CodecPicture> ref_pic) {
   DCHECK(ref_pic);
@@ -53,10 +59,21 @@ void AcceleratedVideoEncoder::EncodeJob::Execute() {
   }
 
   std::move(execute_callback_).Run();
+
+  while (!post_execute_callbacks_.empty()) {
+    std::move(post_execute_callbacks_.front()).Run();
+    post_execute_callbacks_.pop();
+  }
 }
 
 size_t AcceleratedVideoEncoder::GetBitstreamBufferSize() const {
   return GetEncodeBitstreamBufferSize(GetCodedSize());
 }
 
+void AcceleratedVideoEncoder::BitrateControlUpdate(
+    uint64_t encoded_chunk_size_bytes) {
+  NOTREACHED() << __func__ << "() is called to on an"
+               << "AcceleratedVideoEncoder that doesn't support BitrateControl"
+               << "::kConstantQuantizationParameter";
+}
 }  // namespace media

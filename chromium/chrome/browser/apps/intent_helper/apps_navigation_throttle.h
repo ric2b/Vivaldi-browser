@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "url/gurl.h"
 
@@ -196,6 +196,8 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
                                             const GURL& current_url) {}
 
   virtual bool ShouldDeferNavigation(content::NavigationHandle* handle);
+
+  virtual bool ShouldCancelNavigation(content::NavigationHandle* handle);
 
   void ShowIntentPickerForApps(
       content::WebContents* web_contents,

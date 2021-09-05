@@ -17,7 +17,6 @@ include_rules = [
   "+chrome/install_static",
   "+chrome/installer/util",
   "+chrome/notification_helper/notification_helper_constants.h",
-  "+chrome/services/app_service/public/mojom",
   "+chrome/services/cups_proxy",
   "+chrome/services/diagnosticsd/public",
   "+chrome/services/file_util/public",
@@ -25,10 +24,12 @@ include_rules = [
   "+chrome/services/printing/public",
   "+chrome/services/sharing/public",
   "+chrome/services/removable_storage_writer/public",
+  "+chrome/services/speech/buildflags.h",
   "+chrome/services/util_win/public",
   "+chromeos",
   "+components/about_ui",
   "+components/account_id",
+  "+components/federated_learning",
   "+components/arc",
   "+components/assist_ranker",
   "+components/autofill_assistant/browser",
@@ -38,7 +39,8 @@ include_rules = [
   "+components/autofill/core/common",
   "+components/background_task_scheduler",
   "+components/base32",
-  "+components/blacklist/opt_out_blacklist",
+  "+components/blocked_content",
+  "+components/blocklist/opt_out_blocklist",
   "+components/bookmarks/browser",
   "+components/bookmarks/common",
   "+components/bookmarks/managed",
@@ -76,6 +78,7 @@ include_rules = [
   "+components/contextual_search/content/common",
   "+components/contextual_search/core/browser",
   "+components/cookie_config",
+  "+components/country_codes",
   "+components/crash/content/app",
   "+components/crash/content/browser",
   "+components/crash/core/app",
@@ -129,6 +132,7 @@ include_rules = [
   "+components/history/core/common",
   "+components/history/core/test",
   "+components/image_fetcher/core",
+  "+components/infobars/content",
   "+components/infobars/core",
   "+components/invalidation/impl",
   "+components/invalidation/public",
@@ -200,6 +204,7 @@ include_rules = [
   "+components/policy",
   "+components/pref_registry",
   "+components/prefs",
+  "+components/prerender",
   "+components/previews/content",
   "+components/previews/core",
   "+components/printing/browser",
@@ -228,6 +233,7 @@ include_rules = [
   "+components/security_state/core",
   "+components/send_tab_to_self",
   "+components/services/app_service/public",
+  "+components/services/app_service/public/mojom",
   "+components/services/filesystem/public/mojom",
   "+components/services/heap_profiling",
   "+components/services/language_detection/public/cpp",
@@ -315,7 +321,6 @@ include_rules = [
   "+google_apis",
   "+google_update",
   "+installer_util_strings",  # For generated headers
-  "+mash/public/mojom",
   "+media/media_buildflags.h",
   "+media/audio", # For media audio hang monitor.
   "+media/base",  # For media switches
@@ -333,6 +338,7 @@ include_rules = [
   "+rlz",
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
   "+services/audio/public",
+  "+services/cert_verifier",
   "+services/data_decoder/public",
   "+services/device/public",
   "+services/image_annotation/public",
@@ -340,7 +346,6 @@ include_rules = [
   "+services/metrics/metrics_mojo_service.h",
   "+services/metrics/public",
   "+services/network/cert_verifier_with_trust_anchors.h",
-  "+services/network/ignore_errors_cert_verifier.h",
   "+services/network/network_service.h",
   "+services/network/public",
   "+services/network/test",
@@ -367,13 +372,10 @@ include_rules = [
   "+third_party/widevine/cdm/buildflags.h",
   "+third_party/widevine/cdm/widevine_cdm_common.h",
 
-  # Code under //ash runs out-of-process in mash so it must be accessed via mojo
-  # interfaces in //ash/public/mojom. See //ash/README.md.
+  # Code under //ash should be accessed via its public API. See //ash/README.md.
   "-ash",
   "+ash/public",
-  "+ash/keyboard/ui/public",
   "+ash/keyboard/ui/grit",
-  "+ash/keyboard/ui/public",
   "+ash/keyboard/ui/resources",
   "+ash/components/shortcut_viewer",
 
@@ -457,13 +459,7 @@ specific_include_rules = {
     # process, via the views::Widget API.
     "+ui/views/widget/widget.h",
   ],
-  # TODO(mash): Fix. https://crbug.com/768439, https://crbug.com/768395.
   "exo_parts\.cc": [
-    "+ash/shell.h",
-  ],
-  # TODO(mash): Remove. http://crbug.com/678705
-  "fullscreen_chromeos\.cc": [
-    "+ash/root_window_controller.h",
     "+ash/shell.h",
   ],
   # TODO(estade): the message center is initialized and shut down here, but it
@@ -471,7 +467,7 @@ specific_include_rules = {
   "browser_process_impl.cc": [
     "+ui/message_center/message_center.h",
   ],
-  "input_method_manager_impl.cc": [
+  "input_method_engine.cc": [
     # For GetInputMethodKeyboardController.
     "+ash/keyboard/ui/keyboard_ui_controller.h",
   ],

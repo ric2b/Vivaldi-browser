@@ -9,7 +9,7 @@
 #include <dwmapi.h>
 
 #include "base/win/windows_version.h"
-#include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
+//#include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
 #include "ui/base/theme_provider.h"
 #include "ui/display/win/dpi.h"
 #include "ui/views/controls/menu/native_menu_win.h"
@@ -17,37 +17,19 @@
 
 #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
 
-VivaldiAppWindowDesktopWindowTreeHostWin::VivaldiAppWindowDesktopWindowTreeHostWin(
-    VivaldiNativeAppWindowViewsWin* app_window,
-    views::DesktopNativeWidgetAura* desktop_native_widget_aura)
-    : DesktopWindowTreeHostWin(app_window->widget(),
+VivaldiAppWindowDesktopWindowTreeHostWin::
+    VivaldiAppWindowDesktopWindowTreeHostWin(
+        VivaldiNativeAppWindowViewsWin* window_view,
+        views::DesktopNativeWidgetAura* desktop_native_widget_aura)
+    : DesktopWindowTreeHostWin(window_view->widget(),
                                desktop_native_widget_aura),
-      app_window_(app_window) {
-}
+      window_view_(window_view) {}
 
 VivaldiAppWindowDesktopWindowTreeHostWin::
     ~VivaldiAppWindowDesktopWindowTreeHostWin() {}
 
-bool VivaldiAppWindowDesktopWindowTreeHostWin::GetClientAreaInsets(
-    gfx::Insets* insets,
-    HMONITOR monitor) const {
-  // The inset added below is only necessary for the native glass frame, i.e.
-  // not for colored frames drawn by Chrome, or when DWM is disabled.
-  // In fullscreen the frame is not visible.
-  if (!app_window_->glass_frame_view() || IsFullscreen()) {
-    return false;
-  }
-
-  *insets = app_window_->glass_frame_view()->GetClientAreaInsets(monitor);
-
-  return true;
-}
-
 void VivaldiAppWindowDesktopWindowTreeHostWin::HandleFrameChanged() {
-  // We need to update the glass region on or off before the base class adjusts
-  // the window region.
-  app_window_->OnCanHaveAlphaEnabledChanged();
-  UpdateDWMFrame();
+  window_view_->OnCanHaveAlphaEnabledChanged();
   DesktopWindowTreeHostWin::HandleFrameChanged();
 }
 
@@ -56,22 +38,11 @@ VivaldiAppWindowDesktopWindowTreeHostWin::GetSystemMenu() {
   if (!system_menu_.get()) {
     SystemMenuInsertionDelegateWin insertion_delegate;
     system_menu_.reset(
-      new views::NativeMenuWin(app_window_->GetSystemMenuModel(),
+      new views::NativeMenuWin(window_view_->GetSystemMenuModel(),
                                GetHWND()));
     system_menu_->Rebuild(&insertion_delegate);
   }
   return system_menu_.get();
-}
-
-void VivaldiAppWindowDesktopWindowTreeHostWin::PostHandleMSG(UINT message,
-                                                             WPARAM w_param,
-                                                             LPARAM l_param) {
-  switch (message) {
-    case WM_WINDOWPOSCHANGED: {
-      UpdateDWMFrame();
-      break;
-    }
-  }
 }
 
 bool VivaldiAppWindowDesktopWindowTreeHostWin::PreHandleMSG(UINT message,
@@ -85,27 +56,4 @@ bool VivaldiAppWindowDesktopWindowTreeHostWin::PreHandleMSG(UINT message,
   }
   return DesktopWindowTreeHostWin::PreHandleMSG(
     message, w_param, l_param, result);
-}
-
-
-void VivaldiAppWindowDesktopWindowTreeHostWin::UpdateDWMFrame() {
-  if (!GetWidget()->client_view() || !app_window_->glass_frame_view())
-    return;
-
-  MARGINS margins = {0};
-
-  // If the opaque frame is visible, we use the default (zero) margins.
-  // Otherwise, we need to figure out how to extend the glass in.
-  if (app_window_->glass_frame_view()) {
-    gfx::Insets insets = app_window_->glass_frame_view()->GetGlassInsets();
-    // The DWM API's expect values in pixels. We need to convert from DIP to
-    // pixels here.
-    insets = insets.Scale(display::win::GetDPIScale());
-    margins.cxLeftWidth = insets.left();
-    margins.cxRightWidth = insets.right();
-    margins.cyBottomHeight = insets.bottom();
-    margins.cyTopHeight = insets.top();
-  }
-
-  DwmExtendFrameIntoClientArea(GetHWND(), &margins);
 }

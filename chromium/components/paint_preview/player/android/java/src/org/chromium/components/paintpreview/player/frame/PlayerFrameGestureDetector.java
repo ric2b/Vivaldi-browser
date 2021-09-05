@@ -64,6 +64,9 @@ class PlayerFrameGestureDetector
             mScaleGestureDetector.onTouchEvent(event);
         }
 
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            mPlayerFrameViewDelegate.onRelease();
+        }
         return mGestureDetector.onTouchEvent(event);
     }
 
@@ -133,5 +136,9 @@ class PlayerFrameGestureDetector
     }
 
     @Override
-    public void onScaleEnd(ScaleGestureDetector detector) {}
+    public void onScaleEnd(ScaleGestureDetector detector) {
+        assert mCanDetectZoom;
+        mPlayerFrameViewDelegate.scaleFinished(
+                detector.getScaleFactor(), detector.getFocusX(), detector.getFocusY());
+    }
 }

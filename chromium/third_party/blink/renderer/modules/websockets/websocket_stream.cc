@@ -53,7 +53,7 @@ class WebSocketStream::UnderlyingSource final : public UnderlyingSourceBase {
   void DidStartClosingHandshake();
   void DidClose(bool was_clean, uint16_t code, const String& reason);
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(creator_);
     UnderlyingSourceBase::Trace(visitor);
   }
@@ -85,7 +85,7 @@ class WebSocketStream::UnderlyingSink final : public UnderlyingSinkBase {
   void DidClose(bool was_clean, uint16_t code, const String& reason);
   bool AllDataHasBeenConsumed() { return !is_writing_; }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(creator_);
     visitor->Trace(close_resolver_);
     UnderlyingSinkBase::Trace(visitor);
@@ -587,7 +587,7 @@ bool WebSocketStream::HasPendingActivity() const {
   return channel_;
 }
 
-void WebSocketStream::Trace(Visitor* visitor) {
+void WebSocketStream::Trace(Visitor* visitor) const {
   visitor->Trace(script_state_);
   visitor->Trace(connection_resolver_);
   visitor->Trace(closed_resolver_);
@@ -611,17 +611,17 @@ void WebSocketStream::Connect(ScriptState* script_state,
   // Don't read all of a huge initial message before read() has been called.
   channel_->ApplyBackpressure();
 
-  auto* signal = options->signal();
-  if (signal && signal->aborted()) {
-    auto exception = V8ThrowDOMException::CreateOrEmpty(
-        script_state->GetIsolate(), DOMExceptionCode::kAbortError,
-        "WebSocket handshake was aborted");
-    connection_resolver_->Reject(exception);
-    closed_resolver_->Reject(exception);
-    return;
-  }
+  if (options->hasSignal()) {
+    auto* signal = options->signal();
+    if (signal->aborted()) {
+      auto exception = V8ThrowDOMException::CreateOrEmpty(
+          script_state->GetIsolate(), DOMExceptionCode::kAbortError,
+          "WebSocket handshake was aborted");
+      connection_resolver_->Reject(exception);
+      closed_resolver_->Reject(exception);
+      return;
+    }
 
-  if (signal) {
     signal->AddAlgorithm(
         WTF::Bind(&WebSocketStream::OnAbort, WrapWeakPersistent(this)));
   }

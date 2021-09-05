@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Halda áfram</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Keyri villugreiningu á nettengingu<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Tilkynningar</translation>
+<translation id="2501278716633472235">Farðu tilbaka</translation>
 <translation id="2539524384386349900">Greina</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendi ógilt svar.</translation>
 <translation id="2586657967955657006">Klippiborð</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Smelltu á hnapp til að endurhlaða til þess að endursenda gögn sem þarf til þess að hlaða upp síðunni.</translation>
 <translation id="3227137524299004712">Hljóðnemi</translation>
 <translation id="3234666976984236645">Skynja ætíð mikilvægt efni á þessari síðu</translation>
+<translation id="3308738399950580893">Auglýsingar</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> svarar ekki, í augnablikinu.</translation>
 <translation id="3427092606871434483">Leyfa (sjálfgefið)</translation>
 <translation id="3447661539832366887">Eigandi þessa tækis hefur slökkt á leiknum.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Vottorð upplýsingar</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Athuga proxy, eldvegg og DNS stillingar<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Ef þú notar vefselsþjón...</translation>
+<translation id="3894751534882749287">Ef þú vilt sjá síðuna þrátt fyrir allt, geturðu breytt stigi rekjaravarna á síðunni í sprettiglugga fyrir rekjaravarnir eða með því að smella á Leyfa-hnappinn</translation>
 <translation id="3950820424414687140">Skráðu þig inn</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er lokað á</translation>
 <translation id="3987940399970879459">Minna en 1 MB</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Tengingin slitnaði</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Keyri Windows villugreininu á neti<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Rekjaravörn</translation>
 <translation id="4744603770635761495">Staðsetning á forriti</translation>
 <translation id="4750917950439032686">Upplýsingarnar þínar (til dæmis lykilorð og kortanúmer) eru ekki sýnilegar öðrum þegar verið er að senda upplýsingar þínar til síðunnar.</translation>
 <translation id="4764776831041365478">Vefsíðan <ph name="URL" /> gæti verið niðri tímabundið eða hún gæti hafa verið ótímabundið færð á annað veffang.</translation>
@@ -173,10 +177,12 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7090678807593890770">Leitaðu á Google að <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Leyfi fengið gegnum viðbót</translation>
 <translation id="7111012039238467737">(Gilt)</translation>
+<translation id="7113310725918019676">Leyfa <ph name="BLOCKED_TYPE" />frá <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> fylgir ekki öryggisstöðlum.</translation>
 <translation id="7219179957768738017">Tengingin notar <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Afturkalla aðgengi</translation>
 <translation id="7353601530677266744">Skipanalína</translation>
+<translation id="7364115444476960850">Síðan sem þú reyndir að komast inná er varin af <ph name="BLOCKER_NAME" /> frá Vivaldi</translation>
 <translation id="7419106976560586862">Slóð að notendaaðgangi</translation>
 <translation id="7445762425076701745">Ekki er hægt að fullgilda auðkenni netþjónsins sem þú ert tengd/ur við. Þú ert tengd/ur við netþjóninn með því að nota aðeins nafn sem er staðbundið við netið þitt sem ytri vottunaraðili hefur enga leið til að staðfesta eignarhald á. Þar sem sumir stjórendur vottorð gefa út skírteini fyrir þessi nöfn óháð því er engin leið að tryggja að þú sért tengdur við fyrirhugaða vefsíðu og ekki netþrjót.</translation>
 <translation id="7455133967321480974">Nota algilda sjálfgefna stillingu (Hamla)</translation>
@@ -200,6 +206,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8037357227543935929">Spyrja (sjálfgefið)</translation>
 <translation id="8041940743680923270">Nota algilda sjálfgefna stillingu (Spyrja)</translation>
 <translation id="808894953321890993">Breyta lykilorði</translation>
+<translation id="8119307142152921512">Rekjarar og auglýsingar</translation>
 <translation id="8142868475871995937">Heimsæktu &lt;strong&gt;vivaldi://policy&lt;/strong&gt; til þess að sjá lista yfir óleyfðan lista hlekka og aðrar stefnur sem er framfylgt af kerfinu þínu.</translation>
 <translation id="8149426793427495338">Tölvan þín fór að sofa.</translation>
 <translation id="8150722005171944719">Skráin í <ph name="URL" /> er ólesanleg. Hún gæti hafa verið fjarlægð, færð eða aðgangsstýring hamlað skráaraðgengi.</translation>
@@ -217,6 +224,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8703575177326907206">Tenging þín við <ph name="DOMAIN" /> er ekki dulrituð.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS-veffangið&lt;/abbr&gt; fyrir <ph name="HOST_NAME" /> fannst ekki. Vandamálið er í skoðun.</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
+<translation id="8940028675168378100">Lokað á af <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Velselið <ph name="DOMAIN" /> þarfnast notendanafns og lykilorðs.</translation>
 <translation id="9008201768610948239">Hunsa</translation>
 <translation id="9011424611726486705">Opna stillingar fyrir síðu</translation>
@@ -224,6 +232,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="9039213469156557790">Þessi síða geymir að auki önnur gögn sem ekki eru örugg. Aðrir geta skoðað þessi gögn þegar verið er að sækja þau og getur þeim verið breytt af tölvuþrjóti til þess að breyta hegðun á síðunni.</translation>
 <translation id="9069693763241529744">Hamlað af viðbót</translation>
 <translation id="9169664750068251925">Aldrei leyfa á þessari síðu</translation>
+<translation id="9180553614777056266">Auglýsingavörn</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> notar óstudda samskiptareglu.</translation>
 <translation id="9219103736887031265">Myndir</translation>
 <translation id="936602727769022409">Þú gætir misst aðgang að Google reikningnum þínum. Chrome mælir með því að breyta lykilorðinu þínu núna. Þú munt vera beðin/n um að skrá þig inn.</translation>

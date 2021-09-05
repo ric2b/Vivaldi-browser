@@ -221,6 +221,8 @@ const std::string& GetApplicationId(aura::Window* window) {
   return empty_app_id;
 }
 
+int surface_id = 0;
+
 }  // namespace
 
 DEFINE_UI_CLASS_PROPERTY_KEY(int32_t, kClientSurfaceIdKey, 0)
@@ -241,7 +243,7 @@ Surface::Surface()
     : window_(
           std::make_unique<aura::Window>(new CustomWindowDelegate(this),
                                          aura::client::WINDOW_TYPE_CONTROL)) {
-  window_->SetName("ExoSurface");
+  window_->SetName(base::StringPrintf("ExoSurface-%d", surface_id++));
   window_->SetProperty(kSurfaceKey, this);
   window_->Init(ui::LAYER_NOT_DRAWN);
   window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>());
@@ -610,7 +612,8 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
             state_.only_visible_on_secure_output ||
         pending_state_.blend_mode != state_.blend_mode ||
         pending_state_.alpha != state_.alpha ||
-        pending_state_.color_space != state_.color_space;
+        pending_state_.color_space != state_.color_space ||
+        pending_state_.is_tracking_occlusion != state_.is_tracking_occlusion;
 
     bool needs_update_buffer_transform =
         pending_state_.buffer_scale != state_.buffer_scale ||
@@ -637,6 +640,13 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
         (state_.input_region.has_value() && state_.input_region->IsEmpty())
             ? aura::EventTargetingPolicy::kDescendantsOnly
             : aura::EventTargetingPolicy::kTargetAndDescendants);
+
+    if (state_.is_tracking_occlusion) {
+      // TODO(edcourtney): Currently, it doesn't seem to be possible to stop
+      // tracking the occlusion state once started, but it would be nice to stop
+      // if the tracked occlusion region becomes empty.
+      window_->TrackOcclusionState();
+    }
 
 #if defined(OS_CHROMEOS)
     if (needs_output_protection) {
@@ -859,12 +869,11 @@ bool Surface::FillsBoundsOpaquely() const {
 }
 
 void Surface::SetOcclusionTracking(bool tracking) {
-  is_tracking_occlusion_ = tracking;
-  // TODO(edcourtney): Currently, it doesn't seem to be possible to stop
-  // tracking the occlusion state once started, but it would be nice to stop if
-  // the tracked occlusion region becomes empty.
-  if (is_tracking_occlusion_)
-    window()->TrackOcclusionState();
+  pending_state_.is_tracking_occlusion = tracking;
+}
+
+bool Surface::IsTrackingOcclusion() {
+  return state_.is_tracking_occlusion;
 }
 
 void Surface::SetSurfaceHierarchyContentBoundsForTest(
@@ -999,6 +1008,7 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
     render_pass->damage_rect.Union(
         gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
   }
+  damage_.Clear();
 
   gfx::PointF scale(content_size_.width(), content_size_.height());
 
@@ -1157,7 +1167,7 @@ void Surface::UpdateContentSize() {
 }
 
 void Surface::OnWindowOcclusionChanged() {
-  if (!is_tracking_occlusion_)
+  if (!state_.is_tracking_occlusion)
     return;
 
   for (SurfaceObserver& observer : observers_)

@@ -164,7 +164,7 @@ message CastLogsProto {
   repeated CastConnectionInfo cast_connection_info = 2;
 
   // Stores Cast-enabled device specific events with a various context data.
-  // Next tag: 23
+  // Next tag: 26
   message CastEventProto {
     // The name of the action, hashed by same logic used to hash user action
     // event and histogram.
@@ -233,6 +233,16 @@ message CastLogsProto {
 
     // Optional field to log SELINUX audit detail.
     optional string selinux_audit_detail = 22;
+
+    // List of event ids belonging to a particular interaction. One interaction
+    // could receive multiple assistant outputs, hence multiple event ids.
+    repeated string event_id_list = 23;
+
+    // Duo core version.
+    optional fixed64 duo_core_version = 24;
+
+    // Model version of hotword detector.
+    optional string hotword_model_id = 25;
   }
   repeated CastEventProto cast_event = 3;
 
@@ -241,7 +251,7 @@ message CastLogsProto {
   optional fixed32 virtual_release_track = 4;
 
   // Cast specific device information which is expected to change over time.
-  // Next tag: 10
+  // Next tag: 12
   message CastDeviceMutableInfo {
     // This is the last type of reboot the device encountered
     // Next tag: 14
@@ -297,6 +307,12 @@ message CastLogsProto {
 
     // Station ID of the device if connected to Google WiFi network
     optional string google_wifi_station_shmac = 9;
+
+    // Optional field to log installed manifest platform version.
+    optional string installed_manifest_platform_version = 10;
+
+    // Optional field to log installed manifest version.
+    optional uint32 installed_manifest_version = 11;
   }
   // The device sends this information at least once per day.
   optional CastDeviceMutableInfo cast_device_mutable_info = 5;

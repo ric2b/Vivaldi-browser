@@ -47,7 +47,6 @@ class BrowserContext;
 class ChromeBlobStorageContext;
 class ResourceContext;
 class ServiceWorkerContextObserver;
-class ServiceWorkerContextWatcher;
 class StoragePartitionImpl;
 class URLLoaderFactoryGetter;
 
@@ -76,6 +75,10 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       ServiceWorkerRegistry::GetUserKeysAndDataCallback;
   using GetUserDataForAllRegistrationsCallback =
       ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback;
+  using GetInstalledRegistrationOriginsCallback =
+      base::OnceCallback<void(const std::set<url::Origin>& origins)>;
+  using GetStorageUsageForOriginCallback =
+      ServiceWorkerRegistry::GetStorageUsageForOriginCallback;
 
   explicit ServiceWorkerContextWrapper(BrowserContext* browser_context);
 
@@ -123,9 +126,19 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
                                const GURL& scope) override;
   void OnRegistrationStored(int64_t registration_id,
                             const GURL& scope) override;
+  void OnAllRegistrationsDeletedForOrigin(const url::Origin& origin) override;
   void OnReportConsoleMessage(int64_t version_id,
                               const ConsoleMessage& message) override;
+  void OnControlleeAdded(int64_t version_id,
+                         const std::string& uuid,
+                         const ServiceWorkerClientInfo& info) override;
+  void OnControlleeRemoved(int64_t version_id,
+                           const std::string& uuid) override;
   void OnNoControllees(int64_t version_id, const GURL& scope) override;
+  void OnControlleeNavigationCommitted(
+      int64_t version_id,
+      const std::string& uuid,
+      GlobalFrameRoutingId render_frame_host_id) override;
   void OnStarted(int64_t version_id,
                  const GURL& scope,
                  int process_id,
@@ -154,6 +167,10 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void CountExternalRequestsForTest(
       const GURL& url,
       CountExternalRequestsCallback callback) override;
+  bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
+  void WaitForRegistrationsInitializedForTest() override;
+  void AddRegistrationToRegisteredOriginsForTest(
+      const url::Origin& origin) override;
   void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
   void DeleteForOrigin(const GURL& origin, ResultCallback callback) override;
   void PerformStorageCleanup(base::OnceClosure callback) override;
@@ -295,6 +312,24 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key_prefix,
       StatusCallback callback);
 
+  // Returns a set of origins which have at least one stored registration.
+  // The set doesn't include installing/uninstalling/uninstalled registrations.
+  // When |host_filter| is specified the set only includes origins whose host
+  // matches |host_filter|.
+  // This function can be called from any thread and the callback is called on
+  // that thread.
+  void GetInstalledRegistrationOrigins(
+      base::Optional<std::string> host_filter,
+      GetInstalledRegistrationOriginsCallback callback);
+
+  // Returns total resource size stored in the storage for |origin|.
+  // This can be called from any thread and the callback is called on that
+  // thread.
+  void GetStorageUsageForOrigin(const url::Origin& origin,
+                                GetStorageUsageForOriginCallback callback);
+
+  // Returns a list of ServiceWorkerRegistration for |origin|. The list includes
+  // stored registrations and installing (not stored yet) registrations.
   // Must be called on the core thread, and the callback is called on that
   // thread. This restriction is because the callback gets pointers to live
   // registrations, which live on the core thread.
@@ -320,10 +355,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // Can be null before/during init, during/after shutdown, and after
   // DeleteAndStartOver fails.
   ServiceWorkerContextCore* context();
-
-  // Whether |origin| has any registrations. Must be called on UI thread.
-  bool HasRegistrationForOrigin(const GURL& origin) const;
-  void WaitForRegistrationsInitializedForTest();
 
   // This must be called on the core thread, and the |callback| also runs on
   // the core thread which can be called with nullptr on failure.
@@ -384,6 +415,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void DidDeleteAndStartOver(blink::ServiceWorkerStatusCode status);
 
   void DidGetAllRegistrationsForGetAllOrigins(
+      base::TimeTicks start_time,
       GetUsageInfoCallback callback,
       scoped_refptr<base::TaskRunner> callback_runner,
       blink::ServiceWorkerStatusCode status,
@@ -452,10 +484,17 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       base::OnceCallback<void(scoped_refptr<network::SharedURLLoaderFactory>)>
           callback);
 
-  // Called when the stored registrations are loaded, and each time a new
-  // service worker is registered.
-  void OnRegistrationUpdated(
-      const std::vector<ServiceWorkerRegistrationInfo>& registrations);
+  // These methods are used as a callback for GetRegisteredOrigins when
+  // initialising on the core thread, so registered origins can be tracked
+  // on the UI thread as well.
+  void DidGetRegisteredOrigins(std::vector<url::Origin> origins);
+  void InitializeRegisteredOriginsOnUI(std::vector<url::Origin> origins);
+
+  static void DidGetRegisteredOriginsForGetInstalledRegistrationOrigins(
+      base::Optional<std::string> host_filter,
+      GetInstalledRegistrationOriginsCallback callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback,
+      std::vector<url::Origin> origins);
 
   // Temporary for crbug.com/824858.
   void GetAllOriginsInfoOnCoreThread(
@@ -535,6 +574,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void StopAllServiceWorkersOnCoreThread(
       base::OnceClosure callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback);
+  void GetInstalledRegistrationOriginsOnCoreThread(
+      base::Optional<std::string> host_filter,
+      GetInstalledRegistrationOriginsCallback callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback);
+  void GetStorageUsageForOriginOnCoreThread(
+      const url::Origin& origin,
+      GetStorageUsageForOriginCallback callback);
 
   // Observers of |context_core_| which live within content's implementation
   // boundary. Shared with |context_core_|.
@@ -566,15 +612,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   base::flat_map<int64_t /* version_id */, ServiceWorkerRunningInfo>
       running_service_workers_;
 
-  // Maps the origin to a set of registration ids for that origin. Must be
-  // accessed on UI thread.
+  // A set of origins that have at least one registration. See
+  // HasRegistrationForOrigin() for details. Must be accessed on the UI thread.
   // TODO(http://crbug.com/824858): This can be removed when service workers are
   // fully converted to running on the UI thread.
-  base::flat_map<GURL, base::flat_set<int64_t>> registrations_for_origin_;
+  std::set<url::Origin> registered_origins_;
   bool registrations_initialized_ = false;
   base::OnceClosure on_registrations_initialized_;
-
-  scoped_refptr<ServiceWorkerContextWatcher> watcher_;
 
   // Temporary for moving context core to the UI thread.
   scoped_refptr<base::TaskRunner> core_thread_task_runner_;

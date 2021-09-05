@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Продовжити</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Виконати діагностику мережі<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Сповіщення</translation>
+<translation id="2501278716633472235">Повернутися</translation>
 <translation id="2539524384386349900">Визначити</translation>
 <translation id="255002559098805027">Хост <ph name="HOST_NAME" /> надіслав недійсну відповідь.</translation>
 <translation id="2586657967955657006">Буфер обміну</translation>
@@ -173,6 +174,7 @@
 <translation id="7090678807593890770">Пошукайте за запитом "<ph name="LINK" />" у Google</translation>
 <translation id="7108819624672055576">Дозволено розширенням</translation>
 <translation id="7111012039238467737">(Дійсний)</translation>
+<translation id="7113310725918019676">Дозволити <ph name="BLOCKED_TYPE" /> з сервера <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не відповідає стандартам безпеки.</translation>
 <translation id="7219179957768738017">З'єднання використовує версію <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Скасувати доступ</translation>
@@ -217,6 +219,7 @@
 <translation id="8703575177326907206">Ваше з’єднання з <ph name="DOMAIN" /> не зашифровано.</translation>
 <translation id="8740359287975076522">Неможливо знайти &lt;abbr id="dnsDefinition"&gt;DNS-адресу&lt;/abbr&gt; сайта <ph name="HOST_NAME" />. Виконується діагностика.</translation>
 <translation id="8820817407110198400">Закладки</translation>
+<translation id="8940028675168378100">Блоковано <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Для проксі <ph name="DOMAIN" /> потрібно ім’я користувача та пароль.</translation>
 <translation id="9008201768610948239">Ігнорувати</translation>
 <translation id="9011424611726486705">Відкрити налаштування сайту</translation>
@@ -224,6 +227,7 @@
 <translation id="9039213469156557790">Окрім цього, сторінка містить незахищені ресурси. Інші особи можуть переглядати їх під час передавання даних, а зловмисники можуть змінювати роботу сторінки.</translation>
 <translation id="9069693763241529744">Заблоковано розширенням</translation>
 <translation id="9169664750068251925">Завжди блокувати на цьому сайті</translation>
+<translation id="9180553614777056266">Блокувальник реклами</translation>
 <translation id="9183425211371246419">Протокол, який використовує хост <ph name="HOST_NAME" />, не підтримується.</translation>
 <translation id="9219103736887031265">Зображення</translation>
 <translation id="936602727769022409">Ви можете втратити доступ до облікового запису Google. Chromium радить змінити пароль. Вам буде запропоновано ввійти в обліковий запис.</translation>

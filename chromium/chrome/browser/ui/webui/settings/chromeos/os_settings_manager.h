@@ -46,6 +46,7 @@ class MultiDeviceSetupClient;
 
 namespace settings {
 
+class Hierarchy;
 class OsSettingsSections;
 class SearchHandler;
 class SearchTagRegistry;
@@ -104,14 +105,17 @@ class OsSettingsManager : public KeyedService {
   // Note: Returns null when the kNewOsSettingsSearch flag is disabled.
   SearchHandler* search_handler() { return search_handler_.get(); }
 
+  const Hierarchy* hierarchy() const { return hierarchy_.get(); }
+
  private:
-  FRIEND_TEST_ALL_PREFIXES(OsSettingsManagerTest, Sections);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsManagerTest, Initialization);
 
   // KeyedService:
   void Shutdown() override;
 
   std::unique_ptr<SearchTagRegistry> search_tag_registry_;
   std::unique_ptr<OsSettingsSections> sections_;
+  std::unique_ptr<Hierarchy> hierarchy_;
   std::unique_ptr<SearchHandler> search_handler_;
 };
 

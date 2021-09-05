@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "media/base/media_util.h"
 #include "media/base/waiting.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/test/video.h"
@@ -190,7 +191,7 @@ void VideoDecoderClient::CreateDecoderTask(bool* success,
             std::make_unique<PlatformVideoFramePool>(
                 gpu_memory_buffer_factory_),
             std::make_unique<VideoFrameConverter>(),
-            gpu_memory_buffer_factory_);
+            std::make_unique<NullMediaLog>());
       } else {
         LOG(ERROR) << "VD-based video decoders only support import mode";
       }
@@ -387,7 +388,7 @@ void VideoDecoderClient::DecodeDoneTask(media::DecodeStatus status) {
 
 void VideoDecoderClient::FrameReadyTask(scoped_refptr<VideoFrame> video_frame) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_client_sequence_checker_);
-  DCHECK(video_frame->metadata()->IsTrue(VideoFrameMetadata::POWER_EFFICIENT));
+  DCHECK(video_frame->metadata()->power_efficient);
 
   frame_renderer_->RenderFrame(video_frame);
 

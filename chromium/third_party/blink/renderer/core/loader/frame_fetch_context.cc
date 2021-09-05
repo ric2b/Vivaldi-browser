@@ -224,7 +224,9 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   const base::Optional<UserAgentMetadata> user_agent_metadata;
   const bool is_svg_image_chrome_client;
 
-  void Trace(Visitor* visitor) { visitor->Trace(content_security_policy); }
+  void Trace(Visitor* visitor) const {
+    visitor->Trace(content_security_policy);
+  }
 };
 
 ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
@@ -238,7 +240,7 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
       properties,
       MakeGarbageCollected<FrameFetchContext>(loader, document, properties),
       frame->GetTaskRunner(TaskType::kNetworking),
-      MakeGarbageCollected<LoaderFactoryForFrame>(loader, document));
+      MakeGarbageCollected<LoaderFactoryForFrame>(loader, *frame->DomWindow()));
   init.use_counter = MakeGarbageCollected<DetachableUseCounter>(&document);
   init.console_logger = MakeGarbageCollected<DetachableConsoleLogger>(
       document.GetExecutionContext());
@@ -287,24 +289,20 @@ scoped_refptr<const SecurityOrigin> FrameFetchContext::GetTopFrameOrigin()
 SubresourceFilter* FrameFetchContext::GetSubresourceFilter() const {
   if (GetResourceFetcherProperties().IsDetached())
     return nullptr;
-  DocumentLoader* document_loader = MasterDocumentLoader();
-  return document_loader ? document_loader->GetSubresourceFilter() : nullptr;
+  return document_loader_->GetSubresourceFilter();
 }
 
 PreviewsResourceLoadingHints*
 FrameFetchContext::GetPreviewsResourceLoadingHints() const {
   if (GetResourceFetcherProperties().IsDetached())
     return nullptr;
-  DocumentLoader* document_loader = MasterDocumentLoader();
-  if (!document_loader)
-    return nullptr;
-  return document_loader->GetPreviewsResourceLoadingHints();
+  return document_loader_->GetPreviewsResourceLoadingHints();
 }
 
 WebURLRequest::PreviewsState FrameFetchContext::previews_state() const {
-  DocumentLoader* document_loader = MasterDocumentLoader();
-  return document_loader ? document_loader->GetPreviewsState()
-                         : WebURLRequest::kPreviewsUnspecified;
+  if (GetResourceFetcherProperties().IsDetached())
+    return WebURLRequest::kPreviewsUnspecified;
+  return document_loader_->GetPreviewsState();
 }
 
 LocalFrame* FrameFetchContext::GetFrame() const {
@@ -324,7 +322,7 @@ void FrameFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
     return;
 
   // Reload should reflect the current data saver setting.
-  if (IsReloadLoadType(MasterDocumentLoader()->LoadType()))
+  if (IsReloadLoadType(document_loader_->LoadType()))
     request.ClearHttpHeaderField(http_names::kSaveData);
 
   if (save_data_enabled_)
@@ -354,11 +352,6 @@ mojom::FetchCacheMode FrameFetchContext::ResourceRequestCachePolicy(
   return cache_mode;
 }
 
-inline DocumentLoader* FrameFetchContext::MasterDocumentLoader() const {
-  DCHECK(!GetResourceFetcherProperties().IsDetached());
-  return document_loader_;
-}
-
 void FrameFetchContext::PrepareRequest(
     ResourceRequest& request,
     const FetchInitiatorInfo& initiator_info,
@@ -366,9 +359,7 @@ void FrameFetchContext::PrepareRequest(
     ResourceType resource_type) {
   // TODO(yhirano): Clarify which statements are actually needed when
   // this is called during redirect.
-  const bool for_redirect =
-      (request.GetRedirectStatus() ==
-       ResourceRequest::RedirectStatus::kFollowedRedirect);
+  const bool for_redirect = request.GetRedirectInfo().has_value();
 
   SetFirstPartyCookie(request);
   if (request.GetRequestContext() ==
@@ -386,13 +377,12 @@ void FrameFetchContext::PrepareRequest(
   if (GetResourceFetcherProperties().IsDetached())
     return;
 
-  DocumentLoader* document_loader = MasterDocumentLoader();
-  if (document_loader->ForceFetchCacheMode())
-    request.SetCacheMode(*document_loader->ForceFetchCacheMode());
+  if (document_loader_->ForceFetchCacheMode())
+    request.SetCacheMode(*document_loader_->ForceFetchCacheMode());
 
   if (request.GetPreviewsState() == WebURLRequest::kPreviewsUnspecified) {
     WebURLRequest::PreviewsState request_previews_state =
-        document_loader->GetPreviewsState();
+        document_loader_->GetPreviewsState();
     if (request_previews_state == WebURLRequest::kPreviewsUnspecified)
       request_previews_state = WebURLRequest::kPreviewsOff;
     request.SetPreviewsState(request_previews_state);
@@ -406,13 +396,14 @@ void FrameFetchContext::PrepareRequest(
         WebScopedVirtualTimePauser::VirtualTaskDuration::kNonInstant);
   }
 
-  probe::PrepareRequest(Probe(), document_loader, request, initiator_info,
+  probe::PrepareRequest(Probe(), document_loader_, request, initiator_info,
                         resource_type);
 
   // ServiceWorker hook ups.
-  if (document_loader->GetServiceWorkerNetworkProvider()) {
+  if (document_loader_->GetServiceWorkerNetworkProvider()) {
     WrappedResourceRequest webreq(request);
-    document_loader->GetServiceWorkerNetworkProvider()->WillSendRequest(webreq);
+    document_loader_->GetServiceWorkerNetworkProvider()->WillSendRequest(
+        webreq);
   }
 }
 
@@ -704,9 +695,10 @@ void FrameFetchContext::PopulateResourceRequest(
     ResourceType type,
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
-    ResourceRequest& request) {
+    ResourceRequest& request,
+    const FetchInitiatorInfo& initiator_info) {
   if (!GetResourceFetcherProperties().IsDetached())
-    probe::SetDevToolsIds(Probe(), request);
+    probe::SetDevToolsIds(Probe(), request, initiator_info);
 
   ModifyRequestForCSP(request);
   AddClientHintsIfNecessary(hints_preferences, resource_width, request);
@@ -772,9 +764,8 @@ void FrameFetchContext::DispatchDidBlockRequest(
     ResourceType resource_type) const {
   if (GetResourceFetcherProperties().IsDetached())
     return;
-  probe::DidBlockRequest(Probe(), resource_request, MasterDocumentLoader(),
-                         Url(), fetch_initiator_info, blocked_reason,
-                         resource_type);
+  probe::DidBlockRequest(Probe(), resource_request, document_loader_, Url(),
+                         fetch_initiator_info, blocked_reason, resource_type);
 }
 
 bool FrameFetchContext::ShouldBypassMainWorldCSP() const {
@@ -794,15 +785,13 @@ bool FrameFetchContext::IsSVGImageChromeClient() const {
 void FrameFetchContext::CountUsage(WebFeature feature) const {
   if (GetResourceFetcherProperties().IsDetached())
     return;
-  if (DocumentLoader* loader = MasterDocumentLoader())
-    loader->GetUseCounterHelper().Count(feature, GetFrame());
+  document_loader_->GetUseCounterHelper().Count(feature, GetFrame());
 }
 
 void FrameFetchContext::CountDeprecation(WebFeature feature) const {
   if (GetResourceFetcherProperties().IsDetached())
     return;
-  if (MasterDocumentLoader())
-    Deprecation::CountDeprecation(MasterDocumentLoader(), feature);
+  Deprecation::CountDeprecation(document_loader_, feature);
 }
 
 bool FrameFetchContext::ShouldBlockWebSocketByMixedContentCheck(
@@ -830,7 +819,7 @@ FrameFetchContext::CreateWebSocketHandshakeThrottle() {
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
     mojom::RequestContextType request_context,
-    ResourceRequest::RedirectStatus redirect_status,
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
     const KURL& url,
     ReportingDisposition reporting_disposition,
     const base::Optional<String>& devtools_id) const {
@@ -838,9 +827,14 @@ bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
     // TODO(yhirano): Implement the detached case.
     return false;
   }
+  const KURL& url_before_redirects =
+      redirect_info ? redirect_info->original_url : url;
+  ResourceRequest::RedirectStatus redirect_status =
+      redirect_info ? RedirectStatus::kFollowedRedirect
+                    : RedirectStatus::kNoRedirect;
   return MixedContentChecker::ShouldBlockFetch(
-      GetFrame(), request_context, redirect_status, url, devtools_id,
-      reporting_disposition);
+      GetFrame(), request_context, url_before_redirects, redirect_status, url,
+      devtools_id, reporting_disposition);
 }
 
 bool FrameFetchContext::ShouldBlockFetchAsCredentialedSubresource(
@@ -998,7 +992,7 @@ FetchContext* FrameFetchContext::Detach() {
   return this;
 }
 
-void FrameFetchContext::Trace(Visitor* visitor) {
+void FrameFetchContext::Trace(Visitor* visitor) const {
   visitor->Trace(document_loader_);
   visitor->Trace(document_);
   visitor->Trace(frozen_state_);
@@ -1025,22 +1019,21 @@ bool FrameFetchContext::CalculateIfAdSubresource(
 
 bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
     const KURL& url,
-    ResourceRequest::RedirectStatus redirect_status,
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
     ReportingDisposition reporting_disposition) const {
-  if (!RuntimeEnabledFeatures::ConversionMeasurementEnabled())
-    return false;
-
   if (GetResourceFetcherProperties().IsDetached())
     return false;
+
+  if (!RuntimeEnabledFeatures::ConversionMeasurementEnabled(
+          document_->domWindow())) {
+    return false;
+  }
 
   LocalFrame* frame = document_->GetFrame();
   DCHECK(frame);
   // Only register conversions pings that are redirects in the main frame.
-  // TODO(https://crbug.com/1042919): This should also validate that the
-  // redirect is same origin to ensure that the reporting domain has consented
-  // to the registration event.
-  if (!frame->IsMainFrame() ||
-      redirect_status != ResourceRequest::RedirectStatus::kFollowedRedirect) {
+  if (!frame->IsMainFrame() || !redirect_info ||
+      !SecurityOrigin::AreSameOrigin(url, redirect_info->previous_url)) {
     return false;
   }
 
@@ -1049,7 +1042,7 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
   if (url.GetPath() != kWellKnownConversionRegsitrationPath)
     return false;
 
-  if (!document_->IsFeatureEnabled(
+  if (!document_->domWindow()->IsFeatureEnabled(
           mojom::blink::FeaturePolicyFeature::kConversionMeasurement)) {
     String message =
         "The 'conversion-measurement' feature policy must be enabled to "
@@ -1096,12 +1089,20 @@ bool FrameFetchContext::SendConversionRequestInsteadOfRedirecting(
   GetFrame()->GetRemoteNavigationAssociatedInterfaces()->GetInterface(
       &conversion_host);
   conversion_host->RegisterConversion(std::move(conversion));
+
+  // Log use counters once we have a conversion.
+  UseCounter::Count(document_->domWindow(),
+                    mojom::blink::WebFeature::kConversionAPIAll);
+  UseCounter::Count(document_->domWindow(),
+                    mojom::blink::WebFeature::kConversionRegistration);
+
   return true;
 }
 
 mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
 FrameFetchContext::TakePendingWorkerTimingReceiver(int request_id) {
-  return MasterDocumentLoader()->TakePendingWorkerTimingReceiver(request_id);
+  DCHECK(!GetResourceFetcherProperties().IsDetached());
+  return document_loader_->TakePendingWorkerTimingReceiver(request_id);
 }
 
 base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
@@ -1110,7 +1111,7 @@ base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    ResourceRequest::RedirectStatus redirect_status) const {
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   if (!GetResourceFetcherProperties().IsDetached() &&
       document_->IsFreezingInProgress() && !resource_request.GetKeepalive()) {
     AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
@@ -1120,7 +1121,7 @@ base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     return ResourceRequestBlockedReason::kOther;
   }
   return BaseFetchContext::CanRequest(type, resource_request, url, options,
-                                      reporting_disposition, redirect_status);
+                                      reporting_disposition, redirect_info);
 }
 
 CoreProbeSink* FrameFetchContext::Probe() const {

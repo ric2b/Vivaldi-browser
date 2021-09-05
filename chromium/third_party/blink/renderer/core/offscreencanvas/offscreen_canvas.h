@@ -124,7 +124,6 @@ class CORE_EXPORT OffscreenCanvas final
   void Commit(scoped_refptr<CanvasResource> bitmap_image,
               const SkIRect& damage_rect) override;
   bool ShouldAccelerate2dContext() const override;
-  unsigned GetMSAASampleCountFor2dContext() const override { return 0; }
   CanvasResourceDispatcher* GetOrCreateResourceDispatcher() override;
 
   // Partial CanvasResourceHost implementation
@@ -159,7 +158,6 @@ class CORE_EXPORT OffscreenCanvas final
 
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                               AccelerationHint,
                                                const FloatSize&) final;
   bool WouldTaintOrigin() const final { return !origin_clean_; }
   FloatSize ElementSize(const FloatSize& default_object_size,
@@ -179,7 +177,7 @@ class CORE_EXPORT OffscreenCanvas final
 
   FontSelector* GetFontSelector() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   class ScopedInsideWorkerRAF {
     STACK_ALLOCATED();

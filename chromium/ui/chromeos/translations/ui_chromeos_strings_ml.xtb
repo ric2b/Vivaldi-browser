@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">ജാപ്പനീസ് ഇൻപുട്ട് (യുഎസ് കീബോർഡിന്)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> ഇനങ്ങൾ ഇല്ലാതാക്കുന്നു...</translation>
 <translation id="1049926623896334335">Word പ്രമാണം</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> ഉപയോഗിച്ച് ഫയലുകൾ തുറക്കാൻ, ആദ്യം അവയെ Windows ഫയലുകൾ എന്ന ഫോൾഡറിലേക്ക് മാറ്റുക.</translation>
 <translation id="1062407476771304334">മാറ്റിസ്ഥാപിക്കുക</translation>
 <translation id="1065449928621190041">കനേഡിയന്‍ ഫ്രഞ്ച് കീബോര്‍ഡ്</translation>
 <translation id="1119069657431255176">Bzip2 ഉൾക്കൊള്ളിച്ച tar ആർക്കൈവ്</translation>
@@ -41,10 +42,12 @@
 <translation id="1358735829858566124">ഫയലോ ഡയറക്‌റ്ററിയോ ഉപയോഗക്ഷമമല്ല.</translation>
 <translation id="1363028406613469049">ട്രാക്കുചെയ്യുക</translation>
 <translation id="1378727793141957596">Google ഡ്രൈവിലേക്ക് സ്വാഗതം!</translation>
-<translation id="1383876407941801731">തിരയുക</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1395262318152388157">സീക്ക് സ്ലൈഡർ</translation>
 <translation id="1399648040768741453">തെലുങ്ക് കീബോർഡ് (സ്വരസൂചകം)</translation>
 <translation id="1430915738399379752">അച്ചടിക്കുക</translation>
+<translation id="1433600251059882049">ഈ ഫോൾഡർ Linux-മായും Windows-മായും പങ്കിട്ടു</translation>
+<translation id="1435838927755162558">Parallels Desktop ഉപയോഗിച്ച് ഫോൾഡർ പങ്കിടുക</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" /> എന്നതിലേക്ക് നീക്കി.</translation>
 <translation id="1441841714100794440">വിയറ്റ്‌നാമീസ് കീബോർഡ് (ടെലക്‌സ്)</translation>
 <translation id="1455548678241328678">നോര്‍വേജിയന്‍ കീബോര്‍ഡ്</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">ഈ ഫയൽ ഓഫ്‌ലൈനിൽ ലഭ്യമാകില്ല.</translation>
 <translation id="184633654410729720">തായ് കീബോർഡ് (കെഡ്‌മാനീ)</translation>
 <translation id="1847880352285315359">സംരക്ഷിച്ചു</translation>
+<translation id="1853795129690976061">Linux-മായി ഈ ഫോൾഡർ പങ്കിട്ടു</translation>
 <translation id="1864756863218646478">ഫയൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.</translation>
 <translation id="1921986354447415460">ടർക്കിഷ്-എഫ് കീബോർഡ്</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ഫോർമാറ്റ് ചെയ്തു</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">സിംഹള കീബോർഡ്</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ലഭ്യം</translation>
 <translation id="2425665904502185219">മൊത്തം ഫയൽ വലുപ്പം</translation>
+<translation id="2428749644083375155"><ph name="FOLDER_NAME" /> ഫോൾഡറിലേക്ക് <ph name="NUMBER_OF_ITEMS" /> ഇനങ്ങൾ പകർത്തുന്നു</translation>
 <translation id="2448312741937722512">തരം</translation>
 <translation id="2453576648990281505">ഫയൽ ഇതിനകം നിലനിൽക്കുന്നു</translation>
 <translation id="2464079411014186876">ഐസ്‌ക്രീം</translation>
@@ -165,7 +170,7 @@
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">മംഗോളിയന്‍</translation>
 <translation id="2942290791863759244">ജര്‍മ്മന്‍ നിയോ 2 കീബോർഡ്</translation>
-<translation id="2943400156390503548">സ്ലൈഡുകള്‍</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">ഇതിലും ചെറിയൊരു പേര് നൽകുക</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ഫോർമാറ്റ് ചെയ്യുന്നു...</translation>
 <translation id="2951236788251446349">ജെല്ലിഫിഷ്</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">ഭൂമിശാസ്‌ത്രം</translation>
 <translation id="3057861065630527966">നിങ്ങളുടെ ഫോട്ടോകളും വീഡിയോകളും ബാക്കപ്പ് ചെയ്യുക</translation>
 <translation id="3064388234319122767">ലിപ്യന്തരണം (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ഫയലുകൾ</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> എന്നതുമായി പങ്കിടുക</translation>
 <translation id="3088034400796962477">ലിപ്യന്തരണം (salam ← سلام)</translation>
 <translation id="3116361045094675131">യുകെ കീബോര്‍ഡ്</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">മുന്നറിയിപ്പ്: ഇവ താൽക്കാലിക ഫയലുകളാണ് ഡിസ്ക്കിൽ ഇടമുണ്ടാക്കാൻ സ്വയമേവ ഇല്ലാതാക്കിയേക്കാം.  <ph name="BEGIN_LINK" />കൂടുതലറിയുക<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ഫോൾഡർ</translation>
 <translation id="3549797760399244642">drive.google.com-ലേക്ക് പോകുക...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> ഉപയോഗിച്ച് ഫയലുകൾ തുറക്കാൻ, ആദ്യം അവയെ Windows ഫയലുകൾ എന്ന ഫോൾഡറിലേക്ക് പകർത്തുക.</translation>
 <translation id="357479282490346887">ലിത്വാനിയന്‍</translation>
 <translation id="3583509704582854624">അക്ക - അക്ഷര പ്രതീകങ്ങളുടെ ഇൻപുട്ട് (ജാപ്പനീസ് കീബോർഡിന്)</translation>
 <translation id="3603385196401704894">കനേഡിയന്‍ ഫ്രഞ്ച്</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">പതിപ്പ്</translation>
 <translation id="3801082500826908679">ഫാറോസി</translation>
 <translation id="3809272675881623365">മുയൽ</translation>
+<translation id="3810973564298564668">മാനേജ് ചെയ്യുക</translation>
 <translation id="3811494700605067549">ഒരു ഫയൽ തിരഞ്ഞെടുത്തു</translation>
 <translation id="3815016854028376614">Zhuyin ഇൻപുട്ട് രീതി</translation>
 <translation id="3825863595139017598">മംഗോളിയൻ കീബോർഡ്</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">ഒട്ടിക്കുക</translation>
 <translation id="3958548648197196644">കിവി</translation>
 <translation id="3966388904776714213">ഓഡിയോ പ്ലേയർ</translation>
+<translation id="3984317463833596033"><ph name="FOLDER_NAME" /> ഫോൾഡറിലെ ഫയലുകൾ പരിഷ്‌കരിക്കുന്നതിന് Parallels Desktop അനുമതി നൽകുക</translation>
 <translation id="4002066346123236978">ശീർഷകം</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> ആപ്പുകൾ മുഖേന ഫയലുകൾ തുറക്കാൻ ആദ്യം അവ <ph name="SHARED_DIRECTORY_LABEL" /> ഫോൾഡറിലേക്ക് നീക്കുക.</translation>
 <translation id="4070370845051020638">Cantonese ഇൻപുട്ട് രീതി</translation>
 <translation id="4072248638558688893">തമിഴ് കീബോർഡ് (സ്വരസൂചകം)</translation>
 <translation id="4124935795427217608">യൂണികോൺ</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">ഹാംഗുൽ 2 സെറ്റ് മോഡ്</translation>
 <translation id="4477219268485577442">ബൾഗേറിയൻ സ്വരസൂചകം</translation>
 <translation id="4479812471636796472">യുഎസ് ഡൊറാക്ക് കീബോര്‍ഡ്</translation>
+<translation id="4481711095103932593">ഈ ഫോൾഡർ Windows-മായി പങ്കിട്ടു</translation>
 <translation id="4487088045714738411">ബല്‍ജിയന്‍ കീബോര്‍ഡ്</translation>
 <translation id="4522570452068850558">വിശദാംശങ്ങൾ‌</translation>
 <translation id="4552678318981539154">കൂടുതൽ സംഭരണം വാങ്ങുക</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">തിരഞ്ഞെടുക്കലിലേക്ക് <ph name="ENTRY_NAME" /> ചേർത്തു.</translation>
 <translation id="4582497162516204941">Linux (ബീറ്റ) ഉപയോഗിച്ച് ഇൻസ്‌റ്റാൾ ചെയ്യുക</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> എന്നതിനുള്ള ഫലങ്ങൾ കാണിക്കുന്നു.</translation>
+<translation id="4603392156942865207"><ph name="FOLDER_NAME" /> ഫോൾഡറിലേക്ക് <ph name="FILE_NAME" /> പകർത്തുന്നു</translation>
 <translation id="4631887759990505102">ആര്‍ട്ടിസ്റ്റ്</translation>
 <translation id="4656293982926141856">ഈ കമ്പ്യൂട്ടറിൽ</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />' എന്നതിലെ അംഗങ്ങളുമായി ഈ ഇനങ്ങൾ പങ്കിട്ടില്ലെങ്കിൽ അവർക്ക് അവയിലേക്കുള്ള ആക്‌സസ് ‌നഷ്‌ടമാകും.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">സ്വയമേവ ശരിയാക്കുക</translation>
 <translation id="4881695831933465202">തുറക്കുക</translation>
 <translation id="4886021172213954916">തമിഴ് കീബോർഡ് (ടൈപ്പ്റൈറ്റർ)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> ഉപയോഗിച്ച് തുറക്കാനാവില്ല</translation>
+<translation id="4900532980794411603">Parallels Desktop ഉപയോഗിച്ച് പങ്കിടുക</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ബാക്കപ്പ് ചെയ്യാൻ തയ്യാറാണ്</translation>
 <translation id="4924638091161556692">പരിഹരിച്ചു</translation>
 <translation id="4935975195727477204">ഗസാനിയ പുഷ്‌പം</translation>
 <translation id="4943368462779413526">ഫുട്‌ബോള്‍</translation>
+<translation id="4961158930123534723">Parallels Desktop ഉപയോഗിച്ച് ഒരു ഫോൾഡർ പങ്കിട്ടു</translation>
 <translation id="4969785127455456148">ആല്‍‌ബം</translation>
 <translation id="497244430928947428">മലയാളം കീബോർഡ് (സ്വരസൂചകം)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> പ്രതീകങ്ങളോ അതിൽ കുറവോ ഉള്ള ഒരു പേര് ഉപയോഗിക്കുക</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">കമ്പ്യൂട്ടറുകൾ</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">പ്രവർത്തനത്തിന് പ്രതീക്ഷിച്ചതിലും സമയമെടുക്കുന്നു. നിങ്ങൾക്കിത് അവസാനിപ്പിക്കണോ?</translation>
+<translation id="5036159836254554629">Parallels Desktop പങ്കിടൽ മാനേജ് ചെയ്യുക</translation>
 <translation id="5038625366300922036">കൂടുതൽ കാണുക...</translation>
 <translation id="5061708541166515394">കോണ്ട്രാസ്റ്റ്</translation>
 <translation id="5068919226082848014">പിസ്സ</translation>
 <translation id="5081517858322016911">ഫയലുകളിൽ <ph name="TOTAL_FILE_SIZE" /> ഇല്ലാതാക്കപ്പെടും</translation>
+<translation id="508423945471810158"><ph name="FOLDER_NAME" /> ഫോൾഡറിലേക്ക് <ph name="NUMBER_OF_ITEMS" /> ഇനങ്ങൾ നീക്കുന്നു</translation>
 <translation id="509429900233858213">ഒരു പിശക് സംഭവിച്ചു.</translation>
 <translation id="5098629044894065541">ഹീബ്രു</translation>
 <translation id="5123433949759960244">ബാസ്ക്കറ്റ്ബോൾ</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">ഫ്രഞ്ച് കീബോര്‍ഡ്</translation>
 <translation id="6074825444536523002">Google ഫോം</translation>
 <translation id="6096979789310008754">തിരയൽ ടെക്‌സ്‌റ്റ് മായ്ച്ചു, മുഴുവൻ ഫയലുകളും ഫോൾഡറുകളും കാണിക്കുന്നു.</translation>
+<translation id="610101264611565198"><ph name="FOLDER_NAME" /> ഫോൾഡറിലേക്ക് <ph name="FILE_NAME" /> നീക്കുന്നു</translation>
 <translation id="6111770213269631447">ലിപ്യന്തരണം (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">സ്പെയ്സ്</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> നീക്കുന്നു...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" ഇല്ലാതാക്കുന്നു...</translation>
 <translation id="6581162200855843583">Google ഡ്രൈവ് ലിങ്ക്</translation>
 <translation id="6607272825297743757">ഫയൽ വിവരം</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> ഫോൾഡറുകൾ Parallels Desktop ഉപയോഗിച്ച് പങ്കിട്ടു</translation>
 <translation id="6629841649550503054">എല്ലാം <ph name="BEGIN_LINK" />Google ഡ്രൈവിലേക്ക്<ph name="END_LINK" /> ബാക്കപ്പുചെയ്‌തു!</translation>
 <translation id="6643016212128521049">മായ്‌ക്കുക</translation>
 <translation id="6650726141019353908">പിങ്ക് ചിത്രശലഭം</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ഇന്‍സ്റ്റാളേഷന്‍ പരാജയപ്പെട്ടു.</translation>
 <translation id="7040138676081995583">ഇത് ഉപയോഗിച്ച് തുറക്കുക...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" />-ൽ കുറവ്</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ഇനങ്ങൾ തിരഞ്ഞെടുത്തു</translation>
 <translation id="7106346894903675391">കൂടുതൽ സംഭരണം വാങ്ങുക...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;തിരയൽ ഡ്രൈവ്&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">ഉപകരണ മോഡൽ</translation>
 <translation id="8208580316430297579">കലാസൃഷ്‌ടി</translation>
 <translation id="8223479393428528563">ഓഫ്‌ലൈൻ ഉപയോഗത്തിനായി ഈ ഫയലുകൾ സംരക്ഷിക്കാൻ, ഓൺലൈനിൽ തിരികെ വന്ന് ഫയലുകൾ റൈറ്റ് ക്ലിക്ക് ചെയ്‌ത്, <ph name="OFFLINE_CHECKBOX_NAME" /> ഓപ്‌ഷൻ തിരഞ്ഞെടുക്കുക.</translation>
+<translation id="8231972167769262174">ഏകദേശം <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">ഉപേക്ഷിക്കുക</translation>
 <translation id="8261506727792406068">ഇല്ലാതാക്കുക</translation>
 <translation id="8269755669432358899">ഫയലുകളുടെ ഫീഡ്ബാക്ക് പാനലുകൾ ചുരുക്കുക</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google ഡ്രൈവിന് ഇപ്പോൾ "<ph name="FILENAME" />" സമന്വയിപ്പിക്കായില്ല. Google ഡ്രൈവ് പിന്നീട് വീണ്ടും ശ്രമിക്കുന്നതാണ്.</translation>
 <translation id="8477649328507734757">സ്പിൻ</translation>
 <translation id="8487700953926739672">ഓഫ്‌ലൈനില്‍ ലഭ്യമാണ്</translation>
+<translation id="8490342535582768689">നിങ്ങളുടെ Google Drive-ലെ ഫയലുകൾ പരിഷ്‌കരിക്കുന്നതിന് Parallels Desktop അനുമതി നൽകുക. മാറ്റങ്ങൾ, നിങ്ങളുടെ മറ്റ് ഉപകരണങ്ങളിലേക്ക് സമന്വയിപ്പിക്കും.</translation>
 <translation id="8521441079177373948">യുകെ</translation>
 <translation id="8525306231823319788">പൂര്‍ണ്ണ സ്ക്രീന്‍</translation>
 <translation id="8551494947769799688">ലാറ്റ്വിയന്‍</translation>
@@ -724,7 +742,7 @@
 <translation id="939736085109172342">പുതിയ ഫോള്‍ഡര്‍</translation>
 <translation id="942954117721265519">ഈ ഡയറക്റ്ററിയിൽ ചിത്രങ്ങളൊന്നുമില്ല.</translation>
 <translation id="943972244133411984">പരിഷ്‌ക്കരിച്ചത്</translation>
-<translation id="945522503751344254">ഫീഡ്ബാക്ക് അയയ്ക്കുക</translation>
+<translation id="945522503751344254">ഫീഡ്‌ബാക്ക് അയയ്‌ക്കുക</translation>
 <translation id="947144732524271678"><ph name="FROM_ENTRY_NAME" />-ൽ നിന്ന് <ph name="TO_ENTRY_NAME" />-ലേക്ക് <ph name="ENTRY_COUNT" /> എൻട്രികളുള്ള ഒരു ശ്രേണി തിരഞ്ഞെടുത്തു.</translation>
 <translation id="981121421437150478">ഓഫ്‌ലൈൻ</translation>
 <translation id="988685240266037636">"<ph name="FILE_NAME" />" എന്ന് പേരുള്ള ഫയൽ മുമ്പേ നിലവിലുണ്ട്. ഇത് മാറ്റി പകരം വയ്ക്കണോ?</translation>

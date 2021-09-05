@@ -63,7 +63,7 @@
 <translation id="1360699455582016846">ರೂಟಿಂಗ್ ಕೀ <ph name="ROUTING_KEY_NUMBER" /> ಕೆಳಗಿರುವ ಐಟಂ ಕ್ಲಿಕ್ ಮಾಡಿ</translation>
 <translation id="1377925789329510816">ಇದು ಕೊನೆಯ ಶಿರೋನಾಮೆ. ಈ ಪುಟದಲ್ಲಿ ಮೊದಲ ಶಿರೋನಾಮೆಗೆ ವ್ರ್ಯಾಪ್ ಮಾಡಲು ಹುಡುಕಾಟ+H ಅಥವಾ ಎರಡನೇ ಶಿರೋನಾಮೆಗೆ ಹೋಗಲು ಹುಡುಕಾಟ+Shift+H ಒತ್ತಿ.</translation>
 <translation id="138218114945450791">ತಿಳಿ ನೀಲಿ</translation>
-<translation id="1383876407941801731">ಹುಡುಕಾಟ</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1396114365388024581">ಟ್ಯಾಬ್ ಪಟ್ಟಿ</translation>
 <translation id="1405567553485452995">ತಿಳಿ ಹಸಿರು</translation>
 <translation id="1417889266572670458">ಕಡುನೀಲಿ</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">ಬಲಕ್ಕೆ ಸ್ಕ್ರಾಲ್ ಮಾಡಿ</translation>
 <translation id="1781173782405573156">ಕೀ ಮೂಲಕ ಹಾದುಹೋಗುತ್ತವೆ</translation>
 <translation id="1787176709638001873">ಪಾಸ್‌ವರ್ಡ್ ಎಡಿಟ್ ಪಠ್ಯ</translation>
+<translation id="180203835522132923">Search + O, ನಂತರ W</translation>
 <translation id="1810107444790159527">ಪಟ್ಟಿಯ ಬಾಕ್ಸ್</translation>
 <translation id="1812527064848182527">ಲ್ಯಾಂಡ್‌ಸ್ಕೇಪ್</translation>
 <translation id="1829244130665387512">ಪುಟದಲ್ಲಿ ಹುಡುಕಿ</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">ಎರಡು ಬೆರಳುಗಳಿಂದ ಎಡಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ</translation>
 <translation id="2998131015536248178">ಹಿಂದಿನ ಅಕ್ಷರ</translation>
 <translation id="2999559350546931576">ಪಿಚ್ ಇಳಿಸಿ</translation>
+<translation id="3009352964623081324">Search + O, ನಂತರ S. ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಲು, ನಿರ್ವಹಿಸಲು ಮತ್ತು ಧ್ವನಿಗಳನ್ನು ಕಸ್ಟಮೈಸ್ ಮಾಡಲು ಬಳಸಿ.</translation>
 <translation id="3014130421870723208">@ಎಡಿಟ್ 8ಚುಕ್ಕಿ</translation>
 <translation id="3030432017085518523">ಮೆನು ಐಟಂ ರೇಡಿಯೋ ಬಟನ್</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ಸಂಬೋಧನೆಯ ಚಿಹ್ನೆ}one{# ಸಂಬೋಧನೆಯ ಚಿಹ್ನೆಗಳು}other{# ಸಂಬೋಧನೆಯ ಚಿಹ್ನೆಗಳು}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ಅಳವಡಿಕೆ</translation>
 <translation id="4511186779140817916">ಬ್ಲಾಂಚ್ ಮಾಡಿದ ಆಲ್ಮಂಡ್</translation>
 <translation id="451510441928265982">ಯಾವುದೇ ಹಿಂದಿನ ಹಂತ 2 ರ ಶಿರೋನಾಮೆಯಿಲ್ಲ</translation>
+<translation id="4515799157838123044">ಹಿನ್ನೆಲೆ ವಿಷಯವನ್ನು ಶೇಡ್ ಮಾಡಿ</translation>
 <translation id="4517854969512651305">ಮೌಲ್ಯವನ್ನು ಹೆಚ್ಚಿಸಿ</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{ಸ್ಲ್ಯಾಷ್‌}one{# ಸ್ಲ್ಯಾಷ್‌ಗಳು}other{# ಸ್ಲ್ಯಾಷ್‌ಗಳು}}</translation>
 <translation id="4537277403911487429">ಅದೇ ರೀತಿಯ ಮುಂದಿನ ಐಟಂ</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ಭಾಗ</translation>
 <translation id="6637586476836377253">ಲಾಗ್</translation>
 <translation id="6657128831881431364">ಪ್ರಗತಿ ಪಟ್ಟಿ</translation>
+<translation id="6660819301598582123">ವೇಗದ ಕಂದು ಬಣ್ಣದ ನರಿ ಸೋಮಾರಿಯಾದ ನಾಯಿಯ ಮೇಲೆ ಹಾರಿತು.</translation>
 <translation id="667999046851023355">ಡಾಕ್ಯುಮೆಂಟ್</translation>
 <translation id="6688209025607531203">ಒಂದು ಮಾದರಿ ಅಲ್ಲದ ಎಚ್ಚರಿಕೆ</translation>
 <translation id="6689672606256159458">ಗಾಢ ಗುಲಾಬಿ ಕಿತ್ತಳೆ ಬಣ್ಣ</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">ಯಾವುದೇ ಮುಂದಿನ ಹಂತ 5 ರ ಶಿರೋನಾಮೆಯಿಲ್ಲ</translation>
 <translation id="6955705049214951590">ಮಿಸ್ಟಿ ರೋಸ್</translation>
 <translation id="696356426651109308">ಪ್ರಾರಂಭಕ್ಕೆ ಹೋಗಿ</translation>
-<translation id="699159175332639490">ಹುಡುಕಾಟ + O + W</translation>
 <translation id="6994042831499278539">ಪದಕೋಶ ಉಲ್ಲೇಖ</translation>
 <translation id="6996566555547746822">ಮುಂದಿನ ಕಾಂಬೊ ಬಾಕ್ಸ್</translation>
 <translation id="6997224546856374593">ದೊಡ್ಡಕ್ಷರಗಳನ್ನು ಓದುವಾಗ:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">ಗುಲಾಬಿ ಕಿತ್ತಳೆ ಬಣ್ಣ</translation>
 <translation id="7140168702531682811">ಸೂಪರ್‌ಸ್ಕ್ರಿಪ್ಟ್</translation>
 <translation id="7143034430156387447">6 ಮತ್ತು 8 ಚುಕ್ಕಿಗಳ ಬ್ರೈಲ್ ನಡುವೆ ಟಾಗಲ್ ಮಾಡಿ</translation>
-<translation id="7143207342074048698">ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ</translation>
+<translation id="7143207342074048698">ಕನೆಕ್ಟ್...</translation>
 <translation id="7153618581592392745">ನಸು ಕೆನ್ನೀಲಿ</translation>
 <translation id="7157306005867877619">ಸಾರಾಂಶ</translation>
 <translation id="7161771961008409533">ಪಾಪ್-ಅಪ್ ಬಟನ್</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">ಉದಾಹರಣೆ</translation>
 <translation id="7439060726180460871">ಡೈರೆಕ್ಟರಿ</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">ಎಲಿಮೆಂಟ್ ಪ್ರಕಾರಗಳನ್ನು ಮಾತನಾಡುವಾಗ ಪಿಚ್ ಮತ್ತು ಉಲ್ಲೇಖಿಸಿದ, ಅಳಿಸಿದ, ಬೋಲ್ಡ್, ಆವರಣ ಅಥವಾ ದೊಡ್ಡಕ್ಷರ ಪಠ್ಯವನ್ನು ಬದಲಾಯಿಸಿ.</translation>
 <translation id="7491962110804786152">ಟ್ಯಾಬ್</translation>
 <translation id="7505149250476994901">ಅಕ್ಷರದ ಮೊದಲು "ದೊಡ್ಡಕ್ಷರ" ಎಂದು ಹೇಳಿ</translation>
 <translation id="7518543783849163354">ಮಾತನಾಡದಂತೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ChromeVox ಅನ್ನು ನಿಲ್ಲಿಸಲು, Control ಕೀ ಒತ್ತಿ.</translation>

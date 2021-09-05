@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include "base/logging.h"
 #include "build/build_config.h"
 #include "ui/gfx/gfx_export.h"
 
@@ -100,7 +99,7 @@ struct ANativeWindow;
 namespace ui {
 class WindowAndroid;
 class ViewAndroid;
-}
+}  // namespace ui
 #endif
 class SkBitmap;
 
@@ -108,6 +107,12 @@ class SkBitmap;
 extern "C" {
 struct _AtkObject;
 typedef struct _AtkObject AtkObject;
+}
+#endif
+
+#if defined(USE_X11)
+namespace x11 {
+enum class Window : uint32_t;
 }
 #endif
 
@@ -220,7 +225,7 @@ typedef UnimplementedNativeViewAccessible* NativeViewAccessible;
 const ui::mojom::CursorType kNullCursor =
     static_cast<ui::mojom::CursorType>(-1);
 #else
-const gfx::NativeCursor kNullCursor = static_cast<gfx::NativeCursor>(NULL);
+const gfx::NativeCursor kNullCursor = static_cast<gfx::NativeCursor>(nullptr);
 #endif
 
 // Note: for test_shell we're packing a pointer into the NativeViewId. So, if
@@ -233,10 +238,11 @@ typedef intptr_t NativeViewId;
 // AcceleratedWidget provides a surface to compositors to paint pixels.
 #if defined(OS_WIN)
 typedef HWND AcceleratedWidget;
-constexpr AcceleratedWidget kNullAcceleratedWidget = NULL;
+constexpr AcceleratedWidget kNullAcceleratedWidget = nullptr;
 #elif defined(USE_X11)
-typedef unsigned long AcceleratedWidget;
-constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
+typedef x11::Window AcceleratedWidget;
+constexpr AcceleratedWidget kNullAcceleratedWidget =
+    static_cast<x11::Window>(0);
 #elif defined(OS_IOS)
 typedef UIView* AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;

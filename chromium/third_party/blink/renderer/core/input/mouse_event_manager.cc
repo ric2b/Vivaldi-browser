@@ -187,7 +187,7 @@ void MouseEventManager::Clear() {
 
 MouseEventManager::~MouseEventManager() = default;
 
-void MouseEventManager::Trace(Visitor* visitor) {
+void MouseEventManager::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(scroll_manager_);
   visitor->Trace(element_under_mouse_);
@@ -700,7 +700,7 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   mouse_down_ = event.Event();
 
   if (RuntimeEnabledFeatures::TextFragmentIdentifiersEnabled(
-          frame_->GetDocument())) {
+          frame_->DomWindow())) {
     if (frame_->View())
       frame_->View()->DismissFragmentAnchor();
   }

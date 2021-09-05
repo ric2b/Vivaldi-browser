@@ -370,6 +370,8 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
     syncer::UpdateResponseDataList updates) {
   DCHECK(!note_tracker_);
 
+  TRACE_EVENT0("sync", "NoteModelTypeProcessor::OnInitialUpdateReceived");
+
   note_tracker_ = SyncedNoteTracker::CreateEmpty(model_type_state);
   StartTrackingMetadata();
 

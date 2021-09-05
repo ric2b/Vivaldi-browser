@@ -76,4 +76,10 @@ void EscapeStringToStream(std::ostream& out,
                           const std::string_view& str,
                           const EscapeOptions& options);
 
+// Same as EscapeString but escape JSON string and writes the results to the
+// given stream, saving a copy.
+void EscapeJSONStringToStream(std::ostream& out,
+                              const std::string_view& str,
+                              const EscapeOptions& options);
+
 #endif  // TOOLS_GN_ESCAPE_H_

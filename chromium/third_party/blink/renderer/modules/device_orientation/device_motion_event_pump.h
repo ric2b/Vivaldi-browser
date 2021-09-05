@@ -22,7 +22,7 @@ class MODULES_EXPORT DeviceMotionEventPump
   USING_GARBAGE_COLLECTED_MIXIN(DeviceMotionEventPump);
 
  public:
-  explicit DeviceMotionEventPump(scoped_refptr<base::SingleThreadTaskRunner>);
+  explicit DeviceMotionEventPump(LocalFrame&);
   ~DeviceMotionEventPump() override;
 
   void SetController(PlatformEventController*);
@@ -31,10 +31,10 @@ class MODULES_EXPORT DeviceMotionEventPump
   // Note that the returned object is owned by this class.
   DeviceMotionData* LatestDeviceMotionData();
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // DeviceSensorEventPump:
-  void SendStartMessage(LocalFrame* frame) override;
+  void SendStartMessage(LocalFrame& frame) override;
   void SendStopMessage() override;
 
  protected:
@@ -48,7 +48,7 @@ class MODULES_EXPORT DeviceMotionEventPump
  private:
   friend class DeviceMotionEventPumpTest;
 
-  void StartListening(LocalFrame*);
+  void StartListening(LocalFrame&);
   void StopListening();
   void NotifyController();
 

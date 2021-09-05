@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -35,25 +36,6 @@ AXTreeServer::AXTreeServer(const base::StringPiece& pattern,
   base::string16 accessibility_contents_utf16;
   std::unique_ptr<base::DictionaryValue> dict =
       formatter->BuildAccessibilityTreeForPattern(pattern);
-
-  if (!dict) {
-    LOG(ERROR) << "Error: Failed to get accessibility tree";
-    return;
-  }
-
-  Format(*formatter, *dict, filters_path, use_json);
-}
-
-AXTreeServer::AXTreeServer(base::ProcessId pid,
-                           const base::FilePath& filters_path,
-                           bool use_json) {
-  std::unique_ptr<AccessibilityTreeFormatter> formatter(
-      AccessibilityTreeFormatter::Create());
-
-  // Get accessibility tree as nested dictionary.
-  base::string16 accessibility_contents_utf16;
-  std::unique_ptr<base::DictionaryValue> dict =
-      formatter->BuildAccessibilityTreeForProcess(pid);
 
   if (!dict) {
     LOG(ERROR) << "Error: Failed to get accessibility tree";

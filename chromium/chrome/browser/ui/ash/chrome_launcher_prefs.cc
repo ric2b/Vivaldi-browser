@@ -73,6 +73,8 @@ const char kDefaultPinnedAppsKey[] = "default";
 const char kDefaultPinnedApps7AppsKey[] = "7apps";
 const char kDefaultPinnedApps10AppsKey[] = "10apps";
 
+bool skip_pinned_apps_from_sync_for_test = false;
+
 bool IsLegacyCameraAppId(const std::string& app_id) {
   return app_id ==
              "ngmkobaiicipbagcngcmilfkhejlnfci" ||  // Migration Camera App.
@@ -186,7 +188,8 @@ bool IsSafeToApplyDefaultPinLayout(Profile* profile) {
   // apps is likely override it. There is a case when App sync is disabled and
   // in last case local cache is available immediately.
   if (chromeos::features::IsSplitSettingsSyncEnabled()) {
-    if (settings->GetSelectedOsTypes().Has(UserSelectableOsType::kOsApps) &&
+    if (settings->IsOsSyncFeatureEnabled() &&
+        settings->GetSelectedOsTypes().Has(UserSelectableOsType::kOsApps) &&
         !app_list::AppListSyncableServiceFactory::GetForProfile(profile)
              ->IsSyncing()) {
       return false;
@@ -202,7 +205,8 @@ bool IsSafeToApplyDefaultPinLayout(Profile* profile) {
   // If shelf pin layout rolls preference is not started yet then we cannot say
   // if we rolled layout or not.
   if (chromeos::features::IsSplitSettingsSyncEnabled()) {
-    if (settings->GetSelectedOsTypes().Has(
+    if (settings->IsOsSyncFeatureEnabled() &&
+        settings->GetSelectedOsTypes().Has(
             UserSelectableOsType::kOsPreferences) &&
         !PrefServiceSyncableFromProfile(profile)->AreOsPrefsSyncing()) {
       return false;
@@ -457,8 +461,10 @@ std::vector<ash::ShelfID> GetPinnedAppsFromSync(
   app_list::AppListSyncableService* const syncable_service =
       app_list::AppListSyncableServiceFactory::GetForProfile(helper->profile());
   // Some unit tests may not have it or service may not be initialized.
-  if (!syncable_service || !syncable_service->IsInitialized())
+  if (!syncable_service || !syncable_service->IsInitialized() ||
+      skip_pinned_apps_from_sync_for_test) {
     return std::vector<ash::ShelfID>();
+  }
 
   std::vector<PinInfo> pin_infos;
 
@@ -688,4 +694,8 @@ void SetPinPosition(Profile* profile,
   else
     pin_position = syncer::StringOrdinal::CreateInitialOrdinal();
   syncable_service->SetPinPosition(app_id, pin_position);
+}
+
+void SkipPinnedAppsFromSyncForTest() {
+  skip_pinned_apps_from_sync_for_test = true;
 }

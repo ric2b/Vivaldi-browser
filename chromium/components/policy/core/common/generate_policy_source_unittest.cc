@@ -69,6 +69,12 @@ TEST(GeneratePolicySource, ChromeSchemaData) {
   ASSERT_TRUE(subschema.valid());
   EXPECT_EQ(base::Value::Type::BOOLEAN, subschema.type());
 
+  subschema = schema.GetProperty(key::kURLBlacklist);
+  ASSERT_TRUE(subschema.valid());
+  EXPECT_EQ(base::Value::Type::LIST, subschema.type());
+  ASSERT_TRUE(subschema.GetItems().valid());
+  EXPECT_EQ(base::Value::Type::STRING, subschema.GetItems().type());
+
   // Verify that all the Chrome policies are there.
   for (Schema::Iterator it = schema.GetPropertiesIterator(); !it.IsAtEnd();
        it.Advance()) {
@@ -78,12 +84,6 @@ TEST(GeneratePolicySource, ChromeSchemaData) {
   }
 
 #if !defined(OS_IOS)
-  subschema = schema.GetProperty(key::kURLBlacklist);
-  ASSERT_TRUE(subschema.valid());
-  EXPECT_EQ(base::Value::Type::LIST, subschema.type());
-  ASSERT_TRUE(subschema.GetItems().valid());
-  EXPECT_EQ(base::Value::Type::STRING, subschema.GetItems().type());
-
   subschema = schema.GetProperty(key::kDefaultCookiesSetting);
   ASSERT_TRUE(subschema.valid());
   EXPECT_EQ(base::Value::Type::INTEGER, subschema.type());

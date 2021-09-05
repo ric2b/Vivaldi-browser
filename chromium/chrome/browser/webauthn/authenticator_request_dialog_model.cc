@@ -367,6 +367,10 @@ void AuthenticatorRequestDialogModel::OnAuthenticatorMissingUserVerification() {
   SetCurrentStep(Step::kMissingCapability);
 }
 
+void AuthenticatorRequestDialogModel::OnNoCommonAlgorithms() {
+  SetCurrentStep(Step::kMissingCapability);
+}
+
 void AuthenticatorRequestDialogModel::OnAuthenticatorStorageFull() {
   SetCurrentStep(Step::kStorageFull);
 }
@@ -568,4 +572,9 @@ void AuthenticatorRequestDialogModel::set_cable_transport_info(
   cable_extension_provided_ = cable_extension_provided;
   have_paired_phones_ = have_paired_phones;
   qr_generator_key_ = std::move(qr_generator_key);
+}
+
+base::WeakPtr<AuthenticatorRequestDialogModel>
+AuthenticatorRequestDialogModel::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }

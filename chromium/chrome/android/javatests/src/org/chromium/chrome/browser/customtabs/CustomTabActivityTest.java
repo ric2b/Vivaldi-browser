@@ -13,6 +13,7 @@ import static org.junit.Assert.assertFalse;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 import static org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule.LONG_TIMEOUT_MS;
+import static org.chromium.components.content_settings.PrefNames.BLOCK_THIRD_PARTY_COOKIES;
 
 import android.app.Activity;
 import android.app.Instrumentation;
@@ -34,8 +35,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -54,6 +53,8 @@ import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsSession;
 import androidx.browser.customtabs.CustomTabsSessionToken;
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -74,7 +75,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -95,7 +95,6 @@ import org.chromium.chrome.browser.history.HistoryItem;
 import org.chromium.chrome.browser.history.TestBrowsingHistoryObserver;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
-import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -207,6 +206,7 @@ public class CustomTabActivityTest {
     private String mTestPage2;
     private EmbeddedTestServer mTestServer;
     private TestWebServer mWebServer;
+    private CustomTabsConnection mConnectionToCleanup;
 
     @Rule
     public final ScreenShooter mScreenShooter = new ScreenShooter();
@@ -242,6 +242,10 @@ public class CustomTabActivityTest {
             if (handler != null) handler.hideAppMenu();
         });
         mWebServer.shutdown();
+
+        if (mConnectionToCleanup != null) {
+            CustomTabsTestUtils.cleanupSessions(mConnectionToCleanup);
+        }
     }
 
     private CustomTabActivity getActivity() {
@@ -388,10 +392,18 @@ public class CustomTabActivityTest {
         return WebContentsUtils.isSelectPopupVisible(tab.getWebContents());
     }
 
+    private void setCanUseHiddenTabForSession(
+            CustomTabsConnection connection, CustomTabsSessionToken token, boolean useHiddenTab) {
+        assert mConnectionToCleanup == null || mConnectionToCleanup == connection;
+        // Save the connection. In case the hidden tab is not consumed by the test, ensure that it
+        // is properly cleaned up after the test.
+        mConnectionToCleanup = connection;
+        connection.setCanUseHiddenTabForSession(token, useHiddenTab);
+    }
+
     /**
      * Test the entries in the context menu shown when long clicking an image.
      * @SmallTest
-     * @RetryOnFailure
      * BUG=crbug.com/655970
      */
     @Test
@@ -434,7 +446,6 @@ public class CustomTabActivityTest {
     /**
      * Test the entries in the context menu shown when long clicking a link.
      * @SmallTest
-     * @RetryOnFailure
      * BUG=crbug.com/655970
      */
     @Test
@@ -477,7 +488,6 @@ public class CustomTabActivityTest {
     /**
      * Test the entries in the context menu shown when long clicking an mailto url.
      * @SmallTest
-     * @RetryOnFailure
      */
     @Test
     @DisabledTest
@@ -519,7 +529,6 @@ public class CustomTabActivityTest {
     /**
      * Test the entries in the context menu shown when long clicking an tel url.
      * @SmallTest
-     * @RetryOnFailure
      */
     @Test
     @DisabledTest
@@ -563,7 +572,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testAppMenu() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         int numMenuEntries = 1;
@@ -596,7 +604,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testAppMenuForMediaViewer() {
         Intent intent = createMinimalCustomTabIntent();
         intent.putExtra(CustomTabIntentDataProvider.EXTRA_UI_TYPE, CustomTabsUiType.MEDIA_VIEWER);
@@ -614,7 +621,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testAppMenuForReaderMode() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         intent.putExtra(CustomTabIntentDataProvider.EXTRA_UI_TYPE, CustomTabsUiType.READER_MODE);
@@ -637,7 +643,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testAppMenuForOfflinePage() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         intent.putExtra(CustomTabIntentDataProvider.EXTRA_UI_TYPE,
@@ -672,7 +677,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testShareMenuItem() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         intent.putExtra(CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM, true);
@@ -690,7 +694,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testMaxMenuItems() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         int numMenuEntries = 7;
@@ -712,7 +715,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCustomMenuEntry() throws TimeoutException {
         Intent customTabIntent = createMinimalCustomTabIntent();
         Intent baseCallbackIntent = new Intent();
@@ -750,7 +752,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testOpenInBrowser() throws Exception {
         // Augment the CustomTabsSession to catch the callback.
         CallbackHelper callbackTriggered = new CallbackHelper();
@@ -798,7 +799,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testTabReparentingBasic() {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
         reparentAndVerifyTab();
@@ -809,7 +809,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testTabReparentingInfoBar() {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
@@ -834,7 +833,6 @@ public class CustomTabActivityTest {
      * Test whether a custom tab can be reparented to a new activity while showing a select popup.
      */
     // @SmallTest
-    // @RetryOnFailure
     @Test
     @DisabledTest // Disabled due to flakiness on browser_side_navigation apk - see crbug.com/707766
     public void testTabReparentingSelectPopup() throws TimeoutException {
@@ -872,7 +870,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Feature({"StatusBar"})
-    @RetryOnFailure
     public void testToolbarColor() {
         Intent intent = createMinimalCustomTabIntent();
         final int expectedColor = Color.RED;
@@ -906,7 +903,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Feature({"UiCatalogue"})
-    @RetryOnFailure
     public void testActionButton() throws TimeoutException {
         Bitmap expectedIcon = createVectorDrawableBitmap(R.drawable.ic_credit_card_black, 77, 48);
         Intent intent = createMinimalCustomTabIntent();
@@ -948,7 +944,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Feature({"UiCatalogue"})
-    @RetryOnFailure
     public void testMultipleActionButtons() throws TimeoutException {
         Bitmap expectedIcon1 = createVectorDrawableBitmap(R.drawable.ic_content_copy_black, 48, 48);
         Bitmap expectedIcon2 =
@@ -1025,7 +1020,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testActionButtonBadRatio() {
         Bitmap expectedIcon = createTestBitmap(60, 20);
         Intent intent = createMinimalCustomTabIntent();
@@ -1046,7 +1040,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testBottomBar() {
         final int numItems = 3;
         final Bitmap expectedIcon = createTestBitmap(48, 24);
@@ -1113,7 +1106,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testLaunchWithSession() throws Exception {
         CustomTabsSessionToken session = warmUpAndLaunchUrlWithSession();
         assertEquals(getActivity().getIntentDataProvider().getSession(), session);
@@ -1121,7 +1113,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testLoadNewUrlWithSession() throws Exception {
         final Context context = InstrumentationRegistry.getTargetContext();
         final Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
@@ -1155,7 +1146,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCreateNewTab() throws Exception {
         final String testUrl = mTestServer.getURL(
                 "/chrome/test/data/android/customtabs/test_window_open.html");
@@ -1184,7 +1174,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testReferrerAddedAutomatically() throws Exception {
         final Context context = InstrumentationRegistry.getInstrumentation()
                                         .getTargetContext()
@@ -1220,7 +1209,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testVerifiedReferrer() throws Exception {
         final Context context = InstrumentationRegistry.getInstrumentation()
                                         .getTargetContext()
@@ -1297,7 +1285,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPageLoadMetricsAreSent() throws Exception {
         checkPageLoadMetrics(true);
     }
@@ -1392,7 +1379,7 @@ public class CustomTabActivityTest {
         connection.mClientManager.setHideDomainForSession(token, true);
 
         if (useHiddenTab) {
-            connection.setCanUseHiddenTabForSession(token, true);
+            setCanUseHiddenTabForSession(connection, token, true);
             Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(url), null, null));
             ensureCompletedSpeculationForUrl(connection, url);
         }
@@ -1423,7 +1410,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPostMessageBasic() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         Context context = InstrumentationRegistry.getTargetContext();
@@ -1462,7 +1448,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPostMessageWebContentsDestroyed() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         Context context = InstrumentationRegistry.getTargetContext();
@@ -1505,7 +1490,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPostMessageRequiresValidation() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         Context context = InstrumentationRegistry.getTargetContext();
@@ -1530,7 +1514,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPostMessageReceivedInPage() throws Exception {
         final String url =
                 mWebServer.setResponse("/test.html", TITLE_FROM_POSTMESSAGE_TO_CHANNEL, null);
@@ -1559,7 +1542,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPostMessageReceivedFromPage() throws Exception {
         final CallbackHelper messageChannelHelper = new CallbackHelper();
         final CallbackHelper onPostMessageHelper = new CallbackHelper();
@@ -1598,7 +1580,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     @DisabledTest(message = "https://crbug.com/692025")
     public void testPostMessageReceivedFromPageWithLateRequest() throws Exception {
         final CallbackHelper messageChannelHelper = new CallbackHelper();
@@ -1651,7 +1632,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     public void testPostMessageThroughHiddenTabWithRequestBeforeMayLaunchUrl() throws Exception {
         sendPostMessageDuringHiddenTabTransition(BEFORE_MAY_LAUNCH_URL);
@@ -1663,7 +1643,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     public void testPostMessageThroughHiddenTabWithRequestBeforeIntent() throws Exception {
         sendPostMessageDuringHiddenTabTransition(BEFORE_INTENT);
@@ -1675,7 +1654,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     public void testPostMessageThroughHiddenTabWithRequestAfterIntent() throws Exception {
         sendPostMessageDuringHiddenTabTransition(AFTER_INTENT);
@@ -1711,7 +1689,7 @@ public class CustomTabActivityTest {
             Assert.assertTrue(channelRequested);
         }
 
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         session.mayLaunchUrl(Uri.parse(url), null, null);
         ensureCompletedSpeculationForUrl(connection, url);
 
@@ -1773,7 +1751,6 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testPrecreatedRenderer() throws Exception {
         CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         Context context = InstrumentationRegistry.getTargetContext();
@@ -1781,7 +1758,7 @@ public class CustomTabActivityTest {
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         Assert.assertTrue(connection.newSession(token));
         // Forcing no hidden tab implies falling back to simply creating a spare WebContents.
-        connection.setCanUseHiddenTabForSession(token, false);
+        setCanUseHiddenTabForSession(connection, token, false);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), null, null));
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -1804,7 +1781,6 @@ public class CustomTabActivityTest {
     /** Tests that calling warmup() is optional without prerendering. */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testMayLaunchUrlWithoutWarmupNoSpeculation() {
         mayLaunchUrlWithoutWarmup(false);
     }
@@ -1812,7 +1788,6 @@ public class CustomTabActivityTest {
     /** Tests that calling mayLaunchUrl() without warmup() succeeds. */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testMayLaunchUrlWithoutWarmupHiddenTab() {
         mayLaunchUrlWithoutWarmup(true);
     }
@@ -1877,7 +1852,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabAndChangingFragmentIgnoreFragments() throws Exception {
         startHiddenTabAndChangeFragment(true, true);
     }
@@ -1886,7 +1860,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabAndChangingFragmentDontIgnoreFragments() throws Exception {
         startHiddenTabAndChangeFragment(false, true);
     }
@@ -1895,7 +1868,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabAndChangingFragmentDontWait() throws Exception {
         startHiddenTabAndChangeFragment(true, false);
     }
@@ -1904,7 +1876,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabAndChangingFragmentDontWaitDrop() throws Exception {
         startHiddenTabAndChangeFragment(false, false);
     }
@@ -1966,7 +1937,7 @@ public class CustomTabActivityTest {
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         connection.newSession(token);
         connection.setIgnoreUrlFragmentsForSession(token, ignoreFragments);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(initialUrl), null, null));
 
         if (wait) {
@@ -2011,7 +1982,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabCorrectUrl() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
@@ -2019,7 +1989,7 @@ public class CustomTabActivityTest {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), null, null));
         ensureCompletedSpeculationForUrl(connection, mTestPage);
 
@@ -2035,25 +2005,24 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
     public void testHiddenTabThirdPartyCookiesBlocked() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         final CustomTabsSessionToken token =
                 CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         connection.warmup(0);
 
         // Needs the browser process to be initialized.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PrefServiceBridge prefs = PrefServiceBridge.getInstance();
-            boolean old_block_pref = prefs.getBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES);
-            prefs.setBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES, false);
+            boolean old_block_pref = prefs.getBoolean(BLOCK_THIRD_PARTY_COOKIES);
+            prefs.setBoolean(BLOCK_THIRD_PARTY_COOKIES, false);
             Assert.assertTrue(connection.maySpeculate(token));
-            prefs.setBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES, true);
+            prefs.setBoolean(BLOCK_THIRD_PARTY_COOKIES, true);
             Assert.assertFalse(connection.maySpeculate(token));
-            prefs.setBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES, old_block_pref);
+            prefs.setBoolean(BLOCK_THIRD_PARTY_COOKIES, old_block_pref);
         });
     }
 
@@ -2063,12 +2032,11 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabInvalidUrl() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         Assert.assertFalse(
                 connection.mayLaunchUrl(token, Uri.parse("chrome://version"), null, null));
     }
@@ -2079,7 +2047,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testAllocateChildConnectionWithWarmup() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
@@ -2101,7 +2068,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testAllocateChildConnectionNoWarmup() {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
@@ -2124,7 +2090,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testAllocateChildConnectionWithHiddenTab() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
@@ -2132,7 +2097,7 @@ public class CustomTabActivityTest {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), null, null));
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage));
@@ -2174,7 +2139,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabWithReferrer() throws Exception {
         String referrer = "android-app://com.foo.me/";
         maybeSpeculateAndLaunchWithReferrers(
@@ -2196,7 +2160,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testHiddenTabWithMismatchedReferrers() throws Exception {
         String prerenderReferrer = "android-app://com.foo.me/";
         String launchReferrer = "android-app://com.foo.me.i.changed.my.mind/";
@@ -2216,7 +2179,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testClientCanSetReferrer() throws Exception {
         String referrerUrl = "android-app://com.foo.me/";
         maybeSpeculateAndLaunchWithReferrers(mTestPage, false, null, referrerUrl);
@@ -2252,9 +2214,8 @@ public class CustomTabActivityTest {
         ApplicationStatus.registerStateListenerForAllActivities(listener);
 
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            TabTestUtils.getTabWebContentsDelegate(cctActivity.getActivityTab())
-                    .openNewTab(
-                            "about:blank", null, null, WindowOpenDisposition.OFF_THE_RECORD, false);
+            TabTestUtils.openNewTab(cctActivity.getActivityTab(), "about:blank", null, null,
+                    WindowOpenDisposition.OFF_THE_RECORD, false);
         });
 
         mCctHiddenCallback.waitForCallback("CCT not hidden.", 0);
@@ -2342,7 +2303,7 @@ public class CustomTabActivityTest {
             CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
             CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
             connection.newSession(token);
-            connection.setCanUseHiddenTabForSession(token, true);
+            setCanUseHiddenTabForSession(connection, token, true);
             Bundle extras = null;
             if (speculationReferrer != null) {
                 extras = new Bundle();
@@ -2464,7 +2425,7 @@ public class CustomTabActivityTest {
         Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, navigationUrl);
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         connection.newSession(token);
-        connection.setCanUseHiddenTabForSession(token, true);
+        setCanUseHiddenTabForSession(connection, token, true);
 
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(speculationUrl), null, null));
         ensureCompletedSpeculationForUrl(connection, speculationUrl);
@@ -2487,7 +2448,7 @@ public class CustomTabActivityTest {
         CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         Bundle extras = null;
-        connection.setCanUseHiddenTabForSession(token, useHiddenTab);
+        setCanUseHiddenTabForSession(connection, token, useHiddenTab);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), extras, null));
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage));

@@ -23,6 +23,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_merger.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/policy/core/common/values_util.h"
 #include "components/policy/policy_constants.h"
 
 namespace policy {
@@ -59,7 +60,8 @@ void RemapProxyPolicies(PolicyMap* policies) {
       }
       if (!entry->has_higher_priority_than(current_priority) &&
           !current_priority.has_higher_priority_than(*entry)) {
-        proxy_settings->Set(kProxyPolicies[i], entry->value->CreateDeepCopy());
+        proxy_settings->Set(kProxyPolicies[i],
+                            entry->value()->CreateDeepCopy());
       }
       policies->Erase(kProxyPolicies[i]);
     }
@@ -81,29 +83,7 @@ base::flat_set<std::string> GetStringListPolicyItems(
     const PolicyBundle& bundle,
     const PolicyNamespace& space,
     const std::string& policy) {
-  const PolicyMap& chrome_policies = bundle.Get(space);
-  const base::Value* items_ptr = chrome_policies.GetValue(policy);
-
-  if (!items_ptr)
-    return base::flat_set<std::string>();
-
-  // Count the items to allocate the right-sized vector for them.
-  const auto& item_list = items_ptr->GetList();
-  const auto item_count =
-      std::count_if(item_list.begin(), item_list.end(),
-                    [](const auto& item) { return item.is_string(); });
-
-  // Allocate the storage.
-  std::vector<std::string> item_vector;
-  item_vector.reserve(item_count);
-
-  // Populate it.
-  for (const auto& item : item_list) {
-    if (item.is_string())
-      item_vector.emplace_back(item.GetString());
-  }
-
-  return base::flat_set<std::string>(std::move(item_vector));
+  return ValueToStringSet(bundle.Get(space).GetValue(policy));
 }
 
 }  // namespace
@@ -305,7 +285,7 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
   // This policy has to be ignored if it comes from a user signed-in profile.
   bool atomic_policy_group_enabled =
       atomic_policy_group_enabled_policy_value &&
-      atomic_policy_group_enabled_policy_value->value->GetBool() &&
+      atomic_policy_group_enabled_policy_value->value()->GetBool() &&
       !((atomic_policy_group_enabled_policy_value->source ==
              POLICY_SOURCE_CLOUD ||
          atomic_policy_group_enabled_policy_value->source ==

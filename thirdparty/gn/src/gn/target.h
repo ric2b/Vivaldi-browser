@@ -283,6 +283,9 @@ class Target : public Item {
   const OrderedSet<std::string>& all_frameworks() const {
     return all_frameworks_;
   }
+  const OrderedSet<std::string>& all_weak_frameworks() const {
+    return all_weak_frameworks_;
+  }
 
   const std::set<const Target*>& recursive_hard_deps() const {
     return recursive_hard_deps_;
@@ -407,6 +410,7 @@ class Target : public Item {
   bool CheckAssertNoDeps(Err* err) const;
   void CheckSourcesGenerated() const;
   void CheckSourceGenerated(const SourceFile& source) const;
+  bool CheckSourceSetLanguages(Err* err) const;
 
   OutputType output_type_ = UNKNOWN;
   std::string output_name_;
@@ -450,6 +454,7 @@ class Target : public Item {
   // all configs applying to this target.
   OrderedSet<SourceDir> all_framework_dirs_;
   OrderedSet<std::string> all_frameworks_;
+  OrderedSet<std::string> all_weak_frameworks_;
 
   // All hard deps from this target and all dependencies. Filled in when this
   // target is marked resolved. This will not include the current target.

@@ -169,8 +169,7 @@ class TestRenderFrameObserver : public RenderFrameObserver {
     }
   }
 
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override {
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override {
     if (test_runner()->ShouldDumpFrameLoadCallbacks()) {
       std::string description = frame_proxy()->GetFrameDescriptionForWebTests();
       blink_test_runner()->PrintMessage(description +
@@ -178,8 +177,16 @@ class TestRenderFrameObserver : public RenderFrameObserver {
     }
 
     // Looking for navigations to about:blank after a test completes.
-    if (render_frame()->IsMainFrame() && !is_same_document_navigation) {
+    if (render_frame()->IsMainFrame()) {
       blink_test_runner()->DidCommitNavigationInMainFrame();
+    }
+  }
+
+  void DidFinishSameDocumentNavigation() override {
+    if (test_runner()->ShouldDumpFrameLoadCallbacks()) {
+      std::string description = frame_proxy()->GetFrameDescriptionForWebTests();
+      blink_test_runner()->PrintMessage(description +
+                                        " - didCommitLoadForFrame\n");
     }
   }
 
@@ -268,14 +275,19 @@ void WebFrameTestProxy::Reset() {
   }
   if (IsLocalRoot()) {
     GetLocalRootWebWidgetTestProxy()->Reset();
-    GetLocalRootWebWidgetTestProxy()->EndSyntheticGestures();
   }
 
   spell_check_->Reset();
 }
 
 std::string WebFrameTestProxy::GetFrameNameForWebTests() {
-  return UniqueNameHelper::ExtractStableNameForTesting(unique_name());
+  // If the frame is provisional, use the name of the frame it will replace in
+  // the tree, as the provisional frame has no name until swap. The name isn't
+  // moved onto the provisional frame until swap because it may change in the
+  // meantime, but this grabs the value it currently is, which is good enough
+  // for tests.
+  return UniqueNameHelper::ExtractStableNameForTesting(
+      in_frame_tree() ? unique_name() : GetPreviousFrameUniqueName());
 }
 
 std::string WebFrameTestProxy::GetFrameDescriptionForWebTests() {
@@ -288,13 +300,6 @@ std::string WebFrameTestProxy::GetFrameDescriptionForWebTests() {
     return "frame (anonymous)";
   }
   return std::string("frame \"") + name + "\"";
-}
-
-void WebFrameTestProxy::UpdateAllLifecyclePhasesAndCompositeForTesting() {
-  if (!IsLocalRoot())
-    return;
-  auto* widget = static_cast<WebWidgetTestProxy*>(GetLocalRootRenderWidget());
-  widget->SynchronouslyComposite(/*do_raster=*/true);
 }
 
 blink::WebPlugin* WebFrameTestProxy::CreatePlugin(
@@ -703,8 +708,7 @@ void WebFrameTestProxy::DidClearWindowObject() {
   // frame before JS has a chance to run.
   GCController::Install(GetWebFrame());
   interfaces->Install(GetWebFrame());
-  test_runner()->Install(static_cast<RenderFrame*>(this), spell_check_.get(),
-                         web_view_test_proxy_->view_test_runner());
+  test_runner()->Install(this, spell_check_.get());
   web_view_test_proxy_->Install(GetWebFrame());
   GetLocalRootWebWidgetTestProxy()->Install(GetWebFrame());
   blink::WebTestingSupport::InjectInternalsObject(GetWebFrame());
@@ -720,11 +724,12 @@ void WebFrameTestProxy::CaptureDump(CaptureDumpCallback callback) {
   blink_test_runner()->CaptureDump(std::move(callback));
 }
 
-void WebFrameTestProxy::CompositeWithRaster(
-    CompositeWithRasterCallback callback) {
+void WebFrameTestProxy::SynchronouslyCompositeAfterTest(
+    SynchronouslyCompositeAfterTestCallback callback) {
   // When the TestFinished() occurred, if the browser is capturing pixels, it
   // asks each composited RenderFrame to submit a new frame via here.
-  UpdateAllLifecyclePhasesAndCompositeForTesting();
+  if (IsLocalRoot())
+    GetLocalRootWebWidgetTestProxy()->SynchronouslyCompositeAfterTest();
   std::move(callback).Run();
 }
 

@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">التالي</translation>
 <translation id="1242008676835033345">مضمّن في <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">إيقاف</translation>
+<translation id="1289742167380433257">‏لحفظ بياناتك، حسَّنت Google الصور في هذه الصفحة.</translation>
 <translation id="129382876167171263">تظهر هنا الملفات التي تحفظها المواقع الإلكترونية</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">تمت إضافة الموقع <ph name="SITE_NAME" /></translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">طلب الإذن قبل السماح لموقع إلكتروني بإنشاء خريطة ثلاثية الأبعاد للبيئة المحيطة بك أو تتبُّع موضع الكاميرا (مقترَح)</translation>
 <translation id="2212565012507486665">السماح بملفات تعريف الارتباط</translation>
 <translation id="2289270750774289114">طلب الإذن عند محاولة موقع إلكتروني العثور على أجهزة البلوتوث المجاورة (إجراء موصَى به)</translation>
+<translation id="2315043854645842844">لا يدعم نظام التشغيل تحديد الشهادة من جانب العميل.</translation>
 <translation id="2359808026110333948">متابعة</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> ميغابايت</translation>
 <translation id="2434158240863470628">اكتمل التنزيل <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">تم النسخ</translation>
 <translation id="2822354292072154809">هل تريد فعلاً إعادة ضبط جميع أذونات الموقع الإلكتروني للكائن <ph name="CHOSEN_OBJECT_NAME" />؟</translation>
 <translation id="2870560284913253234">الموقع</translation>
+<translation id="2874939134665556319">المقطع الصوتي السابق</translation>
 <translation id="2910701580606108292">السؤال قبل السماح للمواقع الإلكترونية بتشغيل المحتوى المحمي</translation>
 <translation id="2913331724188855103">السماح للمواقع الإلكترونية بحفظ بيانات ملفات تعريف الارتباط وقراءتها (موصى به)</translation>
 <translation id="2968755619301702150">عارض الشهادات</translation>
 <translation id="300526633675317032">سيؤدي هذا إلى محو مساحة التخزين البالغة <ph name="SIZE_IN_KB" /> بأكملها من مساحة تخزين المواقع الإلكترونية.</translation>
+<translation id="301521992641321250">تم الحظر تلقائيًا</translation>
 <translation id="3115898365077584848">عرض المعلومات</translation>
 <translation id="3123473560110926937">حظر الإعلانات في بعض المواقع</translation>
 <translation id="3190152372525844641">‏تفعيل الأذونات لـ Chrome في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
@@ -82,17 +86,20 @@
 <translation id="3730075448226062617">‏للسماح لمتصفِّح Chrome بالوصول إلى الميكروفون، يُرجى أيضًا تفعيل الميكروفون في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
 <translation id="3744111561329211289">المزامنة في الخلفية</translation>
 <translation id="3822502789641063741">هل تريد محو مساحة تخزين المواقع؟</translation>
-<translation id="385051799172605136">الرجوع إلى الوراء</translation>
+<translation id="385051799172605136">رجوع</translation>
+<translation id="3859306556332390985">الانتقال للأمام</translation>
 <translation id="3955193568934677022">السماح للمواقع الإلكترونية بتشغيل المحتوى المحمي (مُستحسَن)</translation>
 <translation id="3987993985790029246">نسخ الرابط</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">العنوان</translation>
 <translation id="4008040567710660924">السماح لموقع إلكتروني معيّن بتشغيل ملفات تعريف الارتباط</translation>
+<translation id="4046123991198612571">المقطع الصوتي التالي</translation>
 <translation id="4165986682804962316">إعدادات المواقع الإلكترونية</translation>
 <translation id="4226663524361240545">يمكن أن تؤدي الإشعارات إلى اهتزاز الجهاز</translation>
 <translation id="4242533952199664413">فتح الإعدادات</translation>
 <translation id="4259722352634471385">التنقل محظور: <ph name="URL" /></translation>
 <translation id="4278390842282768270">منح الإذن</translation>
+<translation id="429312253194641664">تفعيل موقع إلكتروني للوسائط</translation>
 <translation id="4433925000917964731">‏نسخة خفيفة تقدِّمها Google</translation>
 <translation id="4434045419905280838">النوافذ المنبثقة وإعادة التوجيه</translation>
 <translation id="445467742685312942">السماح للمواقع الإلكترونية بتشغيل المحتوى المَحمي</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">إبطال جميع الأذونات للجهاز</translation>
 <translation id="4964199952259983386">‏للسماح لمتصفِّح Chrome باستخدام خدمة الواقع المعزّز (AR)، يُرجى أيضًا تفعيل الكاميرا في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">انتقال للأمام</translation>
+<translation id="4996978546172906250">المشاركة عن طريق</translation>
 <translation id="5039804452771397117">سماح</translation>
 <translation id="5048398596102334565">السماح للمواقع الإلكترونية بالوصول إلى مستشعرات الحركة (مُقترَح)</translation>
 <translation id="5063480226653192405">الاستخدام</translation>
@@ -139,7 +147,7 @@
 <translation id="5922853908706496913">جارٍ مشاركة شاشتك</translation>
 <translation id="5939518447894949180">إعادة الضبط</translation>
 <translation id="6040143037577758943">إغلاق</translation>
-<translation id="6042308850641462728">المزيد</translation>
+<translation id="6042308850641462728">عرض المزيد</translation>
 <translation id="6064125863973209585">عمليات التنزيل المكتمِلة</translation>
 <translation id="6165508094623778733">مزيد من المعلومات</translation>
 <translation id="6177111841848151710">تم حظره لمحرك البحث الحالي</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">محو</translation>
 <translation id="6697925417670533197">عمليات التنزيل النشِطة</translation>
 <translation id="6746124502594467657">الانتقال إلى الأسفل</translation>
+<translation id="6766622839693428701">يمكنك التمرير السريع للأسفل للإغلاق.</translation>
 <translation id="6782111308708962316">منع المواقع الإلكترونية التابعة لجهات خارجية من حفظ بيانات ملفات تعريف الارتباط وقراءتها</translation>
+<translation id="6790428901817661496">التشغيل</translation>
 <translation id="6818926723028410516">اختيار عناصر</translation>
 <translation id="6864395892908308021">‏يتعذّر على هذا الجهاز قراءة NFC.</translation>
 <translation id="6910211073230771657">تم الحذف</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">هناك موقع إلكتروني يستخدم الكاميرا.</translation>
 <translation id="7817023149356982970">سيتم تسجيل خروجك من هذا الموقع الإلكتروني.</translation>
 <translation id="7828557259026017104">ملفات تعريف الارتباط هي ملفات تُنشئها المواقع الإلكترونية التي تزورها. وتستخدمها المواقع الإلكترونية لتتذكّر الإعدادات المفضّلة. أمّا ملفات تعريف الارتباط التابعة لجهات خارجية، فتُنشئها مواقع إلكترونية أخرى. وتمتلك هذه المواقع الإلكترونية بعضًا من المحتوى الذي تراه على صفحة الويب التي تزورها، مثل الإعلانات أو الصور.</translation>
+<translation id="7835852323729233924">تشغيل الوسائط</translation>
 <translation id="7846076177841592234">إلغاء الاختيار</translation>
 <translation id="7846621471902887024">سيتم تسجيل خروجك من جميع المواقع الإلكترونية.</translation>
 <translation id="7882806643839505685">السماح بتشغيل الصوت لموقع معين.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">هل أنت متأكّد أنك تريد محو كل البيانات المحلية، بما في ذلك ملفات تعريف الارتباط، وإعادة ضبط كافة الأذونات لهذا الموقع الإلكتروني؟</translation>
 <translation id="8007176423574883786">تم إيقافه لهذا الجهاز</translation>
 <translation id="802154636333426148">تعذّر التنزيل</translation>
+<translation id="8068648041423924542">يتعذر تحديد الشهادة.</translation>
 <translation id="8087000398470557479">‏هذا المحتوى من <ph name="DOMAIN_NAME" />، وتم عرضه من قبل Google.</translation>
 <translation id="8116925261070264013">المواقع الإلكترونية التي تم كتم الصوت فيها</translation>
 <translation id="8131740175452115882">التأكيد</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">هناك موقع إلكتروني يستخدم الميكروفون والكاميرا.</translation>
 <translation id="8380167699614421159">يعرض هذا الموقع الإلكتروني إعلانات مضلِّلة أو غير مرغوب فيها</translation>
 <translation id="8394832520002899662">يُرجى النقر للرجوع إلى الموقع الإلكتروني.</translation>
+<translation id="8425213833346101688">تغيير</translation>
+<translation id="8441146129660941386">الرجوع للوراء</translation>
 <translation id="8447861592752582886">إبطال إذن الجهاز</translation>
 <translation id="8463851957836045671">الموقع الإلكتروني سريع</translation>
 <translation id="851751545965956758">حظر المواقع الإلكترونية من الاتصال بأجهزة</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">حظر ملفات تعريف الارتباط لموقع إلكتروني مُحدَّد.</translation>
 <translation id="8959122750345127698">التنقل غير قابل للوصول: <ph name="URL" /></translation>
 <translation id="9019902583201351841">يديره والداك</translation>
+<translation id="9074739597929991885">بلوتوث</translation>
 <translation id="945632385593298557">الدخول إلى الميكروفون</translation>
 <translation id="965817943346481315">الحظر في حال كان الموقع الإلكتروني يعرض إعلانات مضلِّلة أو غير مرغوب فيها (مُستحسَن)</translation>
 </translationbundle>

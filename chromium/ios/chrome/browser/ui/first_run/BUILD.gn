@@ -5,8 +5,6 @@
 source_set("first_run") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "first_run_chrome_signin_view_controller.h",
-    "first_run_chrome_signin_view_controller.mm",
     "first_run_util.h",
     "first_run_util.mm",
     "orientation_limiting_navigation_controller.h",
@@ -27,6 +25,7 @@ source_set("first_run") {
     "//components/metrics",
     "//components/prefs",
     "//components/signin/public/identity_manager",
+    "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
@@ -38,6 +37,7 @@ source_set("first_run") {
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/authentication/signin",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/elements",
     "//ios/chrome/browser/ui/fancy_ui",
     "//ios/chrome/browser/ui/icons",
     "//ios/chrome/browser/ui/material_components",

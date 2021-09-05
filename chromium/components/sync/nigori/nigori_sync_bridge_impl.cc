@@ -498,7 +498,11 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
   }
 
   // Keystore key rotation might be not performed, but required.
-  MaybeTriggerKeystoreKeyRotation();
+  MaybeTriggerKeystoreReencryption();
+
+  // Ensure that |cryptographer| contains all keystore keys (non-keystore
+  // passphrase types only).
+  MaybePopulateKeystoreKeysIntoCryptographer();
 }
 
 NigoriSyncBridgeImpl::~NigoriSyncBridgeImpl() {
@@ -738,7 +742,7 @@ bool NigoriSyncBridgeImpl::SetKeystoreKeys(
     broadcasting_observer_->OnCryptographerStateChanged(
         state_.cryptographer.get(), state_.pending_keys.has_value());
   }
-  MaybeTriggerKeystoreKeyRotation();
+  MaybeTriggerKeystoreReencryption();
   // Note: we don't need to persist keystore keys here, because we will receive
   // Nigori node right after this method and persist all the data during
   // UpdateLocalState().
@@ -1199,9 +1203,10 @@ sync_pb::NigoriLocalData NigoriSyncBridgeImpl::SerializeAsNigoriLocalData()
   return output;
 }
 
-void NigoriSyncBridgeImpl::MaybeTriggerKeystoreKeyRotation() {
-  if (state_.NeedsKeystoreKeyRotation()) {
-    QueuePendingLocalCommit(PendingLocalNigoriCommit::ForKeystoreKeyRotation());
+void NigoriSyncBridgeImpl::MaybeTriggerKeystoreReencryption() {
+  if (state_.NeedsKeystoreReencryption()) {
+    QueuePendingLocalCommit(
+        PendingLocalNigoriCommit::ForKeystoreReencryption());
   }
 }
 
@@ -1254,6 +1259,22 @@ void NigoriSyncBridgeImpl::PutNextApplicablePendingLocalCommit() {
     pending_local_commit_queue_.front()->OnFailure(
         broadcasting_observer_.get());
     pending_local_commit_queue_.pop_front();
+  }
+}
+
+void NigoriSyncBridgeImpl::MaybePopulateKeystoreKeysIntoCryptographer() {
+  DCHECK(!state_.keystore_keys_cryptographer->IsEmpty());
+  if (state_.passphrase_type == NigoriSpecifics::KEYSTORE_PASSPHRASE) {
+    // KEYSTORE_PASSPHRASE should be ignored, because otherwise keystore key
+    // rotation logic would be broken.
+    return;
+  }
+  // These keys should usually already be in the keybag, but there is evidence
+  // that some users run into corrupt data with the keys missing in the keybag.
+  for (const std::string& keystore_key :
+       state_.keystore_keys_cryptographer->keystore_keys()) {
+    state_.cryptographer->EmplaceKey(keystore_key,
+                                     KeyDerivationParams::CreateForPbkdf2());
   }
 }
 

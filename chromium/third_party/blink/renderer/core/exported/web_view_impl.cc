@@ -140,6 +140,7 @@
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/first_meaningful_paint_detector.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/paint/paint_timing.h"
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
@@ -557,7 +558,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
         }
       }
       event_result = WebInputEventResult::kHandledSystem;
-      MainFrameImpl()->FrameWidgetImpl()->Client()->DidHandleGestureEvent(
+      MainFrameImpl()->FrameWidgetImpl()->DidHandleGestureEvent(
           event, event_cancelled);
       return event_result;
     case WebInputEvent::Type::kGestureScrollBegin:
@@ -572,7 +573,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
                          ->GetFrame()
                          ->GetEventHandler()
                          .HandleGestureScrollEvent(scaled_event);
-      MainFrameImpl()->FrameWidgetImpl()->Client()->DidHandleGestureEvent(
+      MainFrameImpl()->FrameWidgetImpl()->DidHandleGestureEvent(
           event, event_cancelled);
       return event_result;
     default:
@@ -685,8 +686,8 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
     }
     default: { NOTREACHED(); }
   }
-  MainFrameImpl()->FrameWidgetImpl()->Client()->DidHandleGestureEvent(
-      event, event_cancelled);
+  MainFrameImpl()->FrameWidgetImpl()->DidHandleGestureEvent(event,
+                                                            event_cancelled);
   return event_result;
 }
 
@@ -1663,27 +1664,27 @@ void WebViewImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
 
   if (LocalFrameView* view = MainFrameImpl()->GetFrameView()) {
     LocalFrame* frame = MainFrameImpl()->GetFrame();
-    WebWidgetClient* client =
-        WebLocalFrameImpl::FromFrame(frame)->FrameWidgetImpl()->Client();
+    WebFrameWidgetBase* frame_widget =
+        WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
 
     if (should_dispatch_first_visually_non_empty_layout_ &&
         view->IsVisuallyNonEmpty()) {
       should_dispatch_first_visually_non_empty_layout_ = false;
       // TODO(esprehn): Move users of this callback to something
       // better, the heuristic for "visually non-empty" is bad.
-      client->DidMeaningfulLayout(WebMeaningfulLayout::kVisuallyNonEmpty);
+      frame_widget->DidMeaningfulLayout(WebMeaningfulLayout::kVisuallyNonEmpty);
     }
 
     if (should_dispatch_first_layout_after_finished_parsing_ &&
         frame->GetDocument()->HasFinishedParsing()) {
       should_dispatch_first_layout_after_finished_parsing_ = false;
-      client->DidMeaningfulLayout(WebMeaningfulLayout::kFinishedParsing);
+      frame_widget->DidMeaningfulLayout(WebMeaningfulLayout::kFinishedParsing);
     }
 
     if (should_dispatch_first_layout_after_finished_loading_ &&
         frame->GetDocument()->IsLoadCompleted()) {
       should_dispatch_first_layout_after_finished_loading_ = false;
-      client->DidMeaningfulLayout(WebMeaningfulLayout::kFinishedLoading);
+      frame_widget->DidMeaningfulLayout(WebMeaningfulLayout::kFinishedLoading);
     }
   }
 }
@@ -2008,26 +2009,6 @@ bool WebViewImpl::SelectionBounds(WebRect& anchor_web,
   return true;
 }
 
-void WebViewImpl::DidAcquirePointerLock() {
-  if (MainFrameImpl())
-    MainFrameImpl()->FrameWidget()->DidAcquirePointerLock();
-}
-
-void WebViewImpl::DidNotAcquirePointerLock() {
-  if (MainFrameImpl())
-    MainFrameImpl()->FrameWidget()->DidNotAcquirePointerLock();
-}
-
-void WebViewImpl::DidLosePointerLock() {
-  // Make sure that the main frame wasn't swapped-out when the pointer lock is
-  // lost. There's a race that can happen when a pointer lock is requested, but
-  // the browser swaps out the main frame while the pointer lock request is in
-  // progress. This won't be needed once the main frame is refactored to not use
-  // the WebViewImpl as its WebWidget.
-  if (MainFrameImpl())
-    MainFrameImpl()->FrameWidget()->DidLosePointerLock();
-}
-
 // WebView --------------------------------------------------------------------
 
 WebSettingsImpl* WebViewImpl::SettingsImpl() {
@@ -2095,11 +2076,25 @@ void WebViewImpl::DidAttachLocalMainFrame() {
   }
 }
 
+void WebViewImpl::DidAttachRemoteMainFrame() {
+  DCHECK(!MainFrameImpl());
+
+  RemoteFrame* remote_frame = DynamicTo<RemoteFrame>(GetPage()->MainFrame());
+  DCHECK(remote_frame);
+
+  remote_frame->GetRemoteAssociatedInterfaces()->GetInterface(
+      remote_main_frame_host_remote_.BindNewEndpointAndPassReceiver());
+}
+
 void WebViewImpl::DidDetachLocalMainFrame() {
   // The WebWidgetClient that generated the |scoped_defer_main_frame_update_|
   // for a local main frame is going away.
   scoped_defer_main_frame_update_ = nullptr;
   local_main_frame_host_remote_.reset();
+}
+
+void WebViewImpl::DidDetachRemoteMainFrame() {
+  remote_main_frame_host_remote_.reset();
 }
 
 WebLocalFrame* WebViewImpl::FocusedFrame() {
@@ -2394,20 +2389,6 @@ double WebViewImpl::SetZoomLevel(double zoom_level) {
   return zoom_level_;
 }
 
-float WebViewImpl::TextZoomFactor() {
-  return MainFrameImpl()->GetFrame()->TextZoomFactor();
-}
-
-float WebViewImpl::SetTextZoomFactor(float text_zoom_factor) {
-  LocalFrame* frame = MainFrameImpl()->GetFrame();
-  if (frame->GetWebPluginContainer())
-    return 1;
-
-  frame->SetTextZoomFactor(text_zoom_factor);
-
-  return text_zoom_factor;
-}
-
 float WebViewImpl::PageScaleFactor() const {
   if (!GetPage())
     return 1;
@@ -2473,21 +2454,104 @@ void WebViewImpl::SetZoomFactorForDeviceScaleFactor(
 
 void WebViewImpl::SetPageLifecycleState(
     mojom::blink::PageLifecycleStatePtr state,
+    base::Optional<base::TimeTicks> navigation_start,
     SetPageLifecycleStateCallback callback) {
   Page* page = GetPage();
   if (!page)
     return;
 
-  if (state->visibility != lifecycle_state_->visibility) {
-    SetVisibilityState(state->visibility, /*is_initial_state =*/false);
+  bool storing_in_bfcache = state->is_in_back_forward_cache &&
+                            !lifecycle_state_->is_in_back_forward_cache;
+  bool restoring_from_bfcache = !state->is_in_back_forward_cache &&
+                                lifecycle_state_->is_in_back_forward_cache;
+  bool hiding_page =
+      (state->visibility != mojom::blink::PageVisibilityState::kVisible) &&
+      (lifecycle_state_->visibility ==
+       mojom::blink::PageVisibilityState::kVisible);
+  bool showing_page =
+      (state->visibility == mojom::blink::PageVisibilityState::kVisible) &&
+      (lifecycle_state_->visibility !=
+       mojom::blink::PageVisibilityState::kVisible);
+  bool freezing_page = state->is_frozen && !lifecycle_state_->is_frozen;
+  bool resuming_page = !state->is_frozen && lifecycle_state_->is_frozen;
+
+  if (hiding_page) {
+    SetVisibilityState(state->visibility, /*is_initial_state=*/false);
   }
-  if (state->is_frozen != lifecycle_state_->is_frozen) {
-    Scheduler()->SetPageFrozen(state->is_frozen);
+  if (storing_in_bfcache)
+    DispatchPagehide();
+  if (freezing_page)
+    Scheduler()->SetPageFrozen(true);
+  if (storing_in_bfcache)
+    HookBackForwardCacheEviction(true);
+  if (restoring_from_bfcache)
+    HookBackForwardCacheEviction(false);
+  if (resuming_page)
+    Scheduler()->SetPageFrozen(false);
+  if (restoring_from_bfcache)
+    DispatchPageshow(navigation_start.value());
+  if (showing_page) {
+    SetVisibilityState(mojom::blink::PageVisibilityState::kVisible,
+                       /*is_initial_state=*/false);
   }
 
   lifecycle_state_ = std::move(state);
   // Tell the browser that the freezing or resuming was successful.
   std::move(callback).Run();
+}
+
+void WebViewImpl::DispatchPagehide() {
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
+      frame->DomWindow()->ToLocalDOMWindow()->DispatchPagehideEvent(
+          PageTransitionEventPersistence::kPageTransitionEventPersisted);
+    }
+  }
+}
+
+void WebViewImpl::DispatchPageshow(base::TimeTicks navigation_start) {
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    // Record the metics.
+    if (local_frame && local_frame->View()) {
+      Document* document = local_frame->GetDocument();
+      if (document) {
+        PaintTiming::From(*document).OnRestoredFromBackForwardCache();
+        InteractiveDetector::From(*document)->OnRestoredFromBackForwardCache();
+      }
+      DocumentLoader* loader = local_frame->Loader().GetDocumentLoader();
+      if (loader) {
+        loader->GetTiming().MarkBackForwardCacheRestoreNavigationStart(
+            navigation_start);
+      }
+    }
+    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
+      frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
+          navigation_start);
+      if (frame->IsMainFrame()) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
+            frame->DomWindow()->ToLocalDOMWindow()->HasEventListeners(
+                event_type_names::kPageshow));
+      }
+    }
+  }
+}
+
+void WebViewImpl::HookBackForwardCacheEviction(bool hook) {
+  DCHECK(GetPage());
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
+      continue;
+    if (hook)
+      local_frame->HookBackForwardCacheEviction();
+    else
+      local_frame->RemoveBackForwardCacheEviction();
+  }
 }
 
 void WebViewImpl::EnableAutoResizeMode(const WebSize& min_size,
@@ -2756,6 +2820,16 @@ void WebViewImpl::EnablePreferredSizeChangedMode() {
   UpdatePreferredSize();
 }
 
+void WebViewImpl::Focus() {
+  if (GetPage()->MainFrame()->IsLocalFrame()) {
+    DCHECK(local_main_frame_host_remote_);
+    local_main_frame_host_remote_->FocusPage();
+  } else {
+    DCHECK(remote_main_frame_host_remote_);
+    remote_main_frame_host_remote_->FocusPage();
+  }
+}
+
 float WebViewImpl::DefaultMinimumPageScaleFactor() const {
   return GetPageScaleConstraintsSet().DefaultConstraints().minimum_scale;
 }
@@ -2902,15 +2976,6 @@ void WebViewImpl::PerformCustomContextMenuAction(unsigned action) {
     AsView().page->GetContextMenuController().CustomContextMenuItemSelected(
         action);
   }
-}
-
-void WebViewImpl::ShowContextMenu(WebMenuSourceType source_type) {
-  if (!MainFrameImpl())
-    return;
-
-  // If MainFrameImpl() is non-null, then FrameWidget() will also be non-null.
-  DCHECK(MainFrameImpl()->FrameWidget());
-  MainFrameImpl()->FrameWidget()->ShowContextMenu(source_type);
 }
 
 WebURL WebViewImpl::GetURLForDebugTrace() {
@@ -3418,64 +3483,6 @@ LocalFrame* WebViewImpl::FocusedLocalFrameAvailableForIme() const {
 
 void WebViewImpl::SetPageFrozen(bool frozen) {
   Scheduler()->SetPageFrozen(frozen);
-}
-
-void WebViewImpl::PutPageIntoBackForwardCache() {
-  DCHECK(GetPage());
-
-  SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
-                     /*is_initial_state=*/false);
-
-  for (Frame* frame = GetPage()->MainFrame(); frame;
-       frame = frame->Tree().TraverseNext()) {
-    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
-      frame->DomWindow()->ToLocalDOMWindow()->DispatchPagehideEvent(
-          PageTransitionEventPersistence::kPageTransitionEventPersisted);
-    }
-  }
-
-  // Freeze the page.
-  Scheduler()->SetPageFrozen(/*frozen =*/true);
-  // Hook eviction.
-  for (Frame* frame = GetPage()->MainFrame(); frame;
-       frame = frame->Tree().TraverseNext()) {
-    auto* local_frame = DynamicTo<LocalFrame>(frame);
-    if (!local_frame)
-      continue;
-    local_frame->HookBackForwardCacheEviction();
-  }
-}
-
-void WebViewImpl::RestorePageFromBackForwardCache(
-    base::TimeTicks navigation_start) {
-  DCHECK(GetPage());
-
-  // Unhook eviction.
-  for (Frame* frame = GetPage()->MainFrame(); frame;
-       frame = frame->Tree().TraverseNext()) {
-    auto* local_frame = DynamicTo<LocalFrame>(frame);
-    if (!local_frame)
-      continue;
-    local_frame->RemoveBackForwardCacheEviction();
-  }
-
-  // Resume the page.
-  Scheduler()->SetPageFrozen(/*frozen =*/false);
-  for (Frame* frame = GetPage()->MainFrame(); frame;
-       frame = frame->Tree().TraverseNext()) {
-    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
-      frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
-          navigation_start);
-      if (frame->IsMainFrame()) {
-        UMA_HISTOGRAM_BOOLEAN(
-            "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
-            frame->DomWindow()->ToLocalDOMWindow()->HasEventListeners(
-                event_type_names::kPageshow));
-      }
-    }
-  }
-  SetVisibilityState(mojom::blink::PageVisibilityState::kVisible,
-                     /*is_initial_state=*/false);
 }
 
 WebFrameWidget* WebViewImpl::MainFrameWidget() {

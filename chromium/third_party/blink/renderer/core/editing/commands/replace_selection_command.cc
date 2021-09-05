@@ -1378,7 +1378,7 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
   Element* block_start = EnclosingBlock(insertion_pos.AnchorNode());
   if ((IsHTMLListElement(inserted_nodes.RefNode()) ||
        (IsHTMLListElement(inserted_nodes.RefNode()->firstChild()))) &&
-      block_start && block_start->GetLayoutObject()->IsListItem() &&
+      block_start && block_start->GetLayoutObject()->IsListItemIncludingNG() &&
       HasEditableStyle(*block_start->parentNode())) {
     inserted_nodes.SetRefNode(InsertAsListItems(
         To<HTMLElement>(inserted_nodes.RefNode()), block_start, insertion_pos,
@@ -2104,7 +2104,7 @@ EphemeralRange ReplaceSelectionCommand::InsertedRange() const {
   return EphemeralRange(start_of_inserted_range_, end_of_inserted_range_);
 }
 
-void ReplaceSelectionCommand::Trace(Visitor* visitor) {
+void ReplaceSelectionCommand::Trace(Visitor* visitor) const {
   visitor->Trace(start_of_inserted_content_);
   visitor->Trace(end_of_inserted_content_);
   visitor->Trace(insertion_style_);

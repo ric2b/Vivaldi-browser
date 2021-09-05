@@ -15,7 +15,8 @@ namespace omnibox {
 extern const base::Feature kHideFileUrlScheme;
 extern const base::Feature kHideSteadyStateUrlScheme;
 extern const base::Feature kHideSteadyStateUrlTrivialSubdomains;
-extern const base::Feature kHideSteadyStateUrlPathQueryAndRef;
+extern const base::Feature kRevealSteadyStateUrlPathQueryAndRefOnHover;
+extern const base::Feature kHideSteadyStateUrlPathQueryAndRefOnInteraction;
 extern const base::Feature kOmniboxLocalEntitySuggestions;
 extern const base::Feature kOmniboxReverseAnswers;
 extern const base::Feature kOmniboxShortBookmarkSuggestions;
@@ -24,11 +25,9 @@ extern const base::Feature kOmniboxTabSwitchSuggestions;
 extern const base::Feature kOmniboxTabSwitchSuggestionsDedicatedRow;
 extern const base::Feature kExperimentalKeywordMode;
 extern const base::Feature kOmniboxPedalSuggestions;
-extern const base::Feature kOmniboxSuggestionTransparencyOptions;
 extern const base::Feature kEnableClipboardProviderImageSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kDisplayTitleForCurrentUrl;
-extern const base::Feature kQueryInOmnibox;
 extern const base::Feature kUIExperimentSwapTitleAndUrl;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
 extern const base::Feature kDocumentProvider;
@@ -61,8 +60,9 @@ extern const base::Feature kOmniboxMaxURLMatches;
 // On-Focus Suggestions a.k.a. ZeroSuggest.
 extern const base::Feature kOnFocusSuggestions;
 extern const base::Feature kOnFocusSuggestionsContextualWeb;
-extern const base::Feature kProactiveZeroSuggestionsOnNTPOmnibox;
-extern const base::Feature kProactiveZeroSuggestionsOnNTPRealbox;
+extern const base::Feature kOnFocusSuggestionsContextualWebOnContent;
+extern const base::Feature kReactiveZeroSuggestionsOnNTPOmnibox;
+extern const base::Feature kReactiveZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnNTP;
 extern const base::Feature kZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnSERP;
@@ -79,12 +79,13 @@ extern const base::Feature kHistoryQuickProviderAllowMidwordContinuations;
 // Suggestions UI - these affect the UI or function of the suggestions popup.
 extern const base::Feature kAdaptiveSuggestionsCount;
 extern const base::Feature kCompactSuggestions;
-extern const base::Feature kConfirmOmniboxSuggestionRemovals;
 extern const base::Feature kDeferredKeyboardPopup;
 extern const base::Feature kRichAutocompletion;
 extern const base::Feature kOmniboxLooseMaxLimitOnDedicatedRows;
+extern const base::Feature kOmniboxSearchReadyIncognito;
 extern const base::Feature kOmniboxSuggestionButtonRow;
 extern const base::Feature kOmniboxSuggestionsRecyclerView;
+extern const base::Feature kOmniboxSuggestionsWrapAround;
 extern const base::Feature kWebUIOmniboxPopup;
 
 // Omnibox UI - these affect the UI or function of the location bar (not the

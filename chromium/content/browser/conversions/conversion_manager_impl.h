@@ -64,6 +64,10 @@ class CONTENT_EXPORT ConversionManagerImpl : public ConversionManager {
         base::RepeatingCallback<void(int64_t)> report_sent_callback) = 0;
   };
 
+  // Configures underlying storage to be setup in memory, rather than on
+  // disk. This speeds up initialization to avoid timeouts in test environments.
+  static void RunInMemoryForTesting();
+
   static std::unique_ptr<ConversionManagerImpl> CreateForTesting(
       std::unique_ptr<ConversionReporter> reporter,
       std::unique_ptr<ConversionPolicy> policy,
@@ -72,6 +76,9 @@ class CONTENT_EXPORT ConversionManagerImpl : public ConversionManager {
       scoped_refptr<base::SequencedTaskRunner> storage_task_runner);
 
   // |storage_task_runner| should run with base::TaskPriority::BEST_EFFORT.
+  // TODO(https://crbug.com/1080764): The storage task runner is instead run
+  // with base::TaskPriority::USER_VISIBLE to address some timeouts.
+  // Documentation should be updated.
   ConversionManagerImpl(
       StoragePartition* storage_partition,
       const base::FilePath& user_data_directory,
@@ -162,8 +169,7 @@ class CONTENT_EXPORT ConversionManagerImpl : public ConversionManager {
   // ConversionStorage instance which is scoped to lifetime of
   // |storage_task_runner_|. |storage_| should be accessed by calling
   // base::PostTask with |storage_task_runner_|, and should not be accessed
-  // directly. |storage_| can be null if the storage initialization did not
-  // succeed.
+  // directly. |storage_| should never be nullptr.
   //
   // TODO(https://crbug.com/1066920): This should use base::SequenceBound to
   // avoid having to call PostTask manually, as well as use base::Unretained on

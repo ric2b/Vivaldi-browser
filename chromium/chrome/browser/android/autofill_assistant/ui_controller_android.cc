@@ -54,6 +54,7 @@
 #include "components/version_info/channel.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -242,6 +243,23 @@ base::Optional<bool> GetPreviousFormSelectionResult(
   return input_result.selection().selected(selection_index);
 }
 
+bool ShouldAllowSoftKeyboardForState(AutofillAssistantState state) {
+  switch (state) {
+    case AutofillAssistantState::STARTING:
+    case AutofillAssistantState::RUNNING:
+      return false;
+
+    case AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT:
+    case AutofillAssistantState::PROMPT:
+    case AutofillAssistantState::BROWSE:
+    case AutofillAssistantState::MODAL_DIALOG:
+    case AutofillAssistantState::STOPPED:
+    case AutofillAssistantState::TRACKING:
+    case AutofillAssistantState::INACTIVE:
+      return true;
+  }
+}
+
 }  // namespace
 
 // static
@@ -297,6 +315,9 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
 
   client_ = client;
 
+  // Remove the self destruction.
+  self_destruct_observer_.reset();
+
   // Detach from the current ui_delegate, if one was set previously.
   if (ui_delegate_)
     ui_delegate_->RemoveObserver(this);
@@ -321,7 +342,22 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
     // The UI was created for an existing Controller.
     OnStatusMessageChanged(ui_delegate->GetStatusMessage());
     OnBubbleMessageChanged(ui_delegate->GetBubbleMessage());
-    OnProgressChanged(ui_delegate->GetProgress());
+    auto step_progress_bar_configuration =
+        ui_delegate->GetStepProgressBarConfiguration();
+    if (step_progress_bar_configuration.has_value()) {
+      OnStepProgressBarConfigurationChanged(*step_progress_bar_configuration);
+      if (step_progress_bar_configuration->use_step_progress_bar()) {
+        auto active_step = ui_delegate_->GetProgressActiveStep();
+        if (active_step.has_value()) {
+          OnProgressActiveStepChanged(*active_step);
+        }
+        OnProgressBarErrorStateChanged(ui_delegate->GetProgressBarErrorState());
+      }
+    } else {
+      OnStepProgressBarConfigurationChanged(
+          ShowProgressBarProto::StepProgressBarConfiguration());
+      OnProgressChanged(ui_delegate->GetProgress());
+    }
     OnProgressVisibilityChanged(ui_delegate->GetProgressVisible());
     OnInfoBoxChanged(ui_delegate_->GetInfoBox());
     OnDetailsChanged(ui_delegate->GetDetails());
@@ -388,6 +424,7 @@ void UiControllerAndroid::SetupForState() {
 
   UpdateActions(ui_delegate_->GetUserActions());
   AutofillAssistantState state = ui_delegate_->GetState();
+  AllowShowingSoftKeyboard(ShouldAllowSoftKeyboardForState(state));
   bool should_prompt_action_expand_sheet =
       ui_delegate_->ShouldPromptActionExpandSheet();
   switch (state) {
@@ -472,9 +509,38 @@ void UiControllerAndroid::OnProgressChanged(int progress) {
                                         progress);
 }
 
+void UiControllerAndroid::OnProgressActiveStepChanged(int active_step) {
+  Java_AssistantHeaderModel_setProgressActiveStep(
+      AttachCurrentThread(), GetHeaderModel(), active_step);
+}
+
 void UiControllerAndroid::OnProgressVisibilityChanged(bool visible) {
   Java_AssistantHeaderModel_setProgressVisible(AttachCurrentThread(),
                                                GetHeaderModel(), visible);
+}
+
+void UiControllerAndroid::OnProgressBarErrorStateChanged(bool error) {
+  Java_AssistantHeaderModel_setProgressBarErrorState(AttachCurrentThread(),
+                                                     GetHeaderModel(), error);
+}
+
+void UiControllerAndroid::OnStepProgressBarConfigurationChanged(
+    const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
+  JNIEnv* env = AttachCurrentThread();
+  auto jmodel = GetHeaderModel();
+  Java_AssistantHeaderModel_setUseStepProgressBar(
+      env, jmodel, configuration.use_step_progress_bar());
+  if (!configuration.step_icons().empty()) {
+    auto jcontext =
+        Java_AutofillAssistantUiController_getContext(env, java_object_);
+    auto jlist = Java_AssistantHeaderModel_createIconList(env);
+    for (const auto& icon : configuration.step_icons()) {
+      Java_AssistantHeaderModel_addStepProgressBarIcon(
+          env, jlist,
+          ui_controller_android_utils::CreateJavaDrawable(env, jcontext, icon));
+    }
+    Java_AssistantHeaderModel_setStepProgressBarIcons(env, jmodel, jlist);
+  }
 }
 
 void UiControllerAndroid::OnViewportModeChanged(ViewportMode mode) {
@@ -508,6 +574,11 @@ void UiControllerAndroid::OnOverlayColorsChanged(
   Java_AssistantOverlayModel_setHighlightBorderColor(
       env, overlay_model,
       ui_controller_android_utils::GetJavaColor(env, colors.highlight_border));
+}
+
+void UiControllerAndroid::AllowShowingSoftKeyboard(bool enabled) {
+  Java_AssistantModel_setAllowSoftKeyboard(AttachCurrentThread(), GetModel(),
+                                           enabled);
 }
 
 void UiControllerAndroid::ShowContentAndExpandBottomSheet() {
@@ -586,6 +657,7 @@ std::string UiControllerAndroid::GetDebugContext() {
 }
 
 void UiControllerAndroid::DestroySelf() {
+  self_destruct_observer_.reset();
   client_->DestroyUI();
 }
 
@@ -716,9 +788,11 @@ void UiControllerAndroid::OnCancelButtonClicked(
   // chip will be displayed right above the keyboard.
   if (Java_AutofillAssistantUiController_isKeyboardShown(env, java_object_)) {
     Java_AutofillAssistantUiController_hideKeyboard(env, java_object_);
-  } else {
-    CloseOrCancel(index, TriggerContext::CreateEmpty());
+    return;
   }
+
+  CloseOrCancel(index, TriggerContext::CreateEmpty(),
+                Metrics::DropOutReason::SHEET_CLOSED);
 }
 
 void UiControllerAndroid::OnCloseButtonClicked(
@@ -756,13 +830,15 @@ bool UiControllerAndroid::OnBackButtonClicked(
     return false;
   }
 
-  CloseOrCancel(-1, TriggerContext::CreateEmpty());
+  CloseOrCancel(-1, TriggerContext::CreateEmpty(),
+                Metrics::DropOutReason::BACK_BUTTON_CLICKED);
   return true;
 }
 
 void UiControllerAndroid::CloseOrCancel(
     int action_index,
-    std::unique_ptr<TriggerContext> trigger_context) {
+    std::unique_ptr<TriggerContext> trigger_context,
+    Metrics::DropOutReason dropout_reason) {
   // Close immediately.
   if (!ui_delegate_ ||
       ui_delegate_->GetState() == AutofillAssistantState::STOPPED) {
@@ -785,16 +861,17 @@ void UiControllerAndroid::CloseOrCancel(
                l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_STOPPED),
                base::BindOnce(&UiControllerAndroid::OnCancel,
                               weak_ptr_factory_.GetWeakPtr(), action_index,
-                              std::move(trigger_context)));
+                              std::move(trigger_context), dropout_reason));
 }
 
 void UiControllerAndroid::OnCancel(
     int action_index,
-    std::unique_ptr<TriggerContext> trigger_context) {
+    std::unique_ptr<TriggerContext> trigger_context,
+    Metrics::DropOutReason dropout_reason) {
   if (action_index == -1 || !ui_delegate_ ||
       !ui_delegate_->PerformUserActionWithContext(action_index,
                                                   std::move(trigger_context))) {
-    Shutdown(Metrics::DropOutReason::SHEET_CLOSED);
+    Shutdown(dropout_reason);
   }
 }
 
@@ -872,9 +949,35 @@ void UiControllerAndroid::CloseCustomTab() {
       AttachCurrentThread(), java_object_);
 }
 
+UiControllerAndroid::SelfDestructObserver::SelfDestructObserver(
+    content::WebContents* web_contents,
+    UiControllerAndroid* ui_controller,
+    int64_t navigation_id_to_ignore)
+    : content::WebContentsObserver(web_contents),
+      ui_controller_(ui_controller),
+      navigation_id_to_ignore_(navigation_id_to_ignore) {}
+
+UiControllerAndroid::SelfDestructObserver::~SelfDestructObserver() {}
+
+void UiControllerAndroid::SelfDestructObserver::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsRendererInitiated() ||
+      navigation_handle->GetNavigationId() == navigation_id_to_ignore_) {
+    return;
+  }
+  ui_controller_->DestroySelf();
+}
+
 void UiControllerAndroid::Detach() {
   if (!ui_delegate_)
     return;
+
+  auto* web_contents = client_->GetWebContents();
+  if (web_contents != nullptr) {
+    self_destruct_observer_ = std::make_unique<SelfDestructObserver>(
+        web_contents, this, ui_delegate_->GetErrorCausingNavigationId());
+  }
 
   ResetGenericUiControllers();
 
@@ -983,6 +1086,34 @@ void UiControllerAndroid::OnTextFocusLost() {
       base::BindOnce(&UiControllerAndroid::HideKeyboardIfFocusNotOnText,
                      weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(50));
+}
+
+bool UiControllerAndroid::IsContactComplete(
+    autofill::AutofillProfile* contact) {
+  auto* options = ui_delegate_->GetCollectUserDataOptions();
+  if (options == nullptr) {
+    return false;
+  }
+  return IsCompleteContact(contact, *options);
+}
+
+bool UiControllerAndroid::IsShippingAddressComplete(
+    autofill::AutofillProfile* address) {
+  auto* options = ui_delegate_->GetCollectUserDataOptions();
+  if (options == nullptr) {
+    return false;
+  }
+  return IsCompleteShippingAddress(address, *options);
+}
+
+bool UiControllerAndroid::IsPaymentInstrumentComplete(
+    autofill::CreditCard* card,
+    autofill::AutofillProfile* address) {
+  auto* options = ui_delegate_->GetCollectUserDataOptions();
+  if (options == nullptr) {
+    return false;
+  }
+  return IsCompleteCreditCard(card, address, *options);
 }
 
 void UiControllerAndroid::HideKeyboardIfFocusNotOnText() {
@@ -1528,14 +1659,9 @@ void UiControllerAndroid::OnGenericUserInterfaceChanged(
   // Try to inflate user interface from proto.
   if (generic_ui != nullptr) {
     generic_ui_controller_ = CreateGenericUiControllerForProto(*generic_ui);
-    if (generic_ui_controller_ == nullptr) {
-      // If creation of generic UI fails, end the action.
-      LOG(ERROR) << "Failed to show generic ui: view inflation failed";
-      EndActionProto action_failed;
-      action_failed.set_status(INVALID_ACTION);
-      ui_delegate_->GetBasicInteractions()->EndAction(
-          /* view_inflation_successful = */ false, action_failed);
-    }
+    ClientStatus status(generic_ui_controller_ ? ACTION_APPLIED
+                                               : INVALID_ACTION);
+    ui_delegate_->GetBasicInteractions()->NotifyViewInflationFinished(status);
   } else {
     generic_ui_controller_.reset();
   }
@@ -1663,7 +1789,8 @@ UiControllerAndroid::CreateGenericUiControllerForProto(
   auto jcontext =
       Java_AutofillAssistantUiController_getContext(env, java_object_);
   return GenericUiControllerAndroid::CreateFromProto(
-      proto, base::android::ScopedJavaGlobalRef<jobject>(jcontext),
+      proto, /* context = */ {},
+      base::android::ScopedJavaGlobalRef<jobject>(jcontext),
       generic_ui_delegate_.GetJavaObject(), ui_delegate_->GetEventHandler(),
       ui_delegate_->GetUserModel(), ui_delegate_->GetBasicInteractions());
 }

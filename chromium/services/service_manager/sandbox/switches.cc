@@ -36,10 +36,12 @@ const char kVideoCaptureSandbox[] = "video_capture";
 const char kPdfConversionSandbox[] = "pdf_conversion";
 const char kProxyResolverSandbox[] = "proxy_resolver";
 const char kXrCompositingSandbox[] = "xr_compositing";
+const char kIconReaderSandbox[] = "icon_reader";
 #endif  // OS_WIN
 
 #if defined(OS_CHROMEOS)
 const char kImeSandbox[] = "ime";
+const char kTtsSandbox[] = "tts";
 #endif  // OS_CHROMEOS
 
 // Flags owned by the service manager sandbox.
@@ -80,6 +82,7 @@ const char kGpuSandboxAllowSysVShm[] = "gpu-sandbox-allow-sysv-shm";
 const char kGpuSandboxFailuresFatal[] = "gpu-sandbox-failures-fatal";
 
 // Disables the sandbox for all process types that are normally sandboxed.
+// Meant to be used as a browser-level switch for testing purposes only.
 const char kNoSandbox[] = "no-sandbox";
 
 #if defined(OS_LINUX)

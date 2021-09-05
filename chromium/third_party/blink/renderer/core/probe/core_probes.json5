@@ -24,6 +24,11 @@
         "ExecuteScript",
       ]
     },
+    InspectorIssueReporter: {
+      probes: [
+        "DidFailLoading",
+      ]
+    },
     InspectorAnimationAgent: {
       probes: [
         "AnimationPlayStateChanged",
@@ -45,6 +50,7 @@
     InspectorCSSAgent: {
       probes: [
         "ActiveStyleSheetsUpdated",
+        "DidMutateStyleSheet",
         "DocumentDetached",
         "FontsUpdated",
         "ForcePseudoState",

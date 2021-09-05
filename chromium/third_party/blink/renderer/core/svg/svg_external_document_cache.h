@@ -24,6 +24,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_EXTERNAL_DOCUMENT_CACHE_H_
 
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
@@ -31,8 +32,9 @@
 
 namespace blink {
 class Document;
+class ExecutionContext;
 
-class SVGExternalDocumentCache
+class CORE_EXPORT SVGExternalDocumentCache
     : public GarbageCollected<SVGExternalDocumentCache>,
       public Supplement<Document> {
   USING_GARBAGE_COLLECTED_MIXIN(SVGExternalDocumentCache);
@@ -41,21 +43,21 @@ class SVGExternalDocumentCache
   static const char kSupplementName[];
   static SVGExternalDocumentCache* From(Document&);
   explicit SVGExternalDocumentCache(Document&);
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   class Client : public GarbageCollectedMixin {
    public:
     virtual void NotifyFinished(Document*) = 0;
   };
 
-  class Entry final : public GarbageCollected<Entry>, public ResourceClient {
+  class CORE_EXPORT Entry final : public GarbageCollected<Entry>,
+                                  public ResourceClient {
     USING_GARBAGE_COLLECTED_MIXIN(Entry);
 
    public:
-    explicit Entry(Document* context_document)
-        : context_document_(context_document) {}
+    explicit Entry(ExecutionContext* context) : context_(context) {}
     ~Entry() override = default;
-    void Trace(Visitor*) override;
+    void Trace(Visitor*) const override;
     Document* GetDocument();
     const KURL& Url() const { return GetResource()->Url(); }
 
@@ -68,7 +70,7 @@ class SVGExternalDocumentCache
     String DebugName() const override { return "SVGExternalDocumentCache"; }
 
     Member<Document> document_;
-    Member<Document> context_document_;
+    Member<ExecutionContext> context_;
     HeapHashSet<WeakMember<Client>> clients_;
   };
 

@@ -1,35 +1,51 @@
-# tags: [ android chromeos highsierra linux mac mojave win ]
+# tags: [ android
+#         chromeos
+#         mac highsierra mojave
+#         linux
+#         win win7 ]
 # tags: [ android-chromium android-webview-instrumentation android-not-webview debug ]
 # tags: [ skia-renderer no-skia-renderer ]
 # tags: [ use-gl no-use-gl ]
 # tags: [ use-vulkan no-use-vulkan ]
 # tags: [ use-skia-dawn no-use-skia-dawn ]
-# tags: [ amd amd-0x6613 amd-0x679e amd-0x6821 intel intel-0xa2e intel-0x5912
-#         intel-0xd26 nvidia qualcomm-adreno-(tm)-330 qualcomm-adreno-(tm)-418
-#         qualcomm-adreno-(tm)-420 qualcomm-adreno-(tm)-430
-#         qualcomm-adreno-(tm)-540
+# tags: [ chromeos-board-kevin ]
+# tags: [ amd amd-0x6613 amd-0x679e amd-0x6821
+#         intel intel-0xa2e intel-0x5912 intel-0xd26 intel-0x3e92
+#         nvidia
+#         qualcomm-adreno-(tm)-330 qualcomm-adreno-(tm)-418 qualcomm-adreno-(tm)-420
+#         qualcomm-adreno-(tm)-430 qualcomm-adreno-(tm)-540
 # ]
 # results: [ Failure RetryOnFailure Skip ]
 
 # Seems to be flaky on the new AMD R7 240 drivers.
 crbug.com/653538 [ win amd-0x6613 ] Pixel_GpuRasterization_BlueBox [ RetryOnFailure ]
 
-# Software compositing is not supported on Android: we skip the tests that
-# disable GPU compositing (--disable-gpu-compositing).
+# Software compositing is not supported on Android/ChromeOS: we skip the tests
+# that disable GPU compositing (--disable-gpu-compositing).
 [ android ] Pixel_OffscreenCanvasUnaccelerated2D [ Skip ]
 [ android ] Pixel_OffscreenCanvasUnaccelerated2DWorker [ Skip ]
 [ android ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositing [ Skip ]
 [ android ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker [ Skip ]
 [ android ] Pixel_OffscreenCanvasWebGLSoftwareCompositing [ Skip ]
 [ android ] Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker [ Skip ]
-[ android ] Pixel_CanvasDisplayLinearRGBUnaccelerated2D [ Skip ]
-[ android ] Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing [ Skip ]
 [ android ] Pixel_CanvasDisplaySRGBUnaccelerated2DGPUCompositing [ Skip ]
 [ android ] Pixel_CanvasDisplaySRGBUnaccelerated2D [ Skip ]
 [ android ] Pixel_CanvasUnacceleratedLowLatency2D [ Skip ]
 [ android ] Pixel_RepeatedWebGLTo2D_SoftwareCompositing [ Skip ]
 [ android ] Pixel_Canvas2DTabSwitch_SoftwareCompositing [ Skip ]
 [ android ] Pixel_WebGLReadPixelsTabSwitch_SoftwareCompositing [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasUnaccelerated2D [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasUnaccelerated2DWorker [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositing [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasWebGLSoftwareCompositing [ Skip ]
+[ chromeos ] Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker [ Skip ]
+[ chromeos ] Pixel_CanvasDisplaySRGBUnaccelerated2DGPUCompositing [ Skip ]
+[ chromeos ] Pixel_CanvasDisplaySRGBUnaccelerated2D [ Skip ]
+[ chromeos ] Pixel_CanvasUnacceleratedLowLatency2D [ Skip ]
+[ chromeos ] Pixel_RepeatedWebGLTo2D_SoftwareCompositing [ Skip ]
+[ chromeos ] Pixel_Canvas2DTabSwitch_SoftwareCompositing [ Skip ]
+[ chromeos ] Pixel_WebGLReadPixelsTabSwitch_SoftwareCompositing [ Skip ]
 
 # Skip tab switching tests on Android webview since it doesn't have tabs
 [ android android-webview-instrumentation ] Pixel_Canvas2DTabSwitch [ Skip ]
@@ -118,7 +134,7 @@ crbug.com/868596 [ android android-chromium nvidia ] Pixel_OffscreenCanvasWebGLP
 crbug.com/948141 Pixel_CanvasDisplaySRGBAccelerated2D [ Skip ]
 
 # Fails on Nexus 5, 6 and 6P
-crbug.com/883500 [ android no-skia-renderer qualcomm-adreno-(tm)-330 ] Pixel_BackgroundImage [ Skip ]
+crbug.com/883500 [ android qualcomm-adreno-(tm)-330 ] Pixel_BackgroundImage [ Skip ]
 crbug.com/883500 [ android no-use-gl no-use-vulkan qualcomm-adreno-(tm)-420 ] Pixel_BackgroundImage [ Skip ]
 crbug.com/883500 [ android no-use-gl no-use-vulkan qualcomm-adreno-(tm)-430 ] Pixel_BackgroundImage [ Skip ]
 crbug.com/1029389 [ android qualcomm-adreno-(tm)-330 ] Pixel_PrecisionRoundedCorner [ Skip ]
@@ -161,7 +177,6 @@ crbug.com/974380 [ win ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorke
 
 # Producing blank images on Macmini and Macbook Pro
 crbug.com/974380 [ mac ] Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker [ Skip ]
-crbug.com/974383 [ mac ] Pixel_CanvasDisplayLinearRGBAccelerated2D [ Skip ]
 
 # Skia Renderer, producing incorrect color in one quadrant
 crbug.com/1008450 [ android use-vulkan skia-renderer ] Pixel_Video_BackdropFilter [ Skip ]
@@ -176,22 +191,10 @@ crbug.com/1068301 [ win no-skia-renderer ] Pixel_DirectComposition_Video_MP4_Rou
 # Produces blank images on Intel HD 630 w/ Mesa 19.0.2
 crbug.com/976861 [ linux intel-0x5912 no-use-skia-dawn ] Pixel_OffscreenCanvasTransferToImageBitmap [ Skip ]
 
-# Skip swap chain tests on non-Windows
-[ android ] Pixel_CanvasLowLatency2DSwapChain [ Skip ]
-[ android ] Pixel_CanvasLowLatencyWebGLSwapChain [ Skip ]
-[ android ] Pixel_CanvasLowLatencyWebGLSwapChainAlphaFalse [ Skip ]
-[ chromeos ] Pixel_CanvasLowLatency2DSwapChain [ Skip ]
-[ chromeos ] Pixel_CanvasLowLatencyWebGLSwapChain [ Skip ]
-[ chromeos ] Pixel_CanvasLowLatencyWebGLSwapChainAlphaFalse [ Skip ]
-[ linux ] Pixel_CanvasLowLatency2DSwapChain [ Skip ]
-[ linux ] Pixel_CanvasLowLatencyWebGLSwapChain [ Skip ]
-[ linux ] Pixel_CanvasLowLatencyWebGLSwapChainAlphaFalse [ Skip ]
-[ mac ] Pixel_CanvasLowLatency2DSwapChain [ Skip ]
-[ mac ] Pixel_CanvasLowLatencyWebGLSwapChain [ Skip ]
-[ mac ] Pixel_CanvasLowLatencyWebGLSwapChainAlphaFalse [ Skip ]
-
-# Producing incorrect image on Win10 Intel HD 630 w/ 26.20.100.6912 drivers.
+# Producing incorrect image on Win10 Intel HD 630 and UHD 630 w/ 26.20.100.6912
+# or later drivers.
 crbug.com/997313 [ win intel-0x5912 no-use-skia-dawn ] Pixel_WebGL_PremultipliedAlpha_False [ Failure ]
+crbug.com/997313 [ win intel-0x3e92 no-use-skia-dawn ] Pixel_WebGL_PremultipliedAlpha_False [ Failure ]
 
 # Flakes on Nexus 9 or NVIDIA Shield TV
 crbug.com/1019462 [ android nvidia no-skia-renderer ] Pixel_Video_MP4_FourColors_Aspect_4x3 [ RetryOnFailure ]
@@ -228,9 +231,12 @@ crbug.com/1066979 [ win ] Pixel_Canvas2DRedBoxHdr10 [ Skip ]
 # SkiaRenderer Dawn doesn't support accelerated canvas, webgl, video, or
 # direct composition.
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_Canvas2DTabSwitch [ Skip ]
-crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasDisplayLinearRGBAccelerated2D [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatency2D [ Skip ]
+crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatency2DDrawImage [ Skip ]
+crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatency2DImageData [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatencyWebGL [ Skip ]
+crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatencyWebGLAlphaFalse [ Skip ]
+crbug.com/1021566 [ linux use-skia-dawn ] Pixel_CanvasLowLatencyWebGLDrawImage [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_OffscreenCanvas2DResizeOnWorker [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_OffscreenCanvasTransferBeforeStyleResize [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_OffscreenCanvasWebGLPaintAfterResize [ Skip ]
@@ -244,12 +250,12 @@ crbug.com/1021566 [ linux use-skia-dawn ] Pixel_WebGL2_ClearBufferfv_Result_Disp
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_WebGLReadPixelsTabSwitch [ Skip ]
 crbug.com/1021566 [ linux use-skia-dawn ] Pixel_WebGL_PremultipliedAlpha_False [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_Canvas2DTabSwitch [ Skip ]
-crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasDisplayLinearRGBAccelerated2D [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatency2D [ Skip ]
-crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatency2DSwapChain [ Skip ]
+crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatency2DDrawImage [ Skip ]
+crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatency2DImageData [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatencyWebGL [ Skip ]
-crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatencyWebGLSwapChain [ Skip ]
-crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatencyWebGLSwapChainAlphaFalse [ Skip ]
+crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatencyWebGLAlphaFalse [ Skip ]
+crbug.com/1021566 [ win use-skia-dawn ] Pixel_CanvasLowLatencyWebGLDrawImage [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_OffscreenCanvas2DResizeOnWorker [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_OffscreenCanvasTransferBeforeStyleResize [ Skip ]
 crbug.com/1021566 [ win use-skia-dawn ] Pixel_OffscreenCanvasWebGLPaintAfterResize [ Skip ]
@@ -313,5 +319,23 @@ crbug.com/1021566 [ use-skia-dawn ] Pixel_WebGLGreenTriangle_NoAA_Alpha [ Skip ]
 crbug.com/1021566 [ use-skia-dawn ] Pixel_WebGLGreenTriangle_NoAA_NoAlpha [ Skip ]
 crbug.com/1021566 [ use-skia-dawn ] Pixel_WebGLTransparentGreenTriangle_NoAlpha_ImplicitClear [ Skip ]
 
+# DirectComposition tests are not expected to work properly on Windows 7.
+crbug.com/1086758 [ win7 ] Pixel_DirectComposition* [ Skip ]
+
 # 3D box is shaded incorrectly using SkiaRenderer Dawn on Windows.
 crbug.com/1082769 [ win use-skia-dawn ] Pixel_CSS3DBlueBox [ Failure ]
+
+# Flakes on gpu-fyi-try-chromeos-kevin, produces notably different image.
+crbug.com/1086687 [ chromeos chromeos-board-kevin ] Pixel_PrecisionRoundedCorner [ Skip ]
+
+# Still fails on Nexus 5 after all other Pixel_CanvasLowLatency* pass.
+crbug.com/1097752 [ android qualcomm-adreno-(tm)-330 ] Pixel_CanvasLowLatencyWebGLAlphaFalse [ Skip ]
+
+# Produces blank images on gpu-fyi-try-chromeos-kevin, gpu-fyi-try-chromeos-amd64-generic.
+crbug.com/1086690 [ chromeos ] Pixel_WebGLSadCanvas [ Skip ]
+
+# Likely produces a Dawn validation errors that makes rendering skipped.
+crbug.com/1097735 [ use-skia-dawn ] Pixel_PaintWorkletTransform [ Failure ]
+
+# Test flaky
+crbug.com/1099206 [ win nvidia no-use-skia-dawn ] Pixel_Video_VP9_DXVA [ RetryOnFailure ]

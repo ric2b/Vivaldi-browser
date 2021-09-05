@@ -39,8 +39,6 @@
 <translation id="1873233029667955273">Google Chrome не е вашиот стандарден прелистувач</translation>
 <translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome е застарен</translation>
-<translation id="1900795423379050516">Ако некоја поставка не се прикажува на страницава, погледнете во <ph name="LINK_BEGIN" />
-    поставките за прелистувачот Chrome<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Дозволете најавување на Chrome</translation>
 <translation id="2063848847527508675">Оперативниот систем Chrome треба да се рестартира за да се примени ажурирањето.</translation>
 <translation id="2094919256425865063">Сепак да се напушти Chrome?</translation>
@@ -116,6 +114,7 @@
 <translation id="4251615635259297716">Да се поврзат вашите податоци на Chrome со оваа сметка?</translation>
 <translation id="4281844954008187215">Услови за користење</translation>
 <translation id="4293420128516039005">Најавете се за да го синхронизирате и персонализирате Chrome на сите ваши уреди</translation>
+<translation id="4325083532956419387">Верзија на Chrome OS</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome може да ве штити од упад во податоците, злонамерни екстензии и друго</translation>

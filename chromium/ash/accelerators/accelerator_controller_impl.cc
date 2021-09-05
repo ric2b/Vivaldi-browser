@@ -236,7 +236,6 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
                                  kNotifierAccelerator),
       message_center::RichNotificationData(), std::move(delegate),
       kNotificationKeyboardIcon, SystemNotificationWarningLevel::NORMAL);
-  notification->set_priority(message_center::SYSTEM_PRIORITY);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 }
@@ -997,7 +996,7 @@ bool CanHandleStartAmbientMode() {
 }
 
 void HandleToggleAmbientMode(const ui::Accelerator& accelerator) {
-  Shell::Get()->ambient_controller()->Toggle();
+  Shell::Get()->ambient_controller()->ToggleInSessionUi();
 }
 
 void HandleToggleAssistant(const ui::Accelerator& accelerator) {
@@ -1075,8 +1074,8 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
   }
 
   AssistantUiController::Get()->ToggleUi(
-      /*entry_point=*/chromeos::assistant::mojom::AssistantEntryPoint::kHotkey,
-      /*exit_point=*/chromeos::assistant::mojom::AssistantExitPoint::kHotkey);
+      /*entry_point=*/chromeos::assistant::AssistantEntryPoint::kHotkey,
+      /*exit_point=*/chromeos::assistant::AssistantExitPoint::kHotkey);
 }
 
 void HandleSuspend() {
@@ -1459,7 +1458,9 @@ void HandleTogglePrivacyScreen() {
 
   PrivacyScreenController* controller =
       Shell::Get()->privacy_screen_controller();
-  controller->SetEnabled(!controller->GetEnabled());
+  controller->SetEnabled(
+      !controller->GetEnabled(),
+      PrivacyScreenController::kToggleUISurfaceKeyboardShortcut);
 }
 
 // Percent by which the volume should be changed when a volume key is pressed.

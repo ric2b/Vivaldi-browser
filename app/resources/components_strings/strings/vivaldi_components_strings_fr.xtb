@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Continuer</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Exécution des diagnostics réseau<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifications</translation>
+<translation id="2501278716633472235">Retour</translation>
 <translation id="2539524384386349900">Détecter</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a envoyé une réponse incorrecte.</translation>
 <translation id="2586657967955657006">Presse-papier</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Veuillez appuyer sur le bouton de rechargement pour renvoyer les données nécessaires au chargement de la page.</translation>
 <translation id="3227137524299004712">Micro</translation>
 <translation id="3234666976984236645">Toujours détecter du contenu important sur ce site</translation>
+<translation id="3308738399950580893">publicités</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> est actuellement inaccessible.</translation>
 <translation id="3427092606871434483">Autoriser (par défaut)</translation>
 <translation id="3447661539832366887">Le propriétaire de cet appareil a désactivé le jeu avec Antonio, la boule de lave.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Informations relatives au certificat</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Vérifier les configurations du proxy, du pare-feu et du DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Si vous utilisez un serveur proxy…</translation>
+<translation id="3894751534882749287">Si vous souhaitez afficher la page malgré tout, vous pouvez modifier son niveau de protection dans la popup de blocage des traqueurs ou en cliquant sur le bouton Autoriser</translation>
 <translation id="3950820424414687140">Ouvrir une session</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> est bloqué</translation>
 <translation id="3987940399970879459">Moins de 1 Mo</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Votre connexion a été interrompue</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Exécution du diagnostic réseau de Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Bloqueur de traqueurs</translation>
 <translation id="4744603770635761495">Chemin d’accès à l’exécutable</translation>
 <translation id="4750917950439032686">Vos informations, par exemple vos mots de passe ou vos numéros de carte de paiement, sont privées lorsqu'elles sont transmises à ce site.</translation>
 <translation id="4764776831041365478">Il se peut que la page Web à l’adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770">Effectuer une recherche Google sur <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Autorisé par une extension</translation>
 <translation id="7111012039238467737">(Valide)</translation>
+<translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ne respecte pas les normes de sécurité.</translation>
 <translation id="7219179957768738017">La connexion utilise <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Révoquer l’accès</translation>
 <translation id="7353601530677266744">Ligne de commande</translation>
+<translation id="7364115444476960850">La page que vous essayez de visiter a été bloquée par <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Chemin d’accès au profil</translation>
 <translation id="7445762425076701745">Impossible de valider entièrement l’identité du serveur auquel vous êtes connecté. Le nom utilisé pour cette connexion n’est valide que sur votre réseau et aucune autorité de certification externe ne peut en vérifier la propriété. Certaines autorités de certification délivrent tout de même des certificats pour ces types de nom, par conséquent nous ne sommes pas en mesure de vérifier que vous êtes connecté au site voulu et non à un site malveillant.</translation>
 <translation id="7455133967321480974">Utiliser le paramètre global par défaut (« Bloquer »)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">Demander (par défaut)</translation>
 <translation id="8041940743680923270">Utiliser le paramètre global par défaut (« Demander »)</translation>
 <translation id="808894953321890993">Modifier le mot de passe</translation>
+<translation id="8119307142152921512">traqueurs et publicités</translation>
 <translation id="8142868475871995937">Accéder à &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pour consulter une liste des URL ajoutées à la liste noire et des autres règles définies par votre administrateur système.</translation>
 <translation id="8149426793427495338">Votre ordinateur s’est mis en veille.</translation>
 <translation id="8150722005171944719">Le fichier disponible à l’adresse <ph name="URL" /> n’est pas lisible. Il est possible qu’il ait été supprimé ou déplacé, ou que les autorisations associées empêchent d’y accéder.</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206">Votre connexion à <ph name="DOMAIN" /> n’est pas chiffrée.</translation>
 <translation id="8740359287975076522">L’&lt;abbr id="dnsDefinition"&gt;adresse DNS&lt;/abbr&gt; de <ph name="HOST_NAME" /> est introuvable. Diagnostic du problème en cours…</translation>
 <translation id="8820817407110198400">Signets</translation>
+<translation id="8940028675168378100">Bloqué par <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Le proxy <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9011424611726486705">Ouvrir les paramètres du site</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">De plus, cette page inclut d’autres ressources qui ne sont pas sécurisées. Ces ressources peuvent être consultées par des tiers pendant leur transfert, et modifiées par un pirate informatique dans le but de changer le comportement de cette page.</translation>
 <translation id="9069693763241529744">Bloqué par une extension</translation>
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
+<translation id="9180553614777056266">Bloqueur de publicités</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>
 <translation id="9219103736887031265">Images</translation>
 <translation id="936602727769022409">Vous pourriez perdre l’accès à votre compte Google. L’équipe Vivaldi vous recommande de modifier votre mot de passe maintenant. Vous devrez vous connecter.</translation>

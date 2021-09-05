@@ -136,8 +136,6 @@ static_library("web_test_renderer") {
     "renderer/web_test/test_preferences.h",
     "renderer/web_test/test_runner.cc",
     "renderer/web_test/test_runner.h",
-    "renderer/web_test/test_runner_for_specific_view.cc",
-    "renderer/web_test/test_runner_for_specific_view.h",
     "renderer/web_test/test_websocket_handshake_throttle_provider.cc",
     "renderer/web_test/test_websocket_handshake_throttle_provider.h",
     "renderer/web_test/text_input_controller.cc",
@@ -179,6 +177,7 @@ static_library("web_test_renderer") {
     "//gpu/command_buffer/client:gles2_interface",
     "//media/capture",
     "//printing",
+    "//printing/mojom",
     "//services/device/public/mojom",
     "//skia",
     "//skia:test_fonts",
@@ -295,16 +294,12 @@ static_library("content_shell_lib") {
     "browser/web_test/fake_bluetooth_chooser_factory.h",
     "browser/web_test/fake_bluetooth_delegate.cc",
     "browser/web_test/fake_bluetooth_delegate.h",
-    "browser/web_test/fake_bluetooth_scanning_prompt.cc",
-    "browser/web_test/fake_bluetooth_scanning_prompt.h",
     "browser/web_test/leak_detector.cc",
     "browser/web_test/leak_detector.h",
     "browser/web_test/mock_client_hints_controller_delegate.cc",
     "browser/web_test/mock_client_hints_controller_delegate.h",
     "browser/web_test/mojo_web_test_helper.cc",
     "browser/web_test/mojo_web_test_helper.h",
-    "browser/web_test/secondary_test_window_observer.cc",
-    "browser/web_test/secondary_test_window_observer.h",
     "browser/web_test/test_info_extractor.cc",
     "browser/web_test/test_info_extractor.h",
     "browser/web_test/web_test_background_fetch_delegate.cc",
@@ -348,8 +343,6 @@ static_library("content_shell_lib") {
     "browser/web_test/web_test_shell_platform_delegate.cc",
     "browser/web_test/web_test_shell_platform_delegate.h",
     "browser/web_test/web_test_shell_platform_delegate_mac.mm",
-    "browser/web_test/web_test_tts_controller_delegate.cc",
-    "browser/web_test/web_test_tts_controller_delegate.h",
     "browser/web_test/web_test_tts_platform.cc",
     "browser/web_test/web_test_tts_platform.h",
     "common/power_monitor_test_impl.cc",
@@ -407,6 +400,7 @@ static_library("content_shell_lib") {
     ":client_hints_util",
     ":content_browsertests_mojom",
     ":resources",
+    ":shell_controller_mojom",
     ":web_test_common",
     "//base",
     "//base:base_static",
@@ -675,6 +669,7 @@ repack("pak") {
     "$root_gen_dir/net/net_resources.pak",
     "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
     "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/third_party/blink/public/resources/inspector_overlay_resources.pak",
     "$root_gen_dir/third_party/blink/public/strings/blink_strings_en-US.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
@@ -692,6 +687,7 @@ repack("pak") {
     "//content/browser/webrtc/resources",
     "//mojo/public/js:resources",
     "//net:net_resources",
+    "//third_party/blink/public:devtools_inspector_resources",
     "//third_party/blink/public:resources",
     "//third_party/blink/public:scaled_resources_100_percent",
     "//third_party/blink/public/strings",
@@ -704,10 +700,10 @@ repack("pak") {
     sources +=
         [ "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak" ]
   }
-  if (!is_android) {
+  if (!is_android && !is_fuchsia) {
     sources +=
         [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
-    deps += [ "//content/browser/devtools:resources" ]
+    deps += [ "//content/browser/devtools:devtools_resources" ]
   }
   output = "$root_out_dir/content_shell.pak"
 }
@@ -1086,4 +1082,10 @@ group("content_shell_crash_test") {
       "//tools/android/forwarder2",
     ]
   }
+}
+
+mojom("shell_controller_mojom") {
+  testonly = true
+  sources = [ "common/shell_controller.test-mojom" ]
+  public_deps = [ "//mojo/public/mojom/base" ]
 }

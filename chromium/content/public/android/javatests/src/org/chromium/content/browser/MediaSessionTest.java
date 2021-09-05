@@ -6,9 +6,11 @@ package org.chromium.content.browser;
 
 import android.content.Context;
 import android.media.AudioManager;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
+
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,7 +22,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.MediaSessionObserver;
 import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
@@ -32,13 +33,11 @@ import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.media.MediaSwitches;
 
 import java.util.ArrayList;
-import java.util.concurrent.Callable;
 
 /**
  * Tests for MediaSession.
  */
 @RunWith(ContentJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add(MediaSwitches.AUTOPLAY_NO_GESTURE_REQUIRED_POLICY)
 public class MediaSessionTest {
     @Rule
@@ -93,12 +92,7 @@ public class MediaSessionTest {
 
         public void waitForFocusStateChange(int focusType) {
             CriteriaHelper.pollInstrumentationThread(
-                    Criteria.equals(focusType, new Callable<Integer>() {
-                        @Override
-                        public Integer call() {
-                            return getAudioFocusState();
-                        }
-                    }));
+                    () -> Criteria.checkThat(getAudioFocusState(), Matchers.is(focusType)));
         }
     }
 
@@ -210,7 +204,6 @@ public class MediaSessionTest {
     @Test
     @MediumTest
     @Feature({"MediaSession"})
-    @RetryOnFailure
     public void testShortVideoIsTransient() throws Exception {
         Assert.assertEquals(
                 AudioManager.AUDIOFOCUS_LOSS, mAudioFocusChangeListener.getAudioFocusState());
@@ -458,7 +451,6 @@ public class MediaSessionTest {
     @MediumTest
     @Feature({"MediaSession"})
     @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE) // crbug.com/589176
-    @RetryOnFailure
     public void testMediaResumeAfterTransientFocusLoss() throws Exception {
         Assert.assertEquals(
                 AudioManager.AUDIOFOCUS_LOSS, mAudioFocusChangeListener.getAudioFocusState());
@@ -490,7 +482,6 @@ public class MediaSessionTest {
     @Test
     @MediumTest
     @Feature({"MediaSession"})
-    @RetryOnFailure
     public void testSessionSuspendedAfterFocusLossWhenPlaying() throws Exception {
         ArrayList<StateRecord> expectedStates = new ArrayList<StateRecord>();
         expectedStates.add(DEFAULT_STATE);
@@ -521,7 +512,6 @@ public class MediaSessionTest {
     @Test
     @MediumTest
     @Feature({"MediaSession"})
-    @RetryOnFailure
     public void testSessionSuspendedAfterFocusLossWhenPaused() throws Exception {
         ArrayList<StateRecord> expectedStates = new ArrayList<StateRecord>();
         expectedStates.add(DEFAULT_STATE);

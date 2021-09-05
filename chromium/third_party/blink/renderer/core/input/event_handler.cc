@@ -245,7 +245,7 @@ EventHandler::EventHandler(LocalFrame& frame)
                              this,
                              &EventHandler::ActiveIntervalTimerFired) {}
 
-void EventHandler::Trace(Visitor* visitor) {
+void EventHandler::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(selection_controller_);
   visitor->Trace(capturing_mouse_events_element_);
@@ -597,7 +597,7 @@ base::Optional<ui::Cursor> EventHandler::SelectCursor(
         IntRect visible_rect = page->GetVisualViewport().VisibleContentRect();
         if (!visible_rect.Contains(cursor_rect)) {
           Deprecation::CountDeprecation(
-              &node->GetDocument(),
+              node->GetExecutionContext(),
               WebFeature::kCustomCursorIntersectsViewport);
           continue;
         }
@@ -843,10 +843,8 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
       frame_, HitTestLocation(document_point),
       HitTestRequest::kReadOnly | HitTestRequest::kRetargetForInert);
   InputDeviceCapabilities* source_capabilities =
-      frame_->GetDocument()
-          ->domWindow()
-          ->GetInputDeviceCapabilities()
-          ->FiresTouchEvents(mouse_event.FromTouch());
+      frame_->DomWindow()->GetInputDeviceCapabilities()->FiresTouchEvents(
+          mouse_event.FromTouch());
 
   if (event_result == WebInputEventResult::kNotHandled) {
     event_result = mouse_event_manager_->HandleMouseFocus(hit_test_result,
@@ -1346,13 +1344,8 @@ void EventHandler::MarkHoverStateDirty() {
 Element* EventHandler::EffectiveMouseEventTargetElement(
     Element* target_element) {
   Element* new_element_under_mouse = target_element;
-  if (RuntimeEnabledFeatures::UnifiedPointerCaptureInBlinkEnabled()) {
-    if (pointer_event_manager_->GetMouseCaptureTarget())
-      new_element_under_mouse = pointer_event_manager_->GetMouseCaptureTarget();
-  } else {
-    if (capturing_mouse_events_element_)
-      new_element_under_mouse = capturing_mouse_events_element_.Get();
-  }
+  if (pointer_event_manager_->GetMouseCaptureTarget())
+    new_element_under_mouse = pointer_event_manager_->GetMouseCaptureTarget();
   return new_element_under_mouse;
 }
 
@@ -1621,8 +1614,6 @@ void EventHandler::CacheTouchAdjustmentResult(uint32_t id,
 
 bool EventHandler::GestureCorrespondsToAdjustedTouch(
     const WebGestureEvent& event) {
-  if (!RuntimeEnabledFeatures::UnifiedTouchAdjustmentEnabled())
-    return false;
   // Gesture events start with a GestureTapDown. If GestureTapDown's unique id
   // matches stored adjusted touchstart event id, then we can use the stored
   // result for following gesture event.
@@ -2423,8 +2414,7 @@ MouseEventWithHitTestResults EventHandler::GetMouseEventTarget(
           frame_, FloatPoint(event.PositionInRootFrame()));
 
   // TODO(eirage): This does not handle chorded buttons yet.
-  if (RuntimeEnabledFeatures::UnifiedPointerCaptureInBlinkEnabled() &&
-      event.GetType() != WebInputEvent::Type::kMouseDown) {
+  if (event.GetType() != WebInputEvent::Type::kMouseDown) {
     HitTestResult result(request, HitTestLocation(document_point));
 
     Element* capture_target;
@@ -2462,11 +2452,9 @@ MouseEventWithHitTestResults EventHandler::GetMouseEventTarget(
 void EventHandler::ReleaseMouseCaptureFromLocalRoot() {
   CaptureMouseEventsToWidget(false);
 
-  if (RuntimeEnabledFeatures::UnifiedPointerCaptureInBlinkEnabled()) {
-    frame_->LocalFrameRoot()
-        .GetEventHandler()
-        .ReleaseMouseCaptureFromCurrentFrame();
-  }
+  frame_->LocalFrameRoot()
+      .GetEventHandler()
+      .ReleaseMouseCaptureFromCurrentFrame();
 }
 
 void EventHandler::ReleaseMouseCaptureFromCurrentFrame() {

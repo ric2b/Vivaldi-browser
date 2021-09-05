@@ -17,35 +17,26 @@ class NativeMenuWin;
 
 class VivaldiNativeAppWindowViewsWin;
 
-// AppWindowDesktopWindowTreeHostWin handles updating the glass of app frames on
-// Windows. It is used for all desktop app windows on Windows, but is only
-// actively doing anything when a glass window frame is being used.
+// A sublass to ensure system menu initialization.
 class VivaldiAppWindowDesktopWindowTreeHostWin
     : public views::DesktopWindowTreeHostWin {
  public:
   VivaldiAppWindowDesktopWindowTreeHostWin(
-      VivaldiNativeAppWindowViewsWin* app_window,
+      VivaldiNativeAppWindowViewsWin* window_view,
       views::DesktopNativeWidgetAura* desktop_native_widget_aura);
   ~VivaldiAppWindowDesktopWindowTreeHostWin() override;
 
  private:
   // Overridden from DesktopWindowTreeHostWin:
-  bool GetClientAreaInsets(gfx::Insets* insets,
-                           HMONITOR monitor) const override;
   void HandleFrameChanged() override;
-  void PostHandleMSG(UINT message, WPARAM w_param, LPARAM l_param) override;
   bool PreHandleMSG(UINT message,
                     WPARAM w_param,
                     LPARAM l_param,
                     LRESULT* result) override;
 
-  // Updates the glass frame area by calling the DwmExtendFrameIntoClientArea
-  // Windows function.
-  void UpdateDWMFrame();
-
   views::NativeMenuWin* GetSystemMenu();
 
-  VivaldiNativeAppWindowViewsWin* app_window_;
+  VivaldiNativeAppWindowViewsWin* window_view_;
 
   // The wrapped system menu itself.
   std::unique_ptr<views::NativeMenuWin> system_menu_;

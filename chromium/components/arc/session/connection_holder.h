@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -133,8 +134,8 @@ class ConnectionHolderImpl {
     // When both the instance and host are ready, start connection.
     // TODO(crbug.com/750563): Fix the race issue.
     auto receiver = std::make_unique<mojo::Receiver<HostType>>(host_);
-    mojo::InterfacePtr<HostType> host_proxy;
-    receiver->Bind(mojo::MakeRequest(&host_proxy));
+    mojo::PendingRemote<HostType> host_proxy;
+    receiver->Bind(host_proxy.InitWithNewPipeAndPassReceiver());
     instance_->Init(
         std::move(host_proxy),
         base::BindOnce(&ConnectionHolderImpl::OnConnectionReady,

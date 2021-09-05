@@ -38,11 +38,9 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
  public:
   enum Type { UNKNOWN = 0, MENU, COMMAND, CHECKBOX, RADIO, FOLDER, SEPARATOR,
               CONTAINER };
-  enum Origin {BUNDLE = 0, DELETED_BUNDLE, USER};
+  enum Origin {BUNDLE = 0, MODIFIED_BUNDLE, USER};
 
-  static const int64_t kInvalidSyncTransactionVersion;
-
-  Menu_Node();
+  Menu_Node(const std::string& guid, int64_t id);
   ~Menu_Node() override;
 
   void DumpTree(int indent = 0);
@@ -50,9 +48,10 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   void SetType(Type type) { type_ = type; }
   Type type() const { return type_; }
 
-  void SetId(int64_t id) { id_ = id; }
   int64_t id() const { return id_; }
 
+  // SetGuid() should only be used if we have to change guid as a result of
+  // resolving a guid duplication.
   void SetGuid(std::string guid) { guid_ = guid; }
   const std::string& guid() const { return guid_; }
 
@@ -89,7 +88,6 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   // Returns the menu that this node belongs to.
   const Menu_Node* GetMenu() const;
 
-  bool is_root() const { return id_ == 1; }
   bool is_menu() const { return type_ == MENU; }
   bool is_command() const { return type_ == COMMAND; }
   bool is_checkbox() const { return type_ == CHECKBOX; }
@@ -98,10 +96,18 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   bool is_separator() const { return type_ == SEPARATOR; }
   bool is_container() const { return type_ == CONTAINER; }
 
+  static std::string root_node_guid() { return kRootNodeGuid; }
+  static std::string mainmenu_node_guid() { return kMainmenuNodeGuid; }
+  static int64_t root_node_id() { return kRootNodeId; }
+  static int64_t mainmenu_node_id() { return kMainmenuNodeId; }
   static int64_t GetNewId() {return ++id_counter;}
 
  private:
   friend class Menu_Model;
+
+  enum FixedId { kRootNodeId = 1, kMainmenuNodeId = 2, kFirstDynamicNodeId };
+  static const char kRootNodeGuid[];
+  static const char kMainmenuNodeGuid[];
 
   Type type_;
   Origin origin_;
@@ -112,7 +118,7 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   std::string container_mode_;
   std::string container_edge_;
   std::string guid_;
-  int64_t id_ = 1;
+  int64_t id_;
   bool has_custom_title_ = false;
 
   // Next available id is copied from this value.

@@ -15,8 +15,6 @@ import static org.mockito.Mockito.when;
 
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.MediumTest;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.Spinner;
@@ -27,11 +25,12 @@ import androidx.fragment.app.Fragment;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import org.hamcrest.Matchers;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -44,7 +43,6 @@ import org.mockito.stubbing.Answer;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment.DialogOption;
@@ -54,7 +52,7 @@ import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
+import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.browser_ui.settings.SpinnerPreference;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -68,7 +66,6 @@ import java.util.Set;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class ClearBrowsingDataFragmentTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -80,6 +77,9 @@ public class ClearBrowsingDataFragmentTest {
     public SettingsActivityTestRule<ClearBrowsingDataTabsFragment>
             mSettingsActivityTabFragmentTestRule =
                     new SettingsActivityTestRule<>(ClearBrowsingDataTabsFragment.class);
+
+    @Rule
+    public final AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
 
     @Rule
     public JniMocker mJniMocker = new JniMocker();
@@ -108,8 +108,6 @@ public class ClearBrowsingDataFragmentTest {
         when(mBrowsingDataBridgeMock.getBrowsingDataDeletionTimePeriod(any(), anyInt()))
                 .thenReturn(DEFAULT_TIME_PERIOD);
 
-        SigninTestUtil.setUpAuthForTesting();
-
         mActivityTestRule.startMainActivityOnBlankPage();
 
         // There can be some left-over notification channels from other tests.
@@ -120,11 +118,6 @@ public class ClearBrowsingDataFragmentTest {
                 manager.deleteAllSiteChannels();
             });
         }
-    }
-
-    @After
-    public void tearDown() {
-        SigninTestUtil.tearDownAuthForTesting();
     }
 
     /**  Waits for the progress dialog to disappear from the given CBD preference. */
@@ -345,7 +338,7 @@ public class ClearBrowsingDataFragmentTest {
     @LargeTest
     public void testDialogAboutOtherFormsOfBrowsingHistory() {
         // Sign in.
-        SigninTestUtil.addAndSignInTestAccount();
+        mAccountManagerTestRule.addAndSignInTestAccount();
         OtherFormsOfHistoryDialogFragment.clearShownPreferenceForTesting();
 
         // History is not selected. We still need to select some other datatype, otherwise the
@@ -481,7 +474,7 @@ public class ClearBrowsingDataFragmentTest {
     @Feature({"SiteEngagement"})
     public void testImportantSitesDialogNoFiltering() throws Exception {
         // Sign in.
-        SigninTestUtil.addAndSignInTestAccount();
+        mAccountManagerTestRule.addAndSignInTestAccount();
 
         final String[] importantOrigins = {"http://www.facebook.com", "https://www.google.com"};
         // First mark our origins as important.
@@ -514,7 +507,7 @@ public class ClearBrowsingDataFragmentTest {
     @Feature({"SiteEngagement"})
     public void testImportantSitesDialogNoopOnCancel() throws Exception {
         // Sign in.
-        SigninTestUtil.addAndSignInTestAccount();
+        mAccountManagerTestRule.addAndSignInTestAccount();
 
         final String[] importantOrigins = {"http://www.facebook.com", "http://www.google.com"};
         // First mark our origins as important.
@@ -546,7 +539,7 @@ public class ClearBrowsingDataFragmentTest {
     @Feature({"SiteEngagement"})
     public void testImportantSitesDialog() throws Exception {
         // Sign in.
-        SigninTestUtil.addAndSignInTestAccount();
+        mAccountManagerTestRule.addAndSignInTestAccount();
 
         final String kKeepDomain = "https://www.chrome.com";
         final String kClearDomain = "https://www.google.com";

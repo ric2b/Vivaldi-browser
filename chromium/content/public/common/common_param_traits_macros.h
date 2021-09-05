@@ -17,12 +17,12 @@
 #include "ipc/ipc_message_macros.h"
 #include "services/network/public/cpp/network_ipc_param_traits.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_history_scroll_restoration_type.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -77,7 +77,7 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(
     content::AutoplayPolicy::kNoUserGestureRequired,
     content::AutoplayPolicy::kDocumentUserActivationRequired)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::PreferredColorScheme,
-                              blink::PreferredColorScheme::kNoPreference,
+                              blink::PreferredColorScheme::kDark,
                               blink::PreferredColorScheme::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebRect)
@@ -142,7 +142,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(new_canvas_2d_api_enabled)
   IPC_STRUCT_TRAITS_MEMBER(antialiased_2d_canvas_disabled)
   IPC_STRUCT_TRAITS_MEMBER(antialiased_clips_2d_canvas_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(accelerated_2d_canvas_msaa_sample_count)
   IPC_STRUCT_TRAITS_MEMBER(accelerated_filters_enabled)
   IPC_STRUCT_TRAITS_MEMBER(deferred_filters_enabled)
   IPC_STRUCT_TRAITS_MEMBER(container_culling_enabled)
@@ -166,7 +165,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(primary_hover_type)
   IPC_STRUCT_TRAITS_MEMBER(barrel_button_for_drag_enabled)
   IPC_STRUCT_TRAITS_MEMBER(sync_xhr_in_documents_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(should_respect_image_orientation)
   IPC_STRUCT_TRAITS_MEMBER(number_of_cpu_cores)
   IPC_STRUCT_TRAITS_MEMBER(editing_behavior)
   IPC_STRUCT_TRAITS_MEMBER(supports_multiple_windows)
@@ -244,7 +242,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(picture_in_picture_enabled)
   IPC_STRUCT_TRAITS_MEMBER(translate_service_available)
   IPC_STRUCT_TRAITS_MEMBER(network_quality_estimator_web_holdback)
-  IPC_STRUCT_TRAITS_MEMBER(lazy_load_enabled)
   IPC_STRUCT_TRAITS_MEMBER(lazy_frame_loading_distance_thresholds_px)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_loading_distance_thresholds_px)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_first_k_fully_load)

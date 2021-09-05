@@ -102,6 +102,8 @@ using password_manager::PasswordManager;
 using password_manager::PasswordManagerClient;
 using password_manager::PasswordManagerDriver;
 using password_manager::SerializePasswordFormFillData;
+using web::WebFrame;
+using web::WebState;
 
 namespace {
 // Types of password infobars to display.
@@ -184,7 +186,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
   // The WebState this instance is observing. Will be null after
   // -webStateDestroyed: has been called.
-  web::WebState* _webState;
+  WebState* _webState;
 
   // Bridge to observe WebState from Objective-C.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
@@ -202,16 +204,16 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   // Form data for password generation on this page.
   std::map<FormRendererId, PasswordFormGenerationData> _formGenerationData;
 
-  NSString* _lastTypedfieldIdentifier;
+  FieldRendererId _lastTypedfieldIdentifier;
   NSString* _lastTypedValue;
 }
 
-- (instancetype)initWithWebState:(web::WebState*)webState {
+- (instancetype)initWithWebState:(WebState*)webState {
   self = [self initWithWebState:webState client:nullptr];
   return self;
 }
 
-- (instancetype)initWithWebState:(web::WebState*)webState
+- (instancetype)initWithWebState:(WebState*)webState
                           client:(std::unique_ptr<PasswordManagerClient>)
                                      passwordManagerClient {
   self = [super init];
@@ -286,7 +288,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
 // If Tab was shown, and there is a pending PasswordForm, display autosign-in
 // notification.
-- (void)webStateWasShown:(web::WebState*)webState {
+- (void)webStateWasShown:(WebState*)webState {
   DCHECK_EQ(_webState, webState);
   if (_pendingAutoSigninPasswordForm) {
     [self showAutosigninNotification:std::move(_pendingAutoSigninPasswordForm)];
@@ -295,12 +297,12 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 }
 
 // If Tab was hidden, hide auto sign-in notification.
-- (void)webStateWasHidden:(web::WebState*)webState {
+- (void)webStateWasHidden:(WebState*)webState {
   DCHECK_EQ(_webState, webState);
   [self hideAutosigninNotification];
 }
 
-- (void)webState:(web::WebState*)webState
+- (void)webState:(WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   DCHECK_EQ(_webState, webState);
   if (!navigation->HasCommitted() || navigation->IsSameDocument())
@@ -318,7 +320,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       /*form_may_be_submitted=*/navigation->IsRendererInitiated());
 }
 
-- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+- (void)webState:(WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState, webState);
   // Clear per-page state.
   [self.suggestionHelper resetForNewPage];
@@ -339,23 +341,27 @@ NSString* const kSuggestionSuffix = @" ••••••••";
     uint32_t maxUniqueID = uniqueIDTabHelper->GetNextAvailableRendererID();
     [self didFinishPasswordFormExtraction:std::vector<FormData>()
                           withMaxUniqueID:maxUniqueID];
+    return;
   }
 
   [self findPasswordFormsAndSendThemToPasswordStore];
 }
 
-- (void)webState:(web::WebState*)webState
-    frameDidBecomeAvailable:(web::WebFrame*)web_frame {
+- (void)webState:(WebState*)webState
+    frameDidBecomeAvailable:(WebFrame*)web_frame {
   DCHECK_EQ(_webState, webState);
   DCHECK(web_frame);
+  if (!web_frame->CanCallJavaScriptFunction())
+    return;
   UniqueIDTabHelper* uniqueIDTabHelper =
       UniqueIDTabHelper::FromWebState(_webState);
   uint32_t nextAvailableRendererID =
       uniqueIDTabHelper->GetNextAvailableRendererID();
-  [self.formHelper setUpForUniqueIDsWithInitialState:nextAvailableRendererID];
+  [self.formHelper setUpForUniqueIDsWithInitialState:nextAvailableRendererID
+                                             inFrame:web_frame];
 }
 
-- (void)webStateDestroyed:(web::WebState*)webState {
+- (void)webStateDestroyed:(WebState*)webState {
   DCHECK_EQ(_webState, webState);
   if (_webState) {
     _webState->RemoveObserver(_webStateObserverBridge.get());
@@ -369,8 +375,16 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   _credentialManager.reset();
   _formGenerationData.clear();
   _isPasswordGenerated = NO;
-  _lastTypedfieldIdentifier = nil;
+  _lastTypedfieldIdentifier = FieldRendererId();
   _lastTypedValue = nil;
+}
+
+// Track detaching iframes.
+- (void)webState:(WebState*)webState
+    frameWillBecomeUnavailable:(WebFrame*)web_frame {
+  if (web_frame->IsMainFrame() || !web_frame->CanCallJavaScriptFunction())
+    return;
+  _passwordManager->OnIframeDetach(web_frame->GetFrameId());
 }
 
 #pragma mark - FormSuggestionProvider
@@ -383,7 +397,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
             (FormSuggestionProviderQuery*)formQuery
                                isMainFrame:(BOOL)isMainFrame
                             hasUserGesture:(BOOL)hasUserGesture
-                                  webState:(web::WebState*)webState
+                                  webState:(WebState*)webState
                          completionHandler:
                              (SuggestionsAvailableCompletion)completion {
   if (!GetPageURLAndCheckTrustLevel(webState, nullptr))
@@ -418,22 +432,21 @@ NSString* const kSuggestionSuffix = @" ••••••••";
     }
   }
 
-  if (![formQuery.fieldIdentifier isEqual:_lastTypedfieldIdentifier] ||
+  if (formQuery.uniqueFieldID != _lastTypedfieldIdentifier ||
       ![formQuery.typedValue isEqual:_lastTypedValue]) {
     // This method is called multiple times for the same user keystroke. Inform
     // only once the keystroke.
-    _lastTypedfieldIdentifier = formQuery.fieldIdentifier;
+    _lastTypedfieldIdentifier = formQuery.uniqueFieldID;
     _lastTypedValue = formQuery.typedValue;
 
     self.passwordManager->UpdateStateOnUserInput(
-        self.passwordManagerDriver, SysNSStringToUTF16(formQuery.formName),
-        SysNSStringToUTF16(formQuery.fieldIdentifier),
-        SysNSStringToUTF16(formQuery.typedValue));
+        self.passwordManagerDriver, formQuery.uniqueFormID,
+        formQuery.uniqueFieldID, SysNSStringToUTF16(formQuery.typedValue));
   }
 }
 
 - (void)retrieveSuggestionsForForm:(FormSuggestionProviderQuery*)formQuery
-                          webState:(web::WebState*)webState
+                          webState:(WebState*)webState
                  completionHandler:(SuggestionsReadyCompletion)completion {
   if (!GetPageURLAndCheckTrustLevel(webState, nullptr))
     return;
@@ -549,7 +562,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
 #pragma mark - PasswordManagerClientDelegate
 
-- (web::WebState*)webState {
+- (WebState*)webState {
   return _webState;
 }
 
@@ -990,8 +1003,6 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       [self getFormForGenerationFromFormId:formIdentifier];
   if (!generation_data)
     return;
-  NSString* newPasswordIdentifier =
-      SysUTF16ToNSString(generation_data->new_password_element);
   FieldRendererId newPasswordUniqueId =
       generation_data->new_password_renderer_id;
   FieldRendererId confirmPasswordUniqueId =
@@ -1002,8 +1013,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       if (found) {
         self.passwordManager->PresaveGeneratedPassword(
             self.passwordManagerDriver, form,
-            SysNSStringToUTF16(generatedPassword),
-            SysNSStringToUTF16(newPasswordIdentifier));
+            SysNSStringToUTF16(generatedPassword), newPasswordUniqueId);
       }
       // If the form isn't found, it disappeared between fillPasswordForm below
       // and here. There isn't much that can be done.
@@ -1027,9 +1037,9 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
 #pragma mark - FormActivityObserver
 
-- (void)webState:(web::WebState*)webState
+- (void)webState:(WebState*)webState
     didRegisterFormActivity:(const autofill::FormActivityParams&)params
-                    inFrame:(web::WebFrame*)frame {
+                    inFrame:(WebFrame*)frame {
   DCHECK_EQ(_webState, webState);
 
   if (!GetPageURLAndCheckTrustLevel(webState, nullptr))
@@ -1038,13 +1048,21 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   if (!frame || !frame->CanCallJavaScriptFunction())
     return;
 
-  // Return early if |params| is not complete or if forms are not changed.
-  if (params.input_missing || params.type != "form_changed")
+  // Return early if |params| is not complete.
+  if (params.input_missing)
     return;
 
   // If there's a change in password forms on a page, they should be parsed
   // again.
-  [self findPasswordFormsAndSendThemToPasswordStore];
+  if (params.type == "form_changed")
+    [self findPasswordFormsAndSendThemToPasswordStore];
+
+  // If the form was removed, PasswordManager should be informed to decide
+  // whether the form was submitted.
+  if (params.type == "password_form_removed") {
+    self.passwordManager->OnPasswordFormRemoved(
+        self.passwordManagerDriver, FormRendererId(params.unique_form_id));
+  }
 }
 
 @end

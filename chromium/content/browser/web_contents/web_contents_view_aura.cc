@@ -71,6 +71,7 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/events/blink/web_input_event.h"
@@ -241,22 +242,26 @@ void PrepareDragData(const DropData& drop_data,
     PrepareDragForDownload(drop_data, provider, web_contents);
 #endif
 #if defined(USE_X11) || defined(OS_WIN)
+  bool should_check_file_contents = true;
+#if defined(USE_X11)
+  should_check_file_contents = !features::IsUsingOzonePlatform();
+#endif
   // We set the file contents before the URL because the URL also sets file
   // contents (to a .URL shortcut).  We want to prefer file content data over
   // a shortcut so we add it first.
-  if (!drop_data.file_contents.empty())
+  if (should_check_file_contents && !drop_data.file_contents.empty())
     PrepareDragForFileContents(drop_data, provider);
 #endif
   // Call SetString() before SetURL() when we actually have a custom string.
   // SetURL() will itself do SetString() when a string hasn't been set yet,
   // but we want to prefer drop_data.text.string() over the URL string if it
   // exists.
-  if (!drop_data.text.string().empty())
-    provider->SetString(drop_data.text.string());
+  if (drop_data.text && !drop_data.text->empty())
+    provider->SetString(*drop_data.text);
   if (drop_data.url.is_valid())
     provider->SetURL(drop_data.url, drop_data.url_title);
-  if (!drop_data.html.string().empty())
-    provider->SetHtml(drop_data.html.string(), drop_data.html_base_url);
+  if (drop_data.html && !drop_data.html->empty())
+    provider->SetHtml(*drop_data.html, drop_data.html_base_url);
   if (!drop_data.filenames.empty())
     provider->SetFilenames(drop_data.filenames);
   if (!drop_data.file_system_files.empty()) {
@@ -312,11 +317,12 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
   base::string16 plain_text;
   data.GetString(&plain_text);
   if (!plain_text.empty())
-    drop_data->text = base::NullableString16(plain_text, false);
+    drop_data->text = plain_text;
 
   GURL url;
   base::string16 url_title;
-  data.GetURLAndTitle(ui::DO_NOT_CONVERT_FILENAMES, &url, &url_title);
+  data.GetURLAndTitle(ui::FilenameToURLPolicy::DO_NOT_CONVERT_FILENAMES, &url,
+                      &url_title);
   if (url.is_valid()) {
     drop_data->url = url;
     drop_data->url_title = url_title;
@@ -326,7 +332,7 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
   GURL html_base_url;
   data.GetHtml(&html, &html_base_url);
   if (!html.empty())
-    drop_data->html = base::NullableString16(html, false);
+    drop_data->html = html;
   if (html_base_url.is_valid())
     drop_data->html_base_url = html_base_url;
 
@@ -541,8 +547,7 @@ void WebContentsViewAura::AsyncDropTempFileDeleter::DeleteFileAsync(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindOnce(base::IgnoreResult(&base::DeleteFile), std::move(path),
-                     false));
+      base::BindOnce(base::GetDeleteFileCallback(), std::move(path)));
 }
 #endif
 
@@ -834,8 +839,8 @@ gfx::NativeWindow WebContentsViewAura::GetTopLevelNativeWindow() const {
   return window ? window : delegate_->GetNativeWindow();
 }
 
-void WebContentsViewAura::GetContainerBounds(gfx::Rect* out) const {
-  *out = GetNativeView()->GetBoundsInScreen();
+gfx::Rect WebContentsViewAura::GetContainerBounds() const {
+  return GetNativeView()->GetBoundsInScreen();
 }
 
 void WebContentsViewAura::Focus() {

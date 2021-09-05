@@ -17,7 +17,7 @@
 namespace blink {
 
 MediaValues* MediaValuesDynamic::Create(Document& document) {
-  return MediaValuesDynamic::Create(document.GetFrameOfMasterDocument());
+  return MediaValuesDynamic::Create(document.GetFrameOfTreeRootDocument());
 }
 
 MediaValues* MediaValuesDynamic::Create(LocalFrame* frame) {
@@ -136,10 +136,6 @@ bool MediaValuesDynamic::StrictMode() const {
   return CalculateStrictMode(frame_);
 }
 
-DisplayShape MediaValuesDynamic::GetDisplayShape() const {
-  return CalculateDisplayShape(frame_);
-}
-
 ColorSpaceGamut MediaValuesDynamic::ColorGamut() const {
   return CalculateColorGamut(frame_);
 }
@@ -150,6 +146,10 @@ PreferredColorScheme MediaValuesDynamic::GetPreferredColorScheme() const {
 
 bool MediaValuesDynamic::PrefersReducedMotion() const {
   return CalculatePrefersReducedMotion(frame_);
+}
+
+bool MediaValuesDynamic::PrefersReducedData() const {
+  return CalculatePrefersReducedData(frame_);
 }
 
 ForcedColors MediaValuesDynamic::GetForcedColors() const {
@@ -172,7 +172,7 @@ bool MediaValuesDynamic::HasValues() const {
   return frame_;
 }
 
-void MediaValuesDynamic::Trace(Visitor* visitor) {
+void MediaValuesDynamic::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   MediaValues::Trace(visitor);
 }

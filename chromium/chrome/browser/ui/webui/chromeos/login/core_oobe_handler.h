@@ -16,7 +16,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/oobe_configuration.h"
@@ -56,15 +55,10 @@ class CoreOobeView {
                                const std::string& error_text,
                                const std::string& help_link_text,
                                HelpAppLauncher::HelpTopic help_topic_id) = 0;
-  virtual void ShowTpmError() = 0;
   virtual void ShowSignInUI(const std::string& email) = 0;
   virtual void ResetSignInUI(bool force_online) = 0;
   virtual void ClearUserPodPassword() = 0;
   virtual void RefocusCurrentPod() = 0;
-  virtual void ShowPasswordChangedScreen(bool show_password_error,
-                                         const std::string& email) = 0;
-  virtual void SetUsageStats(bool checked) = 0;
-  virtual void SetTpmPassword(const std::string& tmp_password) = 0;
   virtual void ClearErrors() = 0;
   virtual void ReloadContent(const base::DictionaryValue& dictionary) = 0;
   virtual void ReloadEulaContent(const base::DictionaryValue& dictionary) = 0;
@@ -78,8 +72,6 @@ class CoreOobeView {
   virtual void InitDemoModeDetection() = 0;
   virtual void StopDemoModeDetection() = 0;
   virtual void UpdateKeyboardState() = 0;
-  virtual void ShowActiveDirectoryPasswordChangeScreen(
-      const std::string& username) = 0;
 };
 
 // The core handler for Javascript messages related to the "oobe" view.
@@ -139,15 +131,10 @@ class CoreOobeHandler : public BaseWebUIHandler,
                        const std::string& error_text,
                        const std::string& help_link_text,
                        HelpAppLauncher::HelpTopic help_topic_id) override;
-  void ShowTpmError() override;
   void ShowSignInUI(const std::string& email) override;
   void ResetSignInUI(bool force_online) override;
   void ClearUserPodPassword() override;
   void RefocusCurrentPod() override;
-  void ShowPasswordChangedScreen(bool show_password_error,
-                                 const std::string& email) override;
-  void SetUsageStats(bool checked) override;
-  void SetTpmPassword(const std::string& tmp_password) override;
   void ClearErrors() override;
   void ReloadContent(const base::DictionaryValue& dictionary) override;
   void ReloadEulaContent(const base::DictionaryValue& dictionary) override;
@@ -158,8 +145,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void ShowDeviceResetScreen() override;
   void ShowEnableAdbSideloadingScreen() override;
   void ShowEnableDebuggingScreen() override;
-  void ShowActiveDirectoryPasswordChangeScreen(
-      const std::string& username) override;
 
   void InitDemoModeDetection() override;
   void StopDemoModeDetection() override;
@@ -173,13 +158,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void OnOobeConfigurationChanged() override;
 
   // Handlers for JS WebUI messages.
-  void HandleEnableLargeCursor(bool enabled);
-  void HandleEnableHighContrast(bool enabled);
-  void HandleEnableVirtualKeyboard(bool enabled);
-  void HandleEnableScreenMagnifier(bool enabled);
-  void HandleEnableSpokenFeedback(bool /* enabled */);
-  void HandleEnableSelectToSpeak(bool /* enabled */);
-  void HandleEnableDockedMagnifier(bool /* enabled */);
   void HandleHideOobeDialog();
   void HandleInitialized();
   void HandleSkipUpdateEnrollAfterEula();
@@ -211,9 +189,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // to tab/shift-tab event.
   void HandleRaiseTabKeyEvent(bool reverse);
 
-  // Updates a11y menu state based on the current a11y features state(on/off).
-  void UpdateA11yState();
-
   // Calls javascript to sync OOBE UI visibility with show_oobe_ui_.
   void UpdateOobeUIVisibility();
 
@@ -226,10 +201,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // Updates client area size based on the primary screen size.
   void UpdateClientAreaSize();
 
-  // Notification of a change in the accessibility settings.
-  void OnAccessibilityStatusChanged(
-      const AccessibilityStatusEventDetails& details);
-
   // True if we should show OOBE instead of login.
   bool show_oobe_ui_ = false;
 
@@ -238,8 +209,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
-
-  std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
 
   DemoModeDetector demo_mode_detector_;
 

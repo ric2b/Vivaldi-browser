@@ -30,12 +30,14 @@ ContactsManager* NavigatorContacts::contacts(Navigator& navigator) {
 }
 
 ContactsManager* NavigatorContacts::contacts() {
-  if (!contacts_manager_)
-    contacts_manager_ = MakeGarbageCollected<ContactsManager>();
+  if (!contacts_manager_) {
+    contacts_manager_ = MakeGarbageCollected<ContactsManager>(
+        GetSupplementable()->GetExecutionContext());
+  }
   return contacts_manager_;
 }
 
-void NavigatorContacts::Trace(Visitor* visitor) {
+void NavigatorContacts::Trace(Visitor* visitor) const {
   visitor->Trace(contacts_manager_);
   Supplement<Navigator>::Trace(visitor);
 }

@@ -17,6 +17,7 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_scrollbar_layer.h"
 #include "cc/test/animation_test_common.h"
+#include "cc/test/cc_test_suite.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -1388,15 +1389,23 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
           viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
+  // Because RequestCopyOfOutput could run as a PostTask to return results
+  // RunUntilIdle() to ensure that the result is not returned yet.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(0, result_count);
   request = std::make_unique<viz::CopyOutputRequest>(
       viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
+  // Because RequestCopyOfOutput could run as a PostTask to return results
+  // RunUntilIdle() to ensure that the result is not returned yet.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(0, result_count);
 
   // When the layer is destroyed, expect both requests to be aborted.
   layer = nullptr;
+  // Wait for any posted tasks to run so the results will be returned.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(2, result_count);
 
   layer = Layer::Create();
@@ -1412,6 +1421,9 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
                      &did_receive_first_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(std::move(request));
+  // Because RequestCopyOfOutput could run as a PostTask to return results
+  // RunUntilIdle() to ensure that the result is not returned yet.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(0, did_receive_first_result_from_this_source);
   // Make a request from a different source.
   int did_receive_result_from_different_source = 0;
@@ -1421,6 +1433,9 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
                      &did_receive_result_from_different_source));
   request->set_source(kArbitrarySourceId2);
   layer->RequestCopyOfOutput(std::move(request));
+  // Because RequestCopyOfOutput could run as a PostTask to return results
+  // RunUntilIdle() to ensure that the result is not returned yet.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(0, did_receive_result_from_different_source);
   // Make a request without specifying the source.
   int did_receive_result_from_anonymous_source = 0;
@@ -1429,6 +1444,9 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
       base::BindOnce(&ReceiveCopyOutputResult,
                      &did_receive_result_from_anonymous_source));
   layer->RequestCopyOfOutput(std::move(request));
+  // Because RequestCopyOfOutput could run as a PostTask to return results
+  // RunUntilIdle() to ensure that the result is not returned yet.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
   // Make the second request from |kArbitrarySourceId1|.
   int did_receive_second_result_from_this_source = 0;
@@ -1439,6 +1457,8 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(
       std::move(request));  // First request to be aborted.
+  // Wait for any posted tasks to run so the results will be returned.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(1, did_receive_first_result_from_this_source);
   EXPECT_EQ(0, did_receive_result_from_different_source);
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
@@ -1446,6 +1466,8 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
 
   // When the layer is destroyed, the other three requests should be aborted.
   layer = nullptr;
+  // Wait for any posted tasks to run so the results will be returned.
+  CCTestSuite::RunUntilIdle();
   EXPECT_EQ(1, did_receive_first_result_from_this_source);
   EXPECT_EQ(1, did_receive_result_from_different_source);
   EXPECT_EQ(1, did_receive_result_from_anonymous_source);
@@ -1507,7 +1529,7 @@ TEST_F(LayerTest, SetLayerTreeHostNotUsingLayerListsManagesElementId) {
 
   // Expect additional calls due to has-animation check and initialization
   // of keyframes.
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(7);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(3);
   scoped_refptr<AnimationTimeline> timeline =
       AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
   animation_host_->AddAnimationTimeline(timeline);
@@ -1524,6 +1546,19 @@ TEST_F(LayerTest, SetLayerTreeHostNotUsingLayerListsManagesElementId) {
   test_layer->SetLayerTreeHost(nullptr);
   // Layer should have been un-registered.
   EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+}
+
+// Triggering a commit to push animation counts and raf presence to the
+// compositor is expensive and updated counts can wait until the next
+// commit to be pushed. See https://crbug.com/1083244.
+TEST_F(LayerTest, PushAnimationCountsLazily) {
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(0);
+  animation_host_->SetAnimationCounts(0, /* current_frame_had_raf = */ true,
+                                      /* next_frame_has_pending_raf = */ true);
+  EXPECT_FALSE(host_impl_.animation_host()->CurrentFrameHadRAF());
+  EXPECT_FALSE(animation_host_->needs_push_properties());
+  animation_host_->PushPropertiesTo(host_impl_.animation_host());
+  EXPECT_TRUE(host_impl_.animation_host()->CurrentFrameHadRAF());
 }
 
 TEST_F(LayerTest, SetElementIdNotUsingLayerLists) {

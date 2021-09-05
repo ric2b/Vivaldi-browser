@@ -15,32 +15,34 @@ goog.require('BackgroundKeyboardHandler');
 goog.require('BackgroundMouseHandler');
 goog.require('BrailleCommandData');
 goog.require('BrailleCommandHandler');
+goog.require('BrailleKeyCommand');
+goog.require('ChromeVoxBackground');
+goog.require('ChromeVoxEditableTextBase');
 goog.require('ChromeVoxState');
 goog.require('CommandHandler');
 goog.require('DesktopAutomationHandler');
 goog.require('DownloadHandler');
+goog.require('ExtensionBridge');
 goog.require('FindHandler');
+goog.require('FocusAutomationHandler');
 goog.require('GestureCommandHandler');
 goog.require('LiveRegions');
+goog.require('LocaleOutputHelper');
 goog.require('MathHandler');
 goog.require('MediaAutomationHandler');
+goog.require('NavBraille');
 goog.require('NextEarcons');
+goog.require('NodeIdentifier');
 goog.require('Notifications');
 goog.require('Output');
 goog.require('Output.EventType');
 goog.require('PanelCommand');
 goog.require('PhoneticData');
-goog.require('FocusAutomationHandler');
 goog.require('RangeAutomationHandler');
+goog.require('UserAnnotationHandler');
 goog.require('constants');
 goog.require('cursors.Cursor');
-goog.require('BrailleKeyCommand');
-goog.require('ChromeVoxBackground');
-goog.require('ChromeVoxEditableTextBase');
-goog.require('ExtensionBridge');
-goog.require('NavBraille');
-goog.require('NodeIdentifier');
-goog.require('UserAnnotationHandler');
+
 
 goog.scope(function() {
 const AutomationNode = chrome.automation.AutomationNode;
@@ -58,14 +60,7 @@ Background = class extends ChromeVoxState {
 
     // Initialize legacy background page first.
     ChromeVoxBackground.init();
-
-    /**
-     * A list of site substring patterns to use with ChromeVox next. Keep these
-     * strings relatively specific.
-     * @type {!Array<string>}
-     * @private
-     */
-    this.whitelist_ = ['chromevox_next_test'];
+    LocaleOutputHelper.init();
 
     /**
      * @type {cursors.Range}
@@ -173,6 +168,29 @@ Background = class extends ChromeVoxState {
     // Set the darkScreen state to false, since the display will be on whenever
     // ChromeVox starts.
     sessionStorage.setItem('darkScreen', 'false');
+
+      // A self-contained class to start and stop progress sounds before any
+      // speech has been generated on startup. This is important in cases where
+      // speech is severely delayed.
+      /** @implements {TtsCapturingEventListener} */
+      const ProgressPlayer = class {
+        constructor() {
+          ChromeVox.tts.addCapturingEventListener(this);
+          ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADING);
+        }
+
+        /** @override */
+        onTtsStart() {
+          ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADED);
+          ChromeVox.tts.removeCapturingEventListener(this);
+        }
+
+        /** @override */
+        onTtsEnd() {}
+        /** @override */
+        onTtsInterrupted() {}
+      };
+      new ProgressPlayer();
   }
 
   /**
@@ -278,7 +296,7 @@ Background = class extends ChromeVoxState {
       const curRootStart = range.start.node.root;
       const curRootEnd = range.end.node.root;
 
-      // Disallow crossing over the start of the page selection and roots.
+      // Deny crossing over the start of the page selection and roots.
       if (pageRootStart != pageRootEnd || pageRootStart != curRootStart ||
           pageRootEnd != curRootEnd) {
         o.format('@end_selection');

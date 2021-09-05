@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/mac/mac_util.h"
-#include "base/task/post_task.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -18,6 +17,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_utils.h"
+#include "content/test/render_document_feature.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/ocmock_extensions.h"
@@ -55,8 +55,8 @@ class TextInputClientMacHelper {
  private:
   void OnResult(const std::string& string, const gfx::Point& point) {
     if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-      base::PostTask(FROM_HERE, {BrowserThread::UI},
-                     base::BindOnce(&TextInputClientMacHelper::OnResult,
+      GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&TextInputClientMacHelper::OnResult,
                                     base::Unretained(this), string, point));
       return;
     }
@@ -85,7 +85,7 @@ class SitePerProcessMacBrowserTest : public SitePerProcessBrowserTest {};
 // point to query the text again and verifies that correct result is returned.
 // Finally, the returned words are compared against the first word in the html
 // file which is "This".
-IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
+IN_PROC_BROWSER_TEST_P(SitePerProcessMacBrowserTest,
                        GetStringFromRangeAndPointChildFrame) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
@@ -114,7 +114,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
 // includes the first word. Then it uses the returned point to query the text
 // again and verifies that correct result is returned. Finally, the returned
 // words are compared against the first word in the html file which is "This".
-IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
+IN_PROC_BROWSER_TEST_P(SitePerProcessMacBrowserTest,
                        GetStringFromRangeAndPointMainFrame) {
   GURL main_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -139,7 +139,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
 // of 0. These should not be dropped, otherwise MouseWheelEventQueue will not
 // be informed that the user's gesture has ended.
 // See crbug.com/628742
-IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
+IN_PROC_BROWSER_TEST_P(SitePerProcessMacBrowserTest,
                        ForwardWheelEventsWithPhaseEndingInformation) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
@@ -293,7 +293,7 @@ void SendMacTouchpadPinchSequenceWithExpectedTarget(
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
+IN_PROC_BROWSER_TEST_P(SitePerProcessMacBrowserTest,
                        InputEventRouterTouchpadGestureTargetTest) {
   GURL main_url(embedded_test_server()->GetURL(
       "/frame_tree/page_with_positioned_nested_frames.html"));
@@ -335,4 +335,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
       rwhv_parent, child_center, router->touchpad_gesture_target_, rwhv_child);
 }
 
+INSTANTIATE_TEST_SUITE_P(All,
+                         SitePerProcessMacBrowserTest,
+                         testing::ValuesIn(RenderDocumentFeatureLevelValues()));
 }  // namespace content

@@ -186,14 +186,7 @@ js_compile_bundle("chrome_bundle_main_frame") {
     "resources/chrome_bundle_main_frame.js",
     "resources/image_fetch.js",
   ]
-  deps = [
-    ":credential_manager",
-    ":payment_request",
-  ]
-}
-
-js_compile_checked("payment_request") {
-  sources = [ "resources/payment_request.js" ]
+  deps = [ ":credential_manager" ]
 }
 
 js_compile_checked("credential_manager") {
@@ -324,6 +317,7 @@ source_set("unit_tests_internal") {
     "//components/content_settings/core/browser",
     "//components/infobars/core",
     "//components/payments/core",
+    "//components/safe_browsing/ios/browser:allow_list",
     "//components/security_interstitials/core:unsafe_resource",
     "//components/strings:components_strings_grit",
     "//ios/chrome/browser",
@@ -334,7 +328,6 @@ source_set("unit_tests_internal") {
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/safe_browsing",
-    "//ios/chrome/browser/safe_browsing:allow_list",
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/web",
     "//ios/chrome/test/fakes",

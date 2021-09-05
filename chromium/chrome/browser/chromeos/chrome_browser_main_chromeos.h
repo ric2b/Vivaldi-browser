@@ -48,6 +48,7 @@ class EventRewriterDelegateImpl;
 class FastTransitionObserver;
 class GnubbyNotification;
 class IdleActionWarningObserver;
+class LacrosManager;
 class LoginScreenExtensionsLifetimeManager;
 class LoginScreenExtensionsStorageCleaner;
 class LowDiskNotification;
@@ -69,10 +70,6 @@ class ExternalLoader;
 namespace internal {
 class DBusServices;
 }  // namespace internal
-
-namespace network_health {
-class NetworkHealth;
-}  // namespace network_health
 
 namespace power {
 class SmartChargingManager;
@@ -117,7 +114,6 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
  private:
   std::unique_ptr<default_app_order::ExternalLoader> app_order_loader_;
-  std::unique_ptr<network_health::NetworkHealth> network_health_;
   std::unique_ptr<NetworkPrefStateObserver> network_pref_state_observer_;
   std::unique_ptr<IdleActionWarningObserver> idle_action_warning_observer_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
@@ -160,6 +156,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<lock_screen_apps::StateController>
       lock_screen_apps_state_controller_;
+  std::unique_ptr<LacrosManager> lacros_manager_;
 
   std::unique_ptr<power::SmartChargingManager> smart_charging_manager_;
 

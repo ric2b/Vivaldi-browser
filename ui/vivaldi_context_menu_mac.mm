@@ -9,7 +9,6 @@
 
 #include "base/compiler_specific.h"
 #import "base/mac/scoped_sending_event.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"

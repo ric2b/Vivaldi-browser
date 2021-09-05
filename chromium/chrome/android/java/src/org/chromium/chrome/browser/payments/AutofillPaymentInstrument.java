@@ -19,11 +19,12 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.FullCardRequestDelegate;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentApp.InstrumentDetailsCallback;
+import org.chromium.components.payments.PaymentAppType;
+import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
@@ -143,8 +144,8 @@ public class AutofillPaymentInstrument
 
     @Override
     public boolean canMakePayment() {
-        return PaymentsExperimentalFeatures.isEnabled(
-                       ChromeFeatureList.STRICT_HAS_ENROLLED_AUTOFILL_INSTRUMENT)
+        return PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
+                       PaymentFeatureList.STRICT_HAS_ENROLLED_AUTOFILL_INSTRUMENT)
                 ? strictCanMakePayment()
                 : mHasValidNumberAndName;
     }
@@ -459,5 +460,10 @@ public class AutofillPaymentInstrument
         }
 
         return missingFields;
+    }
+
+    @Override
+    public @PaymentAppType int getPaymentAppType() {
+        return PaymentAppType.AUTOFILL;
     }
 }

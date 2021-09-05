@@ -21,6 +21,8 @@ def CommonChecks(input_api, output_api):
       r'gyp/.*\.py$',
   ]
   tests = []
+  # yapf likes formatting the extra_paths_list to be less readable.
+  # yapf: disable
   tests.extend(
       input_api.canned_checks.GetPylint(
           input_api,
@@ -41,7 +43,7 @@ def CommonChecks(input_api, output_api):
               J('..', '..', 'third_party', 'catapult', 'tracing'),
               J('..', '..', 'third_party', 'depot_tools'),
               J('..', '..', 'third_party', 'colorama', 'src'),
-              J('..', '..', 'third_party', 'pymock'),
+              J('..', '..', 'build'),
           ]))
   tests.extend(
       input_api.canned_checks.GetPylint(
@@ -52,6 +54,7 @@ def CommonChecks(input_api, output_api):
               r'.*_pb2\.py',
           ],
           extra_paths_list=[J('gyp'), J('gn')]))
+  # yapf: enable
 
   # Disabled due to http://crbug.com/410936
   #output.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -86,6 +89,7 @@ def CommonChecks(input_api, output_api):
               J('pylib', 'symbols', 'apk_native_libs_unittest.py'),
               J('pylib', 'symbols', 'elf_symbolizer_unittest.py'),
               J('pylib', 'symbols', 'symbol_utils_unittest.py'),
+              J('pylib', 'utils', 'chrome_proxy_utils_test.py'),
               J('pylib', 'utils', 'decorators_test.py'),
               J('pylib', 'utils', 'device_dependencies_test.py'),
               J('pylib', 'utils', 'dexdump_test.py'),

@@ -16,6 +16,7 @@
 
 namespace autofill_assistant {
 
+using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::InSequence;
@@ -219,6 +220,91 @@ TEST_F(BasicInteractionsTest, ComputeValueToString) {
                           /* is_client_side_only = */ true));
   }
 
+  // Credit cards
+  autofill::CreditCard credit_card_a(base::GenerateGUID(),
+                                     "https://www.example.com");
+  autofill::test::SetCreditCardInfo(&credit_card_a, "Marion Mitchell",
+                                    "4111 1111 1111 1111", "01", "2050", "");
+  autofill::CreditCard credit_card_b(base::GenerateGUID(),
+                                     "https://www.example.com");
+  autofill::test::SetCreditCardInfo(&credit_card_b, "John Doe",
+                                    "4111 1111 1111 2222", "02", "2051", "");
+  auto credit_cards =
+      std::make_unique<std::vector<std::unique_ptr<autofill::CreditCard>>>();
+  credit_cards->emplace_back(
+      std::make_unique<autofill::CreditCard>(credit_card_a));
+  credit_cards->emplace_back(
+      std::make_unique<autofill::CreditCard>(credit_card_b));
+  user_model_.SetAutofillCreditCards(std::move(credit_cards));
+  ValueProto credit_cards_value;
+  credit_cards_value.mutable_credit_cards()->add_values()->set_guid(
+      credit_card_a.guid());
+  credit_cards_value.mutable_credit_cards()->add_values()->set_guid(
+      credit_card_b.guid());
+  user_model_.SetValue("value", credit_cards_value);
+  // Formatting credit cards fails if pattern or locale are not set.
+  proto.mutable_to_string()->mutable_autofill_format()->set_locale("en-US");
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  // {name} {network} **** {last-4-digits} ({month/year})
+  proto.mutable_to_string()->mutable_autofill_format()->set_pattern(
+      "${51}. ${-5} **** ${-4} (${53}/${54})");
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  ValueProto expected_result;
+  expected_result.mutable_strings()->add_values(
+      "Marion Mitchell. Visa **** 1111 (01/50)");
+  expected_result.mutable_strings()->add_values(
+      "John Doe. Visa **** 2222 (02/51)");
+  EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
+
+  // Profiles
+  autofill::AutofillProfile profile_a(base::GenerateGUID(),
+                                      "https://www.example.com");
+  autofill::test::SetProfileInfo(
+      &profile_a, "Marion", "Mitchell", "Morrison", "marion@me.xyz", "Fox",
+      "123 Zoo St.", "unit 5", "Hollywood", "CA", "91601", "US", "16505678910");
+  autofill::AutofillProfile profile_b(base::GenerateGUID(),
+                                      "https://www.example.com");
+  autofill::test::SetProfileInfo(&profile_b, "John", "", "Doe",
+                                 "editor@gmail.com", "", "203 Barfield Lane",
+                                 "apt A", "Mountain View", "CA", "94043", "US",
+                                 "+12345678901");
+  auto profiles = std::make_unique<
+      std::vector<std::unique_ptr<autofill::AutofillProfile>>>();
+  profiles->emplace_back(
+      std::make_unique<autofill::AutofillProfile>(profile_a));
+  profiles->emplace_back(
+      std::make_unique<autofill::AutofillProfile>(profile_b));
+  user_model_.SetAutofillProfiles(std::move(profiles));
+  ValueProto profiles_value;
+  profiles_value.mutable_profiles()->add_values()->set_guid(profile_a.guid());
+  profiles_value.mutable_profiles()->add_values()->set_guid(profile_b.guid());
+  user_model_.SetValue("value", profiles_value);
+  // Formatting profiles fails if pattern is not set.
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  // {name_full}, {address_line_1} {address_line_2} {zip code} {city} {country}
+  proto.mutable_to_string()->mutable_autofill_format()->set_pattern(
+      "${7} ${30} ${31} ${35} ${33} ${36}");
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  expected_result.Clear();
+  expected_result.mutable_strings()->add_values(
+      "Marion Mitchell Morrison 123 Zoo St. unit 5 91601 Hollywood United "
+      "States");
+  expected_result.mutable_strings()->add_values(
+      "John Doe 203 Barfield Lane apt A 94043 Mountain View United States");
+  EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
+
+  // Different locale.
+  proto.mutable_to_string()->mutable_autofill_format()->set_locale("de-DE");
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  expected_result.Clear();
+  expected_result.mutable_strings()->add_values(
+      "Marion Mitchell Morrison 123 Zoo St. unit 5 91601 Hollywood Vereinigte "
+      "Staaten");
+  expected_result.mutable_strings()->add_values(
+      "John Doe 203 Barfield Lane apt A 94043 Mountain View Vereinigte "
+      "Staaten");
+  EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
+
   // Empty value fails.
   user_model_.SetValue("value", ValueProto());
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
@@ -229,7 +315,7 @@ TEST_F(BasicInteractionsTest, ComputeValueToString) {
   multi_value.mutable_booleans()->add_values(false);
   user_model_.SetValue("value", multi_value);
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
-  ValueProto expected_result;
+  expected_result.Clear();
   expected_result.mutable_strings()->add_values("true");
   expected_result.mutable_strings()->add_values("false");
   EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
@@ -294,20 +380,42 @@ TEST_F(BasicInteractionsTest, ComputeValueIntegerSum) {
 
 TEST_F(BasicInteractionsTest, EndActionWithoutCallbackFails) {
   EndActionProto proto;
-  EXPECT_FALSE(basic_interactions_.EndAction(true, proto));
+  EXPECT_FALSE(basic_interactions_.EndAction(ClientStatus(INVALID_ACTION)));
 }
 
 TEST_F(BasicInteractionsTest, EndActionWithCallbackSucceeds) {
-  base::MockCallback<base::OnceCallback<void(bool, ProcessedActionStatusProto,
-                                             const UserModel*)>>
-      callback;
+  base::MockCallback<base::OnceCallback<void(const ClientStatus&)>> callback;
   basic_interactions_.SetEndActionCallback(callback.Get());
 
-  EndActionProto proto;
-  proto.set_status(ACTION_APPLIED);
+  EXPECT_CALL(callback,
+              Run(Property(&ClientStatus::proto_status, ACTION_APPLIED)));
+  EXPECT_TRUE(basic_interactions_.EndAction(ClientStatus(ACTION_APPLIED)));
+}
 
-  EXPECT_CALL(callback, Run(true, ACTION_APPLIED, &user_model_));
-  EXPECT_TRUE(basic_interactions_.EndAction(true, proto));
+TEST_F(BasicInteractionsTest, NotifyViewInflationFinishedRunsCallback) {
+  base::MockCallback<base::OnceCallback<void(const ClientStatus&)>> callback;
+  basic_interactions_.SetViewInflationFinishedCallback(callback.Get());
+
+  EXPECT_CALL(callback,
+              Run(Property(&ClientStatus::proto_status, ACTION_APPLIED)));
+  basic_interactions_.NotifyViewInflationFinished(ClientStatus(ACTION_APPLIED));
+}
+
+TEST_F(BasicInteractionsTest, EndActionResetsViewInflationCallback) {
+  base::MockCallback<base::OnceCallback<void(const ClientStatus&)>>
+      view_inflation_finished_callback;
+  base::MockCallback<base::OnceCallback<void(const ClientStatus&)>>
+      end_action_callback;
+  basic_interactions_.SetViewInflationFinishedCallback(
+      view_inflation_finished_callback.Get());
+  basic_interactions_.SetEndActionCallback(end_action_callback.Get());
+
+  EXPECT_CALL(end_action_callback,
+              Run(Property(&ClientStatus::proto_status, INVALID_ACTION)));
+  EXPECT_CALL(view_inflation_finished_callback, Run(_)).Times(0);
+  EXPECT_TRUE(basic_interactions_.EndAction(ClientStatus(INVALID_ACTION)));
+  EXPECT_FALSE(basic_interactions_.NotifyViewInflationFinished(
+      ClientStatus(ACTION_APPLIED)));
 }
 
 TEST_F(BasicInteractionsTest, ComputeValueCompare) {
@@ -493,8 +601,7 @@ TEST_F(BasicInteractionsTest, ComputeValueCreateLoginOptionResponse) {
   // LoginOptionResponseProto is allowed to extract the payload from
   // client-only values.
   ValueProto expected_response_value;
-  expected_response_value.mutable_login_option_response()->set_payload(
-      "payload");
+  expected_response_value.set_server_payload("payload");
   expected_response_value.set_is_client_side_only(false);
   EXPECT_EQ(user_model_.GetValue("result"), expected_response_value);
 }

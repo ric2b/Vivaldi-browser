@@ -56,9 +56,7 @@ class ChromeBrowsingDataRemoverDelegate
  public:
   // This is an extension of content::BrowsingDataRemover::RemoveDataMask which
   // includes all datatypes therefrom and adds additional Chrome-specific ones.
-  // TODO(crbug.com/668114): Extend this to uint64_t to ensure that we won't
-  // run out of space anytime soon.
-  enum DataType {
+  enum DataType : uint64_t {
     // Embedder can start adding datatypes after the last platform datatype.
     DATA_TYPE_EMBEDDER_BEGIN =
         content::BrowsingDataRemover::DATA_TYPE_CONTENT_END << 1,
@@ -106,6 +104,10 @@ class ChromeBrowsingDataRemoverDelegate
                             content::BrowsingDataRemover::DATA_TYPE_CACHE |
                             content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
 
+    // Datatypes with account-scoped data that needs to be removed
+    // before Google cookies are deleted.
+    DEFERRED_COOKIE_DELETION_DATA_TYPES = DATA_TYPE_PASSWORDS,
+
     // Includes all the available remove options. Meant to be used by clients
     // that wish to wipe as much data as possible from a Profile, to make it
     // look like a new Profile.
@@ -128,7 +130,7 @@ class ChromeBrowsingDataRemoverDelegate
   // This is an extension of content::BrowsingDataRemover::OriginType which
   // includes all origin types therefrom and adds additional Chrome-specific
   // ones.
-  enum OriginType {
+  enum OriginType : uint64_t {
     // Embedder can start adding origin types after the last
     // platform origin type.
     ORIGIN_TYPE_EMBEDDER_BEGIN =
@@ -154,7 +156,13 @@ class ChromeBrowsingDataRemoverDelegate
   static_assert((IMPORTANT_SITES_DATA_TYPES & ~FILTERABLE_DATA_TYPES) == 0,
                 "All important sites datatypes must be filterable.");
 
-  ChromeBrowsingDataRemoverDelegate(content::BrowserContext* browser_context);
+  static_assert((DEFERRED_COOKIE_DELETION_DATA_TYPES & FILTERABLE_DATA_TYPES) ==
+                    0,
+                "Deferred deletion is currently not implemented for filterable "
+                "data types");
+
+  explicit ChromeBrowsingDataRemoverDelegate(
+      content::BrowserContext* browser_context);
   ~ChromeBrowsingDataRemoverDelegate() override;
 
   // KeyedService:
@@ -164,11 +172,13 @@ class ChromeBrowsingDataRemoverDelegate
   content::BrowsingDataRemoverDelegate::EmbedderOriginTypeMatcher
   GetOriginTypeMatcher() override;
   bool MayRemoveDownloadHistory() override;
+  std::vector<std::string> GetDomainsForDeferredCookieDeletion(
+      uint64_t remove_mask) override;
   void RemoveEmbedderData(const base::Time& delete_begin,
                           const base::Time& delete_end,
-                          int remove_mask,
+                          uint64_t remove_mask,
                           content::BrowsingDataFilterBuilder* filter_builder,
-                          int origin_type_mask,
+                          uint64_t origin_type_mask,
                           base::OnceClosure callback) override;
 
 #if defined(OS_ANDROID)
@@ -232,7 +242,9 @@ class ChromeBrowsingDataRemoverDelegate
     kCompromisedCredentials = 34,
     kUserDataSnapshot = 35,
     kMediaFeeds = 36,
-    kMaxValue = kMediaFeeds,
+    kAccountPasswords = 37,
+    kAccountPasswordsSynced = 38,
+    kMaxValue = kAccountPasswordsSynced,
   };
 
   // Called by CreateTaskCompletionClosure().
@@ -322,6 +334,8 @@ class ChromeBrowsingDataRemoverDelegate
   // not initialised, so the registry must be mocked out.
   std::unique_ptr<WebappRegistry> webapp_registry_;
 #endif
+
+  bool should_clear_password_account_storage_settings_ = false;
 
   base::WeakPtrFactory<ChromeBrowsingDataRemoverDelegate> weak_ptr_factory_{
       this};

@@ -30,9 +30,9 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
@@ -712,12 +712,13 @@ bool DragController::CanProcessDrag(DragData* drag_data,
   if (!local_root.ContentLayoutObject())
     return false;
 
-  PhysicalOffset point = local_root.View()->ConvertFromRootFrame(
-      PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
+  const PhysicalOffset point_in_local_root =
+      local_root.View()->ConvertFromRootFrame(
+          PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
 
-  HitTestLocation location(point);
-  HitTestResult result =
-      local_root.GetEventHandler().HitTestResultAtLocation(location);
+  const HitTestResult result =
+      local_root.GetEventHandler().HitTestResultAtLocation(
+          HitTestLocation(point_in_local_root));
 
   if (!result.InnerNode())
     return false;
@@ -732,9 +733,16 @@ bool DragController::CanProcessDrag(DragData* drag_data,
     return false;
   }
 
-  if (did_initiate_drag_ && document_under_mouse_ == drag_initiator_ &&
-      result.IsSelected(location))
-    return false;
+  if (did_initiate_drag_ && document_under_mouse_ == drag_initiator_) {
+    const PhysicalOffset point_in_frame =
+        result.InnerNode()
+            ->GetDocument()
+            .GetFrame()
+            ->View()
+            ->ConvertFromRootFrame(PhysicalOffset::FromFloatPointRound(
+                drag_data->ClientPosition()));
+    return !result.IsSelected(HitTestLocation(point_in_frame));
+  }
 
   return true;
 }
@@ -753,9 +761,7 @@ static DragOperation DefaultOperationForDrag(DragOperation src_op_mask) {
   if (src_op_mask & kDragOperationLink)
     return kDragOperationLink;
 
-  // FIXME: Does IE really return "generic" even if no operations were allowed
-  // by the source?
-  return kDragOperationGeneric;
+  return kDragOperationNone;
 }
 
 bool DragController::TryDHTMLDrag(DragData* drag_data,
@@ -1367,7 +1373,7 @@ void DragController::ContextDestroyed() {
   drag_state_ = nullptr;
 }
 
-void DragController::Trace(Visitor* visitor) {
+void DragController::Trace(Visitor* visitor) const {
   visitor->Trace(page_);
   visitor->Trace(document_under_mouse_);
   visitor->Trace(drag_initiator_);

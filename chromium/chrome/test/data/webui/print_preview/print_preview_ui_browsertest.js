@@ -6,6 +6,7 @@
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
+GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 GEN('#include "services/network/public/cpp/features.h"');
 
@@ -1080,6 +1081,104 @@ TEST_F('PrintPreviewDestinationSelectTestCrOS', 'ChangeIcon', function() {
 
 TEST_F('PrintPreviewDestinationSelectTestCrOS', 'EulaIsDisplayed', function() {
   this.runMochaTest(destination_select_test_cros.TestNames.EulaIsDisplayed);
+});
+
+// eslint-disable-next-line no-var
+var PrintPreviewPrinterStatusTestCros = class extends PrintPreviewTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/test_loader.html?module=print_preview/destination_select_test_cros.js';
+  }
+
+  /** @override */
+  get suiteName() {
+    return printer_status_test_cros.suiteName;
+  }
+
+  /** @override */
+  get featureList() {
+    const kPrinterStatus = ['chromeos::features::kPrinterStatus'];
+    const featureList = super.featureList;
+    featureList.enabled = featureList.enabled ?
+        featureList.enabled.concat(kPrinterStatus) :
+        kPrinterStatus;
+    return featureList;
+  }
+};
+
+TEST_F(
+    'PrintPreviewPrinterStatusTestCros', 'PrinterStatusUpdatesColor',
+    function() {
+      this.runMochaTest(
+          printer_status_test_cros.TestNames.PrinterStatusUpdatesColor);
+    });
+
+TEST_F(
+    'PrintPreviewPrinterStatusTestCros', 'SendStatusRequestOnce', function() {
+      this.runMochaTest(
+          printer_status_test_cros.TestNames.SendStatusRequestOnce);
+    });
+
+TEST_F('PrintPreviewPrinterStatusTestCros', 'HiddenStatusText', function() {
+  this.runMochaTest(printer_status_test_cros.TestNames.HiddenStatusText);
+});
+
+// eslint-disable-next-line no-var
+var PrintPreviewDestinationDropdownCrosTest = class extends PrintPreviewTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/test_loader.html?module=print_preview/destination_dropdown_cros_test.js';
+  }
+
+  /** @override */
+  get suiteName() {
+    return destination_dropdown_cros_test.suiteName;
+  }
+};
+
+TEST_F(
+    'PrintPreviewDestinationDropdownCrosTest', 'CorrectListItems', function() {
+      this.runMochaTest(
+          destination_dropdown_cros_test.TestNames.CorrectListItems);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDropdownCrosTest', 'ClickRemovesSelected',
+    function() {
+      this.runMochaTest(
+          destination_dropdown_cros_test.TestNames.ClickRemovesSelected);
+    });
+
+TEST_F('PrintPreviewDestinationDropdownCrosTest', 'ClickCloses', function() {
+  this.runMochaTest(destination_dropdown_cros_test.TestNames.ClickCloses);
+});
+
+TEST_F('PrintPreviewDestinationDropdownCrosTest', 'TabCloses', function() {
+  this.runMochaTest(destination_dropdown_cros_test.TestNames.TabCloses);
+});
+
+TEST_F(
+    'PrintPreviewDestinationDropdownCrosTest', 'SelectedAfterUpDown',
+    function() {
+      this.runMochaTest(
+          destination_dropdown_cros_test.TestNames.SelectedAfterUpDown);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDropdownCrosTest', 'EnterOpensCloses', function() {
+      this.runMochaTest(
+          destination_dropdown_cros_test.TestNames.EnterOpensCloses);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDropdownCrosTest', 'SelectedFollowsMouse',
+    function() {
+      this.runMochaTest(
+          destination_dropdown_cros_test.TestNames.SelectedFollowsMouse);
+    });
+
+TEST_F('PrintPreviewDestinationDropdownCrosTest', 'Disabled', function() {
+  this.runMochaTest(destination_dropdown_cros_test.TestNames.Disabled);
 });
 
 GEN('#else');

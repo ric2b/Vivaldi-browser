@@ -710,7 +710,10 @@ WebTestBluetoothAdapterProvider::GetDisconnectingHealthThermometer(
       .WillByDefault(
           RunCallback<0 /* success_callback */>(std::vector<uint8_t>({1})));
 
-  ON_CALL(*measurement_interval, WriteRemoteCharacteristic_(_, _, _))
+  ON_CALL(*measurement_interval, WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(RunCallback<2 /* success_callback */>());
+
+  ON_CALL(*measurement_interval, DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(RunCallback<1 /* success_callback */>());
 
   ON_CALL(*measurement_interval, StartNotifySession_(_, _))
@@ -1037,7 +1040,33 @@ scoped_refptr<NiceMockBluetoothAdapter> WebTestBluetoothAdapterProvider::
             }
           }));
 
-  ON_CALL(*measurement_interval, WriteRemoteCharacteristic_(_, _, _))
+  ON_CALL(*measurement_interval, WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(
+          Invoke([adapter_ptr, device_ptr, disconnect, succeeds](
+                     const std::vector<uint8_t>& value,
+                     BluetoothRemoteGattCharacteristic::WriteType write_type,
+                     base::OnceClosure& callback,
+                     BluetoothRemoteGattCharacteristic::ErrorCallback&
+                         error_callback) {
+            base::OnceClosure pending;
+            if (succeeds) {
+              pending = std::move(callback);
+            } else {
+              pending =
+                  base::BindOnce(std::move(error_callback),
+                                 BluetoothRemoteGattService::GATT_ERROR_FAILED);
+            }
+            device_ptr->PushPendingCallback(std::move(pending));
+            if (disconnect) {
+              device_ptr->SetConnected(false);
+              base::ThreadTaskRunnerHandle::Get()->PostTask(
+                  FROM_HERE,
+                  base::BindOnce(&NotifyDeviceChanged,
+                                 base::RetainedRef(adapter_ptr), device_ptr));
+            }
+          }));
+
+  ON_CALL(*measurement_interval, DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(Invoke(
           [adapter_ptr, device_ptr, disconnect, succeeds](
               const std::vector<uint8_t>& value, base::OnceClosure& callback,
@@ -1444,7 +1473,12 @@ WebTestBluetoothAdapterProvider::GetBlocklistTestService(
 
   // Write response.
   ON_CALL(*blocklist_exclude_reads_characteristic,
-          WriteRemoteCharacteristic_(_, _, _))
+          WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(RunCallback<2 /* success callback */>());
+
+  // Write response.
+  ON_CALL(*blocklist_exclude_reads_characteristic,
+          DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(RunCallback<1 /* success callback */>());
 
   blocklist_test_service->AddMockCharacteristic(
@@ -1500,7 +1534,11 @@ WebTestBluetoothAdapterProvider::GetGenericAccessService(
         .WillByDefault(RunCallback<0>(device_name_value));
 
     // Write response.
-    ON_CALL(*device_name, WriteRemoteCharacteristic_(_, _, _))
+    ON_CALL(*device_name, WriteRemoteCharacteristic_(_, _, _, _))
+        .WillByDefault(RunCallback<2 /* success callback */>());
+
+    // Write response.
+    ON_CALL(*device_name, DeprecatedWriteRemoteCharacteristic_(_, _, _))
         .WillByDefault(RunCallback<1 /* success callback */>());
 
     generic_access->AddMockCharacteristic(std::move(device_name));
@@ -1524,7 +1562,19 @@ WebTestBluetoothAdapterProvider::GetGenericAccessService(
     // Crash if WriteRemoteCharacteristic called. Not using GoogleMock's Expect
     // because this is used in web tests that may not report a mock
     // expectation error correctly as a web test failure.
-    ON_CALL(*peripheral_privacy_flag, WriteRemoteCharacteristic_(_, _, _))
+    ON_CALL(*peripheral_privacy_flag, WriteRemoteCharacteristic_(_, _, _, _))
+        .WillByDefault(Invoke(
+            [](const std::vector<uint8_t>&,
+               BluetoothRemoteGattCharacteristic::WriteType, base::OnceClosure&,
+               BluetoothRemoteGattCharacteristic::ErrorCallback&) {
+              NOTREACHED();
+            }));
+
+    // Crash if WriteRemoteCharacteristic called. Not using GoogleMock's Expect
+    // because this is used in web tests that may not report a mock
+    // expectation error correctly as a web test failure.
+    ON_CALL(*peripheral_privacy_flag,
+            DeprecatedWriteRemoteCharacteristic_(_, _, _))
         .WillByDefault(
             Invoke([](const std::vector<uint8_t>&, base::OnceClosure&,
                       BluetoothRemoteGattCharacteristic::ErrorCallback&) {
@@ -1609,7 +1659,20 @@ WebTestBluetoothAdapterProvider::GetDisconnectingService(
           "Disconnection Characteristic", disconnection_service.get(),
           kRequestDisconnectionCharacteristicUUID,
           BluetoothRemoteGattCharacteristic::PROPERTY_WRITE_WITHOUT_RESPONSE));
-  ON_CALL(*disconnection_characteristic, WriteRemoteCharacteristic_(_, _, _))
+  ON_CALL(*disconnection_characteristic, WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(
+          Invoke([adapter, device](
+                     const std::vector<uint8_t>& value,
+                     BluetoothRemoteGattCharacteristic::WriteType write_type,
+                     base::OnceClosure& success,
+                     BluetoothRemoteGattCharacteristic::ErrorCallback& error) {
+            device->SetConnected(false);
+            for (auto& observer : adapter->GetObservers())
+              observer.DeviceChanged(adapter, device);
+            std::move(success).Run();
+          }));
+  ON_CALL(*disconnection_characteristic,
+          DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(Invoke(
           [adapter, device](
               const std::vector<uint8_t>& value, base::OnceClosure& success,
@@ -1642,7 +1705,11 @@ WebTestBluetoothAdapterProvider::GetBaseGATTCharacteristic(
       .WillByDefault(
           RunCallback<1>(BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED));
 
-  ON_CALL(*characteristic, WriteRemoteCharacteristic_(_, _, _))
+  ON_CALL(*characteristic, WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(
+          RunCallback<3>(BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED));
+
+  ON_CALL(*characteristic, DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(
           RunCallback<2>(BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED));
 
@@ -1672,7 +1739,11 @@ WebTestBluetoothAdapterProvider::GetErrorCharacteristic(
       .WillByDefault(RunCallback<1 /* error_callback */>(error_code));
 
   // Write response.
-  ON_CALL(*characteristic, WriteRemoteCharacteristic_(_, _, _))
+  ON_CALL(*characteristic, WriteRemoteCharacteristic_(_, _, _, _))
+      .WillByDefault(RunCallback<3 /* error_callback */>(error_code));
+
+  // Write response.
+  ON_CALL(*characteristic, DeprecatedWriteRemoteCharacteristic_(_, _, _))
       .WillByDefault(RunCallback<2 /* error_callback */>(error_code));
 
   // StartNotifySession response

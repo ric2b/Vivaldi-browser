@@ -5,36 +5,34 @@
 #include "ash/assistant/assistant_suggestions_controller_impl.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/assistant/conversation_starter.h"
 #include "ash/public/cpp/assistant/conversation_starters_client.h"
-#include "ash/public/cpp/assistant/proactive_suggestions.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/unguessable_token.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
 
 namespace {
 
+using chromeos::assistant::AssistantSuggestion;
+using chromeos::assistant::AssistantSuggestionType;
+using chromeos::assistant::features::IsBetterOnboardingEnabled;
 using chromeos::assistant::features::IsConversationStartersV2Enabled;
-using chromeos::assistant::features::IsProactiveSuggestionsEnabled;
-using chromeos::assistant::mojom::AssistantSuggestion;
-using chromeos::assistant::mojom::AssistantSuggestionPtr;
-using chromeos::assistant::mojom::AssistantSuggestionType;
 
 // Conversation starters -------------------------------------------------------
 
@@ -54,34 +52,30 @@ bool IsAllowed(const ConversationStarter& conversation_starter) {
   return true;
 }
 
-AssistantSuggestionPtr ToAssistantSuggestionPtr(
+AssistantSuggestion ToAssistantSuggestion(
     const ConversationStarter& conversation_starter) {
-  AssistantSuggestionPtr ptr = AssistantSuggestion::New();
-  ptr->id = base::UnguessableToken::Create();
-  ptr->type = AssistantSuggestionType::kConversationStarter;
-  ptr->text = conversation_starter.label();
+  AssistantSuggestion suggestion;
+  suggestion.id = base::UnguessableToken::Create();
+  suggestion.type = AssistantSuggestionType::kConversationStarter;
+  suggestion.text = conversation_starter.label();
 
   if (conversation_starter.action_url().has_value())
-    ptr->action_url = conversation_starter.action_url().value();
+    suggestion.action_url = conversation_starter.action_url().value();
 
   if (conversation_starter.icon_url().has_value())
-    ptr->icon_url = conversation_starter.icon_url().value();
+    suggestion.icon_url = conversation_starter.icon_url().value();
 
-  return ptr;
+  return suggestion;
 }
 
 }  // namespace
 
 // AssistantSuggestionsControllerImpl ------------------------------------------
 
-AssistantSuggestionsControllerImpl::AssistantSuggestionsControllerImpl(
-    AssistantControllerImpl* assistant_controller)
-    : assistant_controller_(assistant_controller) {
-  if (IsProactiveSuggestionsEnabled()) {
-    proactive_suggestions_controller_ =
-        std::make_unique<AssistantProactiveSuggestionsController>(
-            assistant_controller_);
-  }
+AssistantSuggestionsControllerImpl::AssistantSuggestionsControllerImpl() {
+  // Onboarding suggestions are only applicable if the feature is enabled.
+  if (IsBetterOnboardingEnabled())
+    UpdateOnboardingSuggestions();
 
   // In conversation starters V2, we only update conversation starters when the
   // Assistant UI is becoming visible so as to maximize freshness.
@@ -99,24 +93,14 @@ const AssistantSuggestionsModel* AssistantSuggestionsControllerImpl::GetModel()
   return &model_;
 }
 
-void AssistantSuggestionsControllerImpl::AddModelObserver(
-    AssistantSuggestionsModelObserver* observer) {
-  model_.AddObserver(observer);
-}
-
-void AssistantSuggestionsControllerImpl::RemoveModelObserver(
-    AssistantSuggestionsModelObserver* observer) {
-  model_.RemoveObserver(observer);
-}
-
 void AssistantSuggestionsControllerImpl::OnAssistantControllerConstructed() {
-  AssistantUiController::Get()->AddModelObserver(this);
+  AssistantUiController::Get()->GetModel()->AddObserver(this);
   AssistantState::Get()->AddObserver(this);
 }
 
 void AssistantSuggestionsControllerImpl::OnAssistantControllerDestroying() {
   AssistantState::Get()->RemoveObserver(this);
-  AssistantUiController::Get()->RemoveModelObserver(this);
+  AssistantUiController::Get()->GetModel()->RemoveObserver(this);
 }
 
 void AssistantSuggestionsControllerImpl::OnUiVisibilityChanged(
@@ -150,11 +134,6 @@ void AssistantSuggestionsControllerImpl::OnUiVisibilityChanged(
     UpdateConversationStarters();
 }
 
-void AssistantSuggestionsControllerImpl::OnProactiveSuggestionsChanged(
-    scoped_refptr<const ProactiveSuggestions> proactive_suggestions) {
-  model_.SetProactiveSuggestions(std::move(proactive_suggestions));
-}
-
 void AssistantSuggestionsControllerImpl::OnAssistantContextEnabled(
     bool enabled) {
   // We currently assume that the context setting is not being modified while
@@ -177,7 +156,7 @@ void AssistantSuggestionsControllerImpl::UpdateConversationStarters() {
     FetchConversationStarters();
     return;
   }
-  // Otherwise we'll use a locally provided set of proactive suggestions.
+  // Otherwise we'll use a locally provided set of conversation starters.
   ProvideConversationStarters();
 }
 
@@ -216,10 +195,10 @@ void AssistantSuggestionsControllerImpl::FetchConversationStarters() {
 
         // We need to transform our conversation starters into the type that is
         // understood by the suggestions model...
-        std::vector<AssistantSuggestionPtr> suggestions;
-        std::transform(
-            conversation_starters.begin(), conversation_starters.end(),
-            std::back_inserter(suggestions), ToAssistantSuggestionPtr);
+        std::vector<AssistantSuggestion> suggestions;
+        std::transform(conversation_starters.begin(),
+                       conversation_starters.end(),
+                       std::back_inserter(suggestions), ToAssistantSuggestion);
 
         // ...and we update our cache.
         self->model_.SetConversationStarters(std::move(suggestions));
@@ -228,16 +207,16 @@ void AssistantSuggestionsControllerImpl::FetchConversationStarters() {
 }
 
 void AssistantSuggestionsControllerImpl::ProvideConversationStarters() {
-  std::vector<AssistantSuggestionPtr> conversation_starters;
+  std::vector<AssistantSuggestion> conversation_starters;
 
   // Adds a conversation starter for the given |message_id| and |action_url|.
   auto AddConversationStarter = [&conversation_starters](
                                     int message_id, GURL action_url = GURL()) {
-    AssistantSuggestionPtr starter = AssistantSuggestion::New();
-    starter->id = base::UnguessableToken::Create();
-    starter->type = AssistantSuggestionType::kConversationStarter;
-    starter->text = l10n_util::GetStringUTF8(message_id);
-    starter->action_url = action_url;
+    AssistantSuggestion starter;
+    starter.id = base::UnguessableToken::Create();
+    starter.type = AssistantSuggestionType::kConversationStarter;
+    starter.text = l10n_util::GetStringUTF8(message_id);
+    starter.action_url = action_url;
     conversation_starters.push_back(std::move(starter));
   };
 
@@ -272,6 +251,34 @@ void AssistantSuggestionsControllerImpl::ProvideConversationStarters() {
   }
 
   model_.SetConversationStarters(std::move(conversation_starters));
+}
+
+// TODO(dmblack): Replace w/ actual suggestions.
+void AssistantSuggestionsControllerImpl::UpdateOnboardingSuggestions() {
+  DCHECK(IsBetterOnboardingEnabled());
+  std::vector<AssistantSuggestion> onboarding_suggestions;
+
+  auto AddOnboardingSuggestion =
+      [&onboarding_suggestions](const std::string& text) {
+        onboarding_suggestions.emplace_back();
+        auto& suggestion = onboarding_suggestions.back();
+        suggestion.id = base::UnguessableToken::Create();
+        suggestion.type = AssistantSuggestionType::kBetterOnboarding;
+        suggestion.text = text;
+        suggestion.icon_url = GURL(
+            "https://www.gstatic.com/images/branding/product/2x/"
+            "googleg_48dp.png");
+        suggestion.action_url = GURL();
+      };
+
+  AddOnboardingSuggestion("First suggestion");
+  AddOnboardingSuggestion("Second suggestion");
+  AddOnboardingSuggestion("Third suggestion");
+  AddOnboardingSuggestion("Fourth suggestion");
+  AddOnboardingSuggestion("Fifth suggestion");
+  AddOnboardingSuggestion("Sixth suggestion");
+
+  model_.SetOnboardingSuggestions(std::move(onboarding_suggestions));
 }
 
 }  // namespace ash

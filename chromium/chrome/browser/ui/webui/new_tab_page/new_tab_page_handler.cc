@@ -32,7 +32,6 @@
 #include "chrome/browser/search/chrome_colors/chrome_colors_factory.h"
 #include "chrome/browser/search/chrome_colors/chrome_colors_service.h"
 #include "chrome/browser/search/instant_service.h"
-#include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_provider_logos/logo_service_factory.h"
@@ -235,6 +234,55 @@ ntp_tiles::NTPTileImpression MakeNTPTileImpression(
       /*url_for_rappor=*/GURL() /* unused */);
 }
 
+SkColor ParseHexColor(const std::string& color) {
+  SkColor result;
+  if (color.size() == 7 && color[0] == '#' &&
+      base::HexStringToUInt(color.substr(1), &result)) {
+    return SkColorSetA(result, 255);
+  }
+  return SK_ColorTRANSPARENT;
+}
+
+new_tab_page::mojom::ImageDoodlePtr MakeImageDoodle(
+    search_provider_logos::LogoType type,
+    const std::string& data,
+    const std::string& mime_type,
+    const GURL& animated_url,
+    int width_px,
+    int height_px,
+    const std::string& background_color,
+    int share_button_x,
+    int share_button_y,
+    const std::string& share_button_icon,
+    const std::string& share_button_bg,
+    GURL log_url,
+    GURL cta_log_url) {
+  auto doodle = new_tab_page::mojom::ImageDoodle::New();
+  std::string base64;
+  base::Base64Encode(data, &base64);
+  doodle->image_url = GURL(base::StringPrintf(
+      "data:%s;base64,%s", mime_type.c_str(), base64.c_str()));
+  if (type == search_provider_logos::LogoType::ANIMATED) {
+    doodle->animation_url = animated_url;
+  }
+  doodle->width = width_px;
+  doodle->height = height_px;
+  doodle->background_color = ParseHexColor(background_color);
+  doodle->share_button = new_tab_page::mojom::DoodleShareButton::New();
+  doodle->share_button->x = share_button_x;
+  doodle->share_button->y = share_button_y;
+  doodle->share_button->icon_url = GURL(base::StringPrintf(
+      "data:image/png;base64,%s", share_button_icon.c_str()));
+  doodle->share_button->background_color = ParseHexColor(share_button_bg);
+  if (type == search_provider_logos::LogoType::ANIMATED) {
+    doodle->image_impression_log_url = cta_log_url;
+    doodle->animation_impression_log_url = log_url;
+  } else {
+    doodle->image_impression_log_url = log_url;
+  }
+  return doodle;
+}
+
 }  // namespace
 
 NewTabPageHandler::NewTabPageHandler(
@@ -242,11 +290,13 @@ NewTabPageHandler::NewTabPageHandler(
         pending_page_handler,
     mojo::PendingRemote<new_tab_page::mojom::Page> pending_page,
     Profile* profile,
+    InstantService* instant_service,
     content::WebContents* web_contents,
+    NTPUserDataLogger* logger,
     const base::Time& ntp_navigation_start_time)
     : chrome_colors_service_(
           chrome_colors::ChromeColorsFactory::GetForProfile(profile)),
-      instant_service_(InstantServiceFactory::GetForProfile(profile)),
+      instant_service_(instant_service),
       ntp_background_service_(
           NtpBackgroundServiceFactory::GetForProfile(profile)),
       logo_service_(LogoServiceFactory::GetForProfile(profile)),
@@ -263,7 +313,7 @@ NewTabPageHandler::NewTabPageHandler(
           BitmapFetcherServiceFactory::GetForBrowserContext(profile)),
       web_contents_(web_contents),
       ntp_navigation_start_time_(ntp_navigation_start_time),
-      logger_(NTPUserDataLogger::GetOrCreateFromWebContents(web_contents)),
+      logger_(logger),
       page_{std::move(pending_page)},
       receiver_{this, std::move(pending_page_handler)} {
   CHECK(instant_service_);
@@ -725,6 +775,73 @@ void NewTabPageHandler::OnPromoLinkClicked() {
   LogEvent(NTP_MIDDLE_SLOT_PROMO_LINK_CLICKED);
 }
 
+void NewTabPageHandler::OnVoiceSearchAction(
+    new_tab_page::mojom::VoiceSearchAction action) {
+  NTPLoggingEventType event;
+  switch (action) {
+    case new_tab_page::mojom::VoiceSearchAction::ACTIVATE_SEARCH_BOX:
+      event = NTP_VOICE_ACTION_ACTIVATE_SEARCH_BOX;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::ACTIVATE_KEYBOARD:
+      event = NTP_VOICE_ACTION_ACTIVATE_KEYBOARD;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::CLOSE_OVERLAY:
+      event = NTP_VOICE_ACTION_CLOSE_OVERLAY;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::QUERY_SUBMITTED:
+      event = NTP_VOICE_ACTION_QUERY_SUBMITTED;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::SUPPORT_LINK_CLICKED:
+      event = NTP_VOICE_ACTION_SUPPORT_LINK_CLICKED;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::TRY_AGAIN_LINK:
+      event = NTP_VOICE_ACTION_TRY_AGAIN_LINK;
+      break;
+    case new_tab_page::mojom::VoiceSearchAction::TRY_AGAIN_MIC_BUTTON:
+      event = NTP_VOICE_ACTION_TRY_AGAIN_MIC_BUTTON;
+      break;
+  }
+  LogEvent(event);
+}
+
+void NewTabPageHandler::OnVoiceSearchError(
+    new_tab_page::mojom::VoiceSearchError error) {
+  NTPLoggingEventType event;
+  switch (error) {
+    case new_tab_page::mojom::VoiceSearchError::ABORTED:
+      event = NTP_VOICE_ERROR_ABORTED;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::NO_SPEECH:
+      event = NTP_VOICE_ERROR_NO_SPEECH;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::AUDIO_CAPTURE:
+      event = NTP_VOICE_ERROR_AUDIO_CAPTURE;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::NETWORK:
+      event = NTP_VOICE_ERROR_NETWORK;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::NOT_ALLOWED:
+      event = NTP_VOICE_ERROR_NOT_ALLOWED;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::LANGUAGE_NOT_SUPPORTED:
+      event = NTP_VOICE_ERROR_LANGUAGE_NOT_SUPPORTED;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::NO_MATCH:
+      event = NTP_VOICE_ERROR_NO_MATCH;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::SERVICE_NOT_ALLOWED:
+      event = NTP_VOICE_ERROR_SERVICE_NOT_ALLOWED;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::BAD_GRAMMAR:
+      event = NTP_VOICE_ERROR_BAD_GRAMMAR;
+      break;
+    case new_tab_page::mojom::VoiceSearchError::OTHER:
+      event = NTP_VOICE_ERROR_OTHER;
+      break;
+  }
+  LogEvent(event);
+}
+
 void NewTabPageHandler::QueryAutocomplete(const base::string16& input,
                                           bool prevent_inline_autocomplete) {
   if (!autocomplete_controller_) {
@@ -879,7 +996,7 @@ void NewTabPageHandler::OpenAutocompleteMatch(
 
   web_contents_->OpenURL(
       content::OpenURLParams(match.destination_url, content::Referrer(),
-                             disposition, ui::PAGE_TRANSITION_LINK, false));
+                             disposition, match.transition, false));
 }
 
 void NewTabPageHandler::DeleteAutocompleteMatch(uint8_t line) {
@@ -1144,40 +1261,28 @@ void NewTabPageHandler::OnLogoAvailable(
       std::move(callback).Run(nullptr);
       return;
     }
-    SkColor doodle_share_button_background_color;
-    if (logo->metadata.share_button_bg.size() != 7 ||
-        logo->metadata.share_button_bg[0] != '#' ||
-        !base::HexStringToUInt(logo->metadata.share_button_bg.substr(1),
-                               &doodle_share_button_background_color)) {
-      std::move(callback).Run(nullptr);
-      return;
-    }
     auto image_doodle_content = new_tab_page::mojom::ImageDoodleContent::New();
-    std::string base64;
-    base::Base64Encode(logo->encoded_image->data(), &base64);
-    image_doodle_content->image_url = GURL(base::StringPrintf(
-        "data:%s;base64,%s", logo->metadata.mime_type.c_str(), base64.c_str()));
+    image_doodle_content->light = MakeImageDoodle(
+        logo->metadata.type, logo->encoded_image->data(),
+        logo->metadata.mime_type, logo->metadata.animated_url,
+        logo->metadata.width_px, logo->metadata.height_px, "#ffffff",
+        logo->metadata.share_button_x, logo->metadata.share_button_y,
+        logo->metadata.share_button_icon, logo->metadata.share_button_bg,
+        logo->metadata.log_url, logo->metadata.cta_log_url);
+    if (logo->dark_encoded_image) {
+      image_doodle_content->dark = MakeImageDoodle(
+          logo->metadata.type, logo->dark_encoded_image->data(),
+          logo->metadata.dark_mime_type, logo->metadata.dark_animated_url,
+          logo->metadata.dark_width_px, logo->metadata.dark_height_px,
+          logo->metadata.dark_background_color,
+          logo->metadata.dark_share_button_x,
+          logo->metadata.dark_share_button_y,
+          logo->metadata.dark_share_button_icon,
+          logo->metadata.dark_share_button_bg, logo->metadata.dark_log_url,
+          logo->metadata.dark_cta_log_url);
+    }
     image_doodle_content->on_click_url = logo->metadata.on_click_url;
-    if (logo->metadata.type == search_provider_logos::LogoType::ANIMATED) {
-      image_doodle_content->animation_url = logo->metadata.animated_url;
-    }
-    image_doodle_content->share_button =
-        new_tab_page::mojom::DoodleShareButton::New();
-    image_doodle_content->share_button->x = logo->metadata.share_button_x;
-    image_doodle_content->share_button->y = logo->metadata.share_button_y;
-    image_doodle_content->share_button->icon_url = GURL(base::StringPrintf(
-        "data:image/png;base64,%s", logo->metadata.share_button_icon.c_str()));
-    image_doodle_content->share_button->background_color =
-        SkColorSetA(doodle_share_button_background_color, 255);
     image_doodle_content->share_url = logo->metadata.short_link;
-    if (logo->metadata.type == search_provider_logos::LogoType::ANIMATED) {
-      image_doodle_content->image_impression_log_url =
-          logo->metadata.cta_log_url;
-      image_doodle_content->animation_impression_log_url =
-          logo->metadata.log_url;
-    } else {
-      image_doodle_content->image_impression_log_url = logo->metadata.log_url;
-    }
     doodle->content = new_tab_page::mojom::DoodleContent::NewImageDoodle(
         std::move(image_doodle_content));
   } else if (logo->metadata.type ==

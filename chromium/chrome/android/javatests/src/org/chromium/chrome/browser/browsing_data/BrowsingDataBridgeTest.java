@@ -10,8 +10,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import junit.framework.Assert;
 
@@ -24,7 +24,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
@@ -32,6 +31,8 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateExtractor;
+import org.chromium.chrome.browser.tab.WebContentsStateBridge;
 import org.chromium.chrome.browser.webapps.TestFetchStorageCallback;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
@@ -90,7 +91,6 @@ public class BrowsingDataBridgeTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testNoCalls() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             BrowsingDataBridge.getInstance().clearBrowsingData(
@@ -239,12 +239,12 @@ public class BrowsingDataBridgeTest {
         Tab[] frozen = new Tab[1];
         WebContents[] restored = new WebContents[1];
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            TabState state = TabState.from(tab);
+            TabState state = TabStateExtractor.from(tab);
             mActivityTestRule.getActivity().getCurrentTabModel().closeTab(tab);
             frozen[0] = mActivityTestRule.getActivity().getCurrentTabCreator().createFrozenTab(
                     state, tab.getId(), 1);
-            restored[0] =
-                    TabState.from(frozen[0]).contentsState.restoreContentsFromByteBuffer(false);
+            restored[0] = WebContentsStateBridge.restoreContentsFromByteBuffer(
+                    TabStateExtractor.from(frozen[0]).contentsState, false);
         });
 
         // Check content of frozen state.
@@ -265,8 +265,8 @@ public class BrowsingDataBridgeTest {
 
         // Check that frozen state was cleaned up.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            restored[0] =
-                    TabState.from(frozen[0]).contentsState.restoreContentsFromByteBuffer(false);
+            restored[0] = WebContentsStateBridge.restoreContentsFromByteBuffer(
+                    TabStateExtractor.from(frozen[0]).contentsState, false);
         });
 
         controller = restored[0].getNavigationController();

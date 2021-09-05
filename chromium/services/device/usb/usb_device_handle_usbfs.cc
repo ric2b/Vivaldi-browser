@@ -17,6 +17,7 @@
 #include "base/files/file_descriptor_watcher_posix.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/numerics/checked_math.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
@@ -169,7 +170,7 @@ class UsbDeviceHandleUsbfs::BlockingTaskRunnerHelper {
   DISALLOW_COPY_AND_ASSIGN(BlockingTaskRunnerHelper);
 };
 
-struct UsbDeviceHandleUsbfs::Transfer {
+struct UsbDeviceHandleUsbfs::Transfer final {
   Transfer() = delete;
   Transfer(scoped_refptr<base::RefCountedBytes> buffer,
            TransferCallback callback);
@@ -291,8 +292,12 @@ void UsbDeviceHandleUsbfs::BlockingTaskRunnerHelper::SetInterface(
     USB_PLOG(DEBUG) << "Failed to set interface " << interface_number
                     << " to alternate setting " << alternate_setting;
   }
-  task_runner_->PostTask(FROM_HERE,
-                         base::BindOnce(std::move(callback), rc == 0));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &UsbDeviceHandleUsbfs::SetAlternateInterfaceSettingComplete,
+          device_handle_, interface_number, alternate_setting, rc == 0,
+          std::move(callback)));
 }
 
 void UsbDeviceHandleUsbfs::BlockingTaskRunnerHelper::ResetDevice(
@@ -386,9 +391,9 @@ UsbDeviceHandleUsbfs::Transfer::Transfer(
     scoped_refptr<base::RefCountedBytes> buffer,
     IsochronousTransferCallback callback)
     : buffer(buffer), isoc_callback(std::move(callback)) {
-  memset(
-      &urb, 0,
-      sizeof(urb) + sizeof(usbdevfs_iso_packet_desc) * urb.number_of_packets);
+  // This buffer size calculation is checked in operator new().
+  memset(&urb, 0,
+         sizeof(urb) + sizeof(urb.iso_frame_desc[0]) * urb.number_of_packets);
   urb.usercontext = this;
   urb.buffer = buffer->front();
 }
@@ -396,10 +401,15 @@ UsbDeviceHandleUsbfs::Transfer::Transfer(
 UsbDeviceHandleUsbfs::Transfer::~Transfer() = default;
 
 void* UsbDeviceHandleUsbfs::Transfer::operator new(
-    std::size_t size,
+    size_t size,
     size_t number_of_iso_packets) {
-  void* p = ::operator new(size + sizeof(usbdevfs_iso_packet_desc) *
-                                      number_of_iso_packets);
+  // The checked math should pass as long as Mojo message size limits are being
+  // enforced.
+  size_t total_size =
+      base::CheckAdd(size, base::CheckMul(sizeof(urb.iso_frame_desc[0]),
+                                          number_of_iso_packets))
+          .ValueOrDie();
+  void* p = ::operator new(total_size);
   Transfer* transfer = static_cast<Transfer*>(p);
   transfer->urb.number_of_packets = number_of_iso_packets;
   return p;
@@ -758,6 +768,19 @@ void UsbDeviceHandleUsbfs::SetConfigurationComplete(int configuration_value,
     device_->ActiveConfigurationChanged(configuration_value);
     // TODO(reillyg): If all interfaces are unclaimed before a new configuration
     // is set then this will do nothing. Investigate.
+    RefreshEndpointInfo();
+  }
+  std::move(callback).Run(success);
+}
+
+void UsbDeviceHandleUsbfs::SetAlternateInterfaceSettingComplete(
+    int interface_number,
+    int alternate_setting,
+    bool success,
+    ResultCallback callback) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+  if (success && device_) {
+    interfaces_[interface_number].alternate_setting = alternate_setting;
     RefreshEndpointInfo();
   }
   std::move(callback).Run(success);

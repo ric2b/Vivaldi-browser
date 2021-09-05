@@ -15,7 +15,7 @@ base::CancelableTaskTracker::TaskId HistoryService::TopUrlsPerDay(
     UrlVisitCount::TopUrlsPerDayCallback callback,
     base::CancelableTaskTracker* tracker) const {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::TopUrlsPerDay, history_backend_.get(),
@@ -29,7 +29,7 @@ base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
     Visit::VisitsCallback callback,
     base::CancelableTaskTracker* tracker) const {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
@@ -46,7 +46,7 @@ base::CancelableTaskTracker::TaskId HistoryService::QueryHistoryWStatement(
     QueryHistoryCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::QueryHistoryWStatement,

@@ -427,4 +427,23 @@ void FakeDriveFs::SendNativeMessageRequest(
   std::move(callback).Run(drive::FILE_ERROR_SERVICE_UNAVAILABLE, "");
 }
 
+void FakeDriveFs::SetStartupArguments(const std::string& arguments,
+                                      SetStartupArgumentsCallback callback) {
+  std::move(callback).Run(false);
+}
+
+void FakeDriveFs::GetStartupArguments(GetStartupArgumentsCallback callback) {
+  std::move(callback).Run("");
+}
+
+void FakeDriveFs::SetTracingEnabled(bool enabled) {}
+
+void FakeDriveFs::SetNetworkingEnabled(bool enabled) {}
+
+void FakeDriveFs::ForcePauseSyncing(bool enable) {}
+
+void FakeDriveFs::DumpAccountSettings() {}
+
+void FakeDriveFs::LoadAccountSettings() {}
+
 }  // namespace drivefs

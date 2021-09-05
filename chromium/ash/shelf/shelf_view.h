@@ -35,9 +35,14 @@
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_model.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 
 namespace ui {
 class SimpleMenuModel;
+}
+
+namespace display {
+class ScopedDisplayForNewWindows;
 }
 
 namespace views {
@@ -48,7 +53,6 @@ class Separator;
 
 namespace ash {
 class DragImageView;
-class ScopedRootWindowForNewWindows;
 class ShelfAppButton;
 class ShelfButton;
 class ShelfModel;
@@ -180,9 +184,13 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   void DestroyDragIconProxy() override;
 
-  // Transfers ownership of |drag_image_|, and cleans up DragIconProxy state.
-  DragImageView* RetrieveDragIconProxyAndClearDragProxyState();
+  // Transfers ownership of |drag_image_widget_|, and cleans up DragIconProxy
+  // state.
+  views::UniqueWidgetPtr RetrieveDragIconProxyAndClearDragProxyState();
 
+  bool ShouldStartDrag(
+      const std::string& app_id,
+      const gfx::Point& location_in_screen_coordinates) const override;
   bool StartDrag(const std::string& app_id,
                  const gfx::Point& location_in_screen_coordinates) override;
   bool Drag(const gfx::Point& location_in_screen_coordinates) override;
@@ -207,6 +215,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // Returns whether |item| should belong in the pinned section of the shelf.
   bool IsItemPinned(const ShelfItem& item) const;
 
+  // Returns whether |item| should be visible or hidden.
+  bool IsItemVisible(const ShelfItem& item) const;
+
   // Update the layout when entering or exiting tablet mode. Have the owning
   // widget call this instead of observing changes ourselves to ensure this
   // happens after the tablet related changes in ShelfController.
@@ -230,9 +241,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // Returns the ShelfAppButton associated with |id|.
   ShelfAppButton* GetShelfAppButton(const ShelfID& id);
 
-  // Updates |first_visible_index_| and |last_visible_index_| when the
-  // scrollable shelf is enabled.
-  void UpdateVisibleIndices();
+  // Updates the visibility of the views of the shelf items and the
+  // |visible_views_indices_|.
+  void UpdateShelfItemViewsVisibility();
 
   // If there is animation associated with |view| in |bounds_animator_|,
   // stops the animation.
@@ -250,6 +261,14 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // Returns the size of the shelf item ripple ring.
   int GetShelfItemRippleSize() const;
 
+  // If |app_icons_layout_offset_| is outdated, re-layout children to ideal
+  // bounds.
+  void LayoutIfAppIconsOffsetUpdates();
+
+  // Returns the app button whose context menu is shown. Returns nullptr if no
+  // app buttons have a context menu showing.
+  ShelfAppButton* GetShelfItemViewWithContextMenu();
+
   // Return the view model for test purposes.
   const views::ViewModel* view_model_for_test() const {
     return view_model_.get();
@@ -259,17 +278,12 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
     default_last_focusable_child_ = default_last_focusable_child;
   }
 
-  void set_app_icons_layout_offset(int app_icons_layout_offset) {
-    app_icons_layout_offset_ = app_icons_layout_offset;
-  }
-
   ShelfAppButton* drag_view() { return drag_view_; }
 
-  int first_visible_index() const { return first_visible_index_; }
-  int last_visible_index() const { return last_visible_index_; }
-  int number_of_visible_apps() const {
-    return std::max(0, last_visible_index_ + 1);
+  const std::vector<int>& visible_views_indices() const {
+    return visible_views_indices_;
   }
+  int number_of_visible_apps() const { return visible_views_indices_.size(); }
   ShelfWidget* shelf_widget() const { return shelf_->shelf_widget(); }
   views::ViewModel* view_model() { return view_model_.get(); }
   const views::ViewModel* view_model() const { return view_model_.get(); }
@@ -277,7 +291,8 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   ShelfID drag_and_drop_shelf_id() const { return drag_and_drop_shelf_id_; }
 
   views::View* first_visible_button_for_testing() {
-    return view_model_->view_at(first_visible_index());
+    DCHECK(!visible_views_indices_.empty());
+    return view_model_->view_at(visible_views_indices_[0]);
   }
 
   ShelfMenuModelAdapter* shelf_menu_model_adapter_for_testing() {
@@ -424,6 +439,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   void ShelfItemAdded(int model_index) override;
   void ShelfItemRemoved(int model_index, const ShelfItem& old_item) override;
   void ShelfItemChanged(int model_index, const ShelfItem& old_item) override;
+  void ShelfItemsUpdatedForDeskChange() override;
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemDelegateChanged(const ShelfID& id,
                                 ShelfItemDelegate* old_delegate,
@@ -492,10 +508,19 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   bool ShouldHandleGestures(const ui::GestureEvent& event) const;
 
-  void DestroyScopedRootWindow();
+  void DestroyScopedDisplay();
 
   // Different from GetTitleForView, |view| here must be a child view.
   base::string16 GetTitleForChildView(const views::View* view) const;
+
+  int CalculateAppIconsLayoutOffset() const;
+
+  // Get the |drag_image_widget_| content view as DragImageView.
+  DragImageView* GetDragImage();
+
+  // Returns the bounds of the given |child| view taken into account RTL layouts
+  // and on-going bounds animations on |child|.
+  gfx::Rect GetChildViewTargetMirroredBounds(const views::View* child) const;
 
   // The model; owned by Launcher.
   ShelfModel* model_;
@@ -507,16 +532,8 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // item in |model_|.
   std::unique_ptr<views::ViewModel> view_model_;
 
-  // Index of the first visible app item. This is either:
-  // * -1 if there are no apps.
-  // * 0 if there is at least one app.
-  // > 0 when this shelf view is the overflow shelf view and only shows a
-  //   subset of items.
-  int first_visible_index_ = -1;
-
-  // Last index of an app launcher button that is visible, or -1 if there
-  // are no apps.
-  int last_visible_index_ = -1;
+  // The indices of the views in |view_model_| that are visible.
+  std::vector<int> visible_views_indices_;
 
   std::unique_ptr<views::BoundsAnimator> bounds_animator_;
 
@@ -551,9 +568,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   std::unique_ptr<ShelfMenuModelAdapter> shelf_menu_model_adapter_;
 
   // Created when a shelf icon is pressed, so that new windows will be on the
-  // same root window as the press event.
-  std::unique_ptr<ScopedRootWindowForNewWindows>
-      scoped_root_window_for_new_windows_;
+  // same display as the press event.
+  std::unique_ptr<display::ScopedDisplayForNewWindows>
+      scoped_display_for_new_windows_;
 
   // True when an item being inserted or removed in the model cancels a drag.
   bool cancelling_drag_model_changed_ = false;
@@ -584,7 +601,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // The image proxy for drag operations when a drag and drop host exists and
   // the item can be dragged outside the app grid.
-  std::unique_ptr<DragImageView> drag_image_;
+  views::UniqueWidgetPtr drag_image_widget_;
 
   // The cursor offset to the middle of the dragged item.
   gfx::Vector2d drag_image_offset_;

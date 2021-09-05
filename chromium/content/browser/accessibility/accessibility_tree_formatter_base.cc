@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/check_op.h"
 #include "base/strings/pattern.h"
@@ -31,6 +32,235 @@ const char kSkipString[] = "@NO_DUMP";
 const char kSkipChildren[] = "@NO_CHILDREN_DUMP";
 
 }  // namespace
+
+//
+// PropertyNode
+//
+
+// static
+PropertyNode PropertyNode::FromPropertyFilter(
+    const AccessibilityTreeFormatter::PropertyFilter& filter) {
+  // Property invocation: property_str expected format is
+  // prop_name or prop_name(arg1, ... argN).
+  PropertyNode root;
+  Parse(&root, filter.property_str.begin(), filter.property_str.end());
+
+  PropertyNode* node = &root.parameters[0];
+  node->original_property = filter.property_str;
+
+  // Line indexes filter: filter_str expected format is
+  // :line_num_1, ... :line_num_N, a comma separated list of line indexes
+  // the property should be queried for. For example, ":1,:5,:7" indicates that
+  // the property should called for objects placed on 1, 5 and 7 lines only.
+  if (!filter.filter_str.empty()) {
+    node->line_indexes =
+        base::SplitString(filter.filter_str, base::string16(1, ','),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  }
+
+  return std::move(*node);
+}
+
+PropertyNode::PropertyNode() = default;
+PropertyNode::PropertyNode(PropertyNode&& o)
+    : key(std::move(o.key)),
+      name_or_value(std::move(o.name_or_value)),
+      parameters(std::move(o.parameters)),
+      original_property(std::move(o.original_property)),
+      line_indexes(std::move(o.line_indexes)) {}
+PropertyNode::~PropertyNode() = default;
+
+PropertyNode& PropertyNode::operator=(PropertyNode&& o) {
+  key = std::move(o.key);
+  name_or_value = std::move(o.name_or_value);
+  parameters = std::move(o.parameters);
+  original_property = std::move(o.original_property);
+  line_indexes = std::move(o.line_indexes);
+  return *this;
+}
+
+PropertyNode::operator bool() const {
+  return !name_or_value.empty();
+}
+
+bool PropertyNode::IsArray() const {
+  return name_or_value == base::ASCIIToUTF16("[]");
+}
+
+bool PropertyNode::IsDict() const {
+  return name_or_value == base::ASCIIToUTF16("{}");
+}
+
+base::Optional<int> PropertyNode::AsInt() const {
+  int value = 0;
+  if (!base::StringToInt(name_or_value, &value)) {
+    return base::nullopt;
+  }
+  return value;
+}
+
+base::Optional<base::string16> PropertyNode::FindKey(const char* refkey) const {
+  for (const auto& param : parameters) {
+    if (param.key == base::ASCIIToUTF16(refkey)) {
+      return param.name_or_value;
+    }
+  }
+  return base::nullopt;
+}
+
+base::Optional<int> PropertyNode::FindIntKey(const char* refkey) const {
+  for (const auto& param : parameters) {
+    if (param.key == base::ASCIIToUTF16(refkey)) {
+      return param.AsInt();
+    }
+  }
+  return base::nullopt;
+}
+
+std::string PropertyNode::ToString() const {
+  std::string out;
+  for (const auto& index : line_indexes) {
+    if (!out.empty()) {
+      out += ',';
+    }
+    out += base::UTF16ToUTF8(index);
+  }
+  if (!out.empty()) {
+    out += ';';
+  }
+
+  if (!key.empty()) {
+    out += base::UTF16ToUTF8(key) + ": ";
+  }
+  out += base::UTF16ToUTF8(name_or_value);
+  if (parameters.size()) {
+    out += '(';
+    for (size_t i = 0; i < parameters.size(); i++) {
+      if (i != 0) {
+        out += ", ";
+      }
+      out += parameters[i].ToString();
+    }
+    out += ')';
+  }
+  return out;
+}
+
+// private
+PropertyNode::PropertyNode(PropertyNode::iterator key_begin,
+                           PropertyNode::iterator key_end,
+                           const base::string16& name_or_value)
+    : key(key_begin, key_end), name_or_value(name_or_value) {}
+PropertyNode::PropertyNode(PropertyNode::iterator begin,
+                           PropertyNode::iterator end)
+    : name_or_value(begin, end) {}
+PropertyNode::PropertyNode(PropertyNode::iterator key_begin,
+                           PropertyNode::iterator key_end,
+                           PropertyNode::iterator value_begin,
+                           PropertyNode::iterator value_end)
+    : key(key_begin, key_end), name_or_value(value_begin, value_end) {}
+
+// private static
+PropertyNode::iterator PropertyNode::Parse(PropertyNode* node,
+                                           PropertyNode::iterator begin,
+                                           PropertyNode::iterator end) {
+  auto iter = begin;
+  auto key_begin = end, key_end = end;
+  while (iter != end) {
+    // Subnode begins: create a new node, record its name and parse its
+    // arguments.
+    if (*iter == '(') {
+      node->parameters.push_back(PropertyNode(key_begin, key_end, begin, iter));
+      key_begin = key_end = end;
+      begin = iter = Parse(&node->parameters.back(), ++iter, end);
+      continue;
+    }
+
+    // Subnode begins: a special case for arrays, which have [arg1, ..., argN]
+    // form.
+    if (*iter == '[') {
+      node->parameters.push_back(
+          PropertyNode(key_begin, key_end, base::UTF8ToUTF16("[]")));
+      key_begin = key_end = end;
+      begin = iter = Parse(&node->parameters.back(), ++iter, end);
+      continue;
+    }
+
+    // Subnode begins: a special case for dictionaries of {key1: value1, ...,
+    // key2: value2} form.
+    if (*iter == '{') {
+      node->parameters.push_back(
+          PropertyNode(key_begin, key_end, base::UTF8ToUTF16("{}")));
+      key_begin = key_end = end;
+      begin = iter = Parse(&node->parameters.back(), ++iter, end);
+      continue;
+    }
+
+    // Subnode ends.
+    if (*iter == ')' || *iter == ']' || *iter == '}') {
+      if (begin != iter) {
+        node->parameters.push_back(
+            PropertyNode(key_begin, key_end, begin, iter));
+        key_begin = key_end = end;
+      }
+      return ++iter;
+    }
+
+    // Dictionary key
+    auto maybe_key_end = end;
+    if (*iter == ':') {
+      maybe_key_end = iter++;
+    }
+
+    // Skip spaces, adjust new node start.
+    if (*iter == ' ') {
+      if (maybe_key_end != end) {
+        key_begin = begin;
+        key_end = maybe_key_end;
+      }
+      begin = ++iter;
+      continue;
+    }
+
+    // Subsequent scalar param case.
+    if (*iter == ',' && begin != iter) {
+      node->parameters.push_back(PropertyNode(key_begin, key_end, begin, iter));
+      iter++;
+      key_begin = key_end = end;
+      begin = iter;
+      continue;
+    }
+
+    iter++;
+  }
+
+  // Single scalar param case.
+  if (begin != iter) {
+    node->parameters.push_back(PropertyNode(begin, iter));
+  }
+  return iter;
+}
+
+//
+// AccessibilityTreeFormatter
+//
+
+AccessibilityTreeFormatter::PropertyFilter::PropertyFilter(
+    const PropertyFilter&) = default;
+
+AccessibilityTreeFormatter::PropertyFilter::PropertyFilter(
+    const base::string16& str,
+    Type type)
+    : match_str(str), type(type) {
+  size_t index = str.find(';');
+  if (index != std::string::npos) {
+    filter_str = str.substr(0, index);
+    if (index + 1 < str.length()) {
+      match_str = str.substr(index + 1, std::string::npos);
+    }
+  }
+  property_str = match_str.substr(0, match_str.find('='));
+}
 
 AccessibilityTreeFormatter::TestPass AccessibilityTreeFormatter::GetTestPass(
     size_t index) {
@@ -189,26 +419,38 @@ AccessibilityTreeFormatterBase::GetVersionSpecificExpectedFileSuffix() {
   return FILE_PATH_LITERAL("");
 }
 
-bool AccessibilityTreeFormatterBase::FilterPropertyName(
-    const base::string16& text) {
-  // Find the first allow-filter matching the property name. The filter should
-  // be either an exact property match or a wildcard matching to support filter
-  // collections like AXRole* which matches AXRoleDescription.
-  const base::string16 delim = base::ASCIIToUTF16("=");
+PropertyNode AccessibilityTreeFormatterBase::GetMatchingPropertyNode(
+    const base::string16& line_index,
+    const base::string16& property_name) {
+  // Find the first allow-filter matching the line index and the property name.
   for (const auto& filter : property_filters_) {
-    base::String16Tokenizer tokenizer(filter.match_str, delim);
-    if (tokenizer.GetNext() && (text == tokenizer.token() ||
-                                base::MatchPattern(text, tokenizer.token()))) {
+    PropertyNode property_node = PropertyNode::FromPropertyFilter(filter);
+
+    // Skip if the line index filter doesn't matched (if specified).
+    if (!property_node.line_indexes.empty() &&
+        std::find(property_node.line_indexes.begin(),
+                  property_node.line_indexes.end(),
+                  line_index) == property_node.line_indexes.end()) {
+      continue;
+    }
+
+    // The filter should be either an exact property match or a wildcard
+    // matching to support filter collections like AXRole* which matches
+    // AXRoleDescription.
+    if (property_name == property_node.name_or_value ||
+        base::MatchPattern(property_name, property_node.name_or_value)) {
       switch (filter.type) {
         case PropertyFilter::ALLOW_EMPTY:
         case PropertyFilter::ALLOW:
-          return true;
+          return property_node;
+        case PropertyFilter::DENY:
+          break;
         default:
           break;
       }
     }
   }
-  return false;
+  return PropertyNode();
 }
 
 bool AccessibilityTreeFormatterBase::MatchesPropertyFilters(
@@ -282,4 +524,5 @@ void AccessibilityTreeFormatterBase::AddPropertyFilter(
 
 void AccessibilityTreeFormatterBase::AddDefaultFilters(
     std::vector<PropertyFilter>* property_filters) {}
+
 }  // namespace content

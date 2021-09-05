@@ -21,6 +21,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -97,7 +98,8 @@ CrostiniUpgraderUI::CrostiniUpgraderUI(content::WebUI* web_ui)
     : ui::MojoWebDialogUI{web_ui} {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUICrostiniUpgraderHost);
-  source->OverrideContentSecurityPolicyScriptSrc(
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
   AddStringResources(source);
 
@@ -122,6 +124,15 @@ CrostiniUpgraderUI::CrostiniUpgraderUI(content::WebUI* web_ui)
 
 CrostiniUpgraderUI::~CrostiniUpgraderUI() = default;
 
+bool CrostiniUpgraderUI::RequestClosePage() {
+  if (page_closed_ || !page_handler_) {
+    return true;
+  }
+
+  page_handler_->RequestClosePage();
+  return false;
+}
+
 void CrostiniUpgraderUI::BindInterface(
     mojo::PendingReceiver<
         chromeos::crostini_upgrader::mojom::PageHandlerFactory>
@@ -145,13 +156,12 @@ void CrostiniUpgraderUI::CreatePageHandler(
       std::move(pending_page_handler), std::move(pending_page),
       // Using Unretained(this) because |page_handler_| will not out-live
       // |this|.
-      base::BindOnce(&CrostiniUpgraderUI::OnWebUICloseDialog,
-                     base::Unretained(this)),
+      base::BindOnce(&CrostiniUpgraderUI::OnPageClosed, base::Unretained(this)),
       std::move(launch_callback_));
 }
 
-void CrostiniUpgraderUI::OnWebUICloseDialog() {
-  can_close_ = true;
+void CrostiniUpgraderUI::OnPageClosed() {
+  page_closed_ = true;
   // CloseDialog() is a no-op if we are not in a dialog (e.g. user
   // access the page using the URL directly, which is not supported).
   ui::MojoWebDialogUI::CloseDialog(nullptr);

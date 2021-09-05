@@ -19,8 +19,6 @@
 #include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/login/configuration_keys.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
@@ -29,8 +27,7 @@
 #include "chrome/browser/chromeos/login/screens/reset_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -64,24 +61,9 @@ namespace chromeos {
 
 namespace {
 
-bool IsRemoraRequisition() {
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-  return policy_manager && policy_manager->IsRemoraRequisition();
-}
-
 void LaunchResetScreen() {
-  // Don't recreate WizardController if it already exists.
-  WizardController* const wizard_controller =
-      WizardController::default_controller();
-  if (wizard_controller && !wizard_controller->login_screen_started()) {
-    wizard_controller->AdvanceToScreen(ResetView::kScreenId);
-  } else {
-    DCHECK(LoginDisplayHost::default_host());
-    LoginDisplayHost::default_host()->StartWizard(ResetView::kScreenId);
-  }
+  DCHECK(LoginDisplayHost::default_host());
+  LoginDisplayHost::default_host()->StartWizard(ResetView::kScreenId);
 }
 
 }  // namespace
@@ -91,11 +73,6 @@ void LaunchResetScreen() {
 CoreOobeHandler::CoreOobeHandler(JSCallsContainer* js_calls_container)
     : BaseWebUIHandler(js_calls_container), version_info_updater_(this) {
   DCHECK(js_calls_container);
-  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
-  CHECK(accessibility_manager);
-  accessibility_subscription_ = accessibility_manager->RegisterCallback(
-      base::Bind(&CoreOobeHandler::OnAccessibilityStatusChanged,
-                 base::Unretained(this)));
 
   ash::TabletMode::Get()->AddObserver(this);
 
@@ -117,17 +94,6 @@ void CoreOobeHandler::DeclareLocalizedValues(
   builder->Add("title", IDS_SHORT_PRODUCT_NAME);
   builder->Add("productName", IDS_SHORT_PRODUCT_NAME);
   builder->Add("learnMore", IDS_LEARN_MORE);
-
-  // OOBE accessibility options menu strings shown on each screen.
-  builder->Add("accessibilityLink", IDS_OOBE_ACCESSIBILITY_LINK);
-  builder->Add("spokenFeedbackOption", IDS_OOBE_SPOKEN_FEEDBACK_OPTION);
-  builder->Add("selectToSpeakOption", IDS_OOBE_SELECT_TO_SPEAK_OPTION);
-  builder->Add("largeCursorOption", IDS_OOBE_LARGE_CURSOR_OPTION);
-  builder->Add("highContrastOption", IDS_OOBE_HIGH_CONTRAST_MODE_OPTION);
-  builder->Add("screenMagnifierOption", IDS_OOBE_SCREEN_MAGNIFIER_OPTION);
-  builder->Add("dockedMagnifierOption", IDS_OOBE_DOCKED_MAGNIFIER_OPTION);
-  builder->Add("virtualKeyboardOption", IDS_OOBE_VIRTUAL_KEYBOARD_OPTION);
-  builder->Add("closeAccessibilityMenu", IDS_OOBE_CLOSE_ACCESSIBILITY_MENU);
 
   // Strings for the device requisition prompt.
   builder->Add("deviceRequisitionPromptCancel",
@@ -161,7 +127,6 @@ void CoreOobeHandler::DeclareLocalizedValues(
 }
 
 void CoreOobeHandler::Initialize() {
-  UpdateA11yState();
   UpdateOobeUIVisibility();
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   version_info_updater_.StartUpdate(true);
@@ -188,18 +153,6 @@ void CoreOobeHandler::RegisterMessages() {
               &CoreOobeHandler::HandleSkipUpdateEnrollAfterEula);
   AddCallback("updateCurrentScreen",
               &CoreOobeHandler::HandleUpdateCurrentScreen);
-  AddCallback("enableHighContrast", &CoreOobeHandler::HandleEnableHighContrast);
-  AddCallback("enableLargeCursor", &CoreOobeHandler::HandleEnableLargeCursor);
-  AddCallback("enableVirtualKeyboard",
-              &CoreOobeHandler::HandleEnableVirtualKeyboard);
-  AddCallback("enableScreenMagnifier",
-              &CoreOobeHandler::HandleEnableScreenMagnifier);
-  AddCallback("enableSpokenFeedback",
-              &CoreOobeHandler::HandleEnableSpokenFeedback);
-  AddCallback("enableSelectToSpeak",
-              &CoreOobeHandler::HandleEnableSelectToSpeak);
-  AddCallback("enableDockedMagnifier",
-              &CoreOobeHandler::HandleEnableDockedMagnifier);
   AddCallback("setDeviceRequisition",
               &CoreOobeHandler::HandleSetDeviceRequisition);
   AddCallback("skipToLoginForTesting",
@@ -234,38 +187,20 @@ void CoreOobeHandler::ShowSignInError(
          help_link_text, static_cast<int>(help_topic_id));
 }
 
-void CoreOobeHandler::ShowTpmError() {
-  CallJS("cr.ui.Oobe.showTpmError");
-}
-
 void CoreOobeHandler::ShowDeviceResetScreen() {
   LaunchResetScreen();
 }
 
 void CoreOobeHandler::ShowEnableDebuggingScreen() {
-  // Don't recreate WizardController if it already exists.
-  WizardController* wizard_controller = WizardController::default_controller();
-  if (wizard_controller && !wizard_controller->login_screen_started()) {
-    wizard_controller->AdvanceToScreen(EnableDebuggingScreenView::kScreenId);
-  }
+  DCHECK(LoginDisplayHost::default_host());
+  LoginDisplayHost::default_host()->StartWizard(
+      EnableDebuggingScreenView::kScreenId);
 }
 
 void CoreOobeHandler::ShowEnableAdbSideloadingScreen() {
-  // Don't recreate WizardController if it already exists.
-  WizardController* wizard_controller = WizardController::default_controller();
-  if (wizard_controller && !wizard_controller->login_screen_started()) {
-    wizard_controller->AdvanceToScreen(
-        EnableAdbSideloadingScreenView::kScreenId);
-  } else {
-    DCHECK(LoginDisplayHost::default_host());
-    LoginDisplayHost::default_host()->StartWizard(
-        EnableAdbSideloadingScreenView::kScreenId);
-  }
-}
-
-void CoreOobeHandler::ShowActiveDirectoryPasswordChangeScreen(
-    const std::string& username) {
-  CallJS("cr.ui.Oobe.showActiveDirectoryPasswordChangeScreen", username);
+  DCHECK(LoginDisplayHost::default_host());
+  LoginDisplayHost::default_host()->StartWizard(
+      EnableAdbSideloadingScreenView::kScreenId);
 }
 
 void CoreOobeHandler::ShowSignInUI(const std::string& email) {
@@ -282,19 +217,6 @@ void CoreOobeHandler::ClearUserPodPassword() {
 
 void CoreOobeHandler::RefocusCurrentPod() {
   CallJS("cr.ui.Oobe.refocusCurrentPod");
-}
-
-void CoreOobeHandler::ShowPasswordChangedScreen(bool show_password_error,
-                                                const std::string& email) {
-  CallJS("cr.ui.Oobe.showPasswordChangedScreen", show_password_error, email);
-}
-
-void CoreOobeHandler::SetUsageStats(bool checked) {
-  CallJS("cr.ui.Oobe.setUsageStats", checked);
-}
-
-void CoreOobeHandler::SetTpmPassword(const std::string& tpm_password) {
-  CallJS("cr.ui.Oobe.setTpmPassword", tpm_password);
 }
 
 void CoreOobeHandler::ClearErrors() {
@@ -324,7 +246,8 @@ void CoreOobeHandler::SetShelfHeight(int height) {
 
 void CoreOobeHandler::HandleInitialized() {
   // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "CoreOobeHandler::HandleInitialized";
+  LOG(ERROR) << "1082670 : CoreOobeHandler::HandleInitialized";
+
   GetOobeUI()->InitializeHandlers();
   AllowJavascript();
 }
@@ -344,44 +267,6 @@ void CoreOobeHandler::HandleUpdateCurrentScreen(
       screen == EulaView::kScreenId);
 }
 
-void CoreOobeHandler::HandleEnableHighContrast(bool enabled) {
-  AccessibilityManager::Get()->EnableHighContrast(enabled);
-}
-
-void CoreOobeHandler::HandleEnableLargeCursor(bool enabled) {
-  AccessibilityManager::Get()->EnableLargeCursor(enabled);
-}
-
-void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
-  AccessibilityManager::Get()->EnableVirtualKeyboard(enabled);
-}
-
-void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
-  DCHECK(MagnificationManager::Get());
-  MagnificationManager::Get()->SetMagnifierEnabled(enabled);
-}
-
-void CoreOobeHandler::HandleEnableSpokenFeedback(bool /* enabled */) {
-  // Checkbox is initialized on page init and updates when spoken feedback
-  // setting is changed so just toggle spoken feedback here.
-  AccessibilityManager::Get()->EnableSpokenFeedback(
-      !AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-}
-
-void CoreOobeHandler::HandleEnableSelectToSpeak(bool /* enabled */) {
-  // Checkbox is initialized on page init and updates when Select to Speak
-  // setting is changed so just toggle Select to Speak here.
-  AccessibilityManager::Get()->SetSelectToSpeakEnabled(
-      !AccessibilityManager::Get()->IsSelectToSpeakEnabled());
-}
-
-void CoreOobeHandler::HandleEnableDockedMagnifier(bool enabled) {
-  // Checkbox is initialized on page init and updates when the docked magnifier
-  // setting is changed so just toggle Select to Speak here.
-  DCHECK(MagnificationManager::Get());
-  MagnificationManager::Get()->SetDockedMagnifierEnabled(enabled);
-}
-
 void CoreOobeHandler::HandleHideOobeDialog() {
   if (LoginDisplayHost::default_host())
     LoginDisplayHost::default_host()->HideOobeDialog();
@@ -389,13 +274,11 @@ void CoreOobeHandler::HandleHideOobeDialog() {
 
 void CoreOobeHandler::HandleSetDeviceRequisition(
     const std::string& requisition) {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
   std::string initial_requisition =
-      connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition();
-  connector->GetDeviceCloudPolicyManager()->SetDeviceRequisition(requisition);
+      policy::EnrollmentRequisitionManager::GetDeviceRequisition();
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(requisition);
 
-  if (IsRemoraRequisition()) {
+  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
     // CfM devices default to static timezone.
     g_browser_process->local_state()->SetInteger(
         prefs::kResolveDeviceTimezoneByGeolocationMethod,
@@ -405,19 +288,21 @@ void CoreOobeHandler::HandleSetDeviceRequisition(
 
   // Exit Chrome to force the restart as soon as a new requisition is set.
   if (initial_requisition !=
-      connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition()) {
+      policy::EnrollmentRequisitionManager::GetDeviceRequisition()) {
     chrome::AttemptRestart();
   }
 }
 
 void CoreOobeHandler::HandleSkipToLoginForTesting() {
-  if (WizardController::default_controller())
+  WizardController* controller = WizardController::default_controller();
+  if (controller && controller->is_initialized())
     WizardController::default_controller()->SkipToLoginForTesting();
 }
 
 void CoreOobeHandler::HandleSkipToUpdateForTesting() {
-  if (WizardController::default_controller())
-    WizardController::default_controller()->SkipToUpdateForTesting();
+  WizardController* controller = WizardController::default_controller();
+  if (controller && controller->is_initialized())
+    controller->SkipToUpdateForTesting();
 }
 
 void CoreOobeHandler::HandleToggleResetScreen() {
@@ -462,26 +347,6 @@ void CoreOobeHandler::SetLoginUserCount(int user_count) {
 
 void CoreOobeHandler::ForwardAccelerator(std::string accelerator_name) {
   CallJS("cr.ui.Oobe.handleAccelerator", accelerator_name);
-}
-
-void CoreOobeHandler::UpdateA11yState() {
-  base::DictionaryValue a11y_info;
-  a11y_info.SetBoolean("highContrastEnabled",
-                       AccessibilityManager::Get()->IsHighContrastEnabled());
-  a11y_info.SetBoolean("largeCursorEnabled",
-                       AccessibilityManager::Get()->IsLargeCursorEnabled());
-  a11y_info.SetBoolean("spokenFeedbackEnabled",
-                       AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-  a11y_info.SetBoolean("selectToSpeakEnabled",
-                       AccessibilityManager::Get()->IsSelectToSpeakEnabled());
-  DCHECK(MagnificationManager::Get());
-  a11y_info.SetBoolean("screenMagnifierEnabled",
-                       MagnificationManager::Get()->IsMagnifierEnabled());
-  a11y_info.SetBoolean("dockedMagnifierEnabled",
-                       MagnificationManager::Get()->IsDockedMagnifierEnabled());
-  a11y_info.SetBoolean("virtualKeyboardEnabled",
-                       AccessibilityManager::Get()->IsVirtualKeyboardEnabled());
-  CallJS("cr.ui.Oobe.refreshA11yInfo", a11y_info);
 }
 
 void CoreOobeHandler::UpdateOobeUIVisibility() {
@@ -529,14 +394,8 @@ void CoreOobeHandler::UpdateLabel(const std::string& id,
 }
 
 void CoreOobeHandler::UpdateDeviceRequisition() {
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-  if (policy_manager) {
-    CallJS("cr.ui.Oobe.updateDeviceRequisition",
-           policy_manager->GetDeviceRequisition());
-  }
+  CallJS("cr.ui.Oobe.updateDeviceRequisition",
+         policy::EnrollmentRequisitionManager::GetDeviceRequisition());
 }
 
 void CoreOobeHandler::UpdateKeyboardState() {
@@ -586,14 +445,6 @@ void CoreOobeHandler::OnOobeConfigurationChanged() {
       chromeos::configuration::ConfigurationHandlerSide::HANDLER_JS,
       configuration);
   CallJS("cr.ui.Oobe.updateOobeConfiguration", configuration);
-}
-
-void CoreOobeHandler::OnAccessibilityStatusChanged(
-    const AccessibilityStatusEventDetails& details) {
-  if (details.notification_type == ACCESSIBILITY_MANAGER_SHUTDOWN)
-    accessibility_subscription_.reset();
-  else
-    UpdateA11yState();
 }
 
 void CoreOobeHandler::HandleLaunchHelpApp(double help_topic_id) {

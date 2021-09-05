@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.device_dialog;
 
 import android.app.Dialog;
-import android.support.test.filters.LargeTest;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -18,7 +19,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -35,7 +35,6 @@ import org.chromium.ui.widget.TextViewWithClickableSpans;
  * Tests for the UsbChooserDialog class.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class UsbChooserDialogTest {
     @Rule

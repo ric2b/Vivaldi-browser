@@ -11,10 +11,12 @@
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/chromeos/printing/print_management/print_management_uma.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -36,6 +38,19 @@
 #include "ui/display/types/display_constants.h"
 
 namespace web_app {
+namespace {
+
+void LogPrintManagementEntryPoints(apps::mojom::AppLaunchSource source) {
+  if (source == apps::mojom::AppLaunchSource::kSourceAppLauncher) {
+    base::UmaHistogramEnumeration("Printing.Cups.PrintManagementAppEntryPoint",
+                                  PrintManagementAppEntryPoint::kLauncher);
+  } else if (source == apps::mojom::AppLaunchSource::kSourceIntentUrl) {
+    base::UmaHistogramEnumeration("Printing.Cups.PrintManagementAppEntryPoint",
+                                  PrintManagementAppEntryPoint::kBrowser);
+  }
+}
+
+}  // namespace
 
 base::Optional<SystemAppType> GetSystemWebAppTypeForAppId(Profile* profile,
                                                           AppId app_id) {
@@ -55,7 +70,8 @@ base::Optional<AppId> GetAppIdForSystemWebApp(Profile* profile,
 
 base::Optional<apps::AppLaunchParams> CreateSystemWebAppLaunchParams(
     Profile* profile,
-    SystemAppType app_type) {
+    SystemAppType app_type,
+    int64_t display_id) {
   base::Optional<AppId> app_id = GetAppIdForSystemWebApp(profile, app_type);
   // TODO(calamity): Decide whether to report app launch failure or CHECK fail.
   if (!app_id)
@@ -70,27 +86,11 @@ base::Optional<apps::AppLaunchParams> CreateSystemWebAppLaunchParams(
   // TODO(calamity): Plumb through better launch sources from callsites.
   apps::AppLaunchParams params = apps::CreateAppIdLaunchParamsWithEventFlags(
       app_id.value(), /*event_flags=*/0,
-      apps::mojom::AppLaunchSource::kSourceChromeInternal,
-      display::kInvalidDisplayId, /*fallback_container=*/
+      apps::mojom::AppLaunchSource::kSourceChromeInternal, display_id,
+      /*fallback_container=*/
       ConvertDisplayModeToAppLaunchContainer(display_mode));
 
   return params;
-}
-
-Browser* LaunchSystemWebApp(Profile* profile,
-                            SystemAppType app_type,
-                            const GURL& url,
-                            bool* did_create) {
-  if (did_create)
-    *did_create = false;
-
-  base::Optional<apps::AppLaunchParams> params =
-      CreateSystemWebAppLaunchParams(profile, app_type);
-  if (!params)
-    return nullptr;
-  params->override_url = url;
-
-  return LaunchSystemWebApp(profile, app_type, url, *params, did_create);
 }
 
 namespace {
@@ -117,20 +117,34 @@ base::FilePath GetLaunchDirectory(
 Browser* LaunchSystemWebApp(Profile* profile,
                             SystemAppType app_type,
                             const GURL& url,
-                            const apps::AppLaunchParams& params,
+                            base::Optional<apps::AppLaunchParams> params,
                             bool* did_create) {
   auto* provider = WebAppProvider::Get(profile);
   if (!provider)
     return nullptr;
 
-  DCHECK_EQ(params.app_id, *GetAppIdForSystemWebApp(profile, app_type));
+  if (!params) {
+    params = CreateSystemWebAppLaunchParams(profile, app_type,
+                                            display::kInvalidDisplayId);
+  }
+  if (!params)
+    return nullptr;
+  params->override_url = url;
+
+  DCHECK_EQ(params->app_id, *GetAppIdForSystemWebApp(profile, app_type));
+
+  // Log enumerated entry point for Print Management App. Only log here if the
+  // app was launched from the browser (omnibox) or from the system launcher.
+  if (app_type == SystemAppType::PRINT_MANAGEMENT) {
+    LogPrintManagementEntryPoints(params->source);
+  }
 
   // Make sure we have a browser for app.  Always reuse an existing browser for
   // popups, otherwise check app type whether we should use a single window.
   // TODO(crbug.com/1060423): Allow apps to control whether popups are single.
   Browser* browser = nullptr;
   Browser::Type browser_type = Browser::TYPE_APP;
-  if (params.disposition == WindowOpenDisposition::NEW_POPUP)
+  if (params->disposition == WindowOpenDisposition::NEW_POPUP)
     browser_type = Browser::TYPE_APP_POPUP;
   if (browser_type == Browser::TYPE_APP_POPUP ||
       provider->system_web_app_manager().IsSingleWindow(app_type)) {
@@ -145,38 +159,38 @@ Browser* LaunchSystemWebApp(Profile* profile,
 
   if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
     if (!browser)
-      browser = CreateWebApplicationWindow(profile, params.app_id,
-                                           params.disposition);
+      browser = CreateWebApplicationWindow(profile, params->app_id,
+                                           params->disposition);
 
     // Navigate application window to application's |url| if necessary.
     web_contents = browser->tab_strip_model()->GetWebContentsAt(0);
     if (!web_contents || web_contents->GetURL() != url) {
       web_contents = NavigateWebApplicationWindow(
-          browser, params.app_id, url, WindowOpenDisposition::CURRENT_TAB);
+          browser, params->app_id, url, WindowOpenDisposition::CURRENT_TAB);
     }
   } else {
     if (!browser)
-      browser = CreateApplicationWindow(profile, params, url);
+      browser = CreateApplicationWindow(profile, *params, url);
 
     // Navigate application window to application's |url| if necessary.
     web_contents = browser->tab_strip_model()->GetWebContentsAt(0);
     if (!web_contents || web_contents->GetURL() != url) {
       web_contents = NavigateApplicationWindow(
-          browser, params, url, WindowOpenDisposition::CURRENT_TAB);
+          browser, *params, url, WindowOpenDisposition::CURRENT_TAB);
     }
   }
 
   // Send launch files.
   if (provider->file_handler_manager().IsFileHandlingAPIAvailable(
-          params.app_id)) {
+          params->app_id)) {
     if (provider->system_web_app_manager().AppShouldReceiveLaunchDirectory(
             app_type)) {
       web_launch::WebLaunchFilesHelper::SetLaunchDirectoryAndLaunchPaths(
           web_contents, web_contents->GetURL(),
-          GetLaunchDirectory(params.launch_files), params.launch_files);
+          GetLaunchDirectory(params->launch_files), params->launch_files);
     } else {
       web_launch::WebLaunchFilesHelper::SetLaunchPaths(
-          web_contents, web_contents->GetURL(), params.launch_files);
+          web_contents, web_contents->GetURL(), params->launch_files);
     }
   }
 

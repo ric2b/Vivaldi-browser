@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/public/cpp/assistant/controller/assistant_alarm_timer_controller.h"
 #include "base/json/json_reader.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -17,8 +18,8 @@
 #include "chromeos/assistant/internal/test_support/fake_assistant_manager_internal.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "chromeos/services/assistant/service_context.h"
 #include "chromeos/services/assistant/test_support/fake_assistant_manager_service_delegate.h"
 #include "chromeos/services/assistant/test_support/fake_service_context.h"
@@ -26,6 +27,7 @@
 #include "chromeos/services/assistant/test_support/mock_assistant_interaction_subscriber.h"
 #include "chromeos/services/assistant/test_support/mock_media_manager.h"
 #include "chromeos/services/assistant/test_support/scoped_assistant_client.h"
+#include "chromeos/services/assistant/test_support/scoped_device_actions.h"
 #include "libassistant/shared/internal_api/assistant_manager_internal.h"
 #include "libassistant/shared/public/assistant_manager.h"
 #include "services/media_session/public/mojom/media_session.mojom-shared.h"
@@ -40,6 +42,7 @@ namespace assistant {
 
 using media_session::mojom::MediaSessionAction;
 using testing::ElementsAre;
+using testing::Invoke;
 using testing::StrictMock;
 using CommunicationErrorType = AssistantManagerService::CommunicationErrorType;
 using UserInfo = AssistantManagerService::UserInfo;
@@ -47,19 +50,6 @@ using UserInfo = AssistantManagerService::UserInfo;
 namespace {
 
 const char* kNoValue = FakeAssistantManager::kNoValue;
-
-// Action CloneArg<k>(pointer) clones the k-th (0-based) argument of the mock
-// function to *pointer. This is analogous to testing::SaveArg<k> except it uses
-// mojo::Clone to support mojo types.
-//
-// Example usage:
-//   std::vector<MyMojoPtr> ptrs;
-//   EXPECT_CALL(my_mock, MyMethod(_)).WillOnce(CloneArg<0>(&ptrs));
-ACTION_TEMPLATE(CloneArg,
-                HAS_1_TEMPLATE_PARAMS(int, k),
-                AND_1_VALUE_PARAMS(pointer)) {
-  *pointer = mojo::Clone(::std::get<k>(args));
-}
 
 #define EXPECT_STATE(_state) \
   EXPECT_EQ(_state, assistant_manager_service()->GetState());
@@ -105,7 +95,7 @@ static std::vector<int> GetNonAuthenticationErrorCodes() {
 }
 
 class AssistantAlarmTimerControllerMock
-    : public ash::mojom::AssistantAlarmTimerController {
+    : public ash::AssistantAlarmTimerController {
  public:
   AssistantAlarmTimerControllerMock() = default;
   AssistantAlarmTimerControllerMock(const AssistantAlarmTimerControllerMock&) =
@@ -114,10 +104,15 @@ class AssistantAlarmTimerControllerMock
       const AssistantAlarmTimerControllerMock&) = delete;
   ~AssistantAlarmTimerControllerMock() override = default;
 
-  // ash::mojom::AssistantAlarmTimerController:
+  // ash::AssistantAlarmTimerController:
+  MOCK_METHOD((const ash::AssistantAlarmTimerModel*),
+              GetModel,
+              (),
+              (const, override));
+
   MOCK_METHOD(void,
               OnTimerStateChanged,
-              (std::vector<ash::mojom::AssistantTimerPtr>),
+              (std::vector<ash::AssistantTimerPtr>),
               (override));
 };
 
@@ -268,6 +263,7 @@ class AssistantManagerServiceImplTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment;
 
   ScopedAssistantClient assistant_client_;
+  ScopedDeviceActions device_actions_;
   FullyInitializedAssistantState assistant_state_;
 
   std::unique_ptr<FakeServiceContext> service_context_;
@@ -568,9 +564,11 @@ TEST_F(AssistantManagerServiceImplTest,
   fake_service_context()->set_assistant_alarm_timer_controller(
       &alarm_timer_controller);
 
-  std::vector<ash::mojom::AssistantTimerPtr> timers;
   EXPECT_CALL(alarm_timer_controller, OnTimerStateChanged)
-      .WillOnce(CloneArg<0>(&timers));
+      .WillOnce(Invoke([](auto timers) {
+        ASSERT_EQ(1u, timers.size());
+        EXPECT_EQ(ash::AssistantTimerState::kFired, timers[0]->state);
+      }));
 
   std::vector<assistant_client::AlarmTimerEvent> events;
 
@@ -586,9 +584,6 @@ TEST_F(AssistantManagerServiceImplTest,
   fake_alarm_timer_manager()->SetAllEvents(std::move(events));
   fake_alarm_timer_manager()->NotifyRingingStateListeners();
   base::RunLoop().RunUntilIdle();
-
-  ASSERT_EQ(1u, timers.size());
-  EXPECT_EQ(ash::mojom::AssistantTimerState::kFired, timers[0]->state);
 }
 
 TEST_F(AssistantManagerServiceImplTest,
@@ -609,9 +604,13 @@ TEST_F(AssistantManagerServiceImplTest,
 
   testing::Mock::VerifyAndClearExpectations(&alarm_timer_controller);
 
-  std::vector<ash::mojom::AssistantTimerPtr> timers;
   EXPECT_CALL(alarm_timer_controller, OnTimerStateChanged)
-      .WillOnce(CloneArg<0>(&timers));
+      .WillOnce(Invoke([](auto timers) {
+        ASSERT_EQ(3u, timers.size());
+        EXPECT_EQ(ash::AssistantTimerState::kScheduled, timers[0]->state);
+        EXPECT_EQ(ash::AssistantTimerState::kPaused, timers[1]->state);
+        EXPECT_EQ(ash::AssistantTimerState::kFired, timers[2]->state);
+      }));
 
   std::vector<assistant_client::AlarmTimerEvent> events;
 
@@ -627,11 +626,6 @@ TEST_F(AssistantManagerServiceImplTest,
   fake_alarm_timer_manager()->SetAllEvents(std::move(events));
   fake_alarm_timer_manager()->NotifyRingingStateListeners();
   base::RunLoop().RunUntilIdle();
-
-  ASSERT_EQ(3u, timers.size());
-  EXPECT_EQ(ash::mojom::AssistantTimerState::kScheduled, timers[0]->state);
-  EXPECT_EQ(ash::mojom::AssistantTimerState::kPaused, timers[1]->state);
-  EXPECT_EQ(ash::mojom::AssistantTimerState::kFired, timers[2]->state);
 }
 
 TEST_F(AssistantManagerServiceImplTest,
@@ -650,19 +644,18 @@ TEST_F(AssistantManagerServiceImplTest,
   fake_service_context()->set_assistant_alarm_timer_controller(
       &alarm_timer_controller);
 
-  // Expect (and capture) |timers| to be sent to AssistantAlarmTimerController.
-  std::vector<ash::mojom::AssistantTimerPtr> timers;
+  // Expect |timers| to be sent to AssistantAlarmTimerController.  Verify
+  // AssistantAlarmTimerController is notified of the scheduled timer.
   EXPECT_CALL(alarm_timer_controller, OnTimerStateChanged)
-      .WillOnce(CloneArg<0>(&timers));
+      .WillOnce(Invoke([](auto timers) {
+        ASSERT_EQ(1u, timers.size());
+        EXPECT_EQ(ash::AssistantTimerState::kScheduled, timers[0]->state);
+      }));
 
   // Start LibAssistant.
   Start();
   WaitUntilStartIsFinished();
   assistant_manager_service()->OnStartFinished();
-
-  // Verify AssistantAlarmTimerController is notified of the scheduled timer.
-  ASSERT_EQ(1u, timers.size());
-  EXPECT_EQ(ash::mojom::AssistantTimerState::kScheduled, timers[0]->state);
 }
 
 }  // namespace assistant

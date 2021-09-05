@@ -40,7 +40,6 @@
 #import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/tabs/closing_web_state_observer.h"
 #import "ios/chrome/browser/tabs/synced_window_delegate_browser_agent.h"
-#import "ios/chrome/browser/tabs/tab_model_list.h"
 #import "ios/chrome/browser/tabs/tab_parenting_observer.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -133,10 +132,9 @@ BOOL ShouldRecordPageLoadStartForNavigation(
 
   web::NavigationItem* pending_item = navigation_manager->GetPendingItem();
   if (pending_item) {
-    UIView* webView = navigation->GetWebState()->GetView();
     if (IsTransitionBetweenDesktopAndMobileUserAgent(
-            pending_item->GetUserAgentType(webView),
-            last_committed_item->GetUserAgentType(webView))) {
+            pending_item->GetUserAgentType(),
+            last_committed_item->GetUserAgentType())) {
       // Switching between Desktop and Mobile user agent.
       return NO;
     }
@@ -189,19 +187,6 @@ void RecordInterfaceOrientationMetric() {
       // enumerated histogram and log this case as well.
       break;
   }
-}
-
-// Records metrics for main frame navigation.
-void RecordMainFrameNavigationMetric(web::WebState* web_state) {
-  DCHECK(web_state);
-  DCHECK(web_state->GetBrowserState());
-  DCHECK(web_state->GetNavigationManager());
-  web::NavigationItem* item =
-      web_state->GetNavigationManager()->GetLastCommittedItem();
-  navigation_metrics::RecordMainFrameNavigation(
-      item ? item->GetVirtualURL() : GURL::EmptyGURL(), true,
-      web_state->GetBrowserState()->IsOffTheRecord(),
-      GetBrowserStateType(web_state->GetBrowserState()));
 }
 
 }  // anonymous namespace
@@ -315,9 +300,6 @@ void RecordMainFrameNavigationMetric(web::WebState* web_state) {
            selector:@selector(applicationDidEnterBackground:)
                name:UIApplicationDidEnterBackgroundNotification
              object:nil];
-
-    // Associate with ChromeBrowserState.
-    TabModelList::RegisterTabModelWithChromeBrowserState(_browserState, self);
   }
   return self;
 }
@@ -338,7 +320,6 @@ void RecordMainFrameNavigationMetric(web::WebState* web_state) {
     return;
 
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-  TabModelList::UnregisterTabModelFromChromeBrowserState(_browserState, self);
 
   _sessionRestorationBrowserAgent = nullptr;
   _tabUsageRecorder = nullptr;
@@ -410,12 +391,20 @@ void RecordMainFrameNavigationMetric(web::WebState* web_state) {
 
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
+  if (!navigation->HasCommitted())
+    return;
 
-  if (!navigation->IsSameDocument() && navigation->HasCommitted() &&
-      !self.offTheRecord) {
+  if (!navigation->IsSameDocument() && !self.offTheRecord) {
     int tabCount = static_cast<int>(self.count);
     UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.TabCountPerLoad", tabCount, 1, 200, 50);
   }
+
+  web::NavigationItem* item =
+      webState->GetNavigationManager()->GetLastCommittedItem();
+  navigation_metrics::RecordMainFrameNavigation(
+      item ? item->GetVirtualURL() : GURL::EmptyGURL(),
+      navigation->IsSameDocument(), self.offTheRecord,
+      GetBrowserStateType(webState->GetBrowserState()));
 }
 
 - (void)webState:(web::WebState*)webState
@@ -466,7 +455,6 @@ void RecordMainFrameNavigationMetric(web::WebState* web_state) {
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   RecordInterfaceOrientationMetric();
-  RecordMainFrameNavigationMetric(webState);
 
   [[OmniboxGeolocationController sharedInstance]
       finishPageLoadForWebState:webState

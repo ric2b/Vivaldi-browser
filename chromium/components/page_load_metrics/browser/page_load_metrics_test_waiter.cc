@@ -238,36 +238,58 @@ PageLoadMetricsTestWaiter::GetMatchedBits(
       blink::LoadingBehaviorFlag::kLoadingBehaviorDocumentWriteBlockReload) {
     matched_bits.Set(TimingField::kDocumentWriteBlockReload);
   }
-  if (timing.paint_timing->largest_image_paint ||
-      timing.paint_timing->largest_text_paint) {
+  if (timing.paint_timing->largest_contentful_paint->largest_image_paint ||
+      timing.paint_timing->largest_contentful_paint->largest_text_paint) {
     matched_bits.Set(TimingField::kLargestContentfulPaint);
   }
   if (timing.paint_timing->first_input_or_scroll_notified_timestamp)
     matched_bits.Set(TimingField::kFirstInputOrScroll);
   if (timing.interactive_timing->first_input_delay)
     matched_bits.Set(TimingField::kFirstInputDelay);
+  if (!timing.back_forward_cache_timings.empty()) {
+    if (!timing.back_forward_cache_timings.back()
+             ->first_paint_after_back_forward_cache_restore.is_zero()) {
+      matched_bits.Set(TimingField::kFirstPaintAfterBackForwardCacheRestore);
+    }
+    if (timing.back_forward_cache_timings.back()
+            ->first_input_delay_after_back_forward_cache_restore.has_value()) {
+      matched_bits.Set(
+          TimingField::kFirstInputDelayAfterBackForwardCacheRestore);
+    }
+  }
 
   return matched_bits;
 }
 
 void PageLoadMetricsTestWaiter::OnTrackerCreated(
     page_load_metrics::PageLoadTracker* tracker) {
-  if (!attach_on_tracker_creation_)
-    return;
   // A PageLoadMetricsWaiter should only wait for events from a single page
   // load.
-  ASSERT_FALSE(did_add_observer_);
-  tracker->AddObserver(
-      std::make_unique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
-  did_add_observer_ = true;
+  if (!attach_on_tracker_creation_)
+    return;
+  AddObserver(tracker);
 }
 
 void PageLoadMetricsTestWaiter::OnCommit(
     page_load_metrics::PageLoadTracker* tracker) {
-  if (attach_on_tracker_creation_)
-    return;
   // A PageLoadMetricsWaiter should only wait for events from a single page
   // load.
+  if (attach_on_tracker_creation_)
+    return;
+  AddObserver(tracker);
+}
+
+void PageLoadMetricsTestWaiter::OnRestoredFromBackForwardCache(
+    page_load_metrics::PageLoadTracker* tracker) {
+  // A PageLoadMetricsWaiter should only wait for events from a single page
+  // load.
+  if (attach_on_tracker_creation_)
+    return;
+  AddObserver(tracker);
+}
+
+void PageLoadMetricsTestWaiter::AddObserver(
+    page_load_metrics::PageLoadTracker* tracker) {
   ASSERT_FALSE(did_add_observer_);
   tracker->AddObserver(
       std::make_unique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));

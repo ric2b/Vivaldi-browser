@@ -8,7 +8,6 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/find_in_page/find_notification_details.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/gfx/range/range.h"
 
@@ -18,8 +17,7 @@ class FindResultObserver;
 enum class SelectionAction;
 
 // Per-tab find manager. Handles dealing with the life cycle of find sessions.
-class FindTabHelper : public content::WebContentsObserver,
-                      public content::WebContentsUserData<FindTabHelper> {
+class FindTabHelper : public content::WebContentsUserData<FindTabHelper> {
  public:
   // The delegate tracks search text state.
   class Delegate {
@@ -48,9 +46,14 @@ class FindTabHelper : public content::WebContentsObserver,
   // function does not block while a search is in progress. The controller will
   // receive the results through the notification mechanism. See Observe(...)
   // for details.
+  //
+  // If |find_next_if_selection_matches| is true and the search results in an
+  // exact match of the selection, keep searching. It should generally be set to
+  // true unless you're starting a new find based on the selection.
   void StartFinding(base::string16 search_string,
                     bool forward_direction,
                     bool case_sensitive,
+                    bool find_next_if_selection_matches,
                     bool run_synchronously_for_testing = false);
 
   // Stops the current Find operation.
@@ -125,6 +128,9 @@ class FindTabHelper : public content::WebContentsObserver,
   // still care about the results of the search (in some cases we don't because
   // the user has issued a new search).
   static int find_request_id_counter_;
+
+  // The WebContents which owns this helper.
+  content::WebContents* web_contents_ = nullptr;
 
   // True if the Find UI is active for this Tab.
   bool find_ui_active_ = false;

@@ -93,7 +93,7 @@ bool Widget::g_disable_activation_change_handling_ = false;
 // WidgetDelegate is supplied.
 class DefaultWidgetDelegate : public WidgetDelegate {
  public:
-  explicit DefaultWidgetDelegate(Widget* widget) : widget_(widget) {
+  DefaultWidgetDelegate() {
     // In most situations where a Widget is used without a delegate the Widget
     // is used as a container, so that we want focus to advance to the top-level
     // widget. A good example of this is the find bar.
@@ -103,12 +103,8 @@ class DefaultWidgetDelegate : public WidgetDelegate {
 
   // WidgetDelegate:
   void DeleteDelegate() override { delete this; }
-  Widget* GetWidget() override { return widget_; }
-  const Widget* GetWidget() const override { return widget_; }
 
  private:
-  Widget* widget_;
-
   DISALLOW_COPY_AND_ASSIGN(DefaultWidgetDelegate);
 };
 
@@ -179,6 +175,8 @@ Widget::Widget(InitParams params) {
 }
 
 Widget::~Widget() {
+  if (widget_delegate_)
+    widget_delegate_->WidgetDestroying();
   DestroyRootView();
   if (ownership_ == InitParams::WIDGET_OWNS_NATIVE_WIDGET) {
     delete native_widget_;
@@ -298,8 +296,7 @@ void Widget::Init(InitParams params) {
     // ViewsDelegate::OnBeforeWidgetInit() may change `params.delegate` either
     // by setting it to null or assigning a different value to it, so handle
     // both cases.
-    auto default_widget_delegate =
-        std::make_unique<DefaultWidgetDelegate>(this);
+    auto default_widget_delegate = std::make_unique<DefaultWidgetDelegate>();
     widget_delegate_ =
         params.delegate ? params.delegate : default_widget_delegate.get();
 
@@ -321,6 +318,9 @@ void Widget::Init(InitParams params) {
 
   // Henceforth, ensure the delegate outlives the Widget.
   widget_delegate_->can_delete_this_ = false;
+
+  if (params.delegate)
+    params.delegate->WidgetInitializing(this);
 
   ownership_ = params.ownership;
   native_widget_ = CreateNativeWidget(params, this)->AsNativeWidgetPrivate();
@@ -377,7 +377,7 @@ void Widget::Init(InitParams params) {
   native_widget_->OnWidgetInitDone();
 
   if (delegate)
-    delegate->OnWidgetInitialized();
+    delegate->WidgetInitialized();
 
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetInitialized(
       this);
@@ -1162,6 +1162,8 @@ gfx::Size Widget::GetMaximumSize() const {
 }
 
 void Widget::OnNativeWidgetMove() {
+  TRACE_EVENT0("ui", "Widget::OnNativeWidgetMove");
+
   widget_delegate_->OnWidgetMove();
   NotifyCaretBoundsChanged(GetInputMethod());
 
@@ -1170,6 +1172,8 @@ void Widget::OnNativeWidgetMove() {
 }
 
 void Widget::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
+  TRACE_EVENT0("ui", "Widget::OnNativeWidgetSizeChanged");
+
   View* root = GetRootView();
   if (root)
     root->SetSize(new_size);
@@ -1229,6 +1233,8 @@ void Widget::OnKeyEvent(ui::KeyEvent* event) {
 //                   RootView from anywhere in Widget. Use
 //                   SendEventToSink() instead. See crbug.com/348087.
 void Widget::OnMouseEvent(ui::MouseEvent* event) {
+  TRACE_EVENT0("ui", "Widget::OnMouseEvent");
+
   View* root_view = GetRootView();
   switch (event->type()) {
     case ui::ET_MOUSE_PRESSED: {
@@ -1472,6 +1478,8 @@ View* Widget::GetFocusTraversableParentView() {
 // Widget, ui::NativeThemeObserver implementation:
 
 void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
+  TRACE_EVENT0("ui", "Widget::OnNativeThemeUpdated");
+
   DCHECK(observer_manager_.IsObserving(observed_theme));
 
 #if defined(OS_MACOSX) || defined(OS_WIN)

@@ -28,6 +28,7 @@
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
+#include "gin/public/v8_platform.h"
 #include "pdf/document_loader_impl.h"
 #include "pdf/draw_utils/coordinates.h"
 #include "pdf/draw_utils/shadow.h"
@@ -67,20 +68,6 @@ using printing::kPointsPerInch;
 using printing::kPixelsPerInch;
 
 namespace chrome_pdf {
-
-static_assert(static_cast<int>(PDFEngine::FormType::kNone) == FORMTYPE_NONE,
-              "None form types must match");
-static_assert(static_cast<int>(PDFEngine::FormType::kAcroForm) ==
-                  FORMTYPE_ACRO_FORM,
-              "AcroForm form types must match");
-static_assert(static_cast<int>(PDFEngine::FormType::kXFAFull) ==
-                  FORMTYPE_XFA_FULL,
-              "XFA full form types must match");
-static_assert(static_cast<int>(PDFEngine::FormType::kXFAForeground) ==
-                  FORMTYPE_XFA_FOREGROUND,
-              "XFA foreground form types must match");
-static_assert(static_cast<int>(PDFEngine::FormType::kCount) == FORMTYPE_COUNT,
-              "Form type counts must match");
 
 namespace {
 
@@ -234,8 +221,10 @@ bool IsV8Initialized() {
 void SetUpV8() {
   const char* recommended = FPDF_GetRecommendedV8Flags();
   v8::V8::SetFlagsFromString(recommended, strlen(recommended));
-  gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode,
-                                 gin::ArrayBufferAllocator::SharedInstance());
+  gin::IsolateHolder::Initialize(
+      gin::IsolateHolder::kNonStrictMode,
+      static_cast<v8::ArrayBuffer::Allocator*>(
+          FPDF_GetArrayBufferAllocatorSharedInstance()));
   DCHECK(!g_isolate_holder);
   g_isolate_holder = new gin::IsolateHolder(
       base::ThreadTaskRunnerHandle::Get(), gin::IsolateHolder::kSingleThread,
@@ -365,18 +354,44 @@ void SetLinkUnderCursor(pp::Instance* instance,
   pp::PDF::SetLinkUnderCursor(instance, link_under_cursor.c_str());
 }
 
+base::string16 GetAttachmentAttribute(FPDF_ATTACHMENT attachment,
+                                      FPDF_BYTESTRING field) {
+  return CallPDFiumWideStringBufferApi(
+      base::BindRepeating(&FPDFAttachment_GetStringValue, attachment, field),
+      /*check_expected_size=*/true);
+}
+
+unsigned long GetAttachmentFileLengthInBytes(FPDF_ATTACHMENT attachment) {
+  unsigned long actual_length_bytes;
+  bool is_attachment_readable = FPDFAttachment_GetFile(
+      attachment, /*buffer=*/nullptr, /*buflen=*/0, &actual_length_bytes);
+  DCHECK(is_attachment_readable);
+  return actual_length_bytes;
+}
+
+base::string16 GetAttachmentName(FPDF_ATTACHMENT attachment) {
+  return CallPDFiumWideStringBufferApi(
+      base::BindRepeating(&FPDFAttachment_GetName, attachment),
+      /*check_expected_size=*/true);
+}
+
 }  // namespace
 
 void InitializeSDK(bool enable_v8) {
   FPDF_LIBRARY_CONFIG config;
-  config.version = 2;
+  config.version = 3;
   config.m_pUserFontPaths = nullptr;
 
   if (enable_v8) {
     SetUpV8();
     config.m_pIsolate = v8::Isolate::GetCurrent();
+    // NOTE: static_cast<> prior to assigning to (void*) is safer since it
+    // will manipulate the pointer value should gin::V8Platform someday have
+    // multiple base classes.
+    config.m_pPlatform = static_cast<v8::Platform*>(gin::V8Platform::Get());
   } else {
     config.m_pIsolate = nullptr;
+    config.m_pPlatform = nullptr;
   }
   config.m_v8EmbedderSlot = gin::kEmbedderPDFium;
   FPDF_InitLibraryWithConfig(&config);
@@ -746,6 +761,8 @@ void PDFiumEngine::FinishLoadingDocument() {
   if (need_update)
     LoadPageInfo();
 
+  LoadDocumentAttachmentInfoList();
+
   LoadDocumentMetadata();
 
   if (called_do_document_action_)
@@ -948,7 +965,7 @@ void PDFiumEngine::KillFormFocus() {
 void PDFiumEngine::UpdateFocus(bool has_focus) {
   base::AutoReset<bool> updating_focus_guard(&updating_focus_, true);
   if (has_focus) {
-    focus_item_type_ = last_focused_item_type_;
+    UpdateFocusItemType(last_focused_item_type_);
     if (focus_item_type_ == FocusElementType::kPage &&
         PageIndexInBounds(last_focused_page_) &&
         last_focused_annot_index_ != -1) {
@@ -962,7 +979,7 @@ void PDFiumEngine::UpdateFocus(bool has_focus) {
   } else {
     last_focused_item_type_ = focus_item_type_;
     if (focus_item_type_ == FocusElementType::kDocument) {
-      focus_item_type_ = FocusElementType::kNone;
+      UpdateFocusItemType(FocusElementType::kNone);
     } else if (focus_item_type_ == FocusElementType::kPage) {
       FPDF_ANNOTATION last_focused_annot = nullptr;
       FPDF_BOOL ret = FORM_GetFocusedAnnot(form(), &last_focused_page_,
@@ -991,20 +1008,14 @@ bool PDFiumEngine::ReadLoadedBytes(uint32_t length, void* buffer) {
 
 void PDFiumEngine::SetFormSelectedText(FPDF_FORMHANDLE form_handle,
                                        FPDF_PAGE page) {
-  unsigned long form_sel_text_len =
-      FORM_GetSelectedText(form_handle, page, nullptr, 0);
+  base::string16 selected_form_text16 = CallPDFiumWideStringBufferApi(
+      base::BindRepeating(&FORM_GetSelectedText, form_handle, page),
+      /*check_expected_size=*/false);
 
   // If form selected text is empty and there was no previous form text
-  // selection, exit early because nothing has changed. When |form_sel_text_len|
-  // is 2, that represents a wide string with just a NUL-terminator.
-  if (form_sel_text_len <= 2 && selected_form_text_.empty())
+  // selection, exit early because nothing has changed.
+  if (selected_form_text16.empty() && selected_form_text_.empty())
     return;
-
-  base::string16 selected_form_text16;
-  PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> string_adapter(
-      &selected_form_text16, form_sel_text_len, false);
-  string_adapter.Close(FORM_GetSelectedText(
-      form_handle, page, string_adapter.GetData(), form_sel_text_len));
 
   // Update previous and current selections, then compare them to check if
   // selection has changed. If so, set plugin text selection.
@@ -1098,6 +1109,9 @@ void PDFiumEngine::OnMultipleClick(int click_count,
 
   selection_.push_back(PDFiumRange(pages_[page_index].get(), start_index,
                                    end_index - start_index));
+
+  if (handling_long_press_)
+    client_->NotifyTouchSelectionOccurred();
 }
 
 bool PDFiumEngine::OnLeftMouseDown(const pp::MouseInputEvent& event) {
@@ -1123,7 +1137,7 @@ bool PDFiumEngine::OnLeftMouseDown(const pp::MouseInputEvent& event) {
     return true;
 
   if (page_index != -1) {
-    focus_item_type_ = FocusElementType::kPage;
+    UpdateFocusItemType(FocusElementType::kPage);
     last_focused_page_ = page_index;
     double page_x;
     double page_y;
@@ -1554,6 +1568,17 @@ bool PDFiumEngine::OnKeyDown(const pp::KeyboardInputEvent& event) {
     OnChar(synthesized);
   }
 
+#if !defined(OS_MACOSX)
+  // macOS doesn't have keyboard-triggered context menus.
+  // Scroll focused annotation into view when context menu is invoked through
+  // keyboard <Shift-F10>.
+  if (event.GetKeyCode() == FWL_VKEY_F10 &&
+      (event.GetModifiers() & PP_INPUTEVENT_MODIFIER_SHIFTKEY)) {
+    DCHECK(!rv);
+    ScrollFocusedAnnotationIntoView();
+  }
+#endif
+
   return rv;
 }
 
@@ -1574,8 +1599,17 @@ bool PDFiumEngine::OnChar(const pp::KeyboardInputEvent& event) {
     return false;
 
   base::string16 str = base::UTF8ToUTF16(event.GetCharacterText().AsString());
-  return !!FORM_OnChar(form(), pages_[last_focused_page_]->GetPage(), str[0],
-                       event.GetModifiers());
+  bool rv = !!FORM_OnChar(form(), pages_[last_focused_page_]->GetPage(), str[0],
+                          event.GetModifiers());
+
+  // Scroll editable form text into view on char events. We should not scroll
+  // focused annotation on escape char event since escape char is used to
+  // dismiss focus from form controls.
+  if (rv && editable_form_text_area_ && event.GetKeyCode() != ui::VKEY_ESCAPE) {
+    ScrollFocusedAnnotationIntoView();
+  }
+
+  return rv;
 }
 
 void PDFiumEngine::StartFind(const std::string& text, bool case_sensitive) {
@@ -1974,6 +2008,14 @@ void PDFiumEngine::SetTwoUpView(bool enable) {
   ProposeNextDocumentLayout();
 }
 
+void PDFiumEngine::DisplayAnnotations(bool display) {
+  if (render_annots_ == display)
+    return;
+
+  render_annots_ = display;
+  InvalidateAllPages();
+}
+
 void PDFiumEngine::InvalidateAllPages() {
   CancelPaints();
   StopFind();
@@ -2124,6 +2166,12 @@ void PDFiumEngine::SelectAll() {
   }
 }
 
+const std::vector<DocumentAttachmentInfo>&
+PDFiumEngine::GetDocumentAttachmentInfoList() const {
+  DCHECK(document_loaded_);
+  return doc_attachment_info_list_;
+}
+
 const DocumentMetadata& PDFiumEngine::GetDocumentMetadata() const {
   DCHECK(document_loaded_);
   return doc_metadata_;
@@ -2142,14 +2190,9 @@ pp::VarArray PDFiumEngine::GetBookmarks() {
 pp::VarDictionary PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
                                                   unsigned int depth) {
   pp::VarDictionary dict;
-  base::string16 title;
-  unsigned long buffer_size = FPDFBookmark_GetTitle(bookmark, nullptr, 0);
-  if (buffer_size > 0) {
-    PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> api_string_adapter(
-        &title, buffer_size, true);
-    api_string_adapter.Close(FPDFBookmark_GetTitle(
-        bookmark, api_string_adapter.GetData(), buffer_size));
-  }
+  base::string16 title = CallPDFiumWideStringBufferApi(
+      base::BindRepeating(&FPDFBookmark_GetTitle, bookmark),
+      /*check_expected_size=*/true);
   dict.Set(pp::Var("title"), pp::Var(base::UTF16ToUTF8(title)));
 
   FPDF_DEST dest = FPDFBookmark_GetDest(doc(), bookmark);
@@ -2173,15 +2216,11 @@ pp::VarDictionary PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
   } else {
     // Extract URI for bookmarks linking to an external page.
     FPDF_ACTION action = FPDFBookmark_GetAction(bookmark);
-    buffer_size = FPDFAction_GetURIPath(doc(), action, nullptr, 0);
-    if (buffer_size > 0) {
-      std::string uri;
-      PDFiumAPIStringBufferAdapter<std::string> api_string_adapter(
-          &uri, buffer_size, true);
-      api_string_adapter.Close(FPDFAction_GetURIPath(
-          doc(), action, api_string_adapter.GetData(), buffer_size));
+    std::string uri = CallPDFiumStringBufferApi(
+        base::BindRepeating(&FPDFAction_GetURIPath, doc(), action),
+        /*check_expected_size=*/true);
+    if (!uri.empty())
       dict.Set(pp::Var("uri"), pp::Var(uri));
-    }
   }
 
   pp::VarArray children;
@@ -2328,6 +2367,7 @@ void PDFiumEngine::SetGrayscale(bool grayscale) {
 }
 
 void PDFiumEngine::HandleLongPress(const pp::TouchInputEvent& event) {
+  base::AutoReset<bool> handling_long_press_guard(&handling_long_press_, true);
   pp::FloatPoint fp =
       event.GetTouchByIndex(PP_TOUCHLIST_TYPE_TARGETTOUCHES, 0).position();
   pp::Point point;
@@ -2719,7 +2759,8 @@ void PDFiumEngine::LoadForm() {
                                     kFormHighlightColor);
     FPDF_SetFormFieldHighlightAlpha(form(), kFormHighlightAlpha);
 
-    if (base::FeatureList::IsEnabled(features::kTabAcrossPDFAnnotations)) {
+    if (base::FeatureList::IsEnabled(features::kTabAcrossPDFAnnotations) &&
+        !client_->IsPrintPreview()) {
       static constexpr FPDF_ANNOTATION_SUBTYPE kFocusableAnnotSubtypes[] = {
           FPDF_ANNOT_LINK, FPDF_ANNOT_HIGHLIGHT, FPDF_ANNOT_WIDGET};
       FPDF_BOOL ret = FPDFAnnot_SetFocusableSubtypes(
@@ -3558,12 +3599,12 @@ void PDFiumEngine::SetSelecting(bool selecting) {
     client_->IsSelectingChanged(selecting);
 }
 
-void PDFiumEngine::SetEditMode(bool edit_mode) {
-  if (edit_mode_ == edit_mode)
+void PDFiumEngine::EnteredEditMode() {
+  if (edit_mode_)
     return;
 
-  edit_mode_ = edit_mode;
-  client_->IsEditModeChanged(edit_mode_);
+  edit_mode_ = true;
+  client_->EnteredEditMode();
 }
 
 void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
@@ -3671,7 +3712,30 @@ void PDFiumEngine::SetSelection(
   }
 }
 
-void PDFiumEngine::ScrollIntoView(const pp::Rect& rect) {
+void PDFiumEngine::ScrollFocusedAnnotationIntoView() {
+  FPDF_ANNOTATION annot;
+  int page_index;
+  if (!FORM_GetFocusedAnnot(form(), &page_index, &annot))
+    return;
+
+  ScrollAnnotationIntoView(annot, page_index);
+  FPDFPage_CloseAnnot(annot);
+}
+
+void PDFiumEngine::ScrollAnnotationIntoView(FPDF_ANNOTATION annot,
+                                            int page_index) {
+  if (!PageIndexInBounds(page_index))
+    return;
+
+  FS_RECTF annot_rect;
+  if (!FPDFAnnot_GetRect(annot, &annot_rect))
+    return;
+
+  pp::Rect rect = pages_[page_index]->PageToScreen(
+      pp::Point(), /*zoom=*/1.0, annot_rect.left, annot_rect.top,
+      annot_rect.right, annot_rect.bottom,
+      layout_.options().default_page_orientation());
+
   pp::Rect visible_rect = GetVisibleRect();
   if (visible_rect.Contains(rect))
     return;
@@ -3778,6 +3842,28 @@ void PDFiumEngine::GetSelection(uint32_t* selection_start_page_index,
   }
 }
 
+void PDFiumEngine::LoadDocumentAttachmentInfoList() {
+  DCHECK(document_loaded_);
+
+  int attachment_count = FPDFDoc_GetAttachmentCount(doc());
+  if (attachment_count <= 0)
+    return;
+
+  doc_attachment_info_list_.resize(attachment_count);
+  for (int i = 0; i < attachment_count; ++i) {
+    FPDF_ATTACHMENT attachment = FPDFDoc_GetAttachment(doc(), i);
+    DCHECK(attachment);
+
+    doc_attachment_info_list_[i].name = GetAttachmentName(attachment);
+    doc_attachment_info_list_[i].size_bytes =
+        GetAttachmentFileLengthInBytes(attachment);
+    doc_attachment_info_list_[i].creation_date =
+        GetAttachmentAttribute(attachment, "CreationDate");
+    doc_attachment_info_list_[i].modified_date =
+        GetAttachmentAttribute(attachment, "ModDate");
+  }
+}
+
 void PDFiumEngine::LoadDocumentMetadata() {
   DCHECK(document_loaded_);
 
@@ -3793,17 +3879,9 @@ void PDFiumEngine::LoadDocumentMetadata() {
 std::string PDFiumEngine::GetMetadataByField(FPDF_BYTESTRING field) const {
   DCHECK(doc());
 
-  size_t size =
-      FPDF_GetMetaText(doc(), field, /*buffer=*/nullptr, /*buflen=*/0);
-  if (size == 0)
-    return std::string();
-
-  base::string16 value;
-  PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> string_adapter(
-      &value, size, /*check_expected_size=*/false);
-  string_adapter.Close(
-      FPDF_GetMetaText(doc(), field, string_adapter.GetData(), size));
-  return base::UTF16ToUTF8(value);
+  return base::UTF16ToUTF8(CallPDFiumWideStringBufferApi(
+      base::BindRepeating(&FPDF_GetMetaText, doc(), field),
+      /*check_expected_size=*/false));
 }
 
 PdfVersion PDFiumEngine::GetDocumentVersion() const {
@@ -3869,7 +3947,7 @@ bool PDFiumEngine::HandleTabEventWithModifiers(uint32_t modifiers) {
 
 bool PDFiumEngine::HandleTabForward(uint32_t modifiers) {
   if (focus_item_type_ == FocusElementType::kNone) {
-    focus_item_type_ = FocusElementType::kDocument;
+    UpdateFocusItemType(FocusElementType::kDocument);
     return true;
   }
 
@@ -3887,17 +3965,17 @@ bool PDFiumEngine::HandleTabForward(uint32_t modifiers) {
 
   if (did_tab_forward) {
     last_focused_page_ = page_index;
-    focus_item_type_ = FocusElementType::kPage;
+    UpdateFocusItemType(FocusElementType::kPage);
   } else {
     last_focused_page_ = -1;
-    focus_item_type_ = FocusElementType::kNone;
+    UpdateFocusItemType(FocusElementType::kNone);
   }
   return did_tab_forward;
 }
 
 bool PDFiumEngine::HandleTabBackward(uint32_t modifiers) {
   if (focus_item_type_ == FocusElementType::kDocument) {
-    focus_item_type_ = FocusElementType::kNone;
+    UpdateFocusItemType(FocusElementType::kNone);
     return false;
   }
 
@@ -3915,7 +3993,7 @@ bool PDFiumEngine::HandleTabBackward(uint32_t modifiers) {
 
   if (did_tab_backward) {
     last_focused_page_ = page_index;
-    focus_item_type_ = FocusElementType::kPage;
+    UpdateFocusItemType(FocusElementType::kPage);
   } else {
     // No focusable annotation found in pages. Possible scenarios:
     // Case 1: |focus_item_type_| is None. Since no object in any page can take
@@ -3928,11 +4006,11 @@ bool PDFiumEngine::HandleTabBackward(uint32_t modifiers) {
       case FocusElementType::kNone:
         did_tab_backward = true;
         last_focused_page_ = -1;
-        focus_item_type_ = FocusElementType::kDocument;
+        UpdateFocusItemType(FocusElementType::kDocument);
         KillFormFocus();
         break;
       case FocusElementType::kDocument:
-        focus_item_type_ = FocusElementType::kNone;
+        UpdateFocusItemType(FocusElementType::kNone);
         break;
       default:
         NOTREACHED();
@@ -3940,6 +4018,16 @@ bool PDFiumEngine::HandleTabBackward(uint32_t modifiers) {
     }
   }
   return did_tab_backward;
+}
+
+void PDFiumEngine::UpdateFocusItemType(FocusElementType focus_item_type) {
+  if (focus_item_type_ == focus_item_type)
+    return;
+  if (focus_item_type_ == FocusElementType::kDocument)
+    client_->DocumentFocusChanged(false);
+  focus_item_type_ = focus_item_type;
+  if (focus_item_type_ == FocusElementType::kDocument)
+    client_->DocumentFocusChanged(true);
 }
 
 #if defined(PDF_ENABLE_XFA)

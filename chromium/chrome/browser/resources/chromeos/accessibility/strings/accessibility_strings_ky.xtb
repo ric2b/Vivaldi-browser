@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Оңго сыдыруу</translation>
 <translation id="1781173782405573156">Ылгоо баскычы</translation>
 <translation id="1787176709638001873">Сырсөздү түзөтүү тексти</translation>
+<translation id="180203835522132923">Search + O, анан W</translation>
 <translation id="1810107444790159527">Тизме кутусу</translation>
 <translation id="1812527064848182527">туурасынан</translation>
 <translation id="1829244130665387512">Ушул беттен табыңыз</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Эки манжаңыз менен экранды солго сүрүңүз</translation>
 <translation id="2998131015536248178">Мурунку белги</translation>
 <translation id="2999559350546931576">Тонду төмөндөтүү</translation>
+<translation id="3009352964623081324">Search + O, анан S. Орнотуп, башкарып, үндөрдү жекелештирүү үчүн колдонуңуз</translation>
 <translation id="3014130421870723208">@ талаасын өзг 8чек</translation>
 <translation id="3030432017085518523">Менюдагы радио баскычы</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}other{# апостроф}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Киргизүү</translation>
 <translation id="4511186779140817916">Тазаланган бадам түстүү назик сары</translation>
 <translation id="451510441928265982">Мурунку 2-деңгээлдеги башкы аталыш жок</translation>
+<translation id="4515799157838123044">Фондогу мазмунду көлөкөлөтүү</translation>
 <translation id="4517854969512651305">Маанисин чоңойтуу</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{бөлчөк сызыгы}other{# бөлчөк сызыгы}}</translation>
 <translation id="4537277403911487429">Кийинки окшош элемент</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Бөлүм</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Илгерилөө тилкеси</translation>
+<translation id="6660819301598582123">Билимдүүнүн түнү - күн, билимсиздин күнү - түн.</translation>
 <translation id="667999046851023355">Документ</translation>
 <translation id="6688209025607531203">Модалдык эмес эскертүү</translation>
 <translation id="6689672606256159458">Коюу кызгылтым</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Кийинки 5-деңгээлдин башкы аталышы жок</translation>
 <translation id="6955705049214951590">Бозомтук кызгылт</translation>
 <translation id="696356426651109308">Башына өтүү</translation>
-<translation id="699159175332639490">Издөө + O + W</translation>
 <translation id="6994042831499278539">Глоссарийге шилтеме</translation>
 <translation id="6996566555547746822">Кийинки айкалыштырылган кутуча</translation>
 <translation id="6997224546856374593">Баш тамгаларды окуганда:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Мисал</translation>
 <translation id="7439060726180460871">Каталог</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Элементтердин түрлөрүн, ошондой эле цитатага алынган, өчүрүлгөн, жоон шрифт менен жазылган, кашаага алынган же баш тамга менен башталган тексттерди айтууда тону өзгөртүлсүн.</translation>
 <translation id="7491962110804786152">өтмөк</translation>
 <translation id="7505149250476994901">Тамгага чейин "баш тамга" деп айтыңыз</translation>
 <translation id="7518543783849163354">ChromeVox окуп жатканда убактылуу токтотуу үчүн Control баскычын басыңыз.</translation>

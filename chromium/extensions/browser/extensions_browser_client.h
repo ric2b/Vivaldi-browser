@@ -32,13 +32,13 @@ namespace base {
 class CommandLine;
 class FilePath;
 class ListValue;
-}
+}  // namespace base
 
 namespace content {
 class BrowserContext;
 class RenderFrameHost;
 class WebContents;
-}
+}  // namespace content
 
 namespace network {
 namespace mojom {
@@ -62,6 +62,7 @@ class ExtensionSystem;
 class ExtensionSystemProvider;
 class ExtensionWebContentsObserver;
 class KioskDelegate;
+class MediaRouterExtensionAccessLogger;
 class ProcessManagerDelegate;
 class ProcessMap;
 class RuntimeAPIDelegate;
@@ -347,6 +348,15 @@ class ExtensionsBrowserClient {
   // webRequest API callbacks so to mitigate CORS related compatibility issues.
   virtual bool ShouldForceWebRequestExtraHeaders(
       content::BrowserContext* context) const;
+
+  // Gets and sets the last save (download) path for a given context.
+  virtual base::FilePath GetSaveFilePath(content::BrowserContext* context);
+  virtual void SetLastSaveFilePath(content::BrowserContext* context,
+                                   const base::FilePath& path);
+
+  // Retrieves the media router access logger for this session.
+  virtual const MediaRouterExtensionAccessLogger* GetMediaRouterAccessLogger()
+      const;
 
  private:
   std::vector<std::unique_ptr<ExtensionsBrowserAPIProvider>> providers_;

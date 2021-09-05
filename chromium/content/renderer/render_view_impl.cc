@@ -65,7 +65,6 @@
 #include "content/public/renderer/window_features_converter.h"
 #include "content/renderer/drop_data_builder.h"
 #include "content/renderer/history_serialization.h"
-#include "content/renderer/ime_event_guard.h"
 #include "content/renderer/internal_document_state_data.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/media/audio/audio_device_factory.h"
@@ -75,7 +74,6 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
-#include "content/renderer/savable_resources.h"
 #include "content/renderer/v8_value_converter_impl.h"
 #include "content/renderer/web_ui_extension_data.h"
 #include "media/audio/audio_output_device.h"
@@ -442,8 +440,9 @@ void RenderViewImpl::Initialize(
   bool has_show_callback = !!show_callback;
 #endif
 
-  WebFrame* opener_frame =
-      RenderFrameImpl::ResolveWebFrame(params->opener_frame_route_id);
+  auto opener_frame_token =
+      params->opener_frame_token.value_or(base::UnguessableToken());
+  auto* opener_frame = WebFrame::FromFrameToken(opener_frame_token);
 
   // The newly created webview_ is owned by this instance.
   webview_ = WebView::Create(this, params->hidden,
@@ -479,7 +478,7 @@ void RenderViewImpl::Initialize(
         this, compositor_deps, opener_frame, &params, std::move(show_callback));
   } else {
     RenderFrameProxy::CreateFrameProxy(
-        params->proxy_routing_id, GetRoutingID(), opener_frame,
+        params->proxy_routing_id, GetRoutingID(), opener_frame_token,
         MSG_ROUTING_NONE, params->replicated_frame_state,
         params->main_frame_frame_token, params->devtools_main_frame_token);
   }
@@ -657,11 +656,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetAntialiasedClips2dCanvasEnabled(
       prefs.antialiased_clips_2d_canvas_enabled);
 
-  // Set MSAA sample count for 2d canvas if requested on the command line (or
-  // default value if not).
-  settings->SetAccelerated2dCanvasMSAASampleCount(
-      prefs.accelerated_2d_canvas_msaa_sample_count);
-
   // Tabs to link is not part of the settings. WebCore calls
   // ChromeClient::tabsToLinks which is part of the glue code.
   web_view->SetTabsToLinks(prefs.tabs_to_links);
@@ -699,9 +693,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       static_cast<blink::HoverType>(prefs.primary_hover_type));
   settings->SetEnableTouchAdjustment(prefs.touch_adjustment_enabled);
   settings->SetBarrelButtonForDragEnabled(prefs.barrel_button_for_drag_enabled);
-
-  settings->SetShouldRespectImageOrientation(
-      prefs.should_respect_image_orientation);
 
   settings->SetEditingBehavior(
       static_cast<WebSettings::EditingBehavior>(prefs.editing_behavior));
@@ -1210,11 +1201,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
                         OnSetHistoryOffsetAndLength)
     IPC_MESSAGE_HANDLER(PageMsg_AudioStateChanged, OnAudioStateChanged)
-    IPC_MESSAGE_HANDLER(PageMsg_SetPageFrozen, SetPageFrozen)
-    IPC_MESSAGE_HANDLER(PageMsg_PutPageIntoBackForwardCache,
-                        PutPageIntoBackForwardCache)
-    IPC_MESSAGE_HANDLER(PageMsg_RestorePageFromBackForwardCache,
-                        RestorePageFromBackForwardCache)
     IPC_MESSAGE_HANDLER(PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames,
                         OnTextAutosizerPageInfoChanged)
     IPC_MESSAGE_HANDLER(PageMsg_SetRendererPrefs, OnSetRendererPrefs)
@@ -1324,7 +1310,7 @@ WebView* RenderViewImpl::CreateView(
   // disagrees.
   mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
 
-  view_params->opener_frame_route_id = creator_frame->GetRoutingID();
+  view_params->opener_frame_token = creator->GetFrameToken();
   DCHECK_EQ(GetRoutingID(), creator_frame->render_view()->GetRoutingID());
 
   view_params->window_was_created_with_opener = true;
@@ -1337,6 +1323,7 @@ WebView* RenderViewImpl::CreateView(
   view_params->frame_widget = std::move(reply->frame_widget);
   view_params->widget_host = std::move(reply->widget_host);
   view_params->widget = std::move(reply->widget),
+  view_params->blink_page_broadcast = std::move(reply->page_broadcast);
   view_params->main_frame_interface_bundle =
       mojom::DocumentScopedInterfaceBundle::New(
           std::move(reply->main_frame_interface_bundle->interface_provider),
@@ -1368,9 +1355,9 @@ WebView* RenderViewImpl::CreateView(
       creator->GetTaskRunner(blink::TaskType::kInternalDefault));
 
   if (reply->wait_for_debugger) {
-    blink::WebLocalFrame* main_frame =
-        view->GetWebView()->MainFrame()->ToWebLocalFrame();
-    main_frame->WaitForDebuggerWhenShown();
+    blink::WebFrameWidget* frame_widget =
+        view->GetMainRenderFrame()->GetLocalRootWebFrameWidget();
+    frame_widget->WaitForDebuggerWhenShown();
   }
 
   return view->GetWebView();
@@ -1378,10 +1365,6 @@ WebView* RenderViewImpl::CreateView(
 
 blink::WebPagePopup* RenderViewImpl::CreatePopup(
     blink::WebLocalFrame* creator) {
-  mojo::PendingRemote<mojom::Widget> widget_channel;
-  mojo::PendingReceiver<mojom::Widget> widget_channel_receiver =
-      widget_channel.InitWithNewPipeAndPassReceiver();
-
   mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget;
   mojo::PendingAssociatedReceiver<blink::mojom::Widget> blink_widget_receiver =
       blink_widget.InitWithNewEndpointAndPassReceiver();
@@ -1395,8 +1378,8 @@ blink::WebPagePopup* RenderViewImpl::CreatePopup(
   int32_t widget_routing_id = MSG_ROUTING_NONE;
   bool success =
       RenderFrameImpl::FromWebFrame(creator)->GetFrameHost()->CreateNewWidget(
-          std::move(widget_channel), std::move(blink_widget_host_receiver),
-          std::move(blink_widget), &widget_routing_id);
+          std::move(blink_widget_host_receiver), std::move(blink_widget),
+          &widget_routing_id);
   if (!success) {
     // When the renderer is being killed the mojo message will fail.
     return nullptr;
@@ -1411,7 +1394,7 @@ blink::WebPagePopup* RenderViewImpl::CreatePopup(
   RenderWidget* popup_widget = RenderWidget::CreateForPopup(
       widget_routing_id, opener_render_widget->compositor_deps(),
       /*hidden=*/false,
-      /*never_composited=*/false, std::move(widget_channel_receiver));
+      /*never_composited=*/false);
 
   // The returned WebPagePopup is self-referencing, so the pointer here is not
   // an owning pointer. It is de-referenced by calling Close().
@@ -1466,7 +1449,7 @@ void RenderViewImpl::PrintPage(WebLocalFrame* frame) {
   RenderWidget* render_widget = render_frame->GetLocalRootRenderWidget();
 
   render_frame->ScriptedPrint(
-      render_widget->input_handler().handling_input_event());
+      render_widget->GetWebWidget()->HandlingInputEvent());
 }
 
 bool RenderViewImpl::SetZoomLevel(double zoom_level) {
@@ -1707,16 +1690,6 @@ bool RenderViewImpl::GetContentStateImmediately() {
   return send_content_state_immediately_;
 }
 
-void RenderViewImpl::ApplyPageVisibilityState(
-    PageVisibilityState visibility_state,
-    bool initial_setting) {
-  GetWebView()->SetVisibilityState(visibility_state, initial_setting);
-  for (auto& observer : observers_)
-    observer.OnPageVisibilityChanged(visibility_state);
-  // Note: RenderWidget visibility is separately set from the IPC handlers, and
-  // does not change when tests override the visibility of the Page.
-}
-
 void RenderViewImpl::OnUpdateWebPreferences(const WebPreferences& prefs) {
   webkit_preferences_ = prefs;
   ApplyWebPreferences(webkit_preferences_, GetWebView());
@@ -1774,17 +1747,6 @@ void RenderViewImpl::SetPageFrozen(bool frozen) {
     GetWebView()->SetPageFrozen(frozen);
 }
 
-void RenderViewImpl::PutPageIntoBackForwardCache() {
-  if (GetWebView())
-    GetWebView()->PutPageIntoBackForwardCache();
-}
-
-void RenderViewImpl::RestorePageFromBackForwardCache(
-    base::TimeTicks navigation_start) {
-  if (GetWebView())
-    GetWebView()->RestorePageFromBackForwardCache(navigation_start);
-}
-
 // This function receives TextAutosizerPageInfo from the main frame's renderer
 // and makes it available to other renderers with frames on the same page.
 void RenderViewImpl::OnTextAutosizerPageInfoChanged(
@@ -1807,20 +1769,6 @@ void RenderViewImpl::DidAutoResize(const blink::WebSize& newSize) {
   // Auto resize should only happen on local main frames.
   DCHECK(main_render_frame_);
   main_render_frame_->GetLocalRootRenderWidget()->DidAutoResize(newSize);
-}
-
-void RenderViewImpl::DidFocus(blink::WebLocalFrame* calling_frame) {
-  // We only allow focus to move to this RenderView when the request comes from
-  // a user gesture. (See also https://bugs.webkit.org/show_bug.cgi?id=33389.)
-  if (calling_frame && calling_frame->HasTransientUserActivation()) {
-    Send(new ViewHostMsg_Focus(GetRoutingID()));
-
-    // Tattle on the frame that called |window.focus()|.
-    RenderFrameImpl* calling_render_frame =
-        RenderFrameImpl::FromWebFrame(calling_frame);
-    if (calling_render_frame)
-      calling_render_frame->FrameDidCallFocus();
-  }
 }
 
 #if defined(OS_ANDROID)

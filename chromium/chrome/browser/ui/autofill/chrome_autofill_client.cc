@@ -10,6 +10,7 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/i18n/rtl.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
@@ -103,6 +104,9 @@
 #endif
 
 namespace autofill {
+
+using AutoselectFirstSuggestion =
+    AutofillClient::PopupOpenArgs::AutoselectFirstSuggestion;
 
 ChromeAutofillClient::~ChromeAutofillClient() {
   // NOTE: It is too late to clean up the autofill popup; that cleanup process
@@ -478,11 +482,7 @@ void ChromeAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {
 }
 
 void ChromeAutofillClient::ShowAutofillPopup(
-    const gfx::RectF& element_bounds,
-    base::i18n::TextDirection text_direction,
-    const std::vector<Suggestion>& suggestions,
-    bool autoselect_first_suggestion,
-    PopupType popup_type,
+    const autofill::AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<AutofillPopupDelegate> delegate) {
   // Convert element_bounds to be in screen space.
   gfx::Rect client_area = web_contents()->GetContainerBounds();
@@ -490,7 +490,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
     client_area = web_contents()->GetOuterWebContents()->GetContainerBounds();
   }
   gfx::RectF element_bounds_in_screen_space =
-      element_bounds + client_area.OffsetFromOrigin();
+      open_args.element_bounds + client_area.OffsetFromOrigin();
 
 #if defined(OS_MACOSX)
   // NOTE(tomas@vivaldi.com): when we are vivaldi, the web_contents in autofill
@@ -502,25 +502,24 @@ void ChromeAutofillClient::ShowAutofillPopup(
     content::WebContents* embedder_web_contents =
         static_cast<content::WebContentsImpl*>(wc)->GetOuterWebContents();
 
-    popup_controller_ =
-        AutofillPopupControllerImpl::GetOrCreate(popup_controller_,
-                                         delegate,
-                                         embedder_web_contents,
-                                         embedder_web_contents->GetNativeView(),
-                                         element_bounds_in_screen_space,
-                                         text_direction);
+    popup_controller_ = AutofillPopupControllerImpl::GetOrCreate(
+        popup_controller_, delegate, embedder_web_contents,
+        embedder_web_contents->GetNativeView(), element_bounds_in_screen_space,
+        open_args.text_direction);
   } else {
 #endif
   // Will delete or reuse the old |popup_controller_|.
   popup_controller_ = AutofillPopupControllerImpl::GetOrCreate(
       popup_controller_, delegate, web_contents(),
       web_contents()->GetNativeView(), element_bounds_in_screen_space,
-      text_direction);
+      open_args.text_direction);
 #if defined(OS_MACOSX)
   }
 #endif
 
-  popup_controller_->Show(suggestions, autoselect_first_suggestion, popup_type);
+  popup_controller_->Show(open_args.suggestions,
+                          open_args.autoselect_first_suggestion.value(),
+                          open_args.popup_type);
 }
 
 void ChromeAutofillClient::UpdateAutofillPopupDataListValues(
@@ -541,11 +540,41 @@ void ChromeAutofillClient::PinPopupView() {
     popup_controller_->PinView();
 }
 
+autofill::AutofillClient::PopupOpenArgs
+ChromeAutofillClient::GetReopenPopupArgs() const {
+  const AutofillPopupController* controller = popup_controller_.get();
+  if (!controller)
+    return autofill::AutofillClient::PopupOpenArgs();
+
+  // By calculating the screen space-independent values, bounds can be passed to
+  // |ShowAutofillPopup| which always computes the bounds in the screen space.
+  gfx::Rect client_area = web_contents()->GetContainerBounds();
+  gfx::RectF screen_space_independent_bounds =
+      controller->element_bounds() - client_area.OffsetFromOrigin();
+  return autofill::AutofillClient::PopupOpenArgs(
+      screen_space_independent_bounds,
+      controller->IsRTL() ? base::i18n::RIGHT_TO_LEFT
+                          : base::i18n::LEFT_TO_RIGHT,
+      controller->GetSuggestions(), AutoselectFirstSuggestion(false),
+      controller->GetPopupType());
+}
+
 void ChromeAutofillClient::UpdatePopup(
     const std::vector<Suggestion>& suggestions,
     PopupType popup_type) {
   if (!popup_controller_.get())
     return;  // Update only if there is a popup.
+
+  // When a form changes dynamically, |popup_controller_| may hold a delegate of
+  // the wrong type, so updating the popup would call into the wrong delegate.
+  // Hence, just close the existing popup (crbug/1113241).
+  // The cast is needed to access AutofillPopupController::GetPopupType().
+  if (popup_type !=
+      static_cast<const AutofillPopupController*>(popup_controller_.get())
+          ->GetPopupType()) {
+    popup_controller_->Hide(PopupHidingReason::kStaleData);
+    return;
+  }
 
   // Calling show will reuse the existing view automatically
   popup_controller_->Show(suggestions, /*autoselect_first_suggestion=*/false,
@@ -649,10 +678,6 @@ void ChromeAutofillClient::WebContentsDestroyed() {
   HideAutofillPopup(PopupHidingReason::kTabGone);
 }
 
-void ChromeAutofillClient::DidAttachInterstitialPage() {
-  HideAutofillPopup(PopupHidingReason::kAttachInterstitialPage);
-}
-
 #if !defined(OS_ANDROID)
 void ChromeAutofillClient::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
@@ -675,15 +700,16 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
           GetPersonalDataManager(),
           GetPersonalDataManager()->app_locale())),
       unmask_controller_(
-          user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()),
-          Profile::FromBrowserContext(web_contents->GetBrowserContext())
-              ->IsOffTheRecord()) {
+          user_prefs::UserPrefs::Get(web_contents->GetBrowserContext())) {
   // TODO(crbug.com/928595): Replace the closure with a callback to the renderer
   // that indicates if log messages should be sent from the renderer.
   log_manager_ =
       LogManager::Create(AutofillLogRouterFactory::GetForBrowserContext(
                              web_contents->GetBrowserContext()),
                          base::Closure());
+  // Initialize StrikeDatabase so its cache will be loaded and ready to use when
+  // when requested by other Autofill classes.
+  GetStrikeDatabase();
 
 #if !defined(OS_ANDROID)
   // Since ZoomController is also a WebContentsObserver, we need to be careful

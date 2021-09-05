@@ -17,6 +17,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_quic_transport_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_dtls_fingerprint.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
@@ -36,6 +38,7 @@
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -122,7 +125,7 @@ class QuicTransport::DatagramUnderlyingSink final : public UnderlyingSinkBase {
     return ScriptPromise::CastUndefined(script_state);
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(quic_transport_);
     UnderlyingSinkBase::Trace(visitor);
   }
@@ -180,7 +183,7 @@ class QuicTransport::DatagramUnderlyingSource final
     return ScriptPromise::CastUndefined(script_state);
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(quic_transport_);
     UnderlyingSourceBase::Trace(visitor);
   }
@@ -196,7 +199,7 @@ class QuicTransport::StreamVendingUnderlyingSource final
    public:
     using EnqueueCallback = base::OnceCallback<void(ScriptWrappable*)>;
     virtual void RequestStream(EnqueueCallback) = 0;
-    virtual void Trace(Visitor*) {}
+    virtual void Trace(Visitor*) const {}
   };
 
   template <class VendorType>
@@ -244,7 +247,7 @@ class QuicTransport::StreamVendingUnderlyingSource final
     }
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(script_state_);
     visitor->Trace(vendor_);
     UnderlyingSourceBase::Trace(visitor);
@@ -271,7 +274,7 @@ class QuicTransport::ReceiveStreamVendor final
                   WrapWeakPersistent(this), std::move(enqueue)));
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(script_state_);
     visitor->Trace(quic_transport_);
     StreamVendor::Trace(visitor);
@@ -310,7 +313,7 @@ class QuicTransport::BidirectionalStreamVendor final
         WrapWeakPersistent(this), std::move(enqueue)));
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(script_state_);
     visitor->Trace(quic_transport_);
     StreamVendor::Trace(visitor);
@@ -340,11 +343,13 @@ class QuicTransport::BidirectionalStreamVendor final
 
 QuicTransport* QuicTransport::Create(ScriptState* script_state,
                                      const String& url,
+                                     QuicTransportOptions* options,
                                      ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::Create() url=" << url;
+  DCHECK(options);
   auto* transport =
       MakeGarbageCollected<QuicTransport>(PassKey(), script_state, url);
-  transport->Init(url, exception_state);
+  transport->Init(url, *options, exception_state);
   return transport;
 }
 
@@ -566,11 +571,15 @@ void QuicTransport::SendFin(uint32_t stream_id) {
   quic_transport_->SendFin(stream_id);
 }
 
+void QuicTransport::AbortStream(uint32_t stream_id) {
+  quic_transport_->AbortStream(stream_id, /*code=*/0);
+}
+
 void QuicTransport::ForgetStream(uint32_t stream_id) {
   stream_map_.erase(stream_id);
 }
 
-void QuicTransport::Trace(Visitor* visitor) {
+void QuicTransport::Trace(Visitor* visitor) const {
   visitor->Trace(received_datagrams_);
   visitor->Trace(received_datagrams_controller_);
   visitor->Trace(outgoing_datagrams_);
@@ -592,7 +601,9 @@ void QuicTransport::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
 }
 
-void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
+void QuicTransport::Init(const String& url,
+                         const QuicTransportOptions& options,
+                         ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::Init() url=" << url << " this=" << this;
   if (!url_.IsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
@@ -626,7 +637,7 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
   auto* execution_context = GetExecutionContext();
 
   if (!execution_context->GetContentSecurityPolicyForWorld()
-           ->AllowConnectToSource(url_)) {
+           ->AllowConnectToSource(url_, url_, RedirectStatus::kNoRedirect)) {
     // TODO(ricea): This error should probably be asynchronous like it is for
     // WebSockets and fetch.
     exception_state.ThrowSecurityError(
@@ -634,6 +645,16 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
         "Refused to connect to '" + url_.ElidedString() +
             "' because it violates the document's Content Security Policy");
     return;
+  }
+
+  Vector<network::mojom::blink::QuicTransportCertificateFingerprintPtr>
+      fingerprints;
+  if (options.hasServerCertificateFingerprints()) {
+    for (const auto& fingerprint : options.serverCertificateFingerprints()) {
+      fingerprints.push_back(
+          network::mojom::blink::QuicTransportCertificateFingerprint::New(
+              fingerprint->algorithm(), fingerprint->value()));
+    }
   }
 
   // TODO(ricea): Register SchedulingPolicy so that we don't get throttled and
@@ -648,8 +669,9 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
           execution_context->GetTaskRunner(TaskType::kNetworking)));
 
   connector->Connect(
-      url_, handshake_client_receiver_.BindNewPipeAndPassRemote(
-                execution_context->GetTaskRunner(TaskType::kNetworking)));
+      url_, std::move(fingerprints),
+      handshake_client_receiver_.BindNewPipeAndPassRemote(
+          execution_context->GetTaskRunner(TaskType::kNetworking)));
 
   handshake_client_receiver_.set_disconnect_handler(
       WTF::Bind(&QuicTransport::OnConnectionError, WrapWeakPersistent(this)));

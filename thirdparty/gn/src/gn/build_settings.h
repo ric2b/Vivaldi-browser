@@ -18,6 +18,7 @@
 #include "gn/scope.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"
+#include "gn/version.h"
 
 class Item;
 
@@ -54,6 +55,12 @@ class BuildSettings {
   // Path of the python executable to run scripts with.
   base::FilePath python_path() const { return python_path_; }
   void set_python_path(const base::FilePath& p) { python_path_ = p; }
+
+  // Required Ninja version.
+  const Version& ninja_required_version() const {
+    return ninja_required_version_;
+  }
+  void set_ninja_required_version(Version v) { ninja_required_version_ = v; }
 
   const SourceFile& build_config_file() const { return build_config_file_; }
   void set_build_config_file(const SourceFile& f) { build_config_file_ = f; }
@@ -136,6 +143,9 @@ class BuildSettings {
   std::string root_path_utf8_;
   base::FilePath secondary_source_path_;
   base::FilePath python_path_;
+
+  // See 40045b9 for the reason behind using 1.7.2 as the default version.
+  Version ninja_required_version_{1, 7, 2};
 
   SourceFile build_config_file_;
   SourceFile arg_file_template_path_;

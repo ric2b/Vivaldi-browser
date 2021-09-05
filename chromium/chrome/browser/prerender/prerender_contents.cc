@@ -18,7 +18,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
-#include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_handle.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -27,10 +26,10 @@
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/web_contents_sizer.h"
-#include "chrome/common/prerender_messages.h"
-#include "chrome/common/prerender_types.h"
 #include "chrome/common/prerender_util.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/prerender/common/prerender_final_status.h"
+#include "components/prerender/common/prerender_messages.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -78,8 +77,7 @@ class PrerenderContents::WebContentsDelegateImpl
     : public content::WebContentsDelegate {
  public:
   explicit WebContentsDelegateImpl(PrerenderContents* prerender_contents)
-      : prerender_contents_(prerender_contents) {
-  }
+      : prerender_contents_(prerender_contents) {}
 
   // content::WebContentsDelegate implementation:
   WebContents* OpenURLFromTab(WebContents* source,
@@ -137,7 +135,8 @@ PrerenderContents::PrerenderContents(
     const content::Referrer& referrer,
     const base::Optional<url::Origin>& initiator_origin,
     Origin origin)
-    : prerender_mode_(DEPRECATED_FULL_PRERENDER),
+    : prerender_mode_(
+          prerender::mojom::PrerenderMode::kDeprecatedFullPrerender),
       prerendering_has_started_(false),
       prerender_manager_(prerender_manager),
       prerender_url_(url),
@@ -157,6 +156,7 @@ PrerenderContents::PrerenderContents(
     case ORIGIN_EXTERNAL_REQUEST:
     case ORIGIN_EXTERNAL_REQUEST_FORCED_PRERENDER:
     case ORIGIN_NAVIGATION_PREDICTOR:
+    case ORIGIN_ISOLATED_PRERENDER:
       DCHECK(!initiator_origin_.has_value());
       break;
 
@@ -178,7 +178,7 @@ bool PrerenderContents::Init() {
   return AddAliasURL(prerender_url_);
 }
 
-void PrerenderContents::SetPrerenderMode(PrerenderMode mode) {
+void PrerenderContents::SetPrerenderMode(prerender::mojom::PrerenderMode mode) {
   DCHECK(!prerendering_has_started_);
   prerender_mode_ = mode;
 }
@@ -253,15 +253,13 @@ void PrerenderContents::StartPrerendering(
       this, content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
       content::Source<WebContents>(prerender_contents_.get()));
 
-  content::NavigationController::LoadURLParams load_url_params(
-      prerender_url_);
+  content::NavigationController::LoadURLParams load_url_params(prerender_url_);
   load_url_params.referrer = referrer_;
   load_url_params.initiator_origin = initiator_origin_;
   load_url_params.transition_type = ui::PAGE_TRANSITION_LINK;
   if (origin_ == ORIGIN_OMNIBOX) {
     load_url_params.transition_type = ui::PageTransitionFromInt(
-        ui::PAGE_TRANSITION_TYPED |
-        ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+        ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
   } else if (origin_ == ORIGIN_NAVIGATION_PREDICTOR) {
     load_url_params.transition_type =
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_GENERATED);
@@ -294,8 +292,8 @@ void PrerenderContents::SetFinalStatus(FinalStatus final_status) {
 
 PrerenderContents::~PrerenderContents() {
   DCHECK_NE(FINAL_STATUS_UNKNOWN, final_status());
-  DCHECK(
-      prerendering_has_been_cancelled() || final_status() == FINAL_STATUS_USED);
+  DCHECK(prerendering_has_been_cancelled() ||
+         final_status() == FINAL_STATUS_USED);
   DCHECK_NE(ORIGIN_MAX, origin());
 
   prerender_manager_->RecordFinalStatus(origin(), final_status());
@@ -355,8 +353,7 @@ void PrerenderContents::Observe(int type,
 }
 
 void PrerenderContents::OnRenderViewHostCreated(
-    RenderViewHost* new_render_view_host) {
-}
+    RenderViewHost* new_render_view_host) {}
 
 std::unique_ptr<WebContents> PrerenderContents::CreateWebContents(
     SessionStorageNamespace* session_storage_namespace) {
@@ -492,8 +489,7 @@ void PrerenderContents::DidFinishLoad(
 void PrerenderContents::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
-      !navigation_handle->HasCommitted() ||
-      navigation_handle->IsErrorPage()) {
+      !navigation_handle->HasCommitted() || navigation_handle->IsErrorPage()) {
     return;
   }
 
@@ -627,8 +623,8 @@ std::unique_ptr<base::DictionaryValue> PrerenderContents::GetAsValue() const {
   base::TimeTicks current_time = base::TimeTicks::Now();
   base::TimeDelta duration = current_time - load_start_time_;
   dict_value->SetInteger("duration", duration.InSeconds());
-  dict_value->SetBoolean("is_loaded", prerender_contents_ &&
-                                      !prerender_contents_->IsLoading());
+  dict_value->SetBoolean(
+      "is_loaded", prerender_contents_ && !prerender_contents_->IsLoading());
   return dict_value;
 }
 
@@ -637,7 +633,8 @@ void PrerenderContents::PrepareForUse() {
 
   if (prerender_contents_.get()) {
     prerender_contents_->SendToAllFrames(new PrerenderMsg_SetIsPrerendering(
-        MSG_ROUTING_NONE, NO_PRERENDER, std::string()));
+        MSG_ROUTING_NONE, prerender::mojom::PrerenderMode::kNoPrerender,
+        std::string()));
   }
 
   NotifyPrerenderStop();
@@ -648,7 +645,7 @@ void PrerenderContents::CancelPrerenderForUnsupportedScheme(const GURL& url) {
 }
 
 void PrerenderContents::AddPrerenderCancelerReceiver(
-    mojo::PendingReceiver<chrome::mojom::PrerenderCanceler> receiver) {
+    mojo::PendingReceiver<prerender::mojom::PrerenderCanceler> receiver) {
   prerender_canceler_receiver_set_.Add(this, std::move(receiver));
 }
 

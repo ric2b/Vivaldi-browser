@@ -314,6 +314,7 @@ DownloadItemImpl::DownloadItemImpl(
     base::Time last_access_time,
     bool transient,
     const std::vector<DownloadItem::ReceivedSlice>& received_slices,
+    base::Optional<DownloadSchedule> download_schedule,
     std::unique_ptr<DownloadEntry> download_entry)
     : request_info_(url_chain,
                     referrer_url,
@@ -352,7 +353,8 @@ DownloadItemImpl::DownloadItemImpl(
       last_modified_time_(last_modified),
       etag_(etag),
       received_slices_(received_slices),
-      is_updating_observers_(false) {
+      is_updating_observers_(false),
+      download_schedule_(std::move(download_schedule)) {
   delegate_->Attach();
   DCHECK(state_ == COMPLETE_INTERNAL || state_ == INTERRUPTED_INTERNAL ||
          state_ == CANCELLED_INTERNAL);
@@ -619,6 +621,7 @@ void DownloadItemImpl::Resume(bool user_resume) {
       paused_ = false;
       if (auto_resume_count_ >= kMaxAutoResumeAttempts) {
         RecordAutoResumeCountLimitReached(GetLastReason());
+        UpdateObservers();
         return;
       }
 
@@ -641,11 +644,14 @@ void DownloadItemImpl::UpdateResumptionInfo(bool user_resume) {
   }
 
   auto_resume_count_ = user_resume ? 0 : ++auto_resume_count_;
+  download_schedule_ = base::nullopt;
+  RecordDownloadLaterEvent(DownloadLaterEvent::kScheduleRemoved);
 }
 
 void DownloadItemImpl::Cancel(bool user_cancel) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(20) << __func__ << "() download = " << DebugString(true);
+  download_schedule_ = base::nullopt;
   InterruptAndDiscardPartialState(
       user_cancel ? DOWNLOAD_INTERRUPT_REASON_USER_CANCELED
                   : DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN);
@@ -1104,6 +1110,11 @@ DownloadItem::DownloadCreationType DownloadItemImpl::GetDownloadCreationType()
   return download_type_;
 }
 
+const base::Optional<DownloadSchedule>& DownloadItemImpl::GetDownloadSchedule()
+    const {
+  return download_schedule_;
+}
+
 void DownloadItemImpl::OnContentCheckCompleted(DownloadDangerType danger_type,
                                                DownloadInterruptReason reason) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -1135,6 +1146,28 @@ void DownloadItemImpl::OnAsyncScanningCompleted(
             << " download=" << DebugString(true);
   SetDangerType(danger_type);
   UpdateObservers();
+}
+
+void DownloadItemImpl::OnDownloadScheduleChanged(
+    base::Optional<DownloadSchedule> schedule) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (!base::FeatureList::IsEnabled(features::kDownloadLater) ||
+      state_ != INTERRUPTED_INTERNAL) {
+    return;
+  }
+
+  RecordDownloadLaterEvent(DownloadLaterEvent::kScheduleChanged);
+
+  SwapDownloadSchedule(std::move(schedule));
+
+  // Need to start later, don't proceed and ping observers.
+  if (ShouldDownloadLater()) {
+    UpdateObservers();
+    return;
+  }
+
+  // Download now. allow_metered_ will be updated afterward.
+  Resume(true /*user_resume*/);
 }
 
 void DownloadItemImpl::SetOpenWhenComplete(bool open) {
@@ -1643,6 +1676,7 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
     DownloadDangerType danger_type,
     MixedContentStatus mixed_content_status,
     const base::FilePath& intermediate_path,
+    base::Optional<DownloadSchedule> download_schedule,
     DownloadInterruptReason interrupt_reason) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (state_ == CANCELLED_INTERNAL)
@@ -1664,6 +1698,10 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
     Cancel(true);
     return;
   }
+
+  if (download_schedule)
+    RecordDownloadLaterEvent(DownloadLaterEvent::kScheduleAdded);
+  SwapDownloadSchedule(std::move(download_schedule));
 
   // There were no other pending errors, and we just failed to determined the
   // download target. The target path, if it is non-empty, should be considered
@@ -1802,12 +1840,62 @@ void DownloadItemImpl::OnTargetResolved() {
     return;
   }
 
+  // The download will be started later, interrupt it for now.
+  if (MaybeDownloadLater()) {
+    UpdateObservers();
+    return;
+  }
+
+  download_schedule_ = base::nullopt;
+
   TransitionTo(IN_PROGRESS_INTERNAL);
   // TODO(asanka): Calling UpdateObservers() prior to MaybeCompleteDownload() is
   // not safe. The download could be in an underminate state after invoking
   // observers. http://crbug.com/586610
   UpdateObservers();
   MaybeCompleteDownload();
+}
+
+bool DownloadItemImpl::MaybeDownloadLater() {
+  if (!base::FeatureList::IsEnabled(features::kDownloadLater) ||
+      !download_schedule_.has_value()) {
+    return false;
+  }
+
+  if (ShouldDownloadLater()) {
+    // TODO(xingliu): Maybe add a new interrupt reason for download later
+    // feature.
+    InterruptWithPartialState(GetReceivedBytes(), std::move(hash_state_),
+                              DOWNLOAD_INTERRUPT_REASON_CRASH);
+    return true;
+  }
+
+  return false;
+}
+
+bool DownloadItemImpl::ShouldDownloadLater() const {
+  // No schedule, just proceed.
+  if (!download_schedule_)
+    return false;
+
+  bool network_type_ok = !download_schedule_->only_on_wifi() ||
+                         !delegate_->IsActiveNetworkMetered();
+  bool should_start_later =
+      download_schedule_->start_time().has_value() &&
+      download_schedule_->start_time() > base::Time::Now();
+
+  // Don't proceed if network requirement is not met or has a scheduled start
+  // time.
+  return !network_type_ok || should_start_later;
+}
+
+void DownloadItemImpl::SwapDownloadSchedule(
+    base::Optional<DownloadSchedule> download_schedule) {
+  if (!base::FeatureList::IsEnabled(features::kDownloadLater))
+    return;
+  download_schedule_ = std::move(download_schedule);
+  if (download_schedule_)
+    allow_metered_ = !download_schedule_->only_on_wifi();
 }
 
 // When SavePackage downloads MHTML to GData (see
@@ -2391,8 +2479,11 @@ void DownloadItemImpl::SetFullPath(const base::FilePath& new_path) {
 void DownloadItemImpl::AutoResumeIfValid() {
   DVLOG(20) << __func__ << "() " << DebugString(true);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  ResumeMode mode = GetResumeMode();
 
+  if (download_schedule_.has_value())
+    return;
+
+  ResumeMode mode = GetResumeMode();
   if (mode != ResumeMode::IMMEDIATE_RESTART &&
       mode != ResumeMode::IMMEDIATE_CONTINUE) {
     return;

@@ -328,7 +328,8 @@ public class OverlayPanelContent {
         // Creates an initially hidden WebContents which gets shown when the panel is opened.
         mWebContents = WebContentsFactory.createWebContents(mIsIncognito, true);
 
-        ContentView cv = ContentView.createContentView(mActivity, mWebContents);
+        ContentView cv = ContentView.createContentView(
+                mActivity, null /* eventOffsetHandler */, mWebContents);
         if (mContentViewWidth != 0 || mContentViewHeight != 0) {
             int width = mContentViewWidth == 0 ? ContentView.DEFAULT_MEASURE_SPEC
                     : MeasureSpec.makeMeasureSpec(mContentViewWidth, MeasureSpec.EXACTLY);
@@ -404,6 +405,8 @@ public class OverlayPanelContent {
      */
     private void destroyWebContents() {
         if (mWebContents != null) {
+            mActivity.getCompositorViewHolder().removeView(mContainerView);
+
             // Native destroy will call up to destroy the Java WebContents.
             OverlayPanelContentJni.get().destroyWebContents(
                     mNativeOverlayPanelContentPtr, OverlayPanelContent.this);

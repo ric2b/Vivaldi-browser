@@ -49,6 +49,12 @@
         <include name="IDR_PRINT_PREVIEW_UI_DESTINATION_SELECT_CROS_JS"
                  file="${root_gen_dir}/chrome/browser/resources/print_preview/ui/destination_select_cros.js"
                  use_base_dir="false" compress="false" type="BINDATA"/>
+        <include name="IDR_PRINT_PREVIEW_UI_PRINT_PREVIEW_DESTINATION_DROPDOWN_CROS_JS"
+                 file="${root_gen_dir}/chrome/browser/resources/print_preview/ui/destination_dropdown_cros.js"
+                 use_base_dir="false" compress="false" type="BINDATA"/>
+        <include name="IDR_PRINT_PREVIEW_UI_PRINT_PREVIEW_PRINTER_STATUS_ICON_CROS_JS"
+                 file="${root_gen_dir}/chrome/browser/resources/print_preview/ui/printer_status_icon_cros.js"
+                 use_base_dir="false" compress="false" type="BINDATA"/>
       </if>
       <include name="IDR_PRINT_PREVIEW_UI_DESTINATION_SELECT_CSS_JS"
                file="${root_gen_dir}/chrome/browser/resources/print_preview/ui/destination_select_css.js"
@@ -141,16 +147,6 @@
       <include name="IDR_PRINT_PREVIEW_UI_ICONS_JS"
                file="${root_gen_dir}/chrome/browser/resources/print_preview/ui/icons.js"
                use_base_dir="false" compress="false" type="BINDATA"/>
-      <include name="IDR_PRINT_PREVIEW_PDF_INDEX_PP_HTML"
-               file="../pdf/index_pp.html"
-               type="BINDATA" />
-      <include name="IDR_PRINT_PREVIEW_PDF_MAIN_PP_JS"
-               file="../pdf/main_pp.js"
-               type="BINDATA" />
-      <include name="IDR_PRINT_PREVIEW_PDF_VIEWER_PAGE_INDICATOR_JS"
-               file="${root_gen_dir}/chrome/browser/resources/pdf/elements/viewer-page-indicator.js"
-               use_base_dir="false"
-               type="BINDATA" />
     </includes>
     <structures>
       <structure name="IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML"
@@ -194,6 +190,10 @@
       <if expr="chromeos">
         <structure name="IDR_PRINT_PREVIEW_DATA_DESTINATION_POLICIES_JS"
                    file="data/destination_policies.js"
+                   compress="false"
+                   type="chrome_html" />
+        <structure name="IDR_PRINT_PREVIEW_DATA_PRINTER_STATUS_CROS_JS"
+                   file="data/printer_status_cros.js"
                    compress="false"
                    type="chrome_html" />
       </if>

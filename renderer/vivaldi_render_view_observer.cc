@@ -72,7 +72,7 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
 // Inserts text into input fields.
 void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
   WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
-  const blink::WebVector<blink::WebImeTextSpan> ime_text_spans;
+  const std::vector<ui::ImeTextSpan> ime_text_spans;
   frame->GetInputMethodController()->CommitText(
       blink::WebString::FromUTF16(text), ime_text_spans,
        blink::WebRange(), 0);

@@ -418,6 +418,17 @@
 #define GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT 0x88FC
 #endif /* GL_EXT_blend_func_extended */
 
+#ifndef GL_OES_draw_buffers_indexed
+#define GL_OES_draw_buffers_indexed 1
+#define GL_BLEND_EQUATION_RGB 0x8009
+#define GL_BLEND_EQUATION_ALPHA 0x883D
+#define GL_BLEND_SRC_RGB 0x80C9
+#define GL_BLEND_SRC_ALPHA 0x80CB
+#define GL_BLEND_DST_RGB 0x80C8
+#define GL_BLEND_DST_ALPHA 0x80CA
+#define GL_COLOR_WRITEMASK 0x0C23
+#endif /* GL_OES_draw_buffers_indexed */
+
 #ifndef GL_EXT_window_rectangles
 #define GL_EXT_window_rectangles 1
 #define GL_INCLUSIVE_EXT 0x8F10
@@ -448,6 +459,7 @@
 #define GL_CHROMIUM_shared_image 1
 #define GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM 0x8AF6
 #define GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM 0x8AF7
+#define GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM 0x8AF8
 #endif /* GL_CHROMIUM_shared_image */
 
 #ifndef GL_NV_internalformat_sample_query

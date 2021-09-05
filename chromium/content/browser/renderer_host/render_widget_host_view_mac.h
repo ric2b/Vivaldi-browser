@@ -28,6 +28,7 @@
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/base/cocoa/accessibility_focus_overrider.h"
 #include "ui/base/cocoa/remote_layer_api.h"
+#include "ui/base/mojom/attributed_string.mojom-forward.h"
 #include "ui/display/mac/display_link_mac.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 
@@ -333,20 +334,28 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void BeginKeyboardEvent() override;
   void EndKeyboardEvent() override;
   void ForwardKeyboardEventWithCommands(
-      std::unique_ptr<InputEvent> event,
+      std::unique_ptr<blink::WebCoalescedInputEvent> event,
       const std::vector<uint8_t>& native_event_data,
       bool skip_in_browser,
       std::vector<blink::mojom::EditCommandPtr> commands) override;
-  void RouteOrProcessMouseEvent(std::unique_ptr<InputEvent> event) override;
-  void RouteOrProcessTouchEvent(std::unique_ptr<InputEvent> event) override;
-  void RouteOrProcessWheelEvent(std::unique_ptr<InputEvent> event) override;
-  void ForwardMouseEvent(std::unique_ptr<InputEvent> event) override;
-  void ForwardWheelEvent(std::unique_ptr<InputEvent> event) override;
-  void GestureBegin(std::unique_ptr<InputEvent> event,
+  void RouteOrProcessMouseEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void RouteOrProcessTouchEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void RouteOrProcessWheelEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void ForwardMouseEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void ForwardWheelEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void GestureBegin(std::unique_ptr<blink::WebCoalescedInputEvent> event,
                     bool is_synthetically_injected) override;
-  void GestureUpdate(std::unique_ptr<InputEvent> event) override;
-  void GestureEnd(std::unique_ptr<InputEvent> event) override;
-  void SmartMagnify(std::unique_ptr<InputEvent> event) override;
+  void GestureUpdate(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void GestureEnd(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
+  void SmartMagnify(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
   void ImeSetComposition(const base::string16& text,
                          const std::vector<ui::ImeTextSpan>& ime_text_spans,
                          const gfx::Range& replacement_range,
@@ -490,8 +499,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void OnGotStringForDictionaryOverlay(
       int32_t targetWidgetProcessId,
       int32_t targetWidgetRoutingId,
-      const mac::AttributedStringCoder::EncodedString& encodedString,
-      gfx::Point baselinePoint);
+      ui::mojom::AttributedStringPtr attributed_string,
+      const gfx::Point& baselinePoint);
 
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;

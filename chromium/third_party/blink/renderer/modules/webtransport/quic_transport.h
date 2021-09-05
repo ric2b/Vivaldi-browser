@@ -27,15 +27,16 @@
 namespace blink {
 
 class ExceptionState;
+class QuicTransportOptions;
 class ReadableStream;
 class ReadableStreamDefaultControllerWithScriptScope;
+class ScriptPromise;
+class ScriptPromiseResolver;
 class ScriptPromiseResolver;
 class ScriptState;
 class WebTransportCloseInfo;
-class WritableStream;
-class ScriptPromise;
-class ScriptPromiseResolver;
 class WebTransportStream;
+class WritableStream;
 
 // https://wicg.github.io/web-transport/#quic-transport
 class MODULES_EXPORT QuicTransport final
@@ -50,8 +51,9 @@ class MODULES_EXPORT QuicTransport final
 
  public:
   using PassKey = util::PassKey<QuicTransport>;
-  static QuicTransport* Create(ScriptState* script_state,
+  static QuicTransport* Create(ScriptState*,
                                const String& url,
+                               QuicTransportOptions*,
                                ExceptionState&);
 
   QuicTransport(PassKey, ScriptState*, const String& url);
@@ -92,11 +94,14 @@ class MODULES_EXPORT QuicTransport final
   // Forwards a SendFin() message to the mojo interface.
   void SendFin(uint32_t stream_id);
 
+  // Forwards a AbortStream() message to the mojo interface.
+  void AbortStream(uint32_t stream_id);
+
   // Removes the reference to a stream.
   void ForgetStream(uint32_t stream_id);
 
   // ScriptWrappable implementation
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
  private:
   class DatagramUnderlyingSink;
@@ -107,7 +112,7 @@ class MODULES_EXPORT QuicTransport final
 
   QuicTransport(ScriptState*, const String& url, ExecutionContext* context);
 
-  void Init(const String& url, ExceptionState&);
+  void Init(const String& url, const QuicTransportOptions&, ExceptionState&);
 
   // Reset the QuicTransport object and all associated streams.
   void ResetAll();

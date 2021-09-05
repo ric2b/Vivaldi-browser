@@ -24,7 +24,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
@@ -303,6 +302,8 @@ void NotificationPlatformBridgeMac::Display(
   [builder setNotificationId:base::SysUTF8ToNSString(notification.id())];
   [builder setProfileId:base::SysUTF8ToNSString(GetProfileId(profile))];
   [builder setIncognito:profile->IsOffTheRecord()];
+  [builder setCreatorPid:[NSNumber numberWithInteger:static_cast<NSInteger>(
+                                                         getpid())]];
   [builder
       setNotificationType:[NSNumber numberWithInteger:static_cast<NSInteger>(
                                                           notification_type)]];
@@ -394,8 +395,8 @@ void NotificationPlatformBridgeMac::ProcessNotificationResponse(
     action_index = button_index.intValue;
   }
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(DoProcessNotificationResponse,
                      static_cast<NotificationCommon::Operation>(
                          operation.unsignedIntValue),
@@ -415,6 +416,8 @@ bool NotificationPlatformBridgeMac::VerifyNotificationData(
       ![response objectForKey:notification_constants::kNotificationId] ||
       ![response objectForKey:notification_constants::kNotificationProfileId] ||
       ![response objectForKey:notification_constants::kNotificationIncognito] ||
+      ![response
+          objectForKey:notification_constants::kNotificationCreatorPid] ||
       ![response objectForKey:notification_constants::kNotificationType]) {
     LOG(ERROR) << "Missing required key";
     return false;
@@ -430,6 +433,12 @@ bool NotificationPlatformBridgeMac::VerifyNotificationData(
       [response objectForKey:notification_constants::kNotificationProfileId];
   NSNumber* notification_type =
       [response objectForKey:notification_constants::kNotificationType];
+  NSNumber* creator_pid =
+      [response objectForKey:notification_constants::kNotificationCreatorPid];
+
+  if (creator_pid.unsignedIntValue != static_cast<NSInteger>(getpid())) {
+    return false;
+  }
 
   if (button_index.intValue <
           notification_constants::kNotificationInvalidButtonIndex ||
@@ -617,8 +626,8 @@ getDisplayedAlertsForProfileId:(NSString*)profileId
     for (NSString* alert in alerts)
       displayedNotifications.insert(base::SysNSStringToUTF8(alert));
 
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(copyable_callback, std::move(displayedNotifications),
                        true /* supports_synchronization */));
   };

@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
@@ -23,10 +24,12 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
@@ -48,14 +51,67 @@ namespace scheduler {
 // To avoid symbol collisions in jumbo builds.
 namespace main_thread_scheduler_impl_unittest {
 
-using testing::InSequence;
-using testing::Mock;
-using testing::NiceMock;
-using testing::NotNull;
-using testing::Return;
+namespace {
+using ::base::Feature;
+using ::base::sequence_manager::FakeTask;
+using ::base::sequence_manager::FakeTaskTiming;
+using blink::WebInputEvent;
+using FeatureAndParams = ::base::test::ScopedFeatureList::FeatureAndParams;
+using ::testing::InSequence;
+using ::testing::Mock;
+using ::testing::NiceMock;
+using ::testing::NotNull;
+using ::testing::Return;
+using ::testing::ReturnRef;
 using InputEventState = WebThreadScheduler::InputEventState;
-using base::sequence_manager::FakeTask;
-using base::sequence_manager::FakeTaskTiming;
+
+// This is a wrapper around MainThreadSchedulerImpl::CreatePageScheduler, that
+// returns the PageScheduler as a PageSchedulerImpl.
+std::unique_ptr<PageSchedulerImpl> CreatePageScheduler(
+    PageScheduler::Delegate* page_scheduler_delegate,
+    ThreadSchedulerImpl* scheduler) {
+  std::unique_ptr<PageScheduler> page_scheduler =
+      scheduler->CreatePageScheduler(page_scheduler_delegate);
+  std::unique_ptr<PageSchedulerImpl> page_scheduler_impl(
+      static_cast<PageSchedulerImpl*>(page_scheduler.release()));
+  return page_scheduler_impl;
+}
+
+// This is a wrapper around PageSchedulerImpl::CreateFrameScheduler, that
+// returns the FrameScheduler as a FrameSchedulerImpl.
+std::unique_ptr<FrameSchedulerImpl> CreateFrameScheduler(
+    PageSchedulerImpl* page_scheduler,
+    FrameScheduler::Delegate* delegate,
+    blink::BlameContext* blame_context,
+    FrameScheduler::FrameType frame_type) {
+  auto frame_scheduler =
+      page_scheduler->CreateFrameScheduler(delegate, blame_context, frame_type);
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler_impl(
+      static_cast<FrameSchedulerImpl*>(frame_scheduler.release()));
+  return frame_scheduler_impl;
+}
+
+class MockFrameDelegate : public FrameScheduler::Delegate {
+ public:
+  MockFrameDelegate() {
+    ON_CALL(*this, GetAgentClusterId)
+        .WillByDefault(ReturnRef(agent_cluster_id_));
+  }
+
+  MOCK_METHOD(const base::UnguessableToken&,
+              GetAgentClusterId,
+              (),
+              (const, override));
+  MOCK_METHOD(ukm::UkmRecorder*, GetUkmRecorder, ());
+  MOCK_METHOD(ukm::SourceId, GetUkmSourceId, ());
+  MOCK_METHOD(void, UpdateTaskTime, (base::TimeDelta));
+  MOCK_METHOD(void, UpdateActiveSchedulerTrackedFeatures, (uint64_t));
+
+ private:
+  base::UnguessableToken agent_cluster_id_ = base::UnguessableToken::Create();
+};
+
+}  // namespace
 
 class FakeInputEvent : public blink::WebInputEvent {
  public:
@@ -247,6 +303,10 @@ class MockPageSchedulerImpl : public PageSchedulerImpl {
  public:
   explicit MockPageSchedulerImpl(MainThreadSchedulerImpl* scheduler)
       : PageSchedulerImpl(nullptr, scheduler) {
+    // This would normally be called by
+    // MainThreadSchedulerImpl::CreatePageScheduler.
+    scheduler->AddPageScheduler(this);
+
     ON_CALL(*this, IsWaitingForMainFrameContentfulPaint)
         .WillByDefault(Return(true));
     ON_CALL(*this, IsWaitingForMainFrameMeaningfulPaint)
@@ -344,9 +404,14 @@ class MainThreadSchedulerImplForTest : public MainThreadSchedulerImpl {
 
 class MainThreadSchedulerImplTest : public testing::Test {
  public:
-  MainThreadSchedulerImplTest(std::vector<base::Feature> features_to_enable,
-                              std::vector<base::Feature> features_to_disable) {
+  MainThreadSchedulerImplTest(std::vector<Feature> features_to_enable,
+                              std::vector<Feature> features_to_disable) {
     feature_list_.InitWithFeatures(features_to_enable, features_to_disable);
+  }
+
+  explicit MainThreadSchedulerImplTest(
+      std::vector<FeatureAndParams> features_to_enable) {
+    feature_list_.InitWithFeaturesAndParameters(features_to_enable, {});
   }
 
   MainThreadSchedulerImplTest() : MainThreadSchedulerImplTest({}, {}) {}
@@ -392,8 +457,8 @@ class MainThreadSchedulerImplTest : public testing::Test {
     page_scheduler_ =
         std::make_unique<NiceMock<MockPageSchedulerImpl>>(scheduler_.get());
     main_frame_scheduler_ =
-        FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
-                                   FrameScheduler::FrameType::kMainFrame);
+        CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+                             FrameScheduler::FrameType::kMainFrame);
 
     widget_scheduler_ = scheduler_->CreateWidgetScheduler();
     input_task_runner_ = widget_scheduler_->InputTaskRunner();
@@ -853,6 +918,20 @@ class MainThreadSchedulerImplTest : public testing::Test {
     return frame_task_queue_controller->GetTaskQueue(queue_traits);
   }
 
+  static scoped_refptr<TaskQueue> ForegroundOnlyTaskQueue(
+      FrameSchedulerImpl* scheduler) {
+    auto* frame_task_queue_controller =
+        scheduler->FrameTaskQueueControllerForTest();
+    auto queue_traits = FrameSchedulerImpl::ForegroundOnlyTaskQueueTraits();
+    return frame_task_queue_controller->GetTaskQueue(queue_traits);
+  }
+
+  static scoped_refptr<TaskQueue> QueueForTaskType(
+      FrameSchedulerImpl* scheduler,
+      TaskType task_type) {
+    return scheduler->GetTaskQueue(task_type);
+  }
+
   QueueingTimeEstimator* queueing_time_estimator() {
     return &scheduler_->queueing_time_estimator_;
   }
@@ -1049,6 +1128,7 @@ TEST_F(MainThreadSchedulerImplTest, TestDefaultPolicy) {
 }
 
 TEST_F(MainThreadSchedulerImplTest, TestDefaultPolicyWithSlowCompositor) {
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -1352,19 +1432,19 @@ class DefaultUseCaseTest : public MainThreadSchedulerImplTest {
 };
 
 TEST_F(DefaultUseCaseTest, InitiallyInEarlyLoadingUseCase) {
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
 
   // Should be early loading by default.
   EXPECT_EQ(UseCase::kEarlyLoading, ForceUpdatePolicyAndGetCurrentUseCase());
 
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameContentfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   EXPECT_EQ(UseCase::kLoading, CurrentUseCase());
 
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameMeaningfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
 }
 
@@ -1401,7 +1481,7 @@ TEST_F(PrioritizeCompositingAndLoadingInUseCaseLoadingTest, LoadingUseCase) {
   // UseCase::kLoading.
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameContentfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
 
   run_order.clear();
   PostTestTasks(&run_order, "I1 D1 C1 T1 L1 D2 C2 T2 L2");
@@ -1418,7 +1498,7 @@ TEST_F(PrioritizeCompositingAndLoadingInUseCaseLoadingTest, LoadingUseCase) {
   // longer prioritized.
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameMeaningfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   test_task_runner_->AdvanceMockTickClock(
       base::TimeDelta::FromMilliseconds(150000));
   run_order.clear();
@@ -1432,6 +1512,7 @@ TEST_F(PrioritizeCompositingAndLoadingInUseCaseLoadingTest, LoadingUseCase) {
 
 TEST_F(MainThreadSchedulerImplTest,
        EventConsumedOnCompositorThread_IgnoresMouseMove_WhenMouseUp) {
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -1449,6 +1530,7 @@ TEST_F(MainThreadSchedulerImplTest,
 
 TEST_F(MainThreadSchedulerImplTest,
        EventForwardedToMainThread_IgnoresMouseMove_WhenMouseUp) {
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -1638,6 +1720,7 @@ TEST_F(
 
 TEST_F(MainThreadSchedulerImplTest,
        EventConsumedOnCompositorThread_IgnoresKeyboardEvents) {
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -1655,6 +1738,7 @@ TEST_F(MainThreadSchedulerImplTest,
 
 TEST_F(MainThreadSchedulerImplTest,
        EventForwardedToMainThread_IgnoresKeyboardEvents) {
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -2524,7 +2608,7 @@ TEST_F(MainThreadSchedulerImplTest,
       .WillByDefault(Return(false));
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameMeaningfulPaint)
       .WillByDefault(Return(true));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   EXPECT_EQ(UseCase::kLoading, ForceUpdatePolicyAndGetCurrentUseCase());
   EXPECT_EQ(rails_response_time(),
             scheduler_->EstimateLongestJankFreeTaskDuration());
@@ -2670,7 +2754,7 @@ TEST_F(MainThreadSchedulerImplTest,
     // helper should /not/ re-enable this queue under any circumstances while
     // timers are paused.
     if (count > 0 && !paused) {
-      EXPECT_EQ(2u, count);
+      EXPECT_EQ(2u, count) << "i = " << i;
       paused = scheduler_->PauseRenderer();
     }
   }
@@ -2933,11 +3017,11 @@ TEST_F(MainThreadSchedulerImplTest, TestLoadRAILMode) {
   EXPECT_EQ(UseCase::kEarlyLoading, ForceUpdatePolicyAndGetCurrentUseCase());
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameContentfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   EXPECT_EQ(UseCase::kLoading, ForceUpdatePolicyAndGetCurrentUseCase());
   ON_CALL(*page_scheduler_, IsWaitingForMainFrameMeaningfulPaint)
       .WillByDefault(Return(false));
-  scheduler_->OnMainFramePaint();
+  scheduler_->OnMainFramePaint(/*force_policy_update=*/false);
   EXPECT_EQ(UseCase::kNone, ForceUpdatePolicyAndGetCurrentUseCase());
   EXPECT_EQ(RAILMode::kAnimation, GetRAILMode());
   scheduler_->RemoveRAILModeObserver(&observer);
@@ -3085,13 +3169,11 @@ TEST_F(MainThreadSchedulerImplTest, EnableVirtualTime) {
 }
 
 TEST_F(MainThreadSchedulerImplTest, EnableVirtualTimeAfterThrottling) {
-  std::unique_ptr<PageSchedulerImpl> page_scheduler =
-      base::WrapUnique(new PageSchedulerImpl(nullptr, scheduler_.get()));
-  scheduler_->AddPageScheduler(page_scheduler.get());
+  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr, nullptr,
-                                 FrameScheduler::FrameType::kSubframe);
+      CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
+                           FrameScheduler::FrameType::kSubframe);
 
   TaskQueue* timer_tq = ThrottleableTaskQueue(frame_scheduler.get()).get();
 
@@ -3221,15 +3303,15 @@ TEST_F(MainThreadSchedulerImplTest, Tracing) {
   // traced value. This test checks that no internal checks fire during this.
 
   std::unique_ptr<PageSchedulerImpl> page_scheduler1 =
-      base::WrapUnique(new PageSchedulerImpl(nullptr, scheduler_.get()));
+      CreatePageScheduler(nullptr, scheduler_.get());
   scheduler_->AddPageScheduler(page_scheduler1.get());
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler1.get(), nullptr, nullptr,
-                                 FrameScheduler::FrameType::kSubframe);
+      CreateFrameScheduler(page_scheduler1.get(), nullptr, nullptr,
+                           FrameScheduler::FrameType::kSubframe);
 
   std::unique_ptr<PageSchedulerImpl> page_scheduler2 =
-      base::WrapUnique(new PageSchedulerImpl(nullptr, scheduler_.get()));
+      CreatePageScheduler(nullptr, scheduler_.get());
   scheduler_->AddPageScheduler(page_scheduler2.get());
 
   CPUTimeBudgetPool* time_budget_pool =
@@ -3378,7 +3460,15 @@ TEST_F(MainThreadSchedulerImplWithInitalVirtualTimeTest, VirtualTimeOverride) {
   EXPECT_EQ(base::Time::Now(), base::Time::FromJsTime(1000000.0));
 }
 
-TEST_F(MainThreadSchedulerImplTest, CompositingAfterInput) {
+class MainThreadSchedulerImplWithCompositingAfterInputPrioritizationTest
+    : public MainThreadSchedulerImplTest {
+ public:
+  MainThreadSchedulerImplWithCompositingAfterInputPrioritizationTest()
+      : MainThreadSchedulerImplTest({kPrioritizeCompositingAfterInput}, {}) {}
+};
+
+TEST_F(MainThreadSchedulerImplWithCompositingAfterInputPrioritizationTest,
+       CompositingAfterInput) {
   Vector<String> run_order;
   PostTestTasks(&run_order, "P1 T1 C1");
   base::RunLoop().RunUntilIdle();
@@ -3687,7 +3777,6 @@ TEST_F(VeryHighPriorityForCompositingWhenFastExperimentTest,
               testing::ElementsAre("C1", "P1", "C2", "L1", "D1", "D2", "I1"));
   EXPECT_EQ(UseCase::kMainThreadCustomInputHandling, CurrentUseCase());
 }
-
 class VeryHighPriorityForCompositingAlternatingExperimentTest
     : public MainThreadSchedulerImplTest {
  public:
@@ -3702,10 +3791,13 @@ TEST_F(VeryHighPriorityForCompositingAlternatingExperimentTest,
   Vector<String> run_order;
   PostTestTasks(&run_order, "D1 D2 D3 C1 C2 C3");
 
+  // Compositor is very high priority, we do a main frame and it is set to
+  // normal priority for a task before being reprioritzed.
+  DoMainFrame();
   EnableIdleTasks();
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(run_order,
-              testing::ElementsAre("C1", "D1", "C2", "D2", "C3", "D3"));
+              testing::ElementsAre("C1", "D1", "C2", "C3", "D2", "D3"));
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
 }
 
@@ -3738,6 +3830,7 @@ TEST_F(VeryHighPriorityForCompositingAfterDelayExperimentTest,
   Vector<String> run_order;
   PostTestTasks(&run_order, "I1 D1 C1 D2 C2 P1");
 
+  DoMainFrame();
   EnableIdleTasks();
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(run_order,
@@ -3751,12 +3844,20 @@ TEST_F(VeryHighPriorityForCompositingAfterDelayExperimentTest,
   AdvanceTimeWithTask(0.15);
 
   Vector<String> run_order;
-  PostTestTasks(&run_order, "I1 D1 C1 D2 C2 P1");
+  PostTestTasks(&run_order, "D1 C1 D2 C2 P1");
 
-  EnableIdleTasks();
   base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order,
-              testing::ElementsAre("P1", "C1", "D1", "D2", "C2", "I1"));
+  EXPECT_THAT(run_order, testing::ElementsAre("P1", "C1", "C2", "D1", "D2"));
+  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+
+  // Next compositor task is the BeginMainFrame. Afterwhich the priority is
+  // returned to normal.
+  DoMainFrame();
+  run_order.clear();
+  PostTestTasks(&run_order, "C1 D1 D2 C2 P1");
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(run_order, testing::ElementsAre("P1", "C1", "D1", "D2", "C2"));
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
 }
 
@@ -3795,7 +3896,9 @@ TEST_F(VeryHighPriorityForCompositingBudgetExperimentTest,
               testing::ElementsAre("P1", "C1", "C2", "D1", "D2", "I1"));
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
 
-  // 1000ms compositor task will exhaust the budget.
+  // 1000ms BeginMainFrame compositor task will exhaust the budget. Compositor
+  // tasks will be run at normal priority.
+  DoMainFrame();
   RunSlowCompositorTask();
 
   run_order.clear();
@@ -3803,8 +3906,6 @@ TEST_F(VeryHighPriorityForCompositingBudgetExperimentTest,
   EnableIdleTasks();
   base::RunLoop().RunUntilIdle();
 
-  // Compositor is now at kVeryHighPriority, compositing tasks will run
-  // before default tasks.
   EXPECT_THAT(run_order,
               testing::ElementsAre("P1", "D1", "C1", "D2", "C2", "I1"));
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
@@ -3812,7 +3913,8 @@ TEST_F(VeryHighPriorityForCompositingBudgetExperimentTest,
 
 TEST_F(VeryHighPriorityForCompositingBudgetExperimentTest,
        TestCompositorPolicy_CompositorPriorityNormalToVeryHigh) {
-  // 1000ms compositor task will exhaust the budget.
+  // 1000ms BeginMainFrame compositor task will exhaust the budget.
+  DoMainFrame();
   RunSlowCompositorTask();
 
   Vector<String> run_order;
@@ -3840,103 +3942,142 @@ TEST_F(VeryHighPriorityForCompositingBudgetExperimentTest,
   EXPECT_EQ(UseCase::kNone, CurrentUseCase());
 }
 
-class VeryHighPriorityForCompositingAlternatingBeginMainFrameExperimentTest
+class DisableNonMainTimerQueuesUntilFMPTest
     : public MainThreadSchedulerImplTest {
  public:
-  VeryHighPriorityForCompositingAlternatingBeginMainFrameExperimentTest()
-      : MainThreadSchedulerImplTest({kVeryHighPriorityForCompositingAlternating,
-                                     kPrioritizeCompositingUntilBeginMainFrame},
-                                    {}) {}
+  DisableNonMainTimerQueuesUntilFMPTest()
+      : MainThreadSchedulerImplTest({{kPerAgentSchedulingExperiments,
+                                      {{"queues", "timer-queues"},
+                                       {"method", "disable"},
+                                       {"signal", "fmp"}}}}) {}
 };
 
-TEST_F(VeryHighPriorityForCompositingAlternatingBeginMainFrameExperimentTest,
-       TestCompositorPolicy_AlternatingCompositorTasks) {
-  Vector<String> run_order;
-  PostTestTasks(&run_order, "C1 D1 C2 D2");
+TEST_F(DisableNonMainTimerQueuesUntilFMPTest, DisablesOnlyNonMainTimerQueue) {
+  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
 
-  base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, testing::ElementsAre("C1", "C2", "D1", "D2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+  NiceMock<MockFrameDelegate> frame_delegate{};
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
+      CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
+                           FrameScheduler::FrameType::kSubframe);
 
-  // Next compositor task is the BeginMainFrame. Compositor priority is set
-  // to normal for a single task before being prioritized again.
-  DoMainFrame();
+  scoped_refptr<TaskQueue> timer_tq =
+      QueueForTaskType(frame_scheduler.get(), TaskType::kJavascriptTimer);
+  ForceUpdatePolicyAndGetCurrentUseCase();
 
-  run_order.clear();
-  PostTestTasks(&run_order, "C1 D1 D2 C2");
+  EXPECT_FALSE(timer_tq->IsQueueEnabled());
 
-  base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, testing::ElementsAre("C1", "D1", "C2", "D2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+  ignore_result(
+      scheduler_->agent_scheduling_strategy().OnMainFrameFirstMeaningfulPaint(
+          *main_frame_scheduler_));
+  ForceUpdatePolicyAndGetCurrentUseCase();
+
+  EXPECT_TRUE(timer_tq->IsQueueEnabled());
 }
 
-class VeryHighPriorityForCompositingAfterDelayUntilBeginMainFrameExperimentTest
+TEST_F(DisableNonMainTimerQueuesUntilFMPTest,
+       ShouldNotifyAgentStrategyOnInput) {
+  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
+
+  NiceMock<MockFrameDelegate> frame_delegate{};
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
+      CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
+                           FrameScheduler::FrameType::kSubframe);
+
+  scoped_refptr<TaskQueue> timer_tq =
+      QueueForTaskType(frame_scheduler.get(), TaskType::kJavascriptTimer);
+
+  FakeInputEvent mouse_move_event{WebInputEvent::Type::kMouseMove,
+                                  blink::WebInputEvent::kLeftButtonDown};
+  FakeInputEvent mouse_down_event{WebInputEvent::Type::kMouseDown,
+                                  blink::WebInputEvent::kLeftButtonDown};
+  InputEventState event_state{};
+
+  // Mouse move event should be ignored, meaning the queue should be disabled.
+  scheduler_->DidHandleInputEventOnCompositorThread(mouse_move_event,
+                                                    event_state);
+  ForceUpdatePolicyAndGetCurrentUseCase();
+  EXPECT_FALSE(timer_tq->IsQueueEnabled());
+
+  // Mouse down should cause MTSI to notify the agent scheduling strategy, which
+  // should re-enable the timer queue.
+  scheduler_->DidHandleInputEventOnCompositorThread(mouse_down_event,
+                                                    event_state);
+  base::RunLoop().RunUntilIdle();  // Notification is posted to the main thread.
+  EXPECT_TRUE(timer_tq->IsQueueEnabled());
+}
+
+class BestEffortNonMainQueuesUntilOnLoadTest
     : public MainThreadSchedulerImplTest {
  public:
-  VeryHighPriorityForCompositingAfterDelayUntilBeginMainFrameExperimentTest()
-      : MainThreadSchedulerImplTest({kVeryHighPriorityForCompositingAfterDelay,
-                                     kPrioritizeCompositingUntilBeginMainFrame},
-                                    {}) {}
+  BestEffortNonMainQueuesUntilOnLoadTest()
+      : MainThreadSchedulerImplTest({{kPerAgentSchedulingExperiments,
+                                      {{"queues", "all-queues"},
+                                       {"method", "best-effort"},
+                                       {"signal", "onload"}}}}) {}
 };
 
-TEST_F(
-    VeryHighPriorityForCompositingAfterDelayUntilBeginMainFrameExperimentTest,
-    TestCompositorPolicy_FirstCompositorTaskSetToVeryHighPriority) {
-  // 150ms task to complete the countdown and prioritze compositing.
-  AdvanceTimeWithTask(0.15);
+TEST_F(BestEffortNonMainQueuesUntilOnLoadTest, DeprioritizesAllNonMainQueues) {
+  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
 
-  Vector<String> run_order;
-  PostTestTasks(&run_order, "D1 C1 D2 C2 P1");
+  NiceMock<MockFrameDelegate> frame_delegate{};
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
+      CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
+                           FrameScheduler::FrameType::kSubframe);
 
-  base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, testing::ElementsAre("P1", "C1", "C2", "D1", "D2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+  scoped_refptr<TaskQueue> non_timer_tq =
+      QueueForTaskType(frame_scheduler.get(), TaskType::kNetworking);
+  ForceUpdatePolicyAndGetCurrentUseCase();
+  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+            TaskQueue::QueuePriority::kBestEffortPriority);
 
-  // Next compositor task is the BeginMainFrame.
-  DoMainFrame();
-  run_order.clear();
-  PostTestTasks(&run_order, "C1 D1 D2 C2 P1");
+  ignore_result(scheduler_->agent_scheduling_strategy().OnMainFrameLoad(
+      *main_frame_scheduler_));
+  ForceUpdatePolicyAndGetCurrentUseCase();
 
-  base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, testing::ElementsAre("P1", "C1", "D1", "D2", "C2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+            TaskQueue::QueuePriority::kNormalPriority);
 }
 
-class VeryHighPriorityForCompositingBudgetBeginMainFrameExperimentTest
+class BestEffortNonMainQueuesUntilOnFMPTimeoutTest
     : public MainThreadSchedulerImplTest {
  public:
-  VeryHighPriorityForCompositingBudgetBeginMainFrameExperimentTest()
-      : MainThreadSchedulerImplTest({kVeryHighPriorityForCompositingBudget,
-                                     kPrioritizeCompositingUntilBeginMainFrame},
-                                    {}) {}
+  BestEffortNonMainQueuesUntilOnFMPTimeoutTest()
+      : MainThreadSchedulerImplTest({{kPerAgentSchedulingExperiments,
+                                      {{"queues", "all-queues"},
+                                       {"method", "best-effort"},
+                                       {"signal", "fmp"},
+                                       {"delay_ms", "1000"}}}}) {}
 };
 
-TEST_F(
-    VeryHighPriorityForCompositingBudgetBeginMainFrameExperimentTest,
-    TestCompositorPolicy_CompositorPriorityNonBeginMainFrameDoesntExhaustBudget) {
-  // 1000ms compositor task will not exhaust the budget.
-  RunSlowCompositorTask();
+TEST_F(BestEffortNonMainQueuesUntilOnFMPTimeoutTest,
+       DeprioritizesNonMainQueues) {
+  auto page_scheduler = CreatePageScheduler(
+      /* page_scheduler_delegate= */ nullptr, scheduler_.get());
 
-  Vector<String> run_order;
-  PostTestTasks(&run_order, "D1 C1 D2 C2 P1");
-  base::RunLoop().RunUntilIdle();
+  NiceMock<MockFrameDelegate> frame_delegate{};
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler = CreateFrameScheduler(
+      page_scheduler.get(), &frame_delegate, /* blame_context= */ nullptr,
+      FrameScheduler::FrameType::kSubframe);
 
-  EXPECT_THAT(run_order, testing::ElementsAre("P1", "C1", "C2", "D1", "D2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
-}
+  scoped_refptr<TaskQueue> non_timer_tq =
+      QueueForTaskType(frame_scheduler.get(), TaskType::kNetworking);
+  ForceUpdatePolicyAndGetCurrentUseCase();
+  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+            TaskQueue::QueuePriority::kBestEffortPriority);
 
-TEST_F(VeryHighPriorityForCompositingBudgetBeginMainFrameExperimentTest,
-       TestCompositorPolicy_CompositorPriorityBeginMainFrameExhaustsBudget) {
-  // 1000ms BeginMainFrame will exhaust the budget.
-  DoMainFrame();
-  RunSlowCompositorTask();
+  ignore_result(
+      scheduler_->agent_scheduling_strategy().OnMainFrameFirstMeaningfulPaint(
+          *main_frame_scheduler_));
 
-  Vector<String> run_order;
-  PostTestTasks(&run_order, "D1 C1 D2 C2 P1");
-  base::RunLoop().RunUntilIdle();
+  // Queue should still have lower priority, since we just started counting
+  // towards the timeout.
+  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+            TaskQueue::QueuePriority::kBestEffortPriority);
 
-  EXPECT_THAT(run_order, testing::ElementsAre("P1", "D1", "C1", "D2", "C2"));
-  EXPECT_EQ(UseCase::kNone, CurrentUseCase());
+  test_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(1000));
+
+  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+            TaskQueue::QueuePriority::kNormalPriority);
 }
 
 }  // namespace main_thread_scheduler_impl_unittest

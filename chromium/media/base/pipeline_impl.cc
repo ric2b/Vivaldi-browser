@@ -20,6 +20,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/cdm_context.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
@@ -69,6 +70,7 @@ class PipelineImpl::RendererWrapper : public DemuxerHost,
   void SetPlaybackRate(double playback_rate);
   void SetVolume(float volume);
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint);
+  void SetPreservesPitch(bool preserves_pitch);
   base::TimeDelta GetMediaTime() const;
   Ranges<base::TimeDelta> GetBufferedTimeRanges() const;
   bool DidLoadingProgress();
@@ -191,6 +193,9 @@ class PipelineImpl::RendererWrapper : public DemuxerHost,
   float volume_;
   base::Optional<base::TimeDelta> latency_hint_;
   CdmContext* cdm_context_;
+
+  // By default, apply pitch adjustments.
+  bool preserves_pitch_ = true;
 
   // Lock used to serialize |shared_state_|.
   // TODO(crbug.com/893739): Add GUARDED_BY annotations.
@@ -325,7 +330,7 @@ void PipelineImpl::RendererWrapper::Stop() {
 
   if (demuxer_) {
     demuxer_->Stop();
-    demuxer_ = NULL;
+    demuxer_ = nullptr;
   }
 
   SetState(kStopped);
@@ -479,6 +484,17 @@ void PipelineImpl::RendererWrapper::SetLatencyHint(
   latency_hint_ = latency_hint;
   if (shared_state_.renderer)
     shared_state_.renderer->SetLatencyHint(latency_hint_);
+}
+
+void PipelineImpl::RendererWrapper::SetPreservesPitch(bool preserves_pitch) {
+  DCHECK(media_task_runner_->BelongsToCurrentThread());
+
+  if (preserves_pitch_ == preserves_pitch)
+    return;
+
+  preserves_pitch_ = preserves_pitch;
+  if (shared_state_.renderer)
+    shared_state_.renderer->SetPreservesPitch(preserves_pitch_);
 }
 
 base::TimeDelta PipelineImpl::RendererWrapper::GetMediaTime() const {
@@ -1034,14 +1050,13 @@ void PipelineImpl::RendererWrapper::InitializeRenderer(
       break;
   }
 
-  if (cdm_context_) {
-    shared_state_.renderer->SetCdm(cdm_context_,
-                                   base::BindOnce(&IgnoreCdmAttached));
-  }
+  if (cdm_context_)
+    shared_state_.renderer->SetCdm(cdm_context_, base::DoNothing());
 
-  if (latency_hint_) {
+  if (latency_hint_)
     shared_state_.renderer->SetLatencyHint(latency_hint_);
-  }
+
+  shared_state_.renderer->SetPreservesPitch(preserves_pitch_);
 
   shared_state_.renderer->Initialize(demuxer_, this, std::move(done_cb));
 }
@@ -1357,6 +1372,15 @@ void PipelineImpl::SetLatencyHint(
       FROM_HERE,
       base::BindOnce(&RendererWrapper::SetLatencyHint,
                      base::Unretained(renderer_wrapper_.get()), latency_hint));
+}
+
+void PipelineImpl::SetPreservesPitch(bool preserves_pitch) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  media_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&RendererWrapper::SetPreservesPitch,
+                                base::Unretained(renderer_wrapper_.get()),
+                                preserves_pitch));
 }
 
 base::TimeDelta PipelineImpl::GetMediaTime() const {

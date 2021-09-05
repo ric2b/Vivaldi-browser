@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -285,11 +286,10 @@ void MimeUtil::AddSupportedMediaFormats() {
   const CodecSet wav_codecs{PCM};
   const CodecSet ogg_audio_codecs{FLAC, OPUS, VORBIS};
 
-#if !defined(OS_ANDROID)
-  CodecSet ogg_video_codecs{THEORA, VP8};
-#else
-  CodecSet ogg_video_codecs;
-#endif  // !defined(OS_ANDROID)
+  CodecSet ogg_video_codecs{VP8};
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+  ogg_video_codecs.emplace(THEORA);
+#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 
   CodecSet ogg_codecs(ogg_audio_codecs);
   ogg_codecs.insert(ogg_video_codecs.begin(), ogg_video_codecs.end());

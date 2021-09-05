@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">የጃፓንኛ ግቤት (ለአሜሪካ ቁልፍ ሰሌዳ)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> ንጥሎችን በመሰረዝ ላይ...</translation>
 <translation id="1049926623896334335">የWord ሰነድ</translation>
+<translation id="1060368002126861100">ፋይሎችን በ<ph name="APP_NAME" /> ለመክፈት፣ መጀመሪያ ወደ የመስኮቶች ፋይሎች አቃፊዉ ይውሰዷቸው።</translation>
 <translation id="1062407476771304334">ተካ</translation>
 <translation id="1065449928621190041">የካናዳ ፈረንሳይኛ ቁልፍ ሰሌዳ</translation>
 <translation id="1119069657431255176">Bzip2 የተጨመቀ የtar ማህደር</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">የመፈለጊያ ተንሸራታች</translation>
 <translation id="1399648040768741453">የቴሉጉ ቁልፍ ሰሌዳ (ፎነቲክ)</translation>
 <translation id="1430915738399379752">አትም</translation>
+<translation id="1433600251059882049">ይህ አቃፊ ለLinux እና Windows ተጋርቷል</translation>
+<translation id="1435838927755162558">አቃፊን ለParallels ዴስክቶፕ አጋራ</translation>
 <translation id="1439494416798956626">ተወስዷል ወደ <ph name="FOLDER_NAME" /></translation>
 <translation id="1441841714100794440">የቪዬትናምኛ የቁልፍ ሰሌዳ (ቴለክስ)</translation>
 <translation id="1455548678241328678">የኖርዌይኛ ቁልፍ ሰሌዳ</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">ይህ ፋይል ከመስመር ውጪ አይገኝም።</translation>
 <translation id="184633654410729720">የታይ ቁልፍ ሰሌዳ (ከድማኒ)</translation>
 <translation id="1847880352285315359">የተቀመጡ</translation>
+<translation id="1853795129690976061">ይህ አቃፊ ለLinux ተጋርቷል</translation>
 <translation id="1864756863218646478">ፋይሉ ሊገኝ አልቻለም።</translation>
 <translation id="1921986354447415460">የቱርክኛ-F የቁልፍ ሰሌዳ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ላይ ቅርጸት ተሰርቷል</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">የሲንሃላ ቁልፍ ሰሌዳ</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ይገኛል</translation>
 <translation id="2425665904502185219">ጠቅላላ የፋይል መጠን</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" />ንጥሎችን ወደ <ph name="FOLDER_NAME" /> በመቅዳት ላይ</translation>
 <translation id="2448312741937722512">አይነት</translation>
 <translation id="2453576648990281505">ፋይል አስቀድሞ አለ</translation>
 <translation id="2464079411014186876">አይስክሬም</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">ጂኦግራፊ</translation>
 <translation id="3057861065630527966">የእርስዎን ፎቶዎች እና ቪዲዮዎች በምትኬ ያስቀምጡ</translation>
 <translation id="3064388234319122767">በቋንቋ ፊደል መጻፍ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">የWindows ፋይሎች</translation>
 <translation id="3078461028045006476">ለ<ph name="EXTENSION_NAME" /> አጋራ</translation>
 <translation id="3088034400796962477">በቋንቋ ፊደል መጻፍ (salam ← سلام)</translation>
 <translation id="3116361045094675131">የዩናይትድ ኪንግደም ቁልፍ ሰሌዳ</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">ማስጠንቀቂያ፦ እነዚህ ፋይሎች ጊዜያዊ የሆኑና የአንጻፊ ቦታ ነጻ ለማስለቀቅ በራስ-ሰር ሊሰረዙ የሚችሉ ናቸው።  <ph name="BEGIN_LINK" />የበለጠ ለመረዳት<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">አቃፊ</translation>
 <translation id="3549797760399244642">ወደ drive.google.com ይሂዱ...</translation>
+<translation id="3553048479571901246">ፋይሎችን በ<ph name="APP_NAME" /> ለመክፈት፣መጀመሪያ ወደ የመስኮቶች ፋይሎች አቃፊዉ ይቅዱዋቸው።</translation>
 <translation id="357479282490346887">ሊቱአኒያን</translation>
 <translation id="3583509704582854624">ፊደልቁጥራዊ ግቤት (ለጃፓንኛ ግቤት)</translation>
 <translation id="3603385196401704894">የካናዳ ፈረንሳይኛ</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">ስሪት</translation>
 <translation id="3801082500826908679">ፋሮኛ</translation>
 <translation id="3809272675881623365">ጥንቸል</translation>
+<translation id="3810973564298564668">አቀናብር</translation>
 <translation id="3811494700605067549">1 ፋይል ተመርጧል</translation>
 <translation id="3815016854028376614">የዡዪን ግቤት ስልት</translation>
 <translation id="3825863595139017598">የሞንጎሊያ ቁልፍ ሰሌዳ</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">ለጥፍ</translation>
 <translation id="3958548648197196644">ኪዊ</translation>
 <translation id="3966388904776714213">የድምጽ አጫዋች</translation>
+<translation id="3984317463833596033">Parallels ዴስክቶፕ በ<ph name="FOLDER_NAME" /> አቃፊው ውስጥ ያሉ ፋይሎችን እንዲቀይር ፈቃድ ይስጡት</translation>
 <translation id="4002066346123236978">ርዕስ</translation>
-<translation id="4065397611279318371">ፋይሎችን በ<ph name="APP_NAME" /> መተግበሪያዎች ለመክፈት በመጀመሪያ ወደ <ph name="SHARED_DIRECTORY_LABEL" /> አቃፊ ይውሰዷው።</translation>
 <translation id="4070370845051020638">የካንቶኒዝ ግቤት ስልት</translation>
 <translation id="4072248638558688893">የታሚል ቁልፍ ሰሌዳ (ፎነቲክ)</translation>
 <translation id="4124935795427217608">ዩኒኮርን</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">ሃንጉል 2 ስብስብ</translation>
 <translation id="4477219268485577442">የቡልጋሪያኛ ፎነቲክ</translation>
 <translation id="4479812471636796472">የአሜሪካ ድቮራክ ቁልፍ ሰሌዳ</translation>
+<translation id="4481711095103932593">ይህ አቃፊ ለWindows ተጋርቷል</translation>
 <translation id="4487088045714738411">የቤልጂየም ቁልፍ ሰሌዳ</translation>
 <translation id="4522570452068850558">ዝርዝሮች</translation>
 <translation id="4552678318981539154">ተጨማሪ ማከማቻ ይግዙ</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> ወደ ምርጫ ታክለዋል።</translation>
 <translation id="4582497162516204941">ከLinux (ቅድመ ይሁንታ ሙከራ) ጋር ጫን</translation>
 <translation id="4594543368593301662">ለ <ph name="SEARCH_TERM" /> ውጤቶችን በማሳየት ላይ።</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> ወደ <ph name="FOLDER_NAME" /> በመቅዳት ላይ</translation>
 <translation id="4631887759990505102">አርቲስት</translation>
 <translation id="4656293982926141856">ይህ ኮምፒውተር</translation>
 <translation id="4669606053856530811">እነዚህ ንጥሎች ለእነሱ ካልተጋሩ በስተቀር የ«<ph name="SOURCE_NAME" />» አባላት መዳረሻ ያጣሉ።</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">በራስ-ጠግን</translation>
 <translation id="4881695831933465202">ክፈት</translation>
 <translation id="4886021172213954916">የታሚል ቁልፍ ሰሌዳ (መተየቢያ)</translation>
-<translation id="4892969127351273348">በ<ph name="APP_NAME" /> መክፈት አልተቻለም</translation>
+<translation id="4900532980794411603">በParallels ዴስክቶፕ አጋራ</translation>
 <translation id="4905417359854579806">የ<ph name="FILE_COUNT" />ን ምትኬ ለማስቀመጥ ዝግጁ</translation>
 <translation id="4924638091161556692">ተጠግኗል</translation>
 <translation id="4935975195727477204">የጋንዛኒያ አበባ</translation>
 <translation id="4943368462779413526">የአሜሪካ እግር ኳስ</translation>
+<translation id="4961158930123534723">1 አቃፊ ለParallels ዴስክቶፕ ተጋርቷል</translation>
 <translation id="4969785127455456148">አልበም</translation>
 <translation id="497244430928947428">የማላያላም ቁልፍ ሰሌዳ (ፎነቲክ)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> ወይም ከዚያ ያነሰ ቁምፊዎች የሆነ ስም ይጠቀሙ</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">ኮምፒውተሮች</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">አንድ ክወና ከሚጠበቀው በላይ ጊዜ እየወሰደ ነው። ማቋረጥ ይፈልጋሉ?</translation>
+<translation id="5036159836254554629">የParallels ዴስክቶፕ ማጋራትን አቀናብር</translation>
 <translation id="5038625366300922036">ተጨማሪ ይመልከቱ...</translation>
 <translation id="5061708541166515394">ንፅፅር</translation>
 <translation id="5068919226082848014">ፒዛ</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> ከፋይሎች ይሰረዛል</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> ንጥሎችን ወደ <ph name="FOLDER_NAME" /> በመውሰድ ላይ</translation>
 <translation id="509429900233858213">ስህተት አጋጥሟል።</translation>
 <translation id="5098629044894065541">ዕብራስጥ</translation>
 <translation id="5123433949759960244">ቅርጫት ኳስ</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">የፈረንሳይኛ ቁልፍ ሰሌዳ</translation>
 <translation id="6074825444536523002">Google ቅጽ</translation>
 <translation id="6096979789310008754">የፍለጋ ጽሑፍ ጸድቷል፣ ሁሉንም ፋይሎች እና አቃፊዎች በማሳየት ላይ።</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" />ን ወደ <ph name="FOLDER_NAME" /> በመውሰድ ላይ</translation>
 <translation id="6111770213269631447">በቋንቋ ፊደል መጻፍ (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">ባዶ ቦታ</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" />ን በመውሰድ ላይ...</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">«<ph name="FILENAME" />»ን በመሰረዝ ላይ...</translation>
 <translation id="6581162200855843583">Google Drive አገናኝ</translation>
 <translation id="6607272825297743757">የፋይል መረጃ</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> አቃፊዎች ለParallels ዴስክቶፕ ተጋርተዋል</translation>
 <translation id="6629841649550503054">ሁሉም ወደ <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /> በምትኬ ተቀምጠዋል!</translation>
 <translation id="6643016212128521049">አጽዳ</translation>
 <translation id="6650726141019353908">ሮዝ ቢራቢሮ</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">መጫን አልተሳካም።</translation>
 <translation id="7040138676081995583">ይክፈቱ በ...</translation>
+<translation id="7059566040011178088">ከ<ph name="REMAINING_TIME" /> ያነሰ</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ንጥሎች ተመርጠዋል</translation>
 <translation id="7106346894903675391">ተጨማሪ ማከማቻ ይግዙ...</translation>
 <translation id="7126604456862387217">«&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;» - &lt;em&gt;Driveን ይፈልጉ&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">የመሳሪያ ሞዴል</translation>
 <translation id="8208580316430297579">ሥነ ጥበብ</translation>
 <translation id="8223479393428528563">እነዚህን ፋይሎች ከመስመር ውጪ ለመጠቀም ለማስቀመጥ ተመልሰው መስመር ላይ ይሂዱ፣ ፋይሎቹን በቀኝ ጠቅ ያድርጉ፣ እና የ<ph name="OFFLINE_CHECKBOX_NAME" /> አማራጩን ይምረጡ።</translation>
+<translation id="8231972167769262174">ስለ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">አጨንግፍ</translation>
 <translation id="8261506727792406068">ሰርዝ</translation>
 <translation id="8269755669432358899">የፋይሎች ግብረመልስ ፓነሎችን ሰብስብ</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">Google Drive አሁን «<ph name="FILENAME" />» ማስመር አልቻለም። Google Drive ቆይቶ እንደገና ይሞክራል።</translation>
 <translation id="8477649328507734757">አሹር</translation>
 <translation id="8487700953926739672">ከመስመር ውጪ ይገኛል</translation>
+<translation id="8490342535582768689">Parallels ዴስክቶፕ በእርስዎ Google Drive ውስጥ ፋይሎችን የመቀየር ፈቃድ ይስጧቸው። ለውጦች ከሌሎች መሣሪያዎችዎ ጋር ይሳመራሉ።</translation>
 <translation id="8521441079177373948">ዩኬ</translation>
 <translation id="8525306231823319788">ሙሉ ማያ ገጽ</translation>
 <translation id="8551494947769799688">ላትቪያን</translation>
@@ -723,7 +741,7 @@
 <translation id="939736085109172342">አዲስ ዓቃፊ</translation>
 <translation id="942954117721265519">በዚህ አቃፊ ውስጥ ምንም ምስሎች የሉም።</translation>
 <translation id="943972244133411984">የተቀየረው በ</translation>
-<translation id="945522503751344254">ግብረ መልስ ላክ</translation>
+<translation id="945522503751344254">ግብረመልስ ላክ</translation>
 <translation id="947144732524271678">ከ<ph name="FROM_ENTRY_NAME" /> እስከ <ph name="TO_ENTRY_NAME" /> ያሉ የ<ph name="ENTRY_COUNT" /> ግቤቶች ክልል ተመርጧል።</translation>
 <translation id="981121421437150478">ከመስመር ውጪ</translation>
 <translation id="988685240266037636">«<ph name="FILE_NAME" />» ፋይል አስቀድሞ አለ። ሊተኩት ይፈልጋሉ?</translation>

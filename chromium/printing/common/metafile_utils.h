@@ -5,7 +5,6 @@
 #ifndef PRINTING_COMMON_METAFILE_UTILS_H_
 #define PRINTING_COMMON_METAFILE_UTILS_H_
 
-#include <map>
 #include <string>
 
 #include "base/containers/flat_map.h"
@@ -18,29 +17,24 @@
 
 namespace printing {
 
-using ContentToProxyIdMap = std::map<uint32_t, int>;
-
-enum class SkiaDocumentType {
-  PDF,
-  // MSKP is an experimental, fragile, and diagnostic-only document type.
-  MSKP,
-  MAX = MSKP
-};
+using ContentToProxyIdMap = base::flat_map<uint32_t, int>;
 
 // Stores the mapping between a content's unique id and its actual content.
-using DeserializationContext = base::flat_map<uint32_t, sk_sp<SkPicture>>;
+using PictureDeserializationContext =
+    base::flat_map<uint32_t, sk_sp<SkPicture>>;
 
 // Stores the mapping between content's unique id and its corresponding frame
 // proxy id.
-using SerializationContext = ContentToProxyIdMap;
+using PictureSerializationContext = ContentToProxyIdMap;
 
 sk_sp<SkDocument> MakePdfDocument(const std::string& creator,
                                   const ui::AXTreeUpdate& accessibility_tree,
                                   SkWStream* stream);
 
-SkSerialProcs SerializationProcs(SerializationContext* ctx);
+SkSerialProcs SerializationProcs(PictureSerializationContext* picture_ctx);
 
-SkDeserialProcs DeserializationProcs(DeserializationContext* ctx);
+SkDeserialProcs DeserializationProcs(
+    PictureDeserializationContext* picture_ctx);
 
 }  // namespace printing
 

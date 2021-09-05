@@ -329,8 +329,8 @@ void HTMLTableElement::CollectStyleForPresentationAttribute(
           WebFeature::kHTMLTableElementPresentationAttributeBackground);
       CSSImageValue* image_value = MakeGarbageCollected<CSSImageValue>(
           AtomicString(url), GetDocument().CompleteURL(url),
-          Referrer(GetDocument().OutgoingReferrer(),
-                   GetDocument().GetReferrerPolicy()),
+          Referrer(GetExecutionContext()->OutgoingReferrer(),
+                   GetExecutionContext()->GetReferrerPolicy()),
           OriginClean::kTrue, false /* is_ad_related */);
       style->SetProperty(
           CSSPropertyValue(GetCSSPropertyBackgroundImage(), *image_value));
@@ -633,7 +633,7 @@ const AtomicString& HTMLTableElement::Summary() const {
   return FastGetAttribute(html_names::kSummaryAttr);
 }
 
-void HTMLTableElement::Trace(Visitor* visitor) {
+void HTMLTableElement::Trace(Visitor* visitor) const {
   visitor->Trace(shared_cell_style_);
   HTMLElement::Trace(visitor);
 }

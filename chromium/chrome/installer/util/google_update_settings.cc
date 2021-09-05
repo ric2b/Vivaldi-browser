@@ -248,16 +248,16 @@ bool GoogleUpdateSettings::SetCollectStatsConsent(bool consented) {
                                 ? install_static::GetClientStateMediumKeyPath()
                                 : install_static::GetClientStateKeyPath();
   RegKey key;
-  LONG result = key.Create(
-      root_key, reg_path.c_str(), KEY_SET_VALUE | KEY_WOW64_32KEY);
+  LONG result =
+      key.Create(root_key, reg_path.c_str(), KEY_SET_VALUE | KEY_WOW64_32KEY);
   if (result != ERROR_SUCCESS) {
     LOG(ERROR) << "Failed opening key " << reg_path << " to set "
                << google_update::kRegUsageStatsField << "; result: " << result;
   } else {
     result = key.WriteValue(google_update::kRegUsageStatsField, value);
-    LOG_IF(ERROR, result != ERROR_SUCCESS) << "Failed setting "
-        << google_update::kRegUsageStatsField << " in key " << reg_path
-        << "; result: " << result;
+    LOG_IF(ERROR, result != ERROR_SUCCESS)
+        << "Failed setting " << google_update::kRegUsageStatsField << " in key "
+        << reg_path << "; result: " << result;
   }
 
   // When opting out, clear registry backup of client id and related values.
@@ -287,7 +287,7 @@ GoogleUpdateSettings::LoadMetricsClientInfo() {
   if (!ReadUserGoogleUpdateStrKey(google_update::kRegMetricsId,
                                   &client_id_16) ||
       client_id_16.empty()) {
-    return std::unique_ptr<metrics::ClientInfo>();
+    return nullptr;
   }
 
   std::unique_ptr<metrics::ClientInfo> client_info(new metrics::ClientInfo);
@@ -408,8 +408,10 @@ bool GoogleUpdateSettings::ClearReferral() {
   return ClearGoogleUpdateStrKey(google_update::kRegReferralField);
 }
 
-void GoogleUpdateSettings::UpdateInstallStatus(bool system_install,
-    installer::ArchiveType archive_type, int install_return_code,
+void GoogleUpdateSettings::UpdateInstallStatus(
+    bool system_install,
+    installer::ArchiveType archive_type,
+    int install_return_code,
     const base::string16& product_guid) {
   DCHECK(archive_type != installer::UNKNOWN_ARCHIVE_TYPE ||
          install_return_code != 0);
@@ -420,8 +422,7 @@ void GoogleUpdateSettings::UpdateInstallStatus(bool system_install,
   base::string16 reg_key(google_update::kRegPathClientState);
   reg_key.append(L"\\");
   reg_key.append(product_guid);
-  LONG result = key.Open(reg_root,
-                         reg_key.c_str(),
+  LONG result = key.Open(reg_root, reg_key.c_str(),
                          KEY_QUERY_VALUE | KEY_SET_VALUE | KEY_WOW64_32KEY);
   if (result == ERROR_SUCCESS)
     channel_info.Initialize(key);
@@ -433,8 +434,7 @@ void GoogleUpdateSettings::UpdateInstallStatus(bool system_install,
     // We have a modified channel_info value to write.
     // Create the app's ClientState key if it doesn't already exist.
     if (!key.Valid()) {
-      result = key.Open(reg_root,
-                        google_update::kRegPathClientState,
+      result = key.Open(reg_root, google_update::kRegPathClientState,
                         KEY_CREATE_SUB_KEY | KEY_WOW64_32KEY);
       if (result == ERROR_SUCCESS)
         result = key.CreateKey(product_guid.c_str(),
@@ -466,7 +466,8 @@ void GoogleUpdateSettings::SetProgress(bool system_install,
 }
 
 bool GoogleUpdateSettings::UpdateGoogleUpdateApKey(
-    installer::ArchiveType archive_type, int install_return_code,
+    installer::ArchiveType archive_type,
+    int install_return_code,
     installer::ChannelInfo* value) {
   DCHECK(archive_type != installer::UNKNOWN_ARCHIVE_TYPE ||
          install_return_code != 0);
@@ -516,7 +517,7 @@ GoogleUpdateSettings::UpdatePolicy GoogleUpdateSettings::GetAppUpdatePolicy(
   // Google Update Group Policy settings are always in HKLM.
   // TODO(wfh): Check if policies should go into Wow6432Node or not.
   if (policy_key.Open(HKEY_LOCAL_MACHINE, kPoliciesKey, KEY_QUERY_VALUE) ==
-          ERROR_SUCCESS) {
+      ERROR_SUCCESS) {
     DWORD value = 0;
     base::string16 app_update_override =
         base::StrCat({kUpdateOverrideValuePrefix, app_guid});
@@ -533,7 +534,7 @@ GoogleUpdateSettings::UpdatePolicy GoogleUpdateSettings::GetAppUpdatePolicy(
   }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-  if (is_overridden != NULL)
+  if (is_overridden != nullptr)
     *is_overridden = found_override;
 
   return update_policy;
@@ -547,10 +548,10 @@ bool GoogleUpdateSettings::AreAutoupdatesEnabled() {
   // disabled.
   RegKey policy_key;
   DWORD value = 0;
-  if (policy_key.Open(HKEY_LOCAL_MACHINE, kPoliciesKey,
-                      KEY_QUERY_VALUE) == ERROR_SUCCESS &&
-      policy_key.ReadValueDW(kCheckPeriodOverrideMinutes,
-                             &value) == ERROR_SUCCESS &&
+  if (policy_key.Open(HKEY_LOCAL_MACHINE, kPoliciesKey, KEY_QUERY_VALUE) ==
+          ERROR_SUCCESS &&
+      policy_key.ReadValueDW(kCheckPeriodOverrideMinutes, &value) ==
+          ERROR_SUCCESS &&
       (value == 0 || value > kCheckPeriodOverrideMinutesMax)) {
     return false;
   }
@@ -615,8 +616,8 @@ bool GoogleUpdateSettings::ReenableAutoupdates() {
 
     // Check the auto-update check period override. If it is 0 or exceeds
     // the maximum timeout, delete the override value.
-    if (policy_key.ReadValueDW(kCheckPeriodOverrideMinutes,
-                               &value) == ERROR_SUCCESS &&
+    if (policy_key.ReadValueDW(kCheckPeriodOverrideMinutes, &value) ==
+            ERROR_SUCCESS &&
         (value == 0 || value > kCheckPeriodOverrideMinutesMax)) {
       ++needs_reset_count;
       if (policy_key.DeleteValue(kCheckPeriodOverrideMinutes) == ERROR_SUCCESS)
@@ -681,8 +682,7 @@ base::Version GoogleUpdateSettings::GetGoogleUpdateVersion(
   base::string16 version;
   RegKey key;
 
-  if (key.Open(root_key,
-               google_update::kRegPathGoogleUpdate,
+  if (key.Open(root_key, google_update::kRegPathGoogleUpdate,
                KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS &&
       key.ReadValue(google_update::kRegGoogleUpdateVersion, &version) ==
           ERROR_SUCCESS) {
@@ -697,8 +697,7 @@ base::Time GoogleUpdateSettings::GetGoogleUpdateLastStartedAU(
   const HKEY root_key = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   RegKey update_key;
 
-  if (update_key.Open(root_key,
-                      google_update::kRegPathGoogleUpdate,
+  if (update_key.Open(root_key, google_update::kRegPathGoogleUpdate,
                       KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS) {
     DWORD last_start;
     if (update_key.ReadValueDW(google_update::kRegLastStartedAUField,
@@ -715,8 +714,7 @@ base::Time GoogleUpdateSettings::GetGoogleUpdateLastChecked(
   const HKEY root_key = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   RegKey update_key;
 
-  if (update_key.Open(root_key,
-                      google_update::kRegPathGoogleUpdate,
+  if (update_key.Open(root_key, google_update::kRegPathGoogleUpdate,
                       KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS) {
     DWORD last_check;
     if (update_key.ReadValueDW(google_update::kRegLastCheckedField,
@@ -742,15 +740,14 @@ bool GoogleUpdateSettings::GetUpdateDetailForApp(bool system_install,
   clientstate_reg_path.append(app_guid);
 
   RegKey clientstate;
-  if (clientstate.Open(root_key,
-                       clientstate_reg_path.c_str(),
+  if (clientstate.Open(root_key, clientstate_reg_path.c_str(),
                        KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS) {
     base::string16 version;
     DWORD dword_value;
     if ((clientstate.ReadValueDW(google_update::kRegLastCheckSuccessField,
                                  &dword_value) == ERROR_SUCCESS) &&
-        (clientstate.ReadValue(google_update::kRegVersionField,
-                               &version) == ERROR_SUCCESS)) {
+        (clientstate.ReadValue(google_update::kRegVersionField, &version) ==
+         ERROR_SUCCESS)) {
       product_found = true;
       data->version = base::UTF16ToASCII(version);
       data->last_success = base::Time::FromTimeT(dword_value);
@@ -820,8 +817,8 @@ bool GoogleUpdateSettings::ReadExperimentLabels(
                      : install_static::GetClientStateKeyPath());
 
   RegKey client_state;
-  LONG result = client_state.Open(
-      reg_root, client_state_path.c_str(), KEY_QUERY_VALUE | KEY_WOW64_32KEY);
+  LONG result = client_state.Open(reg_root, client_state_path.c_str(),
+                                  KEY_QUERY_VALUE | KEY_WOW64_32KEY);
   if (result == ERROR_SUCCESS) {
     result = client_state.ReadValue(google_update::kExperimentLabels,
                                     experiment_labels);

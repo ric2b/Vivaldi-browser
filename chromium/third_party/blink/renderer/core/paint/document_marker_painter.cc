@@ -108,7 +108,7 @@ void DrawDocumentMarker(GraphicsContext& context,
 #endif
 
   const auto rect = SkRect::MakeWH(width, kMarkerHeight * zoom);
-  const auto local_matrix = SkMatrix::MakeScale(zoom, zoom);
+  const auto local_matrix = SkMatrix::Scale(zoom, zoom);
 
   PaintFlags flags;
   flags.setAntiAlias(true);
@@ -126,18 +126,25 @@ void DrawDocumentMarker(GraphicsContext& context,
 
 }  // namespace
 
+bool DocumentMarkerPainter::ShouldPaintMarkerUnderline(
+    const StyleableMarker& marker) {
+  if (marker.HasThicknessNone() ||
+      (marker.UnderlineColor() == Color::kTransparent &&
+       !marker.UseTextColor()) ||
+      marker.UnderlineStyle() == ui::mojom::ImeTextSpanUnderlineStyle::kNone) {
+    return false;
+  }
+  return true;
+}
+
 void DocumentMarkerPainter::PaintStyleableMarkerUnderline(
     GraphicsContext& context,
     const PhysicalOffset& box_origin,
     const StyleableMarker& marker,
     const ComputedStyle& style,
     const FloatRect& marker_rect,
-    LayoutUnit logical_height) {
-  if (marker.HasThicknessNone() ||
-      (marker.UnderlineColor() == Color::kTransparent &&
-       !marker.UseTextColor()))
-    return;
-
+    LayoutUnit logical_height,
+    bool in_dark_mode) {
   // start of line to draw, relative to box_origin.X()
   LayoutUnit start = LayoutUnit(marker_rect.X());
   LayoutUnit width = LayoutUnit(marker_rect.Width());
@@ -165,7 +172,7 @@ void DocumentMarkerPainter::PaintStyleableMarkerUnderline(
   }
 
   Color marker_color =
-      marker.UseTextColor()
+      (marker.UseTextColor() || in_dark_mode)
           ? style.VisitedDependentColor(GetCSSPropertyWebkitTextFillColor())
           : marker.UnderlineColor();
   if (marker.UnderlineStyle() !=

@@ -455,6 +455,9 @@ base::string16 SafetyCheckHandler::GetStringForPasswords(
     case PasswordsStatus::kError:
       return l10n_util::GetStringUTF16(
           IDS_SETTINGS_CHECK_PASSWORDS_ERROR_GENERIC);
+    case PasswordsStatus::kFeatureUnavailable:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_PASSWORDS_FEATURE_UNAVAILABLE);
   }
 }
 
@@ -571,6 +574,7 @@ void SafetyCheckHandler::DetermineIfNoPasswordsOrSafe(
 void SafetyCheckHandler::OnVersionUpdaterResult(VersionUpdater::Status status,
                                                 int progress,
                                                 bool rollback,
+                                                bool powerwash,
                                                 const std::string& version,
                                                 int64_t update_size,
                                                 const base::string16& message) {
@@ -632,6 +636,9 @@ void SafetyCheckHandler::OnStateChanged(
                              Done(0), Total(0));
       break;
     case BulkLeakCheckService::State::kTokenRequestFailure:
+      OnPasswordsCheckResult(PasswordsStatus::kFeatureUnavailable,
+                             Compromised(0), Done(0), Total(0));
+      break;
     case BulkLeakCheckService::State::kHashingFailure:
     case BulkLeakCheckService::State::kServiceError:
       OnPasswordsCheckResult(PasswordsStatus::kError, Compromised(0), Done(0),

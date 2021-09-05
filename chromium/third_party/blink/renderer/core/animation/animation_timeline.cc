@@ -85,11 +85,10 @@ void AnimationTimeline::ServiceAnimations(TimingUpdateReason reason) {
   TRACE_EVENT0("blink", "AnimationTimeline::serviceAnimations");
 
   auto current_phase_and_time = CurrentPhaseAndTime();
-  bool maybe_update_compositor_scroll_timeline = false;
 
   if (IsScrollTimeline() &&
       last_current_phase_and_time_ != current_phase_and_time) {
-    maybe_update_compositor_scroll_timeline = true;
+    UpdateCompositorTimeline();
   }
 
   last_current_phase_and_time_ = current_phase_and_time;
@@ -102,12 +101,8 @@ void AnimationTimeline::ServiceAnimations(TimingUpdateReason reason) {
   std::sort(animations.begin(), animations.end(), CompareAnimations);
 
   for (Animation* animation : animations) {
-    if (!animation->Update(reason)) {
+    if (!animation->Update(reason))
       animations_needing_update_.erase(animation);
-      continue;
-    }
-    if (maybe_update_compositor_scroll_timeline)
-      animation->UpdateCompositorScrollTimeline();
   }
 
   DCHECK_EQ(outdated_animation_count_, 0U);
@@ -216,13 +211,23 @@ void AnimationTimeline::ScheduleServiceOnNextFrame() {
     document_->View()->ScheduleAnimation();
 }
 
+Animation* AnimationTimeline::Play(AnimationEffect* child) {
+  Animation* animation = Animation::Create(child, this);
+  DCHECK(animations_.Contains(animation));
+
+  animation->play();
+  DCHECK(animations_needing_update_.Contains(animation));
+
+  return animation;
+}
+
 void AnimationTimeline::MarkAnimationsCompositorPending(bool source_changed) {
   for (const auto& animation : animations_) {
     animation->SetCompositorPending(source_changed);
   }
 }
 
-void AnimationTimeline::Trace(Visitor* visitor) {
+void AnimationTimeline::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(animations_needing_update_);
   visitor->Trace(animations_);

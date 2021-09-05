@@ -18,11 +18,12 @@ class XRTargetRaySpace : public XRSpace {
   base::Optional<TransformationMatrix> NativeFromMojo() override;
   bool EmulatedPosition() const override;
 
-  base::Optional<XRNativeOriginInformation> NativeOrigin() const override;
+  base::Optional<device::mojom::blink::XRNativeOriginInformation> NativeOrigin()
+      const override;
 
   bool IsStationary() const override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   Member<XRInputSource> input_source_;

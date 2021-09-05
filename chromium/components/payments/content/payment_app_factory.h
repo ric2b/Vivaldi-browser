@@ -11,8 +11,8 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/payments/content/payment_app.h"
 #include "components/payments/content/service_worker_payment_app_finder.h"
-#include "components/payments/core/payment_app.h"
 #include "content/public/browser/payment_app_provider.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 
@@ -54,19 +54,19 @@ class PaymentAppFactory {
     virtual scoped_refptr<PaymentManifestWebDataService>
     GetPaymentManifestWebDataService() const = 0;
     virtual bool MayCrawlForInstallablePaymentApps() = 0;
+    virtual bool IsOffTheRecord() const = 0;
+    virtual PaymentRequestSpec* GetSpec() const = 0;
 
-    // These parameters are only used to create native payment apps.
+    // Tells the UI to show the processing spinner. Only desktop UI needs this
+    // notification.
+    virtual void ShowProcessingSpinner() = 0;
+
+    // These parameters are only used to create the autofill payment app.
     virtual const std::vector<autofill::AutofillProfile*>&
     GetBillingProfiles() = 0;
     virtual bool IsRequestedAutofillDataAvailable() = 0;
     virtual ContentPaymentRequestDelegate* GetPaymentRequestDelegate()
         const = 0;
-    virtual PaymentRequestSpec* GetSpec() const = 0;
-
-    // Called after an app is installed. Used for just-in-time installable
-    // payment handlers, for example.
-    virtual void OnPaymentAppInstalled(const url::Origin& origin,
-                                       int64_t registration_id) = 0;
 
     // Called when an app is created.
     virtual void OnPaymentAppCreated(std::unique_ptr<PaymentApp> app) = 0;
@@ -78,15 +78,9 @@ class PaymentAppFactory {
 
     // Whether the factory should early exit before creating platform-specific
     // PaymentApp objects. This is used by PaymentAppServiceBridge to skip
-    // creating native PaymentApps, which currently cannot be used over JNI.
+    // creating native AutofillPaymentApp, which currently cannot be used over
+    // JNI.
     virtual bool SkipCreatingNativePaymentApps() const = 0;
-
-    // When SkipCreatingNativePaymentApps() is true, this callback is called
-    // when service-worker payment app info is available.
-    virtual void OnCreatingNativePaymentAppsSkipped(
-        content::PaymentAppProvider::PaymentApps apps,
-        ServiceWorkerPaymentAppFinder::InstallablePaymentApps
-            installable_apps) = 0;
 
     // Called when all apps of this factory have been created.
     virtual void OnDoneCreatingPaymentApps() = 0;

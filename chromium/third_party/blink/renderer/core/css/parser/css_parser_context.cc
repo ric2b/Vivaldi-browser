@@ -117,7 +117,7 @@ CSSParserContext::CSSParserContext(
           charset,
           document.InQuirksMode() ? kHTMLQuirksMode : kHTMLStandardMode,
           document.ImportsController() && profile == kLiveProfile
-              ? (document.ImportsController()->Master()->InQuirksMode()
+              ? (document.ImportsController()->TreeRoot()->InQuirksMode()
                      ? kHTMLQuirksMode
                      : kHTMLStandardMode)
               : document.InQuirksMode() ? kHTMLQuirksMode : kHTMLStandardMode,
@@ -242,8 +242,8 @@ void CSSParserContext::Count(WebFeature feature) const {
 }
 
 void CSSParserContext::CountDeprecation(WebFeature feature) const {
-  if (IsUseCounterRecordingEnabled())
-    Deprecation::CountDeprecation(*document_, feature);
+  if (IsUseCounterRecordingEnabled() && document_)
+    Deprecation::CountDeprecation(document_->GetExecutionContext(), feature);
 }
 
 void CSSParserContext::Count(CSSParserMode mode, CSSPropertyID property) const {
@@ -283,14 +283,15 @@ bool CSSParserContext::CustomElementsV0Enabled() const {
   // Support features conservatively.
   if (!document_)
     return true;
-  return RuntimeEnabledFeatures::CustomElementsV0Enabled(document_);
+  return RuntimeEnabledFeatures::CustomElementsV0Enabled(
+      document_->GetExecutionContext());
 }
 
 bool CSSParserContext::IsForMarkupSanitization() const {
   return document_ && document_->IsForMarkupSanitization();
 }
 
-void CSSParserContext::Trace(Visitor* visitor) {
+void CSSParserContext::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
 }
 

@@ -118,6 +118,7 @@
 <translation id="4974590756084640048">Bật lại cảnh báo</translation>
 <translation id="5023310440958281426">Kiểm tra chính sách của quản trị viên của bạn</translation>
 <translation id="5039804452771397117">Cho phép</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 cookie đang được dùng)} other {(# cookie đang được dùng)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kiểm tra địa chỉ proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
 <translation id="5287240709317226393">Hiển thị cookie</translation>

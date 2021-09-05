@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1620510694547887537">Videocamera</translation>
 <translation id="1627276047960621195">Descrittori di file</translation>
-<translation id="1635033183663317347">Installata dal supervisore.</translation>
 <translation id="1682548588986054654">Nuova finestra riservata</translation>
 <translation id="1698122934742150150">Solo per la sessione di navigazione in incognito corrente</translation>
 <translation id="1706625117072057435">Livelli di zoom</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Richiesta di condivisione dello schermo da parte di <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">I&amp;ncolla e Vai all'indirizzo <ph name="URL" /></translation>
-<translation id="3725367690636977613">pagine</translation>
 <translation id="3727187387656390258">Ispeziona popup</translation>
 <translation id="3744111561329211289">Sincronizzazione in secondo piano</translation>
 <translation id="3760460896538743390">Ispeziona pagina in &amp;background</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Accetta per gruppo</translation>
-<translation id="4091434297613116013">fogli</translation>
 <translation id="4096508467498758490">Disattiva estensioni in modalità sviluppatore</translation>
 <translation id="4100839878934973028">Un altro programma sul computer ha aggiunto un'applicazione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="4109898769411476438">Chiudi il browser prima di importare</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Mostra &amp;controlli</translation>
 <translation id="7311079019872751559">Accesso con plug-in senza sandbox</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
 <translation id="7412226954991670867">Memoria GPU</translation>
 <translation id="7421925624202799674">&amp;Visualizza sorgente pagina</translation>
@@ -433,7 +429,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8071432093239591881">Stampa come immagine</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Gestisci estensioni</translation>
-<translation id="8180239481735238521">pagina</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Trasferimento è in corso} other {Trasferimenti sono in corso}}</translation>
 <translation id="8230134520748321204">Salvare la password per <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8798099450830957504">Predefinito</translation>
 <translation id="8800004011501252845">Mostra destinazioni per</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">foglio</translation>
 <translation id="8823514049557262177">Copia testo del lin&amp;k</translation>
 <translation id="8823704566850948458">Suggerisci password...</translation>
 <translation id="8859174528519900719">Frame secondario: <ph name="SUBFRAME_SITE" /></translation>

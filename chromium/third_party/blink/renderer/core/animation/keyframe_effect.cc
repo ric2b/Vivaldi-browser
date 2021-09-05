@@ -122,8 +122,8 @@ KeyframeEffect* KeyframeEffect::Create(
     effect->target_pseudo_ = pseudo;
     if (element) {
       element->GetDocument().UpdateStyleAndLayoutTreeForNode(element);
-      effect->effect_target_ =
-          element->GetPseudoElement(CSSSelector::ParsePseudoId(pseudo));
+      effect->effect_target_ = element->GetPseudoElement(
+          CSSSelector::ParsePseudoId(pseudo, element));
     }
   }
   return effect;
@@ -208,7 +208,8 @@ void KeyframeEffect::RefreshTarget() {
   } else {
     target_element_->GetDocument().UpdateStyleAndLayoutTreeForNode(
         target_element_);
-    PseudoId pseudoId = CSSSelector::ParsePseudoId(target_pseudo_);
+    PseudoId pseudoId =
+        CSSSelector::ParsePseudoId(target_pseudo_, target_element_);
     new_target = target_element_->GetPseudoElement(pseudoId);
   }
 
@@ -423,7 +424,7 @@ bool KeyframeEffect::HasPlayingAnimation() const {
   return owner_ && owner_->Playing();
 }
 
-void KeyframeEffect::Trace(Visitor* visitor) {
+void KeyframeEffect::Trace(Visitor* visitor) const {
   visitor->Trace(effect_target_);
   visitor->Trace(target_element_);
   visitor->Trace(model_);
@@ -591,9 +592,10 @@ AnimationTimeDelta KeyframeEffect::CalculateTimeToEffectChange(
     case Timing::kPhaseNone:
       return AnimationTimeDelta::Max();
     case Timing::kPhaseBefore:
-      DCHECK_GE(start_time, local_time.value());
-      return forwards ? AnimationTimeDelta::FromSecondsD(start_time -
-                                                         local_time.value())
+      // Return value is clamped at 0 to prevent unexpected results that could
+      // be caused by returning negative values.
+      return forwards ? AnimationTimeDelta::FromSecondsD(std::max<double>(
+                            start_time - local_time.value(), 0))
                       : AnimationTimeDelta::Max();
     case Timing::kPhaseActive:
       if (forwards) {

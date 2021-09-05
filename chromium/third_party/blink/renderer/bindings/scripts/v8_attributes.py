@@ -408,7 +408,8 @@ def getter_context(interface, attribute, context):
             or 'CachedAttribute' in extended_attributes
             or 'ReflectOnly' in extended_attributes
             or context['is_keep_alive_for_gc']
-            or context['is_getter_raises_exception']):
+            or context['is_getter_raises_exception']
+            or context['high_entropy'] == 'Direct'):
         context['cpp_value_original'] = cpp_value
         cpp_value = 'cpp_value'
 
@@ -442,6 +443,9 @@ def getter_context(interface, attribute, context):
             cpp_value=cpp_value,
             creation_context='holder',
             extended_attributes=extended_attributes),
+        'is_getter_call_with_script_state':
+        has_extended_attribute_value(attribute, 'GetterCallWith',
+                                     'ScriptState'),
         'v8_set_return_value_for_main_world':
         v8_set_return_value_statement(for_main_world=True),
         'v8_set_return_value':
@@ -455,10 +459,9 @@ def getter_expression(interface, attribute, context):
                                              extra_arguments)
     getter_name = scoped_name(interface, attribute, this_getter_base_name)
 
-    arguments = []
-    arguments.extend(
-        v8_utilities.call_with_arguments(
-            attribute.extended_attributes.get('CallWith')))
+    arguments = v8_utilities.call_with_arguments(
+        attribute.extended_attributes.get('GetterCallWith')
+        or attribute.extended_attributes.get('CallWith'))
     # Members of IDL partial interface definitions are implemented in C++ as
     # static member functions, which for instance members (non-static members)
     # take *impl as their first argument

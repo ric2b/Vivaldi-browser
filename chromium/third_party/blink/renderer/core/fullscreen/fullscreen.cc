@@ -74,6 +74,7 @@ void FullscreenElementChanged(Document& document,
     DCHECK_NE(old_element, Fullscreen::FullscreenElementFrom(document));
 
     old_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
+    old_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
 
     old_element->SetContainsFullScreenElement(false);
     old_element->SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
@@ -84,6 +85,7 @@ void FullscreenElementChanged(Document& document,
     DCHECK_EQ(new_element, Fullscreen::FullscreenElementFrom(document));
 
     new_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
+    new_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
 
     // OOPIF: For RequestType::PrefixedForCrossProcessDescendant, |new_element|
     // is the iframe element for the out-of-process frame that contains the
@@ -218,7 +220,7 @@ bool AllowedToUseFullscreen(const Document& document,
 
   // 2. If Feature Policy is enabled, return the policy for "fullscreen"
   // feature.
-  return document.IsFeatureEnabled(
+  return document.GetExecutionContext()->IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature::kFullscreen, report_on_failure);
 }
 
@@ -650,6 +652,9 @@ ScriptPromise Fullscreen::RequestFullscreen(Element& pending,
 
 void Fullscreen::DidResolveEnterFullscreenRequest(Document& document,
                                                   bool granted) {
+  if (!document.domWindow())
+    return;
+
   // We may be called synchronously from within
   // |FullscreenController::EnterFullscreen()| if we were already fullscreen,
   // but must still not synchronously change the fullscreen element. Instead
@@ -1015,7 +1020,7 @@ void Fullscreen::ElementRemoved(Element& node) {
   // layer. This is done in Element::RemovedFrom.
 }
 
-void Fullscreen::Trace(Visitor* visitor) {
+void Fullscreen::Trace(Visitor* visitor) const {
   visitor->Trace(pending_requests_);
   visitor->Trace(pending_exits_);
   Supplement<LocalDOMWindow>::Trace(visitor);
@@ -1029,7 +1034,7 @@ Fullscreen::PendingRequest::PendingRequest(Element* element,
 
 Fullscreen::PendingRequest::~PendingRequest() = default;
 
-void Fullscreen::PendingRequest::Trace(Visitor* visitor) {
+void Fullscreen::PendingRequest::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
   visitor->Trace(resolver_);
 }

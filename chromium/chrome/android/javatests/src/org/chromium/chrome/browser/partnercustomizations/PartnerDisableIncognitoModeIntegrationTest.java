@@ -8,10 +8,11 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.PopupMenu;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -20,7 +21,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
@@ -101,7 +101,6 @@ public class PartnerDisableIncognitoModeIntegrationTest {
     @Test
     @MediumTest
     @Feature({"DisableIncognitoMode"})
-    @RetryOnFailure
     public void testIncognitoEnabledIfNoParentalControls() throws InterruptedException {
         setParentalControlsEnabled(false);
         mActivityTestRule.startMainActivityOnBlankPage();

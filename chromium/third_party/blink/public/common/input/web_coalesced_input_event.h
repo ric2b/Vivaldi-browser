@@ -29,6 +29,7 @@ class BLINK_COMMON_EXPORT WebCoalescedInputEvent {
                          const ui::LatencyInfo&);
   // Copy constructor to deep copy the event.
   WebCoalescedInputEvent(const WebCoalescedInputEvent&);
+  ~WebCoalescedInputEvent();
 
   WebInputEvent* EventPointer();
   void AddCoalescedEvent(const blink::WebInputEvent&);
@@ -45,6 +46,7 @@ class BLINK_COMMON_EXPORT WebCoalescedInputEvent {
   GetPredictedEventsPointers() const;
 
   const ui::LatencyInfo& latency_info() const { return latency_; }
+  ui::LatencyInfo& latency_info() { return latency_; }
 
   bool CanCoalesceWith(const WebCoalescedInputEvent& other) const
       WARN_UNUSED_RESULT;
@@ -63,8 +65,6 @@ class BLINK_COMMON_EXPORT WebCoalescedInputEvent {
   std::vector<WebScopedInputEvent> predicted_events_;
   ui::LatencyInfo latency_;
 };
-
-using WebScopedCoalescedInputEvent = std::unique_ptr<WebCoalescedInputEvent>;
 
 }  // namespace blink
 

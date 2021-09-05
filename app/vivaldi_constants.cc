@@ -45,22 +45,11 @@ const char kVivaldiThumbDataHost[] = VIVALDI_THUMB_URL_HOST;
 const char kVivaldiUIDataURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_DATA_URL_HOST "/";
 
-const char kBasePathMappingUrl[] = VIVALDI_DATA_URL_SCHEME
-    "://" VIVALDI_DATA_URL_HOST "/" VIVALDI_DATA_URL_PATH_MAPPING_DIR "/";
-
-const char kBaseThumbnailUrl[] = VIVALDI_DATA_URL_SCHEME
-    "://" VIVALDI_DATA_URL_HOST "/" VIVALDI_DATA_URL_THUMBNAIL_DIR "/";
-
-const char kBaseNotesAttachmentUrl[] = VIVALDI_DATA_URL_SCHEME
-    "://" VIVALDI_DATA_URL_HOST "/" VIVALDI_DATA_URL_NOTES_ATTACHMENT "/";
-
 const char kVivaldiWebUIURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_WEBUI_URL_HOST "/";
 
 const char kVivaldiThumbURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_THUMB_URL_HOST "/";
-
-const char kVivaldiDataUrlThumbnailDir[] = VIVALDI_DATA_URL_THUMBNAIL_DIR;
 
 const char kWindowExtDataKey[] = "extData";
 

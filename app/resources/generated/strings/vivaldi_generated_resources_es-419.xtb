@@ -37,7 +37,6 @@
 <translation id="1603914832182249871">(Incógnito)</translation>
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1627276047960621195">Descriptores de archivos</translation>
-<translation id="1635033183663317347">Instalado por su tutor.</translation>
 <translation id="1682548588986054654">Nueva ventana de incógnito</translation>
 <translation id="1698122934742150150">Solo a la sesión de incógnito actual</translation>
 <translation id="1706625117072057435">Niveles de zoom</translation>
@@ -167,7 +166,6 @@
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitud para compartir la pantalla de <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Pe&amp;gar e ir a <ph name="URL" /></translation>
-<translation id="3725367690636977613">páginas</translation>
 <translation id="3727187387656390258">Inspeccionar ventana emergente</translation>
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
 <translation id="3760460896538743390">Inspeccionar página de &amp;fondo</translation>
@@ -195,7 +193,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Aceptar por el grupo</translation>
-<translation id="4091434297613116013">hojas de papel</translation>
 <translation id="4096508467498758490">Inhabilitar extensiones en modo de programador</translation>
 <translation id="4100839878934973028">Otro programa en tu computadora agregó una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
@@ -428,7 +425,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8071432093239591881">Imprimir como imagen</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">Administrar extensiones</translation>
-<translation id="8180239481735238521">página</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
  ……=1 {Descarga en curso} other {Descargas en curso}}</translation>
 <translation id="8230134520748321204">¿Quieres guardar la contraseña para <ph name="ORIGIN" />?</translation>
@@ -461,7 +457,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8798099450830957504">Predeterminado</translation>
 <translation id="8800004011501252845">Mostrando destinos para</translation>
 <translation id="8808478386290700967">Tienda virtual</translation>
-<translation id="8813811964357448561">hoja de papel</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto del vínculo</translation>
 <translation id="8823704566850948458">Sugerir contraseña…</translation>
 <translation id="8859174528519900719">Submarco: <ph name="SUBFRAME_SITE" /></translation>

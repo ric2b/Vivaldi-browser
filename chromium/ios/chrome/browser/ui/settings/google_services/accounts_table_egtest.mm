@@ -11,14 +11,12 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
-#import "ios/testing/earl_grey/app_launch_configuration.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -48,45 +46,6 @@ id<GREYMatcher> ButtonWithFakeIdentity(FakeChromeIdentity* fakeIdentity) {
 id<GREYMatcher> NoBookmarksLabel() {
   return grey_text(l10n_util::GetNSString(IDS_IOS_BOOKMARK_NO_BOOKMARKS_LABEL));
 }
-
-// Returns a matcher for the button to sign out and clear data.
-id<GREYMatcher> SignOutAndClearDataButton() {
-  return grey_accessibilityID(
-      kSettingsAccountsTableViewSignoutAndClearDataCellId);
-}
-
-// Opens the list of accounts and taps the sign out button, |buttonMatcher|.
-void SignOut(id<GREYMatcher> buttonMatcher, int labelID) {
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
-  [ChromeEarlGreyUI tapAccountsMenuButton:buttonMatcher];
-
-  // Both of the Buttons on the screen have the same label and traits. We need
-  // to match with the Button that does not have an accessibility label as this
-  // is the one created by the ActionSheetCoordinator.
-  [[EarlGrey selectElementWithMatcher:grey_allOf(ButtonWithAccessibilityLabelId(
-                                                     labelID),
-                                                 grey_not(buttonMatcher), nil)]
-      performAction:grey_tap()];
-
-  // Wait until the user is signed out.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
-      performAction:grey_tap()];
-  [SigninEarlGreyUtils checkSignedOut];
-}
-
-// Signs out of account using the sign out button.
-void SignOut() {
-  SignOut(SignOutAccountsButton(),
-          IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
-}
-
-// Signs out of account using the sign out and clear data button.
-void SignOutAndClearData() {
-  SignOut(SignOutAndClearDataButton(),
-          IDS_IOS_DISCONNECT_DIALOG_CONTINUE_AND_CLEAR_MOBILE);
-}
 }
 
 // Integration tests using the Account Settings screen.
@@ -102,12 +61,6 @@ void SignOutAndClearData() {
 
   [ChromeEarlGrey clearSyncServerData];
   [super tearDown];
-}
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(kClearSyncedData);
-  return config;
 }
 
 - (void)setUp {
@@ -237,7 +190,9 @@ void SignOutAndClearData() {
   [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
                                      withTitle:@"cats"];
 
-  SignOut();
+  // Sign out.
+  [SigninEarlGreyUI
+      signOutWithSignOutConfirmation:SignOutConfirmationNonManagedUser];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
@@ -262,7 +217,9 @@ void SignOutAndClearData() {
   [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
                                      withTitle:@"cats"];
 
-  SignOutAndClearData();
+  // Sign out.
+  [SigninEarlGreyUI signOutWithSignOutConfirmation:
+                        SignOutConfirmationNonManagedUserWithClearedData];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
@@ -286,7 +243,9 @@ void SignOutAndClearData() {
   [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
                                      withTitle:@"cats"];
 
-  SignOutAndClearData();
+  // Sign out.
+  [SigninEarlGreyUI
+      signOutWithSignOutConfirmation:SignOutConfirmationManagedUser];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];

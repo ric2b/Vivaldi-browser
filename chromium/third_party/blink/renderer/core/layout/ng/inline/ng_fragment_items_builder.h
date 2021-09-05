@@ -7,7 +7,8 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_box_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_logical_line_item.h"
+#include "third_party/blink/renderer/platform/text/writing_direction_mode.h"
 
 namespace blink {
 
@@ -22,8 +23,17 @@ class CORE_EXPORT NGFragmentItemsBuilder {
   STACK_ALLOCATED();
 
  public:
-  NGFragmentItemsBuilder() = default;
-  explicit NGFragmentItemsBuilder(const NGInlineNode& node);
+  explicit NGFragmentItemsBuilder(WritingDirectionMode writing_direction);
+  NGFragmentItemsBuilder(const NGInlineNode& node,
+                         WritingDirectionMode writing_direction);
+
+  WritingDirectionMode GetWritingDirection() const {
+    return writing_direction_;
+  }
+  WritingMode GetWritingMode() const {
+    return writing_direction_.GetWritingMode();
+  }
+  TextDirection Direction() const { return writing_direction_.Direction(); }
 
   wtf_size_t Size() const { return items_.size(); }
 
@@ -39,22 +49,20 @@ class CORE_EXPORT NGFragmentItemsBuilder {
                : text_content_;
   }
 
-  // The caller should create a |ChildList| for a complete line and add to this
-  // builder.
+  // The caller should create a |NGLogicalLineItems| for a complete line and add
+  // to this builder.
   //
   // Adding a line is a two-pass operation, because |NGInlineLayoutAlgorithm|
   // creates and positions children within a line box, but its parent algorithm
   // positions the line box. |SetCurrentLine| sets the children, and the next
   // |AddLine| adds them.
   //
-  // TODO(kojii): Moving |ChildList| is not cheap because it has inline
-  // capacity. Reconsider the ownership.
-  using Child = NGLineBoxFragmentBuilder::Child;
-  using ChildList = NGLineBoxFragmentBuilder::ChildList;
+  // The caller must keep |children| alive until |AddLine| completes.
   void SetCurrentLine(const NGPhysicalLineBoxFragment& line,
-                      ChildList&& children);
+                      NGLogicalLineItems* current_line);
   void AddLine(const NGPhysicalLineBoxFragment& line,
                const LogicalOffset& offset);
+  void ClearCurrentLineForTesting();
 
   // Add a list marker to the current line.
   void AddListMarker(const NGPhysicalBoxFragment& marker_fragment,
@@ -76,25 +84,22 @@ class CORE_EXPORT NGFragmentItemsBuilder {
   // items and stops copying before the first dirty line.
   AddPreviousItemsResult AddPreviousItems(
       const NGFragmentItems& items,
-      WritingMode writing_mode,
-      TextDirection direction,
       const PhysicalSize& container_size,
       NGBoxFragmentBuilder* container_builder = nullptr,
-      bool stop_at_dirty = false);
+      const NGFragmentItem* end_item = nullptr);
 
   struct ItemWithOffset {
     DISALLOW_NEW();
 
    public:
-    ItemWithOffset(scoped_refptr<const NGFragmentItem> item,
-                   const LogicalOffset& offset)
-        : item(std::move(item)), offset(offset) {}
-    explicit ItemWithOffset(const LogicalOffset& offset) : offset(offset) {}
+    template <class... Args>
+    explicit ItemWithOffset(const LogicalOffset& offset, Args&&... args)
+        : item(std::forward<Args>(args)...), offset(offset) {}
 
-    const NGFragmentItem& operator*() const { return *item; }
-    const NGFragmentItem* operator->() const { return item.get(); }
+    const NGFragmentItem& operator*() const { return item; }
+    const NGFragmentItem* operator->() const { return &item; }
 
-    scoped_refptr<const NGFragmentItem> item;
+    NGFragmentItem item;
     LogicalOffset offset;
   };
 
@@ -110,30 +115,27 @@ class CORE_EXPORT NGFragmentItemsBuilder {
   // containing block geometry for OOF-positioned nodes.
   //
   // Once this method has been called, new items cannot be added.
-  const ItemWithOffsetList& Items(WritingMode,
-                                  TextDirection,
-                                  const PhysicalSize& outer_size);
+  const ItemWithOffsetList& Items(const PhysicalSize& outer_size);
 
   // Build a |NGFragmentItems|. The builder cannot build twice because data set
   // to this builder may be cleared.
-  void ToFragmentItems(WritingMode,
-                       TextDirection,
-                       const PhysicalSize& outer_size,
-                       void* data);
+  void ToFragmentItems(const PhysicalSize& outer_size, void* data);
 
  private:
-  void AddItems(Child* child_begin, Child* child_end);
+  void AddItems(NGLogicalLineItem* child_begin, NGLogicalLineItem* child_end);
 
-  void ConvertToPhysical(WritingMode writing_mode,
-                         TextDirection direction,
-                         const PhysicalSize& outer_size);
+  void ConvertToPhysical(const PhysicalSize& outer_size);
 
   ItemWithOffsetList items_;
   String text_content_;
   String first_line_text_content_;
 
   // Keeps children of a line until the offset is determined. See |AddLine|.
-  ChildList current_line_;
+  NGLogicalLineItems* current_line_ = nullptr;
+
+  NGInlineNode node_;
+
+  WritingDirectionMode writing_direction_;
 
   bool has_floating_descendants_for_paint_ = false;
   bool is_converted_to_physical_ = false;

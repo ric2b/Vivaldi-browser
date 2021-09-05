@@ -22,21 +22,13 @@ ManifestManagerHost::ManifestManagerHost(RenderFrameHost* render_frame_host)
 }
 
 ManifestManagerHost::~ManifestManagerHost() {
-  OnConnectionError();
+  DispatchPendingCallbacks();
 }
 
 void ManifestManagerHost::BindObserver(
     mojo::PendingAssociatedReceiver<blink::mojom::ManifestUrlChangeObserver>
         receiver) {
   manifest_url_change_observer_receiver_.Bind(std::move(receiver));
-}
-
-ManifestManagerHost* ManifestManagerHost::GetOrCreateForCurrentDocument(
-    RenderFrameHostImpl* rfh) {
-  DCHECK(rfh->is_main_frame());
-  if (!GetForCurrentDocument(rfh))
-    CreateForCurrentDocument(rfh);
-  return GetForCurrentDocument(rfh);
 }
 
 void ManifestManagerHost::GetManifest(GetManifestCallback callback) {
@@ -63,7 +55,7 @@ blink::mojom::ManifestManager& ManifestManagerHost::GetManifestManager() {
   return *manifest_manager_;
 }
 
-void ManifestManagerHost::OnConnectionError() {
+void ManifestManagerHost::DispatchPendingCallbacks() {
   std::vector<GetManifestCallback> callbacks;
   for (CallbackMap::iterator it(&callbacks_); !it.IsAtEnd(); it.Advance()) {
     callbacks.push_back(std::move(*it.GetCurrentValue()));
@@ -71,7 +63,10 @@ void ManifestManagerHost::OnConnectionError() {
   callbacks_.Clear();
   for (auto& callback : callbacks)
     std::move(callback).Run(GURL(), blink::Manifest());
+}
 
+void ManifestManagerHost::OnConnectionError() {
+  DispatchPendingCallbacks();
   if (GetForCurrentDocument(manifest_manager_frame_)) {
     DeleteForCurrentDocument(manifest_manager_frame_);
   }
@@ -91,12 +86,10 @@ void ManifestManagerHost::ManifestUrlChanged(
   if (!manifest_manager_frame_->IsCurrent())
     return;
 
-  // TODO(yuzus): |NotifyManifestUrlChanged| should start taking a
-  // |RenderFrameHost| parameter.
   WebContents* web_contents =
       WebContents::FromRenderFrameHost(manifest_manager_frame_);
   static_cast<WebContentsImpl*>(web_contents)
-      ->NotifyManifestUrlChanged(manifest_url);
+      ->NotifyManifestUrlChanged(manifest_manager_frame_, manifest_url);
 }
 
 RENDER_DOCUMENT_HOST_USER_DATA_KEY_IMPL(ManifestManagerHost)

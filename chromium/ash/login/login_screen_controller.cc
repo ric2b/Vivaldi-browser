@@ -136,41 +136,6 @@ void LoginScreenController::AuthenticateUserWithPasswordOrPin(
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void LoginScreenController::AuthenticateUserWithExternalBinary(
-    const AccountId& account_id,
-    OnAuthenticateCallback callback) {
-  // It is an error to call this function while an authentication is in
-  // progress.
-  LOG_IF(FATAL, IsAuthenticating())
-      << "Duplicate authentication attempt; current authentication stage is "
-      << static_cast<int>(authentication_stage_);
-
-  if (!client_) {
-    std::move(callback).Run(base::nullopt);
-    return;
-  }
-
-  authentication_stage_ = AuthenticationStage::kDoAuthenticate;
-  client_->AuthenticateUserWithExternalBinary(
-      account_id,
-      base::BindOnce(&LoginScreenController::OnAuthenticateComplete,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void LoginScreenController::EnrollUserWithExternalBinary(
-    OnAuthenticateCallback callback) {
-  if (!client_) {
-    std::move(callback).Run(base::nullopt);
-    return;
-  }
-
-  client_->EnrollUserWithExternalBinary(base::BindOnce(
-      [](OnAuthenticateCallback callback, bool success) {
-        std::move(callback).Run(base::make_optional<bool>(success));
-      },
-      std::move(callback)));
-}
-
 void LoginScreenController::AuthenticateUserWithEasyUnlock(
     const AccountId& account_id) {
   // TODO(jdufault): integrate this into authenticate stage after mojom is
@@ -274,12 +239,6 @@ void LoginScreenController::ShowGaiaSignin(const AccountId& prefilled_account) {
   if (!client_)
     return;
   client_->ShowGaiaSignin(prefilled_account);
-}
-
-void LoginScreenController::HideGaiaSignin() {
-  if (!client_)
-    return;
-  client_->HideGaiaSignin();
 }
 
 void LoginScreenController::OnRemoveUserWarningShown() {
@@ -453,11 +412,12 @@ void LoginScreenController::ShowLoginScreen() {
 
 void LoginScreenController::SetKioskApps(
     const std::vector<KioskAppMenuEntry>& kiosk_apps,
-    const base::RepeatingCallback<void(const KioskAppMenuEntry&)>& launch_app) {
+    const base::RepeatingCallback<void(const KioskAppMenuEntry&)>& launch_app,
+    const base::RepeatingClosure& on_show_menu) {
   Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow())
       ->shelf_widget()
       ->login_shelf_view()
-      ->SetKioskApps(kiosk_apps, launch_app);
+      ->SetKioskApps(kiosk_apps, launch_app, on_show_menu);
 }
 
 void LoginScreenController::ShowResetScreen() {

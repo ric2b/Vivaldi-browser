@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cell.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_discover_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_cell.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_updater.h"
@@ -56,6 +57,10 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 // The overscroll actions controller managing accelerators over the toolbar.
 @property(nonatomic, strong)
     OverscrollActionsController* overscrollActionsController;
+
+// The DiscoverFeedVC that might be displayed by this VC.
+@property(nonatomic, weak) UIViewController* discoverFeedVC;
+
 @end
 
 @implementation ContentSuggestionsViewController
@@ -83,6 +88,9 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 }
 
 - (void)dealloc {
+  [self.discoverFeedVC willMoveToParentViewController:nil];
+  [self.discoverFeedVC.view removeFromSuperview];
+  [self.discoverFeedVC removeFromParentViewController];
   [self.overscrollActionsController invalidate];
 }
 
@@ -366,6 +374,21 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   CSCollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
 
+  if ([self.collectionUpdater
+          isDiscoverItem:[self.collectionViewModel
+                             itemTypeForIndexPath:indexPath]]) {
+    ContentSuggestionsDiscoverItem* discoverFeedItem =
+        static_cast<ContentSuggestionsDiscoverItem*>(item);
+    self.discoverFeedVC = discoverFeedItem.discoverFeed;
+    if (self.discoverFeedVC) {
+      [self addChildViewController:self.discoverFeedVC];
+      UICollectionViewCell* cell = [super collectionView:collectionView
+                                  cellForItemAtIndexPath:indexPath];
+      [self.discoverFeedVC didMoveToParentViewController:self];
+      return cell;
+    }
+  }
+
   if ([self.collectionUpdater isContentSuggestionsSection:indexPath.section] &&
       [self.collectionUpdater contentSuggestionTypeForItem:item] !=
           ContentSuggestionTypeEmpty &&
@@ -463,13 +486,6 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
           shouldUseCustomStyleForSection:indexPath.section]) {
     return UIColor.clearColor;
   }
-  // MDCCollectionView doesn't support dynamic colors, so they have to be
-  // resolved now.
-  // TODO(crbug.com/984928): Clean up once dynamic color support is added.
-  if (@available(iOS 13, *)) {
-    return [ntp_home::kNTPBackgroundColor()
-        resolvedColorWithTraitCollection:self.traitCollection];
-  }
   return ntp_home::kNTPBackgroundColor();
 }
 
@@ -562,6 +578,16 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   [self.headerSynchronizer updateFakeOmniboxOnCollectionScroll];
   self.scrolledToTop =
       scrollView.contentOffset.y >= [self.headerSynchronizer pinnedOffsetY];
+}
+
+- (BOOL)scrollViewShouldScrollToTop:(UIScrollView*)scrollView {
+  // User has tapped the status bar to scroll to the top.
+  // Prevent scrolling back to pre-focus state, making sure we don't have
+  // two scrolling animations running at the same time.
+  [self.headerSynchronizer resetPreFocusOffset];
+  // Unfocus omnibox without scrolling back.
+  [self.headerSynchronizer unfocusOmnibox];
+  return YES;
 }
 
 - (void)scrollViewWillBeginDragging:(UIScrollView*)scrollView {

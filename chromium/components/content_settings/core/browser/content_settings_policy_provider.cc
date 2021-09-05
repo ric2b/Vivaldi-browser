@@ -20,9 +20,12 @@
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+
+namespace content_settings {
 
 namespace {
 
@@ -30,6 +33,8 @@ struct PrefsForManagedContentSettingsMapEntry {
   const char* pref_name;
   ContentSettingsType content_type;
   ContentSetting setting;
+  content_settings::WildcardsInPrimaryPattern wildcards_in_primary_pattern =
+      content_settings::WildcardsInPrimaryPattern::ALLOWED;
 };
 
 const PrefsForManagedContentSettingsMapEntry
@@ -57,9 +62,11 @@ const PrefsForManagedContentSettingsMapEntry
         {prefs::kManagedNotificationsBlockedForUrls,
          ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_BLOCK},
         {prefs::kManagedPluginsAllowedForUrls, ContentSettingsType::PLUGINS,
-         CONTENT_SETTING_ALLOW},
+         CONTENT_SETTING_ALLOW,
+         content_settings::WildcardsInPrimaryPattern::NOT_ALLOWED},
         {prefs::kManagedPluginsBlockedForUrls, ContentSettingsType::PLUGINS,
-         CONTENT_SETTING_BLOCK},
+         CONTENT_SETTING_BLOCK,
+         content_settings::WildcardsInPrimaryPattern::NOT_ALLOWED},
         {prefs::kManagedPopupsAllowedForUrls, ContentSettingsType::POPUPS,
          CONTENT_SETTING_ALLOW},
         {prefs::kManagedPopupsBlockedForUrls, ContentSettingsType::POPUPS,
@@ -71,9 +78,30 @@ const PrefsForManagedContentSettingsMapEntry
         {prefs::kManagedLegacyCookieAccessAllowedForDomains,
          ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW}};
 
-}  // namespace
+class VectorRuleIterator : public RuleIterator {
+ public:
+  VectorRuleIterator(const std::vector<Rule>::const_iterator& begin,
+                     const std::vector<Rule>::const_iterator& end)
+      : current_rule(begin), end_rule(end) {}
 
-namespace content_settings {
+  ~VectorRuleIterator() override {}
+
+  bool HasNext() const override { return current_rule != end_rule; }
+
+  Rule Next() override {
+    Rule rule(current_rule->primary_pattern, current_rule->secondary_pattern,
+              current_rule->value.Clone(), current_rule->expiration,
+              current_rule->session_model);
+    current_rule++;
+    return rule;
+  }
+
+ private:
+  std::vector<Rule>::const_iterator current_rule;
+  std::vector<Rule>::const_iterator end_rule;
+};
+
+}  // namespace
 
 // The preferences used to manage the default policy value for
 // ContentSettingsTypes.
@@ -236,6 +264,18 @@ std::unique_ptr<RuleIterator> PolicyProvider::GetRuleIterator(
   return value_map_.GetRuleIterator(content_type, resource_identifier, &lock_);
 }
 
+std::unique_ptr<RuleIterator> PolicyProvider::GetDiscardedRuleIterator(
+    ContentSettingsType content_type,
+    const ResourceIdentifier& resource_identifier,
+    bool incognito) const {
+  auto it = discarded_rules_value_map_.find(content_type);
+  if (it == discarded_rules_value_map_.end()) {
+    return std::make_unique<EmptyRuleIterator>(EmptyRuleIterator());
+  }
+  return std::make_unique<VectorRuleIterator>(it->second.begin(),
+                                              it->second.end());
+}
+
 void PolicyProvider::GetContentSettingsFromPreferences(
     OriginIdentifierValueMap* value_map) {
   for (size_t i = 0; i < base::size(kPrefsForManagedContentSettingsMap); ++i) {
@@ -295,6 +335,18 @@ void PolicyProvider::GetContentSettingsFromPreferences(
              content_settings::WebsiteSettingsRegistry::GetInstance()
                  ->Get(content_type)
                  ->SupportsEmbeddedExceptions());
+
+      if (base::FeatureList::IsEnabled(
+              content_settings::kDisallowWildcardsInPluginContentSettings) &&
+          kPrefsForManagedContentSettingsMap[i].wildcards_in_primary_pattern ==
+              WildcardsInPrimaryPattern::NOT_ALLOWED &&
+          pattern_pair.first.HasHostWildcards()) {
+        discarded_rules_value_map_[content_type].push_back(
+            Rule(pattern_pair.first, secondary_pattern,
+                 base::Value(kPrefsForManagedContentSettingsMap[i].setting),
+                 base::Time(), content_settings::SessionModel::Durable));
+        continue;
+      }
 
       // Don't set a timestamp for policy settings.
       value_map->SetValue(

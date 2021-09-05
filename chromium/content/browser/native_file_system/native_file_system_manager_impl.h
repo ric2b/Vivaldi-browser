@@ -172,17 +172,6 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
       mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
       ResolvedTokenCallback callback);
 
-  void DidResolveTransferTokenForFileHandle(
-      const BindingContext& binding_context,
-      mojo::PendingReceiver<blink::mojom::NativeFileSystemFileHandle>
-          file_handle_receiver,
-      NativeFileSystemTransferTokenImpl* resolved_token);
-  void DidResolveTransferTokenForDirectoryHandle(
-      const BindingContext& binding_context,
-      mojo::PendingReceiver<blink::mojom::NativeFileSystemDirectoryHandle>
-          directory_handle_receiver,
-      NativeFileSystemTransferTokenImpl* resolved_token);
-
   storage::FileSystemContext* context() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return context_.get();
@@ -205,6 +194,23 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
   // Remove |token| from |transfer_tokens_|. It is an error to try to remove a
   // token that doesn't exist.
   void RemoveToken(const base::UnguessableToken& token);
+
+  SharedHandleState GetSharedHandleStateForPath(
+      const base::FilePath& path,
+      const url::Origin& origin,
+      storage::IsolatedContext::ScopedFSHandle file_system,
+      bool is_directory,
+      NativeFileSystemPermissionContext::UserAction user_action);
+
+  // Creates a FileSystemURL which corresponds to a FilePath and Origin.
+  struct FileSystemURLAndFSHandle {
+    storage::FileSystemURL url;
+    std::string base_name;
+    storage::IsolatedContext::ScopedFSHandle file_system;
+  };
+  FileSystemURLAndFSHandle CreateFileSystemURLFromPath(
+      const url::Origin& origin,
+      const base::FilePath& path);
 
  private:
   friend class NativeFileSystemFileHandleImpl;
@@ -248,19 +254,19 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
       ResolvedTokenCallback callback,
       const base::UnguessableToken& token);
 
+  void DidResolveTransferTokenForFileHandle(
+      const BindingContext& binding_context,
+      mojo::PendingReceiver<blink::mojom::NativeFileSystemFileHandle>
+          file_handle_receiver,
+      NativeFileSystemTransferTokenImpl* resolved_token);
+  void DidResolveTransferTokenForDirectoryHandle(
+      const BindingContext& binding_context,
+      mojo::PendingReceiver<blink::mojom::NativeFileSystemDirectoryHandle>
+          directory_handle_receiver,
+      NativeFileSystemTransferTokenImpl* resolved_token);
   void DidResolveForSerializeHandle(
       SerializeHandleCallback callback,
       NativeFileSystemTransferTokenImpl* resolved_token);
-
-  // Creates a FileSystemURL which corresponds to a FilePath and Origin.
-  struct FileSystemURLAndFSHandle {
-    storage::FileSystemURL url;
-    std::string base_name;
-    storage::IsolatedContext::ScopedFSHandle file_system;
-  };
-  FileSystemURLAndFSHandle CreateFileSystemURLFromPath(
-      const url::Origin& origin,
-      const base::FilePath& path);
 
   blink::mojom::NativeFileSystemEntryPtr CreateFileEntryFromPathImpl(
       const BindingContext& binding_context,
@@ -295,8 +301,8 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
 
   bool off_the_record_;
 
-  // NativeFileSystemTransferTokenImpl owns a Transfer token receiver and is
-  // removed from this map when the mojo connection is closed.
+  // NativeFileSystemTransferTokenImpl owns a Transfer token receiver set and is
+  // removed from this map when all mojo connections are closed.
   std::map<base::UnguessableToken,
            std::unique_ptr<NativeFileSystemTransferTokenImpl>>
       transfer_tokens_;

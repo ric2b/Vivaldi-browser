@@ -25,6 +25,7 @@
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/dedicated_worker_id.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/shared_worker_id.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
@@ -141,6 +142,14 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   void OnControlleeRemoved(ServiceWorkerVersion* version,
                            const std::string& client_uuid);
 
+  // Called when the navigation for a window client commits to a render frame
+  // host. Also called asynchronously to preserve the ordering with
+  // OnControlleeAdded and OnControlleeRemoved.
+  void OnControlleeNavigationCommitted(
+      ServiceWorkerVersion* version,
+      const std::string& client_uuid,
+      GlobalFrameRoutingId render_frame_host_id);
+
   // Called when all controllees are removed.
   // Note regarding BackForwardCache integration:
   // Clients in back-forward cache don't count as controllees.
@@ -217,9 +226,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
       int process_id,
       mojo::PendingAssociatedRemote<blink::mojom::ServiceWorkerContainer>
           container_remote,
-      blink::mojom::ServiceWorkerClientType client_type,
-      DedicatedWorkerId dedicated_worker_id,
-      SharedWorkerId shared_worker_id);
+      ServiceWorkerClientInfo client_info);
 
   // Updates the client UUID of an existing container host.
   void UpdateContainerHostClientID(const std::string& current_client_uuid,
@@ -282,6 +289,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // does not own these object or influence their lifetime.
   ServiceWorkerRegistration* GetLiveRegistration(int64_t registration_id);
   void AddLiveRegistration(ServiceWorkerRegistration* registration);
+  // RemoveLiveRegistration removes registration from |live_registrations_|
+  // and notifies all observers of the id of the registration removed.
   void RemoveLiveRegistration(int64_t registration_id);
   const std::map<int64_t, ServiceWorkerRegistration*>& GetLiveRegistrations()
       const {
@@ -332,6 +341,9 @@ class CONTENT_EXPORT ServiceWorkerContextCore
 
   // Called by ServiceWorkerStorage when StoreRegistration() succeeds.
   void NotifyRegistrationStored(int64_t registration_id, const GURL& scope);
+  // Called on the core thread and notifies observers that all registrations
+  // have been deleted for a particular origin.
+  void NotifyAllRegistrationsDeletedForOrigin(const url::Origin& origin);
 
   URLLoaderFactoryGetter* loader_factory_getter() {
     return loader_factory_getter_.get();
@@ -402,7 +414,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
 
   // |container_host_by_uuid_| owns container hosts for service worker clients.
   // Container hosts for service worker execution contexts are owned by
-  // ServiceWorkerProviderHost.
+  // ServiceWorkerHost.
   ContainerHostByClientUUIDMap container_host_by_uuid_;
 
   std::unique_ptr<

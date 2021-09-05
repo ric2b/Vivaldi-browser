@@ -80,6 +80,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/history/foreign_session_handler.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
@@ -107,8 +108,10 @@
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/policy/content/policy_blacklist_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/spellcheck/browser/pref_names.h"
@@ -157,6 +160,7 @@
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -237,27 +241,6 @@ base::OnceCallback<void(RenderViewContextMenu*)>* GetMenuShownCallback() {
       callback;
   return callback.get();
 }
-
-// State of the profile that is activated via "Open Link as User".
-enum UmaEnumOpenLinkAsUser {
-  OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID,
-  OPEN_LINK_AS_USER_INACTIVE_PROFILE_MULTI_PROFILE_SESSION_ENUM_ID,
-  OPEN_LINK_AS_USER_INACTIVE_PROFILE_SINGLE_PROFILE_SESSION_ENUM_ID,
-  OPEN_LINK_AS_USER_LAST_ENUM_ID,
-};
-
-// State of other profiles when the "Open Link as User" context menu is shown.
-enum UmaEnumOpenLinkAsUserProfilesState {
-  OPEN_LINK_AS_USER_PROFILES_STATE_NO_OTHER_ACTIVE_PROFILES_ENUM_ID,
-  OPEN_LINK_AS_USER_PROFILES_STATE_OTHER_ACTIVE_PROFILES_ENUM_ID,
-  OPEN_LINK_AS_USER_PROFILES_STATE_LAST_ENUM_ID,
-};
-
-#if !defined(OS_CHROMEOS)
-// We report the number of "Open Link as User" entries shown in the context
-// menu via UMA, differentiating between at most that many profiles.
-const int kOpenLinkAsUserMaxProfilesReported = 10;
-#endif  // !defined(OS_CHROMEOS)
 
 enum class UmaEnumIdLookupType {
   GeneralEnumId,
@@ -1135,13 +1118,8 @@ std::string RenderViewContextMenu::GetTargetLanguage() const {
 }
 
 void RenderViewContextMenu::AppendDeveloperItems() {
-  // Show Inspect Element in DevTools itself only in case of the debug
-  // devtools build.
+  // Do not Show Inspect Element for DevTools.
   bool show_developer_items = !IsDevToolsURL(params_.page_url);
-
-#if BUILDFLAG(DEBUG_DEVTOOLS)
-  show_developer_items = true;
-#endif
 
   if (!show_developer_items)
     return;
@@ -1203,7 +1181,7 @@ void RenderViewContextMenu::AppendLinkItems() {
         in_app ? IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD_INAPP
                : IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
 
-    AppendOpenInBookmarkAppLinkItems();
+    AppendOpenInWebAppLinkItems();
     AppendOpenWithLinkItems();
 
     // While ChromeOS supports multiple profiles, only one can be open at a
@@ -1230,24 +1208,6 @@ void RenderViewContextMenu::AppendLinkItems() {
           if (chrome::FindLastActiveWithProfile(profile))
             multiple_profiles_open_ = true;
         }
-      }
-
-      if (!target_profiles_entries.empty()) {
-        UmaEnumOpenLinkAsUserProfilesState profiles_state;
-        if (multiple_profiles_open_) {
-          profiles_state =
-              OPEN_LINK_AS_USER_PROFILES_STATE_OTHER_ACTIVE_PROFILES_ENUM_ID;
-        } else {
-          profiles_state =
-              OPEN_LINK_AS_USER_PROFILES_STATE_NO_OTHER_ACTIVE_PROFILES_ENUM_ID;
-        }
-        UMA_HISTOGRAM_ENUMERATION(
-            "RenderViewContextMenu.OpenLinkAsUserProfilesState", profiles_state,
-            OPEN_LINK_AS_USER_PROFILES_STATE_LAST_ENUM_ID);
-
-        UMA_HISTOGRAM_ENUMERATION("RenderViewContextMenu.OpenLinkAsUserShown",
-                                  target_profiles_entries.size(),
-                                  kOpenLinkAsUserMaxProfilesReported);
       }
 
       if (multiple_profiles_open_ && !target_profiles_entries.empty()) {
@@ -1289,8 +1249,6 @@ void RenderViewContextMenu::AppendLinkItems() {
 
     if (browser && send_tab_to_self::ShouldOfferFeatureForLink(
                        active_web_contents, params_.link_url)) {
-      send_tab_to_self::RecordSendTabToSelfClickResult(
-          send_tab_to_self::kLinkMenu, SendTabToSelfClickResult::kShowItem);
       if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
 #if defined(OS_MACOSX)
         menu_model_.AddItem(IDC_CONTENT_LINK_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1307,11 +1265,6 @@ void RenderViewContextMenu::AppendLinkItems() {
                     GetBrowser()->profile())),
             ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
 #endif
-        send_tab_to_self::RecordSendTabToSelfClickResult(
-            send_tab_to_self::kLinkMenu,
-            SendTabToSelfClickResult::kShowDeviceList);
-        send_tab_to_self::RecordSendTabToSelfDeviceCount(
-            send_tab_to_self::kLinkMenu, 1);
       } else {
         send_tab_to_self_sub_menu_model_ =
             std::make_unique<send_tab_to_self::SendTabToSelfSubMenuModel>(
@@ -1387,8 +1340,12 @@ void RenderViewContextMenu::AppendSmartSelectionActionItems() {
 #endif
 }
 
-void RenderViewContextMenu::AppendOpenInBookmarkAppLinkItems() {
+void RenderViewContextMenu::AppendOpenInWebAppLinkItems() {
   Profile* const profile = Profile::FromBrowserContext(browser_context_);
+  // TODO(crbug.com/1100255): Check whether
+  // AppServiceProxy::BrowserAppLauncher() is nullptr instead to be more direct.
+  if (profile->IsOffTheRecord())
+    return;
 
   base::Optional<web_app::AppId> app_id =
       web_app::FindInstalledAppWithUrlInScope(profile, params_.link_url);
@@ -1404,16 +1361,15 @@ void RenderViewContextMenu::AppendOpenInBookmarkAppLinkItems() {
     open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP;
   }
 
-  auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile);
+  auto* const provider = web_app::WebAppProviderBase::GetProviderBase(profile);
   menu_model_.AddItem(
       IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
       l10n_util::GetStringFUTF16(
           open_in_app_string_id,
           base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id))));
 
-  MenuManager* menu_manager = MenuManager::Get(browser_context_);
-  // TODO(crbug.com/1052707): Use AppIconManager to read PWA icons.
-  gfx::Image icon = menu_manager->GetIconForExtension(*app_id);
+  gfx::Image icon = gfx::Image::CreateFrom1xBitmap(
+      provider->icon_manager().GetFavicon(*app_id));
   menu_model_.SetIcon(menu_model_.GetItemCount() - 1,
                       ui::ImageModel::FromImage(icon));
 }
@@ -1533,8 +1489,6 @@ void RenderViewContextMenu::AppendPageItems() {
   if (GetBrowser() &&
       send_tab_to_self::ShouldOfferFeature(
           GetBrowser()->tab_strip_model()->GetActiveWebContents())) {
-    send_tab_to_self::RecordSendTabToSelfClickResult(
-        send_tab_to_self::kContentMenu, SendTabToSelfClickResult::kShowItem);
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     send_tab_to_self_menu_present = true;
     if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
@@ -1553,11 +1507,6 @@ void RenderViewContextMenu::AppendPageItems() {
                   GetBrowser()->profile())),
           ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
 #endif
-      send_tab_to_self::RecordSendTabToSelfClickResult(
-          send_tab_to_self::kContentMenu,
-          SendTabToSelfClickResult::kShowDeviceList);
-      send_tab_to_self::RecordSendTabToSelfDeviceCount(
-          send_tab_to_self::kContentMenu, 1);
     } else {
       send_tab_to_self_sub_menu_model_ =
           std::make_unique<send_tab_to_self::SendTabToSelfSubMenuModel>(
@@ -1708,6 +1657,12 @@ void RenderViewContextMenu::AppendSearchProvider() {
             ->GetDefaultSearchProvider();
     if (!default_provider)
       return;
+
+    if (params_.properties.find(
+            prefs::kDefaultSearchProviderContextMenuAccessAllowed) ==
+        params_.properties.end())
+      return;
+
     menu_model_.AddItem(
         IDC_CONTENT_CONTEXT_SEARCHWEBFOR,
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_SEARCHWEBFOR,
@@ -2268,7 +2223,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP:
-      ExecOpenBookmarkApp();
+      ExecOpenWebApp();
       break;
 
     case IDC_CONTENT_CONTEXT_SAVELINKAS:
@@ -2662,6 +2617,13 @@ bool RenderViewContextMenu::IsSaveLinkAsEnabled() const {
   if (!local_state->GetBoolean(prefs::kAllowFileSelectionDialogs))
     return false;
 
+  PolicyBlacklistService* service =
+      PolicyBlacklistFactory::GetForBrowserContext(browser_context_);
+  if (service->GetURLBlacklistState(params_.link_url) ==
+      policy::URLBlacklist::URLBlacklistState::URL_IN_BLACKLIST) {
+    return false;
+  }
+
   return params_.link_url.is_valid() &&
       ProfileIOData::IsHandledProtocol(params_.link_url.scheme());
 }
@@ -2795,7 +2757,7 @@ bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
   return incognito_avail != IncognitoModePrefs::DISABLED;
 }
 
-void RenderViewContextMenu::ExecOpenBookmarkApp() {
+void RenderViewContextMenu::ExecOpenWebApp() {
   base::Optional<web_app::AppId> app_id =
       web_app::FindInstalledAppWithUrlInScope(
           Profile::FromBrowserContext(browser_context_), params_.link_url);
@@ -2836,22 +2798,6 @@ void RenderViewContextMenu::ExecOpenLinkInProfile(int profile_index) {
   DCHECK_LE(profile_index, static_cast<int>(profile_link_paths_.size()));
 
   base::FilePath profile_path = profile_link_paths_[profile_index];
-
-  Profile* profile =
-      g_browser_process->profile_manager()->GetProfileByPath(profile_path);
-  UmaEnumOpenLinkAsUser profile_state;
-  if (chrome::FindLastActiveWithProfile(profile)) {
-    profile_state = OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID;
-  } else if (multiple_profiles_open_) {
-    profile_state =
-        OPEN_LINK_AS_USER_INACTIVE_PROFILE_MULTI_PROFILE_SESSION_ENUM_ID;
-  } else {
-    profile_state =
-        OPEN_LINK_AS_USER_INACTIVE_PROFILE_SINGLE_PROFILE_SESSION_ENUM_ID;
-  }
-  UMA_HISTOGRAM_ENUMERATION("RenderViewContextMenu.OpenLinkAsUser",
-                            profile_state, OPEN_LINK_AS_USER_LAST_ENUM_ID);
-
   profiles::SwitchToProfile(
       profile_path, false,
       base::Bind(OnProfileCreated, params_.link_url,

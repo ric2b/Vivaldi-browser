@@ -36,10 +36,9 @@ void RenderFrameMetadataProviderImpl::Bind(
       std::move(client_receiver), task_runner_);
 
 #if defined(OS_ANDROID)
-  if (pending_report_all_root_scrolls_for_accessibility_.has_value()) {
-    ReportAllRootScrollsForAccessibility(
-        *pending_report_all_root_scrolls_for_accessibility_);
-    pending_report_all_root_scrolls_for_accessibility_.reset();
+  if (pending_report_all_root_scrolls_.has_value()) {
+    ReportAllRootScrolls(*pending_report_all_root_scrolls_);
+    pending_report_all_root_scrolls_.reset();
   }
 #endif
   if (pending_report_all_frame_submission_for_testing_.has_value()) {
@@ -50,15 +49,13 @@ void RenderFrameMetadataProviderImpl::Bind(
 }
 
 #if defined(OS_ANDROID)
-void RenderFrameMetadataProviderImpl::ReportAllRootScrollsForAccessibility(
-    bool enabled) {
+void RenderFrameMetadataProviderImpl::ReportAllRootScrolls(bool enabled) {
   if (!render_frame_metadata_observer_remote_) {
-    pending_report_all_root_scrolls_for_accessibility_ = enabled;
+    pending_report_all_root_scrolls_ = enabled;
     return;
   }
 
-  render_frame_metadata_observer_remote_->ReportAllRootScrollsForAccessibility(
-      enabled);
+  render_frame_metadata_observer_remote_->ReportAllRootScrolls(enabled);
 }
 #endif
 
@@ -129,5 +126,13 @@ void RenderFrameMetadataProviderImpl::OnFrameSubmissionForTesting(
                                       OnFrameTokenFrameSubmissionForTesting,
                                   weak_factory_.GetWeakPtr()));
 }
+
+#if defined(OS_ANDROID)
+void RenderFrameMetadataProviderImpl::OnRootScrollOffsetChanged(
+    const gfx::Vector2dF& root_scroll_offset) {
+  for (Observer& observer : observers_)
+    observer.OnRootScrollOffsetChanged(root_scroll_offset);
+}
+#endif
 
 }  // namespace content

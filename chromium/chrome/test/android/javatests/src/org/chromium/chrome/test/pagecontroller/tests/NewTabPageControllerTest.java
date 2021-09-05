@@ -7,8 +7,8 @@ package org.chromium.chrome.test.pagecontroller.tests;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -19,6 +19,7 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.test.pagecontroller.controllers.ntp.ChromeMenu;
 import org.chromium.chrome.test.pagecontroller.controllers.ntp.NewTabPageController;
 import org.chromium.chrome.test.pagecontroller.controllers.urlpage.UrlPage;
@@ -51,6 +52,7 @@ public class NewTabPageControllerTest {
     }
 
     @Test
+    @DisabledTest(message = "https://crbug.com/1091640")
     public void testHideArticles() {
         boolean isHidden = mController.areArticlesHidden();
         mController.toggleHideArticles();

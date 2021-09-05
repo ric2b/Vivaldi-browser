@@ -4,15 +4,16 @@
 
 package org.chromium.chrome.browser.download;
 
-import static android.support.test.espresso.Espresso.onData;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onData;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.equalTo;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.Espresso;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.espresso.Espresso;
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -172,7 +173,7 @@ public class DownloadLocationChangeTest implements CustomMainActivityStart {
     private void startDownload(boolean hasSDCard) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(DownloadPromptStatus.SHOW_INITIAL,
-                    DownloadLocationDialogBridge.getPromptForDownloadAndroid());
+                    DownloadDialogBridge.getPromptForDownloadAndroid());
 
             simulateDownloadDirectories(hasSDCard);
 
@@ -211,6 +212,6 @@ public class DownloadLocationChangeTest implements CustomMainActivityStart {
 
     private void promptDownloadLocationDialog(@DownloadPromptStatus int promptStatus) {
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { DownloadLocationDialogBridge.setPromptForDownloadAndroid(promptStatus); });
+                () -> { DownloadDialogBridge.setPromptForDownloadAndroid(promptStatus); });
     }
 }

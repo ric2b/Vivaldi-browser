@@ -55,7 +55,7 @@ PaintTiming& PaintTiming::From(Document& document) {
 }
 
 void PaintTiming::MarkFirstPaint() {
-  // Test that m_firstPaint is non-zero here, as well as in setFirstPaint, so
+  // Test that |first_paint_| is non-zero here, as well as in setFirstPaint, so
   // we avoid invoking monotonicallyIncreasingTime() on every call to
   // markFirstPaint().
   if (!first_paint_.is_null())
@@ -64,7 +64,7 @@ void PaintTiming::MarkFirstPaint() {
 }
 
 void PaintTiming::MarkFirstContentfulPaint() {
-  // Test that m_firstContentfulPaint is non-zero here, as well as in
+  // Test that |first_contentful_paint_| is non-zero here, as well as in
   // setFirstContentfulPaint, so we avoid invoking
   // monotonicallyIncreasingTime() on every call to
   // markFirstContentfulPaint().
@@ -79,6 +79,26 @@ void PaintTiming::MarkFirstImagePaint() {
   first_image_paint_ = clock_->NowTicks();
   SetFirstContentfulPaint(first_image_paint_);
   RegisterNotifySwapTime(PaintEvent::kFirstImagePaint);
+}
+
+void PaintTiming::MarkFirstEligibleToPaint() {
+  if (!first_eligible_to_paint_.is_null())
+    return;
+
+  first_eligible_to_paint_ = clock_->NowTicks();
+  NotifyPaintTimingChanged();
+}
+
+// We deliberately use |first_paint_| here rather than |first_paint_swap_|,
+// because |first_paint_swap_| is set asynchronously and we need to be able to
+// rely on a synchronous check that SetFirstPaintSwap hasn't been scheduled or
+// run.
+void PaintTiming::MarkIneligibleToPaint() {
+  if (first_eligible_to_paint_.is_null() || !first_paint_.is_null())
+    return;
+
+  first_eligible_to_paint_ = base::TimeTicks();
+  NotifyPaintTimingChanged();
 }
 
 void PaintTiming::SetFirstMeaningfulPaintCandidate(base::TimeTicks timestamp) {
@@ -120,11 +140,22 @@ void PaintTiming::NotifyPaint(bool is_first_paint,
   fmp_detector_->NotifyPaint();
 }
 
+void PaintTiming::OnPortalActivate() {
+  last_portal_activated_swap_ = base::TimeTicks();
+  RegisterNotifySwapTime(PaintEvent::kPortalActivatedPaint);
+}
+
+void PaintTiming::SetPortalActivatedPaint(base::TimeTicks stamp) {
+  DCHECK(last_portal_activated_swap_.is_null());
+  last_portal_activated_swap_ = stamp;
+  NotifyPaintTimingChanged();
+}
+
 void PaintTiming::SetTickClockForTesting(const base::TickClock* clock) {
   clock_ = clock;
 }
 
-void PaintTiming::Trace(Visitor* visitor) {
+void PaintTiming::Trace(Visitor* visitor) const {
   visitor->Trace(fmp_detector_);
   Supplement<Document>::Trace(visitor);
 }
@@ -146,6 +177,13 @@ void PaintTiming::NotifyPaintTimingChanged() {
 void PaintTiming::SetFirstPaint(base::TimeTicks stamp) {
   if (!first_paint_.is_null())
     return;
+
+  LocalFrame* frame = GetFrame();
+  if (frame && frame->GetDocument()) {
+    Document* document = frame->GetDocument();
+    document->MarkFirstPaint();
+  }
+
   first_paint_ = stamp;
   RegisterNotifySwapTime(PaintEvent::kFirstPaint);
 }
@@ -204,11 +242,17 @@ void PaintTiming::ReportSwapTime(PaintEvent event,
     case PaintEvent::kFirstPaint:
       SetFirstPaintSwap(timestamp);
       return;
+    case PaintEvent::kFirstPaintAfterBackForwardCacheRestore:
+      SetFirstPaintAfterBackForwardCacheRestoreSwap(timestamp);
+      return;
     case PaintEvent::kFirstContentfulPaint:
       SetFirstContentfulPaintSwap(timestamp);
       return;
     case PaintEvent::kFirstImagePaint:
       SetFirstImagePaintSwap(timestamp);
+      return;
+    case PaintEvent::kPortalActivatedPaint:
+      SetPortalActivatedPaint(timestamp);
       return;
     default:
       NOTREACHED();
@@ -261,12 +305,30 @@ void PaintTiming::SetFirstImagePaintSwap(base::TimeTicks stamp) {
   NotifyPaintTimingChanged();
 }
 
+void PaintTiming::SetFirstPaintAfterBackForwardCacheRestoreSwap(
+    base::TimeTicks stamp) {
+  // The last element is already allocated when the page is restored from the
+  // cache.
+  DCHECK(!first_paints_after_back_forward_cache_restore_swap_.IsEmpty());
+  DCHECK(first_paints_after_back_forward_cache_restore_swap_.back().is_null());
+  first_paints_after_back_forward_cache_restore_swap_.back() = stamp;
+  NotifyPaintTimingChanged();
+}
+
 void PaintTiming::ReportSwapResultHistogram(WebSwapResult result) {
   DEFINE_STATIC_LOCAL(
       EnumerationHistogram, did_swap_histogram,
       ("PageLoad.Internal.Renderer.PaintTiming.SwapResult",
        static_cast<uint32_t>(WebSwapResult::kSwapResultLast) + 1));
   did_swap_histogram.Count(static_cast<uint32_t>(result));
+}
+
+void PaintTiming::OnRestoredFromBackForwardCache() {
+  // Allocate the last element with 0, which indicates that the first paint
+  // after this navigation doesn't happen yet.
+  first_paints_after_back_forward_cache_restore_swap_.push_back(
+      base::TimeTicks());
+  RegisterNotifySwapTime(PaintEvent::kFirstPaintAfterBackForwardCacheRestore);
 }
 
 }  // namespace blink

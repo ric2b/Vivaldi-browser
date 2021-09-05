@@ -34,7 +34,7 @@ class PaymentRequestStateTest : public testing::Test,
   PaymentRequestStateTest()
       : num_on_selected_information_changed_called_(0),
         test_payment_request_delegate_(&test_personal_data_manager_),
-        journey_logger_(test_payment_request_delegate_.IsIncognito(),
+        journey_logger_(test_payment_request_delegate_.IsOffTheRecord(),
                         ukm::UkmRecorder::GetNewSourceID()),
         address_(autofill::test::GetFullProfile()),
         credit_card_visa_(autofill::test::GetCreditCard()) {
@@ -85,9 +85,6 @@ class PaymentRequestStateTest : public testing::Test,
         GURL("https://example.com/pay"),
         url::Origin::Create(GURL("https://example.com")), spec_.get(), this,
         "en-US", &test_personal_data_manager_, &test_payment_request_delegate_,
-        base::BindRepeating(
-            [](const url::Origin& origin,
-               int64_t registration_id) { /* Intentionally left blank. */ }),
         &journey_logger_);
     state_->AddObserver(this);
   }

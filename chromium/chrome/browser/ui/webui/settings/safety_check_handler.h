@@ -30,7 +30,7 @@
 // software.
 class SafetyCheckHandler
     : public settings::SettingsPageUIHandler,
-      public password_manager::BulkLeakCheckService::Observer,
+      public password_manager::BulkLeakCheckServiceInterface::Observer,
       public safety_check::SafetyCheck::SafetyCheckHandlerInterface {
  public:
   // The following enum represent the state of the safety check parent
@@ -70,8 +70,9 @@ class SafetyCheckHandler
     kSignedOut = 5,
     kQuotaLimit = 6,
     kError = 7,
+    kFeatureUnavailable = 8,
     // New enum values must go above here.
-    kMaxValue = kError,
+    kMaxValue = kFeatureUnavailable,
   };
   enum class ExtensionsStatus {
     kChecking = 0,
@@ -192,6 +193,7 @@ class SafetyCheckHandler
   void OnVersionUpdaterResult(VersionUpdater::Status status,
                               int progress,
                               bool rollback,
+                              bool powerwash,
                               const std::string& version,
                               int64_t update_size,
                               const base::string16& message);
@@ -235,12 +237,12 @@ class SafetyCheckHandler
   std::unique_ptr<safety_check::UpdateCheckHelper> update_helper_;
 
   std::unique_ptr<VersionUpdater> version_updater_;
-  password_manager::BulkLeakCheckService* leak_service_ = nullptr;
+  password_manager::BulkLeakCheckServiceInterface* leak_service_ = nullptr;
   extensions::PasswordsPrivateDelegate* passwords_delegate_ = nullptr;
   extensions::ExtensionPrefs* extension_prefs_ = nullptr;
   extensions::ExtensionServiceInterface* extension_service_ = nullptr;
-  ScopedObserver<password_manager::BulkLeakCheckService,
-                 password_manager::BulkLeakCheckService::Observer>
+  ScopedObserver<password_manager::BulkLeakCheckServiceInterface,
+                 password_manager::BulkLeakCheckServiceInterface::Observer>
       observed_leak_check_{this};
   base::WeakPtrFactory<SafetyCheckHandler> weak_ptr_factory_{this};
 };

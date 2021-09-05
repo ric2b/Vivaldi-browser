@@ -89,7 +89,7 @@ class PageIndicatorView::PageIndicatorButton : public views::Button,
 
     const SkColor selected_color =
         AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kIconPrimary,
+            AshColorProvider::ContentLayerType::kIconColorPrimary,
             AshColorProvider::AshColorMode::kDark);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
@@ -178,9 +178,7 @@ PageIndicatorView::~PageIndicatorView() {
 }
 
 gfx::Size PageIndicatorView::CalculatePreferredSize() const {
-  gfx::Size size = buttons_container_->GetPreferredSize();
-  size.set_height(size.height() * expanded_amount_);
-  return size;
+  return gfx::Size(kTrayMenuWidth, kPageIndicatorViewMaxHeight);
 }
 
 void PageIndicatorView::Layout() {

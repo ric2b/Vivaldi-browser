@@ -52,7 +52,6 @@
 #include "cc/test/test_layer_tree_frame_sink.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
-#include "cc/trees/frame_rate_counter.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/scroll_and_scale_set.h"
@@ -6187,9 +6186,9 @@ class LayerTreeHostTestSwapPromiseDuringCommit : public LayerTreeHostTest {
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
-      // Queueing a swap promise from DidBeginMainFrame should cause a
+      // Queueing a swap promise from DidBeginMainFrame should not cause a
       // subsequent main frame to be scheduled.
-      EXPECT_EQ(1, set_needs_commit_count);
+      EXPECT_EQ(0, set_needs_commit_count);
     }
 
     EndTest();
@@ -8902,34 +8901,124 @@ class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
   }
 
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override {
+    // Check that data for kSequenceId is captured. Ideally, we should get
+    // 2 frame_expected and 2 frame_produced. But on slow bots, it is difficult
+    // to infer the correct numbers. Both frame_expected and frame_produced
+    // could drop to 1 (or even below). So no sanity check on data itself.
     ASSERT_TRUE(base::Contains(results, kSequenceId));
-    const auto& throughput = results[kSequenceId];
-    // Frame 3 and 4 are counted. See the sequence in DidCommit comment for
-    // normal case that expects 2 for both frames_expected and frames_produced.
-    //
-    // However, on slow bots, things could be different.
-    // - Begin frame could be skipped but still counted as expected frames,
-    //
-    //     e(5,5)b(8)B(0,8)E(8)s(3)S(8)e(8,8)b(11)
-    //         B(8,11)E(11)ts(4)S(11)e(11,11)P(3)e(14,14)P(4)
-    //
-    //   B(0, 8) and B(8, 11) make frame_expected to be 4, more than 2 expected
-    //   by test.
-    //
-    // - Finish before frame 4 is presented in multi-thread mode.
-    //
-    //     e(3,3)b(4)B(0,4)E(4)s(2)e(4,4)b(6)B(4,6)E(6)s(3)S(4)e(6,6)
-    //         P(2)e(7,7)P(3)
-    //
-    //   Only P(3) is counted thus frames_produced is 1.
-    EXPECT_GE(throughput.frames_expected, 2u);
-    EXPECT_GE(throughput.frames_produced, 1u);
 
     EndTest();
   }
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThrougputTrackerTest);
+
+// Confirm that DelegatedInkMetadata set on the LTH propagates to the
+// CompositorFrameMetadata and RenderFrameMetadata, and then both are correctly
+// reset when another frame is drawn without DelegatedInkMetadata.
+class LayerTreeHostTestDelegatedInkMetadataOnAndOff
+    : public LayerTreeHostTest,
+      public RenderFrameMetadataObserver {
+ public:
+  // Provides a wrapper which can be passed to LayerTreeHost, but just forwards
+  // to the test class.
+  class ForwardingRenderFrameMetadataObserver
+      : public RenderFrameMetadataObserver {
+   public:
+    explicit ForwardingRenderFrameMetadataObserver(
+        RenderFrameMetadataObserver* target)
+        : target_(target) {}
+
+    // RenderFrameMetadataObserver implementation.
+    void BindToCurrentThread() override { target_->BindToCurrentThread(); }
+    void OnRenderFrameSubmission(
+        const RenderFrameMetadata& render_frame_metadata,
+        viz::CompositorFrameMetadata* compositor_frame_metadata,
+        bool force_send) override {
+      target_->OnRenderFrameSubmission(render_frame_metadata,
+                                       compositor_frame_metadata, force_send);
+    }
+
+   private:
+    RenderFrameMetadataObserver* target_ = nullptr;
+  };
+
+  void BeginTest() override {
+    // Set up a basic render frame observer for the LTH/LTHI to forward to.
+    layer_tree_host()->SetRenderFrameObserver(
+        std::make_unique<ForwardingRenderFrameMetadataObserver>(this));
+
+    // Setting up a basic frame that can be redrawn.
+    layer_tree_host()->SetViewportRectAndScale(gfx::Rect(10, 10), 1.f,
+                                               viz::LocalSurfaceIdAllocation());
+    layer_tree_host()->root_layer()->SetBounds(gfx::Size(10, 10));
+    layer_ = FakePictureLayer::Create(&client_);
+    layer_tree_host()->root_layer()->AddChild(layer_);
+    client_.set_bounds(layer_->bounds());
+
+    // Values chosen arbitrarily
+    SkColor color = SK_ColorDKGRAY;
+    double diameter = 1.000002;
+    gfx::PointF point = gfx::PointF(135, 45);
+    gfx::RectF area = gfx::RectF(173, 438);
+    base::TimeTicks timestamp = base::TimeTicks::Now();
+
+    expected_metadata_ =
+        viz::DelegatedInkMetadata(point, diameter, color, timestamp, area);
+    layer_tree_host()->SetDelegatedInkMetadata(
+        std::make_unique<viz::DelegatedInkMetadata>(
+            expected_metadata_.value()));
+  }
+
+  void DidCommitAndDrawFrame() override {
+    // Cause a redraw to occur.
+    layer_->SetNeedsDisplay();
+  }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
+    if (expected_metadata_.has_value()) {
+      // Now try again with no metadata to confirm everything is cleared out.
+      expected_metadata_.reset();
+    }
+  }
+
+  void ExpectMetadata(bool had_delegated_ink_metadata,
+                      viz::DelegatedInkMetadata* actual_metadata) {
+    if (expected_metadata_.has_value()) {
+      EXPECT_TRUE(had_delegated_ink_metadata);
+      EXPECT_TRUE(actual_metadata);
+      EXPECT_EQ(expected_metadata_->point(), actual_metadata->point());
+      EXPECT_EQ(expected_metadata_->color(), actual_metadata->color());
+      EXPECT_EQ(expected_metadata_->diameter(), actual_metadata->diameter());
+      EXPECT_EQ(expected_metadata_->presentation_area(),
+                actual_metadata->presentation_area());
+      EXPECT_EQ(expected_metadata_->timestamp(), actual_metadata->timestamp());
+    } else {
+      EXPECT_FALSE(had_delegated_ink_metadata);
+      EXPECT_FALSE(actual_metadata);
+      EndTest();
+    }
+  }
+
+  void AfterTest() override {}
+
+  // RenderFrameMetadataObserver implementation.
+  void BindToCurrentThread() override {}
+  void OnRenderFrameSubmission(
+      const RenderFrameMetadata& render_frame_metadata,
+      viz::CompositorFrameMetadata* compositor_frame_metadata,
+      bool force_send) override {
+    ExpectMetadata(render_frame_metadata.has_delegated_ink_metadata,
+                   compositor_frame_metadata->delegated_ink_metadata.get());
+  }
+
+ private:
+  base::Optional<viz::DelegatedInkMetadata> expected_metadata_;
+  FakeContentLayerClient client_;
+  scoped_refptr<Layer> layer_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDelegatedInkMetadataOnAndOff);
 
 }  // namespace
 }  // namespace cc

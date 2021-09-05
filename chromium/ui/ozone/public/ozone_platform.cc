@@ -18,7 +18,6 @@
 namespace ui {
 
 namespace {
-
 OzonePlatform* g_instance = nullptr;
 
 void EnsureInstance() {
@@ -43,6 +42,15 @@ OzonePlatform::OzonePlatform() {
 }
 
 OzonePlatform::~OzonePlatform() = default;
+
+// static
+void OzonePlatform::PreEarlyInitialization() {
+  EnsureInstance();
+  if (g_instance->prearly_initialized_)
+    return;
+  g_instance->prearly_initialized_ = true;
+  g_instance->PreEarlyInitialize();
+}
 
 // static
 void OzonePlatform::InitializeForUI(const InitParams& args) {
@@ -114,5 +122,12 @@ void OzonePlatform::AfterSandboxEntry() {
   // This should not be called in single-process mode.
   DCHECK(!single_process_);
 }
+
+void OzonePlatform::PostMainMessageLoopStart(
+    base::OnceCallback<void()> shutdown_cb) {}
+
+void OzonePlatform::PostMainMessageLoopRun() {}
+
+void OzonePlatform::PreEarlyInitialize() {}
 
 }  // namespace ui

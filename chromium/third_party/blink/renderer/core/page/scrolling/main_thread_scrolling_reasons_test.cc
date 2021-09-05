@@ -299,8 +299,7 @@ class NonCompositedMainThreadScrollingReasonsTest
     : public MainThreadScrollingReasonsTest {
   static const uint32_t kLCDTextRelatedReasons =
       cc::MainThreadScrollingReason::kHasTransformAndLCDText |
-      cc::MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText |
-      cc::MainThreadScrollingReason::kIsNotStackingContextAndLCDText;
+      cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
 
  protected:
   NonCompositedMainThreadScrollingReasonsTest() {
@@ -387,64 +386,24 @@ TEST_F(NonCompositedMainThreadScrollingReasonsTest, TransformTest) {
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, BackgroundNotOpaqueTest) {
   TestNonCompositedReasons(
       "background-not-opaque",
-      cc::MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText);
+      cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest,
        CantPaintScrollingBackgroundTest) {
   TestNonCompositedReasons(
       "cant-paint-scrolling-background",
-      cc::MainThreadScrollingReason::kCantPaintScrollingBackground);
+      cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, ClipTest) {
-  TestNonCompositedReasons(
-      "clip", cc::MainThreadScrollingReason::kHasClipRelatedProperty |
-                  cc::MainThreadScrollingReason::kCantPaintScrollingBackground);
+  TestNonCompositedReasons("clip",
+                           cc::MainThreadScrollingReason::kNotScrollingOnMain);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, ClipPathTest) {
-  uint32_t clip_reason = cc::MainThreadScrollingReason::kHasClipRelatedProperty;
-  GetWebView()->GetSettings()->SetPreferCompositingToLCDTextEnabled(false);
-  Document* document = GetFrame()->GetDocument();
-  // Test ancestor with ClipPath
-  Element* element = document->body();
-  element->classList().Add("clip-path");
-  Element* container = document->getElementById("scroller1");
-  ASSERT_TRUE(container);
-  ForceFullCompositingUpdate();
-
-  PaintLayerScrollableArea* scrollable_area =
-      ToLayoutBoxModelObject(container->GetLayoutObject())->GetScrollableArea();
-  EXPECT_MAIN_THREAD_SCROLLING_REASON(
-      clip_reason,
-      scrollable_area->GetNonCompositedMainThreadScrollingReasons());
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(GetViewMainThreadScrollingReasons());
-
-  // Remove clip path from ancestor.
-  element->classList().Remove("clip-path");
-  ForceFullCompositingUpdate();
-
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(
-      scrollable_area->GetNonCompositedMainThreadScrollingReasons());
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(GetViewMainThreadScrollingReasons());
-
-  // Test descendant with ClipPath
-  element = document->getElementById("content1");
-  ASSERT_TRUE(element);
-  element->classList().Add("clip-path");
-  ForceFullCompositingUpdate();
-  EXPECT_MAIN_THREAD_SCROLLING_REASON(
-      clip_reason,
-      scrollable_area->GetNonCompositedMainThreadScrollingReasons());
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(GetViewMainThreadScrollingReasons());
-
-  // Remove clip path from descendant.
-  element->classList().Remove("clip-path");
-  ForceFullCompositingUpdate();
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(
-      scrollable_area->GetNonCompositedMainThreadScrollingReasons());
-  EXPECT_NO_MAIN_THREAD_SCROLLING_REASON(GetViewMainThreadScrollingReasons());
+  TestNonCompositedReasons("clip-path",
+                           cc::MainThreadScrollingReason::kNotScrollingOnMain);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, BoxShadowTest) {
@@ -455,17 +414,21 @@ TEST_F(NonCompositedMainThreadScrollingReasonsTest, BoxShadowTest) {
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, InsetBoxShadowTest) {
   TestNonCompositedReasons(
       "inset-box-shadow",
-      cc::MainThreadScrollingReason::kCantPaintScrollingBackground);
+      cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, StackingContextTest) {
-  TestNonCompositedReasons(
-      "non-stacking-context",
-      cc::MainThreadScrollingReason::kIsNotStackingContextAndLCDText);
+  TestNonCompositedReasons("non-stacking-context",
+                           cc::MainThreadScrollingReason::kNotScrollingOnMain);
+}
+
+TEST_F(NonCompositedMainThreadScrollingReasonsTest, BorderRadiusTest) {
+  TestNonCompositedReasons("border-radius",
+                           cc::MainThreadScrollingReason::kNotScrollingOnMain);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest,
-       CompositedWithLCDTextRelatedReasonsTest) {
+       ForcedComositingWithLCDRelatedReasons) {
   // With "will-change:transform" we composite elements with
   // LCDTextRelatedReasons only. For elements with other
   // NonCompositedReasons, we don't create scrollingLayer for their

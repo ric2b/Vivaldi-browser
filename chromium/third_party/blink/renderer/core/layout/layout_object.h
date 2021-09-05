@@ -551,6 +551,28 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            ShouldApplySizeContainment();
   }
 
+  inline bool IsStackingContext() const {
+    return IsStackingContext(StyleRef());
+  }
+  inline bool IsStackingContext(const ComputedStyle& style) const {
+    // This is an inlined version of the following:
+    // `IsStackingContextWithoutContainment() ||
+    //  ShouldApplyLayoutContainment() ||
+    //  ShouldApplyPaintContainment()`
+    // The reason it is inlined is that the containment checks share
+    // common logic, which is extracted here to avoid repeated computation.
+    return style.IsStackingContextWithoutContainment() ||
+           ((style.ContainsLayout() || style.ContainsPaint()) &&
+            (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
+            (!IsTablePart() || IsLayoutBlockFlow()));
+  }
+
+  inline bool IsStacked() const { return IsStacked(StyleRef()); }
+  inline bool IsStacked(const ComputedStyle& style) const {
+    return style.GetPosition() != EPosition::kStatic ||
+           IsStackingContext(style);
+  }
+
   void NotifyPriorityScrollAnchorStatusChanged();
 
  private:
@@ -652,7 +674,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsFrame() const { return IsOfType(kLayoutObjectFrame); }
   bool IsFrameSet() const { return IsOfType(kLayoutObjectFrameSet); }
-  bool IsInsideListMarker() const {
+  bool IsInsideListMarkerForCustomContent() const {
     return IsOfType(kLayoutObjectInsideListMarker);
   }
   bool IsLayoutNGBlockFlow() const {
@@ -666,9 +688,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutNGInsideListMarker() const {
     return IsOfType(kLayoutObjectNGInsideListMarker);
   }
-  bool IsLayoutNGListMarkerImage() const {
-    return IsOfType(kLayoutObjectNGListMarkerImage);
-  }
   bool IsLayoutNGOutsideListMarker() const {
     return IsOfType(kLayoutObjectNGOutsideListMarker);
   }
@@ -681,10 +700,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return IsOfType(kLayoutObjectLayoutNGTableCol);
   }
   bool IsListItem() const { return IsOfType(kLayoutObjectListItem); }
+  bool IsListMarkerForNormalContent() const {
+    return IsOfType(kLayoutObjectListMarker);
+  }
+  bool IsListMarkerImage() const {
+    return IsOfType(kLayoutObjectListMarkerImage);
+  }
   bool IsMathML() const { return IsOfType(kLayoutObjectMathML); }
   bool IsMathMLRoot() const { return IsOfType(kLayoutObjectMathMLRoot); }
   bool IsMedia() const { return IsOfType(kLayoutObjectMedia); }
-  bool IsOutsideListMarker() const {
+  bool IsOutsideListMarkerForCustomContent() const {
     return IsOfType(kLayoutObjectOutsideListMarker);
   }
   bool IsProgress() const { return IsOfType(kLayoutObjectProgress); }
@@ -938,8 +963,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            (StyleRef().Display() == EDisplay::kBlock ||
             StyleRef().Display() == EDisplay::kWebkitBox) &&
            StyleRef().StyleType() == kPseudoIdNone && IsLayoutBlock() &&
-           !IsListMarker() && !IsLayoutFlowThread() &&
-           !IsLayoutMultiColumnSet();
+           !IsLayoutFlowThread() && !IsLayoutMultiColumnSet();
   }
   // If node has been split into continuations, it returns the first layout
   // object generated for the node.
@@ -1155,6 +1179,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool ShouldClipOverflow() const { return bitfields_.ShouldClipOverflow(); }
   bool HasClipRelatedProperty() const;
 
+  // Not returning StyleRef().HasTransformRelatedProperty() because some objects
+  // ignore the transform-related styles (e.g. LayoutInline, LayoutSVGBlock).
   bool HasTransformRelatedProperty() const {
     return bitfields_.HasTransformRelatedProperty();
   }
@@ -1170,8 +1196,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Returns |true| if any property that renders using filter operations is
   // used (including, but not limited to, 'filter' and 'box-reflect').
-  // Not calling style()->hasFilterInducingProperty because some objects force
-  // to ignore reflection style (e.g. LayoutInline).
+  // Not calling StyleRef().HasFilterInducingProperty() because some objects
+  // ignore reflection style (e.g. LayoutInline, LayoutSVGBlock).
   bool HasFilterInducingProperty() const {
     return StyleRef().HasNonInitialFilter() || HasReflection();
   }
@@ -1354,8 +1380,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Returns true if style would make this object a fixed container.
   // This value gets cached by bitfields_.can_contain_fixed_position_objects_.
-  // TODO(pdr): Should this function be unified with
-  // ComputedStyle::CanContainFixedPositionObjects?
   bool ComputeIsFixedContainer(const ComputedStyle* style) const;
 
   virtual LayoutObject* HoverAncestor() const { return Parent(); }
@@ -1639,6 +1663,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   static LayoutBlock* FindNonAnonymousContainingBlock(
       LayoutObject* container,
       AncestorSkipInfo* = nullptr);
+
+  // Returns the nearest anceestor in the layout tree that is not anonymous,
+  // or null if there is none.
+  LayoutObject* NonAnonymousAncestor() const;
 
   const LayoutBlock* InclusiveContainingBlock() const;
 
@@ -1963,6 +1991,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            !IsLayoutNGOutsideListMarker() && !IsOutsideListMarker();
   }
 
+  // Not returning StyleRef().BoxReflect() because some objects ignore the
+  // reflection style (e.g. LayoutInline, LayoutSVGBlock).
   bool HasReflection() const { return bitfields_.HasReflection(); }
 
   // The current selection state for an object.  For blocks, the state refers to
@@ -2034,17 +2064,40 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return IsListItem() || IsLayoutNGListItem();
   }
 
-  // There are 3 types of list marker. LayoutNG creates different types for
-  // inside and outside; outside is derived from LayoutBlockFlow, and inside
-  // from LayoutInline. Legacy is derived from LayoutBox.
+  // There 5 different types of list markers:
+  // * LayoutListMarker (LayoutBox): for both outside and inside markers with
+  //   'content: normal', in legacy layout.
+  // * LayoutInsideListMarker (LayoutInline): for non-normal inside markers in
+  //   legacy layout.
+  // * LayoutOutsideListMarker (LayoutBlockFlow): for non-normal outside markers
+  //   in legacy layout.
+  // * LayoutNGInsideListMarker (LayoutInline): for inside markers in LayoutNG.
+  // * LayoutNGOutsideListMarker (LayoutNGBlockFlowMixin<LayoutBlockFlow>):
+  //   for outside markers in LayoutNG.
+
+  // Legacy marker with inside position, normal or not.
+  bool IsInsideListMarker() const;
+  // Legacy marker with outside position, normal or not.
+  bool IsOutsideListMarker() const;
+  // Any kind of legacy list marker.
   bool IsListMarker() const {
-    return IsOutsideListMarker() || IsInsideListMarker();
+    return IsListMarkerForNormalContent() ||
+           IsInsideListMarkerForCustomContent() ||
+           IsOutsideListMarkerForCustomContent();
   }
-  bool IsListMarkerIncludingNGOutside() const {
-    return IsListMarker() || IsLayoutNGOutsideListMarker();
+  // Any kind of LayoutBox list marker.
+  bool IsBoxListMarkerIncludingNG() const {
+    return IsListMarkerForNormalContent() ||
+           IsOutsideListMarkerForCustomContent() ||
+           IsLayoutNGOutsideListMarker();
   }
-  bool IsListMarkerIncludingNGOutsideAndInside() const {
-    return IsListMarkerIncludingNGOutside() || IsLayoutNGInsideListMarker();
+  // Any kind of LayoutNG list marker.
+  bool IsLayoutNGListMarker() const {
+    return IsLayoutNGInsideListMarker() || IsLayoutNGOutsideListMarker();
+  }
+  // Any kind of list marker.
+  bool IsListMarkerIncludingAll() const {
+    return IsListMarker() || IsLayoutNGListMarker();
   }
 
   virtual bool IsCombineText() const { return false; }
@@ -2103,9 +2156,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                                  TransformationMatrix&) const;
 
   bool CreatesGroup() const {
-    return StyleRef().HasOpacity() || HasMask() || HasClipPath() ||
-           HasFilterInducingProperty() || HasNonInitialBackdropFilter() ||
-           StyleRef().HasBlendMode();
+    // See |HasReflection()| for why |StyleRef().BoxReflect()| is not used.
+    return StyleRef().HasGroupingProperty(HasReflection());
   }
 
   Vector<PhysicalRect> OutlineRects(const PhysicalOffset& additional_offset,
@@ -2236,8 +2288,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // setNeedsRepaint before calling this function.
   virtual void InvalidateDisplayItemClients(PaintInvalidationReason) const;
 
-  virtual bool HasNonCompositedScrollbars() const { return false; }
-
   // Called before setting style for existing/new anonymous child. Override to
   // set custom styles for the child. For new anonymous child, |child| is null.
   virtual void UpdateAnonymousChildStyle(const LayoutObject* child,
@@ -2306,21 +2356,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
    public:
     // Convenience mutator that clears paint invalidation flags and this object
     // and its descendants' needs-paint-property-update flags.
-    void ClearPaintFlags() {
-      DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
-                DocumentLifecycle::kInPrePaint);
-      layout_object_.ClearPaintInvalidationFlags();
-      layout_object_.bitfields_.SetNeedsPaintPropertyUpdate(false);
-      layout_object_.bitfields_.SetEffectiveAllowedTouchActionChanged(false);
-
-      if (!layout_object_.PrePaintBlockedByDisplayLock(
-              DisplayLockLifecycleTarget::kChildren)) {
-        layout_object_.bitfields_.SetDescendantNeedsPaintPropertyUpdate(false);
-        layout_object_.bitfields_
-            .SetDescendantEffectiveAllowedTouchActionChanged(false);
-        layout_object_.bitfields_.ResetSubtreePaintPropertyUpdateReasons();
-      }
-    }
+    void ClearPaintFlags() { layout_object_.ClearPaintFlags(); }
     void SetShouldCheckForPaintInvalidation() {
       // This method is only intended to be called when visiting this object
       // during pre-paint, and as such it should only mark itself, and not the
@@ -2579,6 +2615,20 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return element->GetDisplayLockContext();
   }
 
+  void SetDocumentForAnonymous(Document* document) {
+    DCHECK(IsAnonymous());
+    node_ = document;
+  }
+
+  bool IsLayoutNGObjectForListMarkerImage() const {
+    DCHECK(IsListMarkerImage());
+    return bitfields_.IsLayoutNGObjectForListMarkerImage();
+  }
+  void SetIsLayoutNGObjectForListMarkerImage(bool b) {
+    DCHECK(IsListMarkerImage());
+    bitfields_.SetIsLayoutNGObjectForListMarkerImage(b);
+  }
+
  protected:
   enum LayoutObjectType {
     kLayoutObjectBr,
@@ -2594,6 +2644,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectLayoutTableCol,
     kLayoutObjectLayoutNGTableCol,
     kLayoutObjectListItem,
+    kLayoutObjectListMarker,
+    kLayoutObjectListMarkerImage,
     kLayoutObjectMathML,
     kLayoutObjectMathMLRoot,
     kLayoutObjectMedia,
@@ -2605,7 +2657,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectNGListItem,
     kLayoutObjectNGInsideListMarker,
     kLayoutObjectNGOutsideListMarker,
-    kLayoutObjectNGListMarkerImage,
     kLayoutObjectNGProgress,
     kLayoutObjectNGText,
     kLayoutObjectOutsideListMarker,
@@ -2721,11 +2772,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual void InsertedIntoTree();
   virtual void WillBeRemovedFromTree();
 
-  void SetDocumentForAnonymous(Document* document) {
-    DCHECK(IsAnonymous());
-    node_ = document;
-  }
-
 #if DCHECK_IS_ON()
   virtual bool PaintInvalidationStateIsDirty() const;
 #endif
@@ -2735,6 +2781,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     DCHECK(!NeedsLayout() ||
            LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
   }
+  virtual void ClearPaintFlags();
 
   void SetIsBackgroundAttachmentFixedObject(bool);
 
@@ -3153,8 +3200,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     // control clips or contain: paint.
     ADD_BOOLEAN_BITFIELD(should_clip_overflow_, ShouldClipOverflow);
 
-    // This boolean is the cached value from
-    // ComputedStyle::hasTransformRelatedProperty.
+    // The cached value from ComputedStyle::HasTransformRelatedProperty for
+    // objects that do not ignore transform-related styles (e.g. not
+    // LayoutInline, LayoutSVGBlock).
     ADD_BOOLEAN_BITFIELD(has_transform_related_property_,
                          HasTransformRelatedProperty);
     ADD_BOOLEAN_BITFIELD(has_reflection_, HasReflection);
@@ -3264,6 +3312,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
     // True at start of |Destroy()| before calling |WillBeDestroyed()|.
     ADD_BOOLEAN_BITFIELD(being_destroyed_, BeingDestroyed);
+
+    // From LayoutListMarkerImage
+    ADD_BOOLEAN_BITFIELD(is_layout_ng_object_for_list_marker_image,
+                         IsLayoutNGObjectForListMarkerImage);
 
    private:
     // This is the cached 'position' value of this object

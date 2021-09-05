@@ -4,21 +4,17 @@
 
 #include "printing/backend/cups_helper.h"
 
-#include <cups/ppd.h>
 #include <stddef.h>
 
-#include <string>
 #include <vector>
 
-#include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "printing/backend/print_backend.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/mojom/print.mojom.h"
@@ -52,7 +48,10 @@ constexpr char kCupsMaxCopies[] = "cupsMaxCopies";
 constexpr char kColorDevice[] = "ColorDevice";
 constexpr char kColorModel[] = "ColorModel";
 constexpr char kColorMode[] = "ColorMode";
+// TODO(crbug.com/1081705): Epson "Ink" attribute bloats prints on Linux.
+#if !defined(OS_LINUX)
 constexpr char kInk[] = "Ink";
+#endif
 constexpr char kProcessColorModel[] = "ProcessColorModel";
 constexpr char kPrintoutMode[] = "PrintoutMode";
 constexpr char kDraftGray[] = "Draft.Gray";
@@ -87,81 +86,6 @@ constexpr char kSharpCMBW[] = "CMBW";
 constexpr char kXeroxXRXColor[] = "XRXColor";
 constexpr char kXeroxAutomatic[] = "Automatic";
 constexpr char kXeroxBW[] = "BW";
-
-void ParseLpOptions(const base::FilePath& filepath,
-                    base::StringPiece printer_name,
-                    int* num_options,
-                    cups_option_t** options) {
-  std::string content;
-  if (!base::ReadFileToString(filepath, &content))
-    return;
-
-  const char kDest[] = "dest";
-  const char kDefault[] = "default";
-  const size_t kDestLen = sizeof(kDest) - 1;
-  const size_t kDefaultLen = sizeof(kDefault) - 1;
-
-  for (base::StringPiece line : base::SplitStringPiece(
-           content, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-    if (base::StartsWith(line, base::StringPiece(kDefault, kDefaultLen),
-                         base::CompareCase::INSENSITIVE_ASCII) &&
-        isspace(line[kDefaultLen])) {
-      line = line.substr(kDefaultLen);
-    } else if (base::StartsWith(line, base::StringPiece(kDest, kDestLen),
-                                base::CompareCase::INSENSITIVE_ASCII) &&
-               isspace(line[kDestLen])) {
-      line = line.substr(kDestLen);
-    } else {
-      continue;
-    }
-
-    line = base::TrimWhitespaceASCII(line, base::TRIM_ALL);
-    if (line.empty())
-      continue;
-
-    size_t space_found = line.find(' ');
-    if (space_found == base::StringPiece::npos)
-      continue;
-
-    base::StringPiece name = line.substr(0, space_found);
-    if (name.empty())
-      continue;
-
-    if (!EqualsCaseInsensitiveASCII(printer_name, name))
-      continue;  // This is not the required printer.
-
-    line = line.substr(space_found + 1);
-    // Remove extra spaces.
-    line = base::TrimWhitespaceASCII(line, base::TRIM_ALL);
-    if (line.empty())
-      continue;
-
-    // Parse the selected printer custom options. Need to pass a
-    // null-terminated string.
-    *num_options = cupsParseOptions(line.as_string().c_str(), 0, options);
-  }
-}
-
-void MarkLpOptions(base::StringPiece printer_name, ppd_file_t* ppd) {
-  static constexpr char kSystemLpOptionPath[] = "/etc/cups/lpoptions";
-  static constexpr char kUserLpOptionPath[] = ".cups/lpoptions";
-
-  std::vector<base::FilePath> file_locations;
-  file_locations.push_back(base::FilePath(kSystemLpOptionPath));
-  base::FilePath homedir;
-  base::PathService::Get(base::DIR_HOME, &homedir);
-  file_locations.push_back(base::FilePath(homedir.Append(kUserLpOptionPath)));
-
-  for (const base::FilePath& location : file_locations) {
-    int num_options = 0;
-    cups_option_t* options = nullptr;
-    ParseLpOptions(location, printer_name, &num_options, &options);
-    if (num_options > 0 && options) {
-      cupsMarkOptions(ppd, num_options, options);
-      cupsFreeOptions(num_options, options);
-    }
-  }
-}
 
 int32_t GetCopiesMax(ppd_file_t* ppd) {
   ppd_attr_t* attr = ppdFindAttr(ppd, kCupsMaxCopies, nullptr);
@@ -409,6 +333,8 @@ bool GetHPColorModeSettings(ppd_file_t* ppd,
   return true;
 }
 
+// TODO(crbug.com/1081705): Epson "Ink" attribute bloats prints on Linux.
+#if !defined(OS_LINUX)
 bool GetEpsonInkSettings(ppd_file_t* ppd,
                          ColorModel* color_model_for_black,
                          ColorModel* color_model_for_color,
@@ -434,6 +360,7 @@ bool GetEpsonInkSettings(ppd_file_t* ppd,
   }
   return true;
 }
+#endif  // !defined(OS_LINUX)
 
 bool GetSharpARCModeSettings(ppd_file_t* ppd,
                              ColorModel* color_model_for_black,
@@ -538,7 +465,10 @@ bool GetColorModelSettings(ppd_file_t* ppd,
          GetHPColorSettings(ppd, cm_black, cm_color, is_color) ||
          GetHPColorModeSettings(ppd, cm_black, cm_color, is_color) ||
          GetBrotherColorSettings(ppd, cm_black, cm_color, is_color) ||
+// TODO(crbug.com/1081705): Epson "Ink" attribute bloats prints on Linux.
+#if !defined(OS_LINUX)
          GetEpsonInkSettings(ppd, cm_black, cm_color, is_color) ||
+#endif
          GetSharpARCModeSettings(ppd, cm_black, cm_color, is_color) ||
          GetXeroxColorSettings(ppd, cm_black, cm_color, is_color) ||
          GetProcessColorModelSettings(ppd, cm_black, cm_color, is_color);
@@ -594,7 +524,7 @@ http_t* HttpConnectionCUPS::http() {
   return http_;
 }
 
-bool ParsePpdCapabilities(base::StringPiece printer_name,
+bool ParsePpdCapabilities(cups_dest_t* dest,
                           base::StringPiece locale,
                           base::StringPiece printer_capabilities,
                           PrinterSemanticCapsAndDefaults* printer_info) {
@@ -616,7 +546,8 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
     return false;
   }
   ppdMarkDefaults(ppd);
-  MarkLpOptions(printer_name, ppd);
+  if (dest)
+    cupsMarkOptions(ppd, dest->num_options, dest->options);
 
   PrinterSemanticCapsAndDefaults caps;
   caps.collate_capable = true;

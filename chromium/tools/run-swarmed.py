@@ -37,25 +37,6 @@ INTERNAL_ERROR_EXIT_CODE = -1000
 DEFAULT_ANDROID_DEVICE_TYPE = "walleye"
 
 
-def _ReadVpythonPin():
-  """Reads the vpython CIPD package name and version from
-  //third_party/depot_tools.
-
-  Returns them as a (pkgname, version) tuple.
-  """
-  chromium_src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-  manifest_path = os.path.join(chromium_src_dir, 'third_party', 'depot_tools',
-                               'cipd_manifest.txt')
-  with open(manifest_path, 'r') as manifest:
-    for line in manifest.readlines():
-      # lines look like:
-      # name/of/package version
-      if 'vpython' in line and 'git_revision' in line:
-        vpython_pkg, vpython_version = line.split()
-        return vpython_pkg, vpython_version
-  raise ValueError('unable to read vpython pin from %s' % (manifest_path, ))
-
-
 def _Spawn(args):
   """Triggers a swarming job. The arguments passed are:
   - The index of the job;
@@ -92,6 +73,9 @@ def _Spawn(args):
         'kvm=1',
         '-d',
         'gpu=none',
+    ]
+  if args.arch != 'detect':
+    trigger_args += [
         '-d',
         'cpu=' + args.arch,
     ]
@@ -108,42 +92,28 @@ def _Spawn(args):
   if args.device_os:
     trigger_args += ['-d', 'device_os=' + args.device_os]
 
-  # The canonical version numbers are stored in the infra repository here:
-  # build/scripts/slave/recipe_modules/swarming/api.py
-  #
-  # HACK(iannucci): These packages SHOULD NOT BE HERE.
-  # Remove method once Swarming Pool Task Templates are implemented.
-  # crbug.com/812428
-  cpython_version = 'version:2.7.15.chromium14'
-  cpython_pkg = (
-      '.swarming_module:infra/python/cpython/${platform}=' + cpython_version)
-
-  vpython_pkg = '.swarming_module:%s=%s' % _ReadVpythonPin()
-  vpython_native_pkg = vpython_pkg.replace('vpython', 'vpython-native')
-
-  trigger_args += [
-      '--cipd-package',
-      cpython_pkg,
-      '--cipd-package',
-      vpython_native_pkg,
-      '--cipd-package',
-      vpython_pkg,
-      '--',
-  ]
+  runner_args = []
   if not args.no_test_flags:
     # These flags are recognized by our test runners, but do not work
     # when running custom scripts.
-    trigger_args += [
+    runner_args += [
         '--test-launcher-summary-output=${ISOLATED_OUTDIR}/output.json',
         '--system-log-file=${ISOLATED_OUTDIR}/system_log'
     ]
   if args.gtest_filter:
-    trigger_args.append('--gtest_filter=' + args.gtest_filter)
+    runner_args.append('--gtest_filter=' + args.gtest_filter)
+  if args.repeat:
+    runner_args.append('--repeat=' + args.repeat)
   elif args.target_os == 'fuchsia':
     filter_file = \
         'testing/buildbot/filters/fuchsia.' + args.target_name + '.filter'
     if os.path.isfile(filter_file):
-      trigger_args.append('--test-launcher-filter-file=../../' + filter_file)
+      runner_args.append('--test-launcher-filter-file=../../' + filter_file)
+
+  if runner_args:
+    trigger_args.append('--')
+    trigger_args.extend(runner_args)
+
   with open(os.devnull, 'w') as nul:
     subprocess.check_call(trigger_args, stdout=nul)
   return (index, json_file, args)
@@ -201,17 +171,16 @@ def main():
       '--device-type',
       help='device_type specifier for Swarming'
       ' from https://chromium-swarm.appspot.com/botlist .')
-  # TODO(crbug.com/812428): Switch this back to chromium.tests once
-  # that pool runs with task templates.
-  parser.add_argument(
-      '--pool',
-      default='chromium.tests.template',
-      help='Use the given swarming pool.')
+  parser.add_argument('--pool',
+                      default='chromium.tests',
+                      help='Use the given swarming pool.')
   parser.add_argument('--results', '-r', default='results',
                       help='Directory in which to store results.')
   parser.add_argument('--gtest_filter',
                       help='Use the given gtest_filter, rather than the '
                            'default filter file, if any.')
+  parser.add_argument(
+      '--repeat', help='Number of times to repeat the specified set of tests.')
   parser.add_argument('--no-test-flags', action='store_true',
                       help='Do not add --test-launcher-summary-output and '
                            '--system-log-file flags to the comment.')
@@ -248,7 +217,7 @@ def main():
     args.target_name = os.path.splitext(args.target_name)[0]
 
   # Determine the CPU architecture of the test binary, if not specified.
-  if args.arch == 'detect' and args.target_os == 'fuchsia':
+  if args.arch == 'detect' and args.target_os not in ('android', 'mac', 'win'):
     executable_info = subprocess.check_output(
         ['file', os.path.join(args.out_dir, args.target_name)])
     if 'ARM aarch64' in executable_info:

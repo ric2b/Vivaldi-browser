@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 """Library for defining CI builders.
 
 The `ci_builder` function defined in this module enables defining a CI builder.
@@ -21,6 +25,7 @@ defaults = args.defaults(
     console_view = args.COMPUTE,
     header = None,
     main_console_view = None,
+    cq_mirrors_console_view = None,
     repo = None,
 )
 
@@ -51,31 +56,36 @@ def declare_bucket(milestone_vars):
       refs = [milestone_vars.ref],
   )
 
-  ci.main_console_view(
-      name = milestone_vars.main_console_name,
-      header = '//chromium-header.textpb',
-      repo = 'https://chromium.googlesource.com/chromium/src',
-      refs = [milestone_vars.ref],
-      title = milestone_vars.main_console_title,
-      top_level_ordering = [
-          'chromium',
-          'chromium.win',
-          'chromium.mac',
-          'chromium.linux',
-          'chromium.chromiumos',
-          'chromium.android',
-          'chrome',
-          'chromium.memory',
-          'chromium.dawn',
-          'chromium.gpu',
-          'chromium.fyi',
-          'chromium.android.fyi',
-          'chromium.clang',
-          'chromium.fuzz',
-          'chromium.gpu.fyi',
-          'chromium.swangle',
-      ],
-  )
+  # TODO(gbeaty) Determine what should be in each main console and define it
+  # separately
+  for name, title in (
+      (milestone_vars.main_console_name, milestone_vars.main_console_title),
+      (milestone_vars.cq_mirrors_console_name, milestone_vars.cq_mirrors_console_title)):
+    ci.overview_console_view(
+        name = name,
+        header = '//chromium-header.textpb',
+        repo = 'https://chromium.googlesource.com/chromium/src',
+        refs = [milestone_vars.ref],
+        title = title,
+        top_level_ordering = [
+            'chromium',
+            'chromium.win',
+            'chromium.mac',
+            'chromium.linux',
+            'chromium.chromiumos',
+            'chromium.android',
+            'chrome',
+            'chromium.memory',
+            'chromium.dawn',
+            'chromium.gpu',
+            'chromium.fyi',
+            'chromium.android.fyi',
+            'chromium.clang',
+            'chromium.fuzz',
+            'chromium.gpu.fyi',
+            'chromium.swangle',
+        ],
+    )
 
 
 def set_defaults(milestone_vars, **kwargs):
@@ -105,8 +115,8 @@ def _console_view_ordering_graph_key(console_name):
   return graph.key('@chromium', '', 'console_view_ordering', console_name)
 
 
-def _main_console_view_ordering_graph_key(console_name):
-  return graph.key('@chromium', '', 'main_console_view_ordering', console_name)
+def _overview_console_view_ordering_graph_key(console_name):
+  return graph.key('@chromium', '', 'overview_console_view_ordering', console_name)
 
 
 def _console_view_ordering_impl(ctx, *, console_name, ordering):
@@ -120,15 +130,15 @@ def _console_view_ordering_impl(ctx, *, console_name, ordering):
 _console_view_ordering = lucicfg.rule(impl=_console_view_ordering_impl)
 
 
-def _main_console_view_ordering_impl(ctx, *, console_name, top_level_ordering):
-  key = _main_console_view_ordering_graph_key(console_name)
+def _overview_console_view_ordering_impl(ctx, *, console_name, top_level_ordering):
+  key = _overview_console_view_ordering_graph_key(console_name)
   graph.add_node(key, props = {
       'top_level_ordering': top_level_ordering,
   })
   graph.add_edge(keys.project(), key)
   return graph.keyset(key)
 
-_main_console_view_ordering = lucicfg.rule(impl=_main_console_view_ordering_impl)
+_overview_console_view_ordering = lucicfg.rule(impl=_overview_console_view_ordering_impl)
 
 
 def _category_join(parent, category):
@@ -227,20 +237,20 @@ def _get_console_view_key_fn(console_name):
   return key_fn
 
 
-def _get_main_console_view_key_fn(console_name):
-  """Get the key function for sorting entries of a main_console_view.
+def _get_overview_console_view_key_fn(console_name):
+  """Get the key function for sorting overview_console_view entries.
 
   Returns:
-    The key function used to sort entries of the main_console_view with
-    the given name or None if the name does not refer to a
-    main_console_view.
+    The key function used to sort entries of the overview_console_view
+    with the given name or None if the name does not refer to an
+    overview_console_view.
   """
-  main_console_ordering = graph.node(
-      _main_console_view_ordering_graph_key(console_name))
-  if main_console_ordering == None:
+  overview_console_ordering = graph.node(
+      _overview_console_view_ordering_graph_key(console_name))
+  if overview_console_ordering == None:
     return None
 
-  top_level_ordering = main_console_ordering.props.top_level_ordering
+  top_level_ordering = overview_console_ordering.props.top_level_ordering
 
   def key_fn(b):
     if not b.category:
@@ -267,20 +277,19 @@ def _get_main_console_view_key_fn(console_name):
   return key_fn
 
 
-def _sort_consoles(ctx):
+def _sort_console_entries(ctx):
   milo = ctx.output['luci-milo.cfg']
   consoles = []
   for console in milo.consoles:
     if not console.builders:
       continue
     key_fn = (_get_console_view_key_fn(console.id)
-              or _get_main_console_view_key_fn(console.id))
+              or _get_overview_console_view_key_fn(console.id))
     if key_fn:
       console.builders = sorted(console.builders, key_fn)
     consoles.append(console)
-  milo.consoles = sorted(consoles, lambda c: c.id)
 
-lucicfg.generator(_sort_consoles)
+lucicfg.generator(_sort_console_entries)
 
 
 def ordering(*, short_names=None, categories=None):
@@ -351,15 +360,15 @@ def console_view(*, name, ordering=None, **kwargs):
   )
 
 
-def main_console_view(*, name, top_level_ordering, **kwargs):
-  """Create a main console view.
+def overview_console_view(*, name, top_level_ordering, **kwargs):
+  """Create an overview console view.
 
-  A main console view is a console view that contains a subset of
+  An overview console view is a console view that contains a subset of
   entries from other consoles. The entries from each console will have
   that console's name prepended to the entries' categories and will
   appear in the same order as they do in that console. The ordering of
   entries from different consoles is controlled by the
- `top_level_ordering` parameter.
+  `top_level_ordering` parameter.
 
   Args:
     name - The name of the console view.
@@ -381,7 +390,7 @@ def main_console_view(*, name, top_level_ordering, **kwargs):
       **kwargs
   )
 
-  _main_console_view_ordering(
+  _overview_console_view_ordering(
       console_name = name,
       top_level_ordering = top_level_ordering,
   )
@@ -410,6 +419,7 @@ def ci_builder(
     add_to_console_view=args.DEFAULT,
     console_view=args.DEFAULT,
     main_console_view=args.DEFAULT,
+    cq_mirrors_console_view=args.DEFAULT,
     console_view_entry=None,
     **kwargs):
   """Define a CI builder.
@@ -428,6 +438,11 @@ def ci_builder(
     main_console_view - A string identifying the ID of the main console
       view to add an entry to. Supports a module-level default that
       defaults to None. An entry will be added only if
+      `console_view_entry` is provided. Note that `add_to_console_view`
+      has no effect on creating an entry to the main console view.
+    cq_mirrors_console_view - A string identifying the ID of the CQ
+      mirrors console view to add an entry to. Supports a module-level
+      default that defaults to None. An entry will be added only if
       `console_view_entry` is provided. Note that `add_to_console_view`
       has no effect on creating an entry to the main console view.
     console_view_entry - A structure providing the details of the entry
@@ -468,6 +483,16 @@ def ci_builder(
         luci.console_view_entry(
             builder = builder,
             console_view = main_console_view,
+            category = '|'.join([console_view, console_view_entry.category]),
+            short_name = console_view_entry.short_name,
+        )
+
+      cq_mirrors_console_view = defaults.get_value(
+          'cq_mirrors_console_view', cq_mirrors_console_view)
+      if cq_mirrors_console_view:
+        luci.console_view_entry(
+            builder = builder,
+            console_view = cq_mirrors_console_view,
             category = '|'.join([console_view, console_view_entry.category]),
             short_name = console_view_entry.short_name,
         )
@@ -639,7 +664,7 @@ def fyi_ios_builder(
     **kwargs):
 
   if not caches:
-    caches = [builders.xcode_cache.x11c29]
+    caches = [builders.xcode_cache.x11e146]
 
   return fyi_builder(
       name = name,
@@ -796,15 +821,15 @@ def mac_builder(
 def mac_ios_builder(*,
                     name,
                     caches=None,
-                    executable='recipe:ios/unified_builder_tester',
+                    executable='recipe:chromium',
                     goma_backend=builders.goma.backend.RBE_PROD,
                     properties=None,
                     **kwargs):
   if not caches:
-    caches = [builders.xcode_cache.x11c29]
+    caches = [builders.xcode_cache.x11e146]
   if not properties:
     properties = {
-      'xcode_build_version': '11c29'
+      'xcode_build_version': '11e146'
     }
 
   return mac_builder(
@@ -909,7 +934,7 @@ ci = struct(
     console_view_entry = console_view_entry,
     declare_bucket = declare_bucket,
     defaults = defaults,
-    main_console_view = main_console_view,
+    overview_console_view = overview_console_view,
     ordering = ordering,
     set_defaults = set_defaults,
 

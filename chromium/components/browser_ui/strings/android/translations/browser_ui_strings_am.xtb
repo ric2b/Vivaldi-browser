@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">ቀጣይ</translation>
 <translation id="1242008676835033345"><ph name="WEBSITE_URL" /> ላይ ተካትቷል</translation>
 <translation id="1272079795634619415">አቁም</translation>
+<translation id="1289742167380433257">ውሂብ እንዲቆጥብልዎ የዚህ ገጽ ምስሎች በGoogle እንዲተቡ ተደርገዋል።</translation>
 <translation id="129382876167171263">በድር ጣቢያዎች የተቀመጡ ፋይሎች እዚህ ይታያሉ</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" />፣ <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> ጣቢያ ተክሏል</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">ጣቢያዎች የዙሪያዎ የ3ል ካርታ እንዲፈጥሩ ወይም የካሜራ ቦታን እንዲከታተል ከመፍቀድ በፊት ጠይቅ (የሚመከር)</translation>
 <translation id="2212565012507486665">ኩኪዎችን ፍቀድ</translation>
 <translation id="2289270750774289114">አንድ ጣቢያ በአቅራቢያ ያሉ ብሉቱዝ መሣሪያዎችን ፈልጎ ለማግኘት ሲፈልግ ጠይቅ (የሚመከር)</translation>
+<translation id="2315043854645842844">የደንበኛ ወገን ዕውቅና ማረጋገጫ ምርጫ በስርዓተ-ክወናው አይደገፍም።</translation>
 <translation id="2359808026110333948">ቀጥል</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> ሜባ</translation>
 <translation id="2434158240863470628">ማውረድ ተጠናቅቋል <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">ተቀድቷል</translation>
 <translation id="2822354292072154809">እርግጠኛ ነዎት ሁሉንም የ<ph name="CHOSEN_OBJECT_NAME" /> ጣቢያ ፈቃዶችን ዳግም ማስጀመር ይፈልጋሉ?</translation>
 <translation id="2870560284913253234">ጣቢያ</translation>
+<translation id="2874939134665556319">ቀዳሚ ትራክ</translation>
 <translation id="2910701580606108292">ጣቢያዎች ጥበቃ የሚደረግለትን ይዘትን እንዲያጫውቱ ከመፍቀድ በፊት ጠይቅ</translation>
 <translation id="2913331724188855103">ጣቢያዎች የኩኪ ውሂብ እንዲያስቀምጡ እና እንዲያነቡ ይፍቀዱ (የሚመከር)</translation>
 <translation id="2968755619301702150">የእውቅና ማረጋገጫ መመልከቻ</translation>
 <translation id="300526633675317032">ይህ ሁሉንም <ph name="SIZE_IN_KB" /> የድር ጣቢያ ማከማቻ ያጸዳል።</translation>
+<translation id="301521992641321250">በራስ-ሰር ታግዷል</translation>
 <translation id="3115898365077584848">መረጃ አሳይ</translation>
 <translation id="3123473560110926937">በአንዳንድ ጣቢያዎች ላይ ታግዷል</translation>
 <translation id="3190152372525844641">በ<ph name="BEGIN_LINK" />Android ቅንብሮች<ph name="END_LINK" /> ውስጥ ፍቃዶችን ለChrome ያብሩ።</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">የዳራ ስምረት</translation>
 <translation id="3822502789641063741">የጣቢያ ማከማቻ ይጽዳ?</translation>
 <translation id="385051799172605136">ተመለስ</translation>
+<translation id="3859306556332390985">ወደፊት ፈልግ</translation>
 <translation id="3955193568934677022">ጥበቃ የሚደረግበትን ይዘት እንዲያጫውቱ ለጣቢያዎች ፍቀድ (የሚመከር)</translation>
 <translation id="3987993985790029246">አገናኝ ቅዳ</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">ርዕስ</translation>
 <translation id="4008040567710660924">የተወሰነ ጣቢያ ኩኪዎችን ፍቀድ።</translation>
+<translation id="4046123991198612571">ቀጣይ ትራክ</translation>
 <translation id="4165986682804962316">የጣቢያ ቅንብሮች</translation>
 <translation id="4226663524361240545">ማሳወቂያዎች መሣሪያውን እንዲነዝር ሊያደርጉት ይችላሉ</translation>
 <translation id="4242533952199664413">ቅንብሮችን ክፈት</translation>
 <translation id="4259722352634471385">ዳሰሳ ታግዷል፦ <ph name="URL" /></translation>
 <translation id="4278390842282768270">ተፈቅዷል</translation>
+<translation id="429312253194641664">አንድ ጣቢያ ሚዲያን በማጫወት ላይ ነው</translation>
 <translation id="4433925000917964731">ቀላል ገጹ በGoogle ቀርቧል።</translation>
 <translation id="4434045419905280838">ብቅ-ባዮች እና አቅጣጫ ማዞሮች</translation>
 <translation id="445467742685312942">ጣቢያዎች የተጠበቀ ይዘትን እንዲያጫውት ይፍቀዱ</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">ሁሉንም የመሣሪያ ፈቃዶች ይሻሩ</translation>
 <translation id="4964199952259983386">Chrome ኤአርን እንዲጠቀም ለማስቻል፣ እንዲሁም በ<ph name="BEGIN_LINK" />የAndroid ቅንብሮች<ph name="END_LINK" /> ውስጥ ካሜራውን ያብሩ።</translation>
 <translation id="497421865427891073">ወደ ፊት ሂድ</translation>
+<translation id="4996978546172906250">ያጋሩ በ</translation>
 <translation id="5039804452771397117">ፍቀድ</translation>
 <translation id="5048398596102334565">ጣቢያዎች የእንቅስቃሴ ዳሳሾችን እንዲደርሱባቸው ይፍቀዱ (የሚመከር)</translation>
 <translation id="5063480226653192405">አጠቃቀም</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">አጽዳ</translation>
 <translation id="6697925417670533197">ንቁ ውርዶች</translation>
 <translation id="6746124502594467657">ወደታች አውርድ</translation>
+<translation id="6766622839693428701">ለመዝጋት ወደታች ያንሸራትቱ።</translation>
 <translation id="6782111308708962316">የሦስተኛ ወገን ድር ጣቢያዎች የኩኪ ውሂብን እንዳያስቀምጡ እና እንዳያነብቡ ከልክል</translation>
+<translation id="6790428901817661496">አጫውት</translation>
 <translation id="6818926723028410516">ንጥሎችን ይምረጡ</translation>
 <translation id="6864395892908308021">ይህ መሣሪያ NFCን ማንበብ አይችልም</translation>
 <translation id="6910211073230771657">ተሰርዟል</translation>
@@ -192,11 +202,12 @@
 <translation id="7649070708921625228">እገዛ</translation>
 <translation id="7658239707568436148">ይቅር</translation>
 <translation id="7781829728241885113">ትናንት</translation>
-<translation id="7791543448312431591">አክል</translation>
+<translation id="7791543448312431591">ያክሉ</translation>
 <translation id="780301667611848630">አይ፣ አመሰግናለሁ</translation>
 <translation id="7804248752222191302">አንድ ጣቢያ ካሜራዎን እየተጠቀመ ነው</translation>
 <translation id="7817023149356982970">ከዚህ ጣቢያ ዘግተው እንዲወጡ ይደረጋሉ።</translation>
 <translation id="7828557259026017104">ኩኪዎች እርስዎ በሚጎበኟቸው ድር ጣቢያዎች የሚፈጠሩ ፋይሎች ናቸው። ጣቢያዎች የእርስዎን ምርጫዎች ለማስታወስ ይጠቀሙባቸዋል። የሦስተኛ ወገን ኩኪዎች በሌሎች ጣቢያዎች የሚፈጠሩ ናቸው። እነዚህ ጣቢያዎች እንደ ማስታወቂያዎች ወይም ምስሎች ያሉ እርስዎ በሚጎበኙት ድረ-ገጽ ላይ ያለ ይዘትን በባለቤትነት የያዙ ናቸው።</translation>
+<translation id="7835852323729233924">ሚዲያን በማጫወት ላይ</translation>
 <translation id="7846076177841592234">ምርጫ ሰርዝ</translation>
 <translation id="7846621471902887024">ከሁሉም ጣቢያዎች ዘግተው እንዲወጡ ይደረጋሉ።</translation>
 <translation id="7882806643839505685">ለተወሰነ ጣቢያ ድምጽ ፍቀድ።</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">እርግጠኛ ነዎት ለዚህ ጣቢያ ኩኪዎችንም ጨምሮ ሁሉንም አካባቢያዊ ውሂብ ማጽዳት እና ሁሉም ፍቃዶችን ዳግም ማስጀመር ይፈልጋሉ?</translation>
 <translation id="8007176423574883786">ለዚህ መሣሪያ ጠፍቷል</translation>
 <translation id="802154636333426148">ማውረድ አልተሳካም</translation>
+<translation id="8068648041423924542">የዕውቅና ማረጋገጫን መምረጥ አልተቻለም።</translation>
 <translation id="8087000398470557479">ይህ ይዘት ከ<ph name="DOMAIN_NAME" /> የመጣ ነው፣ የተላከው በGoogle ነው።</translation>
 <translation id="8116925261070264013">ድምፀ ከል ተደርጓል</translation>
 <translation id="8131740175452115882">አረጋግጥ</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">አንድ ጣቢያ የእርስዎን ካሜራ እና ማይክሮፎን እየተጠቀመ ነው</translation>
 <translation id="8380167699614421159">ይህ ጣቢያ ረባሽ ወይም አሳሳች ማስታወቂያዎችን ያሳያል</translation>
 <translation id="8394832520002899662">ወደ ጣቢያው ለመመለስ መታ ያድርጉ</translation>
+<translation id="8425213833346101688">ለውጥ</translation>
+<translation id="8441146129660941386">ወደኋላ ፈልግ</translation>
 <translation id="8447861592752582886">የመሣሪያ ፈቃድ ሻር</translation>
 <translation id="8463851957836045671">ጣቢያ ፈጣን ነው</translation>
 <translation id="851751545965956758">ጣቢያዎች ከመሣሪያዎች ጋር እንዳይገናኙ አግድ</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">የአንድ የተወሰነ ጣቢያ ኩኪዎችን ያግዱ።</translation>
 <translation id="8959122750345127698">ዳሰሳ ሊደረስበት አይችልም፦ <ph name="URL" /></translation>
 <translation id="9019902583201351841">በእርስዎ ወላጆች የሚቀናበር</translation>
+<translation id="9074739597929991885">ብሉቱዝ</translation>
 <translation id="945632385593298557">የእርስዎን ማይክሮፎን ይድረሱ</translation>
 <translation id="965817943346481315">ጣቢያው ረባሽ ወይም አሳሳች ማስታወቂያዎችን የሚያሳይ ከሆነ ማገድ (የሚመከር)</translation>
 </translationbundle>

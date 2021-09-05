@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CHROME_INSTALLER_SETUP_SETUP_RESOURCE_H_
+#define CHROME_INSTALLER_SETUP_SETUP_RESOURCE_H_
+
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by setup.rc
 //
-#define IDI_SETUP                       101
+#define IDI_SETUP 101
+
 #define IDD_DIALOG1                     129
 #define IDB_BITMAP_BKGND                130
 #define IDB_BITMAP_BKGND_125            131
@@ -36,9 +40,11 @@
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        103
-#define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1001
-#define _APS_NEXT_SYMED_VALUE           101
+#define _APS_NEXT_RESOURCE_VALUE 103
+#define _APS_NEXT_COMMAND_VALUE 40001
+#define _APS_NEXT_CONTROL_VALUE 1001
+#define _APS_NEXT_SYMED_VALUE 101
 #endif
 #endif
+
+#endif  // CHROME_INSTALLER_SETUP_SETUP_RESOURCE_H_

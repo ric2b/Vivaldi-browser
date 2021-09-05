@@ -4,10 +4,13 @@
 
 #include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_dialog.h"
 
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/window_properties.h"
 #include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "ui/base/ui_base_types.h"
@@ -75,6 +78,10 @@ bool CrostiniInstallerDialog::ShouldCloseDialogOnEscape() const {
 void CrostiniInstallerDialog::AdjustWidgetInitParams(
     views::Widget::InitParams* params) {
   params->z_order = ui::ZOrderLevel::kNormal;
+
+  const ash::ShelfID shelf_id(crostini::kCrostiniInstallerShelfId);
+  params->init_properties_container.SetProperty(ash::kShelfIDKey,
+                                                shelf_id.Serialize());
 }
 
 bool CrostiniInstallerDialog::CanCloseDialog() const {
@@ -82,7 +89,14 @@ bool CrostiniInstallerDialog::CanCloseDialog() const {
   // closing logic, we should find a more general solution.
 
   // Disallow closing without WebUI consent.
-  return installer_ui_ == nullptr || installer_ui_->can_close();
+  //
+  // Note that while the function name |CanCloseDialog| does not indicate the
+  // intend to close the dialog, but it is indeed only called when we are
+  // closing it, so requesting closing the page here is appropriate. One might
+  // think we should actually do all of this in |OnDialogCloseRequested|
+  // instead, but unfortunately that function is called after the web content is
+  // closed.
+  return installer_ui_ == nullptr || installer_ui_->RequestClosePage();
 }
 
 void CrostiniInstallerDialog::OnDialogShown(content::WebUI* webui) {

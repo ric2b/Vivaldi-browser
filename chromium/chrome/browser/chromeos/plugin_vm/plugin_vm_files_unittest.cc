@@ -106,6 +106,7 @@ TEST_F(PluginVmFilesTest, LaunchPluginVmApp) {
               })));
   ash::ShelfModel shelf_model;
   ChromeLauncherController chrome_launcher_controller(&profile_, &shelf_model);
+  chrome_launcher_controller.Init();
 
   // Ensure that Plugin VM is allowed.
   test_helper.AllowPluginVm();
@@ -154,15 +155,15 @@ TEST_F(PluginVmFilesTest, LaunchPluginVmApp) {
 
   auto launcher_item_controller =
       std::make_unique<AppWindowLauncherItemController>(
-          ash::ShelfID(kPluginVmAppId));
+          ash::ShelfID(kPluginVmShelfAppId));
   ui::test::MockBaseWindow mock_window;
   launcher_item_controller->AddWindow(&mock_window);
-  shelf_model.SetShelfItemDelegate(ash::ShelfID(kPluginVmAppId),
+  shelf_model.SetShelfItemDelegate(ash::ShelfID(kPluginVmShelfAppId),
                                    std::move(launcher_item_controller));
   vm_tools::cicerone::LaunchContainerApplicationResponse response;
   response.set_success(true);
   EXPECT_CALL(mock_window, Activate());
-  EXPECT_CALL(app_launched_callback, Run(true, ""));
+  EXPECT_CALL(app_launched_callback, Run(LaunchPluginVmAppResult::SUCCESS, ""));
   std::move(cicerone_response_callback).Run(std::move(response));
 }
 

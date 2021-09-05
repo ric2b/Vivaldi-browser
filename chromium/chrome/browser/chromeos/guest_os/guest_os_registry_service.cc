@@ -20,7 +20,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_pref_names.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
@@ -44,6 +46,9 @@ constexpr char kCrostiniIconFolder[] = "crostini.icons";
 
 constexpr char kCrostiniAppsInstalledHistogram[] =
     "Crostini.AppsInstalledAtLogin";
+
+constexpr char kPluginVmAppsInstalledHistogram[] =
+    "PluginVm.AppsInstalledAtLogin";
 
 std::string GenerateAppId(const std::string& desktop_file_id,
                           const std::string& vm_name,
@@ -181,7 +186,7 @@ bool EqualsExcludingTimestamps(const base::Value& left,
   return left_iter == left_items.end() && right_iter == right_items.end();
 }
 
-bool InstallIconFromFileThread(const base::FilePath& icon_path,
+void InstallIconFromFileThread(const base::FilePath& icon_path,
                                const std::string& content_png) {
   DCHECK(!content_png.empty());
 
@@ -192,13 +197,10 @@ bool InstallIconFromFileThread(const base::FilePath& icon_path,
   if (wrote != static_cast<int>(content_png.size())) {
     VLOG(2) << "Failed to write Crostini icon file: "
             << icon_path.MaybeAsASCII();
-    if (!base::DeleteFile(icon_path, false)) {
+    if (!base::DeleteFile(icon_path)) {
       VLOG(2) << "Couldn't delete broken icon file" << icon_path.MaybeAsASCII();
     }
-    return false;
   }
-
-  return true;
 }
 
 void DeleteIconFolderFromFileThread(const base::FilePath& path) {
@@ -213,6 +215,10 @@ static std::string Join(const List& list);
 
 static std::string ToString(bool b) {
   return b ? "true" : "false";
+}
+
+static std::string ToString(int i) {
+  return base::NumberToString(i);
 }
 
 static std::string ToString(const std::string& string) {
@@ -261,6 +267,7 @@ static std::string ToString(const vm_tools::apps::App& app) {
 
 static std::string ToString(const vm_tools::apps::ApplicationList& list) {
   return "{apps: " + Join(list.apps()) +
+         ", vm_type: " + ToString(list.vm_type()) +
          ", vm_name: " + ToString(list.vm_name()) +
          ", container_name: " + ToString(list.container_name()) +
          ", owner_id: " + ToString(list.owner_id()) + "}";
@@ -553,23 +560,44 @@ void GuestOsRegistryService::RecordStartupMetrics() {
   const base::DictionaryValue* apps =
       prefs_->GetDictionary(guest_os::prefs::kGuestOsRegistry);
 
-  if (!crostini::CrostiniFeatures::Get()->IsEnabled(profile_))
+  bool crostini_enabled =
+      crostini::CrostiniFeatures::Get()->IsEnabled(profile_);
+  bool plugin_vm_enabled = plugin_vm::IsPluginVmEnabled(profile_);
+  if (!crostini_enabled && !plugin_vm_enabled)
     return;
 
-  size_t num_apps = 0;
+  int num_crostini_apps = 0;
+  int num_plugin_vm_apps = 0;
 
   for (const auto& item : apps->DictItems()) {
     if (item.first == crostini::GetTerminalId())
       continue;
 
-    const base::Value* no_display = item.second.FindKeyOfType(
-        guest_os::prefs::kAppNoDisplayKey, base::Value::Type::BOOLEAN);
-    if (no_display && no_display->GetBool())
+    base::Optional<bool> no_display =
+        item.second.FindBoolKey(guest_os::prefs::kAppNoDisplayKey);
+    if (no_display && no_display.value())
       continue;
 
-    num_apps++;
+    base::Optional<int> vm_type =
+        item.second.FindIntKey(guest_os::prefs::kAppVmTypeKey);
+    if (!vm_type ||
+        vm_type ==
+            GuestOsRegistryService::VmType::ApplicationList_VmType_TERMINA) {
+      num_crostini_apps++;
+    } else if (vm_type == GuestOsRegistryService::VmType::
+                              ApplicationList_VmType_PLUGIN_VM) {
+      num_plugin_vm_apps++;
+    } else {
+      NOTREACHED();
+    }
   }
-  UMA_HISTOGRAM_COUNTS_1000(kCrostiniAppsInstalledHistogram, num_apps);
+
+  if (crostini_enabled)
+    UMA_HISTOGRAM_COUNTS_1000(kCrostiniAppsInstalledHistogram,
+                              num_crostini_apps);
+  if (plugin_vm_enabled)
+    UMA_HISTOGRAM_COUNTS_1000(kPluginVmAppsInstalledHistogram,
+                              num_plugin_vm_apps);
 }
 
 base::FilePath GuestOsRegistryService::GetAppPath(
@@ -606,27 +634,39 @@ base::FilePath GuestOsRegistryService::GetIconPath(
   }
 }
 
-void GuestOsRegistryService::MaybeRequestIcon(const std::string& app_id,
-                                              ui::ScaleFactor scale_factor) {
-  // First check to see if this request is already in process or not.
-  const auto active_iter = active_icon_requests_.find(app_id);
-  if (active_iter != active_icon_requests_.end()) {
-    if (active_iter->second & (1 << scale_factor)) {
-      // Icon request already in progress.
-      return;
-    }
+void GuestOsRegistryService::RequestIcon(
+    const std::string& app_id,
+    ui::ScaleFactor scale_factor,
+    base::OnceCallback<void(std::string)> callback) {
+  if (!GetRegistration(app_id)) {
+    // App isn't registered (e.g. a GUI app launched from within Crostini
+    // that doesn't have a .desktop file). Can't get an icon for that case so
+    // return an empty icon.
+    std::move(callback).Run({});
+    return;
   }
+  // First check to see if this request is in the retry list. If so return
+  // immediately with an empty icon.
   const auto retry_iter = retry_icon_requests_.find(app_id);
   if (retry_iter != retry_icon_requests_.end()) {
     if (retry_iter->second & (1 << scale_factor)) {
       // Icon request already setup to be retried when we are active.
+      std::move(callback).Run({});
       return;
     }
   }
-  RequestIcon(app_id, scale_factor);
+
+  // Coalesce calls to the container.
+  auto& callbacks = active_icon_requests_[{app_id, scale_factor}];
+  callbacks.emplace_back(std::move(callback));
+  if (callbacks.size() > 1) {
+    return;
+  }
+  RequestContainerAppIcon(app_id, scale_factor);
 }
 
 void GuestOsRegistryService::ClearApplicationList(
+    VmType vm_type,
     const std::string& vm_name,
     const std::string& container_name) {
   std::vector<std::string> removed_apps;
@@ -638,12 +678,16 @@ void GuestOsRegistryService::ClearApplicationList(
     for (const auto& item : apps->DictItems()) {
       if (item.first == crostini::GetTerminalId())
         continue;
-      if (item.second.FindKey(guest_os::prefs::kAppVmNameKey)->GetString() ==
-              vm_name &&
-          (container_name.empty() ||
-           item.second.FindKey(guest_os::prefs::kAppContainerNameKey)
-                   ->GetString() == container_name))
-        removed_apps.push_back(item.first);
+      Registration registration(&item.second, /*is_terminal_app=*/false);
+      if (vm_type != registration.VmType())
+        continue;
+      if (vm_name != registration.VmName())
+        continue;
+      if (!container_name.empty() &&
+          container_name != registration.ContainerName()) {
+        continue;
+      }
+      removed_apps.push_back(item.first);
     }
     for (const std::string& removed_app : removed_apps) {
       RemoveAppData(removed_app);
@@ -653,6 +697,7 @@ void GuestOsRegistryService::ClearApplicationList(
 
   if (removed_apps.empty())
     return;
+
   std::vector<std::string> updated_apps;
   std::vector<std::string> inserted_apps;
   for (Observer& obs : observers_)
@@ -759,22 +804,21 @@ void GuestOsRegistryService::UpdateApplicationList(
        retry_iter != retry_icon_requests_.end(); ++retry_iter) {
     for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors()) {
       if (retry_iter->second & (1 << scale_factor)) {
-        RequestIcon(retry_iter->first, scale_factor);
+        RequestContainerAppIcon(retry_iter->first, scale_factor);
       }
     }
   }
   retry_icon_requests_.clear();
 
-  if (!updated_apps.empty() || !removed_apps.empty() ||
-      !inserted_apps.empty()) {
-    for (Observer& obs : observers_)
-      obs.OnRegistryUpdated(this, updated_apps, removed_apps, inserted_apps);
-  }
+  if (updated_apps.empty() && removed_apps.empty() && inserted_apps.empty())
+    return;
+
+  for (Observer& obs : observers_)
+    obs.OnRegistryUpdated(this, updated_apps, removed_apps, inserted_apps);
 }
 
 void GuestOsRegistryService::RemoveAppData(const std::string& app_id) {
   // Remove any pending requests we have for this icon.
-  active_icon_requests_.erase(app_id);
   retry_icon_requests_.erase(app_id);
 
   // Remove local data on filesystem for the icons.
@@ -831,19 +875,18 @@ void GuestOsRegistryService::SetAppScaled(const std::string& app_id,
   app->SetKey(guest_os::prefs::kAppScaledKey, base::Value(scaled));
 }
 
-void GuestOsRegistryService::RequestIcon(const std::string& app_id,
-                                         ui::ScaleFactor scale_factor) {
+void GuestOsRegistryService::RequestContainerAppIcon(
+    const std::string& app_id,
+    ui::ScaleFactor scale_factor) {
   // Ignore requests for app_id that isn't registered.
   base::Optional<GuestOsRegistryService::Registration> registration =
       GetRegistration(app_id);
+  DCHECK(registration);
   if (!registration) {
-    VLOG(2) << "Request to load icon for non-registered app: " << app_id;
+    LOG(ERROR) << "Request to load icon for non-registered app: " << app_id;
     return;
   }
-
-  // Mark that we're doing a request for this icon so we don't duplicate
-  // requests.
-  active_icon_requests_[app_id] |= (1 << scale_factor);
+  VLOG(1) << "Request to load icon for app: " << app_id;
 
   // Now make the call to request the actual icon.
   std::vector<std::string> desktop_file_ids{registration->DesktopFileId()};
@@ -867,8 +910,10 @@ void GuestOsRegistryService::RequestIcon(const std::string& app_id,
   }
 
   crostini::CrostiniManager::GetForProfile(profile_)->GetContainerAppIcons(
-      registration->VmName(), registration->ContainerName(), desktop_file_ids,
-      ash::AppListConfig::instance().grid_icon_dimension(), icon_scale,
+      crostini::ContainerId(registration->VmName(),
+                            registration->ContainerName()),
+      desktop_file_ids, ash::AppListConfig::instance().grid_icon_dimension(),
+      icon_scale,
       base::BindOnce(&GuestOsRegistryService::OnContainerAppIcon,
                      weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));
 }
@@ -878,31 +923,34 @@ void GuestOsRegistryService::OnContainerAppIcon(
     ui::ScaleFactor scale_factor,
     bool success,
     const std::vector<crostini::Icon>& icons) {
+  std::string icon_content;
   if (!success) {
+    VLOG(1) << "Failed to load icon for app: " << app_id;
     // Add this to the list of retryable icon requests so we redo this when
     // we get feedback from the container that it's available.
     retry_icon_requests_[app_id] |= (1 << scale_factor);
-    return;
+  } else if (icons.empty()) {
+    VLOG(1) << "No icon in container for app: " << app_id;
+  } else {
+    VLOG(1) << "Found icon in container for app: " << app_id;
+    // Now install the icon that we received.
+    const base::FilePath icon_path = GetIconPath(app_id, scale_factor);
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::BindOnce(&InstallIconFromFileThread, icon_path,
+                       icons[0].content));
+    icon_content = std::move(icons[0].content);
   }
-  if (icons.empty())
-    return;
-  // Now install the icon that we received.
-  const base::FilePath icon_path = GetIconPath(app_id, scale_factor);
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&InstallIconFromFileThread, icon_path, icons[0].content),
-      base::BindOnce(&GuestOsRegistryService::OnIconInstalled,
-                     weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));
-}
 
-void GuestOsRegistryService::OnIconInstalled(const std::string& app_id,
-                                             ui::ScaleFactor scale_factor,
-                                             bool success) {
-  if (!success)
-    return;
-
-  for (Observer& obs : observers_)
-    obs.OnAppIconUpdated(app_id, scale_factor);
+  // Invoke all active icon request callbacks with the icon.
+  auto key = std::pair<std::string, ui::ScaleFactor>(app_id, scale_factor);
+  auto& callbacks = active_icon_requests_[key];
+  VLOG(1) << "Invoking icon callbacks for app: " << app_id
+          << ", num callbacks: " << callbacks.size();
+  for (auto& callback : callbacks) {
+    std::move(callback).Run(icon_content);
+  }
+  active_icon_requests_.erase(key);
 }
 
 void GuestOsRegistryService::MigrateTerminal() const {

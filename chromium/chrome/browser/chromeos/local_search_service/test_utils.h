@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,22 +10,36 @@
 #include <utility>
 #include <vector>
 
-#include "chrome/browser/chromeos/local_search_service/index.h"
+#include "base/strings/string16.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chromeos/local_search_service/shared_structs.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace local_search_service {
 
 // Creates test data to be registered to the index. |input| is a map from
-// id to search-tags.
+// id to contents (id and content).
 std::vector<Data> CreateTestData(
-    const std::map<std::string, std::vector<std::string>>& input);
+    const std::map<std::string,
+                   std::vector<std::pair<std::string, std::string>>>& input);
 
-// Finds item for |query| from |index| and checks their ids are those in
-// |expected_result_ids|.
-void FindAndCheck(Index* index,
-                  std::string query,
-                  int32_t max_results,
-                  ResponseStatus expected_status,
-                  const std::vector<std::string>& expected_result_ids);
+// Similar to above, but takes a weight for each item.
+std::vector<Data> CreateTestData(
+    const std::map<std::string,
+                   std::vector<std::tuple<std::string, std::string, float>>>&
+        input);
+
+// Checks |result|'s id, score and number of matching positions are expected.
+void CheckResult(const Result& result,
+                 const std::string& expected_id,
+                 float expected_score,
+                 size_t expected_number_positions);
+
+float TfIdfScore(size_t num_docs,
+                 size_t num_docs_with_term,
+                 float weighted_num_term_occurrence_in_doc,
+                 size_t doc_length);
+
 }  // namespace local_search_service
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOCAL_SEARCH_SERVICE_TEST_UTILS_H_

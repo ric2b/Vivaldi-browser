@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Продолжить</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Провести диагностику сети<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Оповещения</translation>
+<translation id="2501278716633472235">Вернуться</translation>
 <translation id="2539524384386349900">Определять</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> отправил неверный ответ.</translation>
 <translation id="2586657967955657006">Буфер обмена</translation>
@@ -69,6 +70,7 @@
 <translation id="3226128629678568754">Чтобы повторно ввести данные, необходимые для загрузки страницы, обновите страницу.</translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3234666976984236645">Всегда определять важный контент на этом сайте</translation>
+<translation id="3308738399950580893">реклама</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> недоступен.</translation>
 <translation id="3427092606871434483">Разрешать (по умолчанию)</translation>
 <translation id="3447661539832366887">Владелец этого устройства отключил игру с динозавром.</translation>
@@ -84,6 +86,7 @@
 <translation id="3681007416295224113">Данные сертификата</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Проверьте настройки прокси-сервера, брандмауэра и DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Если вы используете прокси-сервер...</translation>
+<translation id="3894751534882749287">Если вы всё равно хотите просмотреть эту страницу, измените настройки блокировки или нажмите кнопку Разрешить</translation>
 <translation id="3950820424414687140">Вход</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> заблокирован</translation>
 <translation id="3987940399970879459">Менее 1 МБ</translation>
@@ -110,6 +113,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Соединение прервано</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запустить средства диагностики сети Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Блокировщик слежки</translation>
 <translation id="4744603770635761495">Путь к исполняемому файлу</translation>
 <translation id="4750917950439032686">Информация, которую вы сообщаете этому сайту (например, пароли и номера банковских карт), защищена.</translation>
 <translation id="4764776831041365478">Веб-страница по адресу <ph name="URL" />, возможно, временно недоступна или перемещена по новому адресу.</translation>
@@ -172,10 +176,12 @@
 <translation id="7090678807593890770">Выполните поиск по запросу <ph name="LINK" /> в Google</translation>
 <translation id="7108819624672055576">Разрешено расширением</translation>
 <translation id="7111012039238467737">(действительный)</translation>
+<translation id="7113310725918019676">Разрешить <ph name="BLOCKED_TYPE" /> с сервера <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не соответствует стандартам безопасности.</translation>
 <translation id="7219179957768738017">В этом подключении используется протокол <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Отменить доступ</translation>
 <translation id="7353601530677266744">Командная строка</translation>
+<translation id="7364115444476960850">Страница, к которой вы обратились, была заблокирована <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Путь к профилю</translation>
 <translation id="7445762425076701745">Идентификация сервера, к которому вы подключились, не может быть полностью подтверждена. Вы подключились к серверу, используя название, которое действительно только в вашей сети; владелец этого сервера не может быть проверен или подтверждён внешним центром сертификации. Так как некоторые центры сертификации могут выдавать сертификаты для подобных названий, отсутствуют гарантии в том, что это действительно нужный вам сайт, а не сайт злоумышленника.</translation>
 <translation id="7455133967321480974">Использовать глобально (блокировать)</translation>
@@ -199,6 +205,7 @@
 <translation id="8037357227543935929">Спрашивать (по умолчанию)</translation>
 <translation id="8041940743680923270">Использовать глобально (спрашивать)</translation>
 <translation id="808894953321890993">Сменить пароль</translation>
+<translation id="8119307142152921512">слежка и реклама</translation>
 <translation id="8142868475871995937">Чтобы просмотреть адреса в чёрном списке, и другие правила, заданные системным администратором, перейдите по адресу: &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="8149426793427495338">Ваш компьютер перешёл в спящий режим.</translation>
 <translation id="8150722005171944719">Файл по адресу <ph name="URL" /> недоступен. Возможно, он был удалён или перемещён, либо права доступа к нему ограничены.</translation>
@@ -216,6 +223,7 @@
 <translation id="8703575177326907206">Соединение с <ph name="DOMAIN" /> не зашифровано.</translation>
 <translation id="8740359287975076522">Не удается найти &lt;abbr id="dnsDefinition"&gt;DNS-адрес&lt;/abbr&gt; сайта <ph name="HOST_NAME" />. Выполняется диагностика.</translation>
 <translation id="8820817407110198400">Закладки</translation>
+<translation id="8940028675168378100">Блокировано <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Прокси-сервер <ph name="DOMAIN" /> запрашивает имя пользователя и пароль.</translation>
 <translation id="9008201768610948239">Пропустить</translation>
 <translation id="9011424611726486705">Открыть настройки сайта</translation>
@@ -223,6 +231,7 @@
 <translation id="9039213469156557790">Обратите внимание, что на странице обнаружен небезопасный контент. Возможно, при передаче ресурсы просматриваются третьими лицами, а злоумышленники могут получить доступ к странице и изменить её поведение.</translation>
 <translation id="9069693763241529744">Заблокировано расширением</translation>
 <translation id="9169664750068251925">Всегда блокировать на этом сайте</translation>
+<translation id="9180553614777056266">Блокировщик рекламы</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> использует неподдерживаемый протокол.</translation>
 <translation id="9219103736887031265">Картинки</translation>
 <translation id="936602727769022409">Вы можете потерять доступ к учётной записи Google. Рекомендуем сменить пароль. После этого потребуется снова войти в учётную запись.</translation>

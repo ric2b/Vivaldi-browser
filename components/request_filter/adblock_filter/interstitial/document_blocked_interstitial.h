@@ -1,0 +1,64 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_INTERSTITIAL_DOCUMENT_BLOCKED_INTERSTITIAL_H_
+#define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_INTERSTITIAL_DOCUMENT_BLOCKED_INTERSTITIAL_H_
+
+#include <memory>
+#include <string>
+
+#include "base/macros.h"
+#include "base/time/time.h"
+#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
+
+class GURL;
+
+namespace adblock_filter {
+// This class is responsible for showing/hiding the interstitial page that
+// occurs when a document gets blocked by the ad/tracker blocker
+class DocumentBlockedInterstitial
+    : public security_interstitials::SecurityInterstitialPage {
+ public:
+  // Interstitial type, used in tests.
+  static const security_interstitials::SecurityInterstitialPage::TypeID
+      kTypeForTesting;
+
+  DocumentBlockedInterstitial(
+      content::WebContents* web_contents,
+      const GURL& request_url,
+      RuleGroup blocking_group,
+      std::unique_ptr<
+          security_interstitials::SecurityInterstitialControllerClient>
+          controller_client);
+
+  ~DocumentBlockedInterstitial() override;
+
+  // SecurityInterstitialPage method:
+  security_interstitials::SecurityInterstitialPage::TypeID GetTypeForTesting()
+      override;
+
+ protected:
+  // SecurityInterstitialPage implementation:
+  void CommandReceived(const std::string& command) override;
+  bool ShouldCreateNewNavigation() const override;
+  void PopulateInterstitialStrings(
+      base::DictionaryValue* load_time_data) override;
+  void OnInterstitialClosing() override;
+  bool ShouldDisplayURL() const override;
+  int GetHTMLTemplateId() override;
+
+ private:
+  friend class LookalikeUrlNavigationThrottleBrowserTest;
+
+  // Values added to get our shared interstitial HTML to play nice.
+  void PopulateStringsForSharedHTML(base::DictionaryValue* load_time_data);
+
+  RuleGroup blocking_group_;
+
+  DISALLOW_COPY_AND_ASSIGN(DocumentBlockedInterstitial);
+};
+}  // namespace adblock_filter
+
+#endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_INTERSTITIAL_DOCUMENT_BLOCKED_INTERSTITIAL_H_

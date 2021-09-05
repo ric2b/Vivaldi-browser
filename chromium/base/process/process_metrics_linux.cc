@@ -18,6 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/process/internal_linux.h"
 #include "base/process/process_metrics_iocounters.h"
@@ -60,13 +61,9 @@ bool ReadProcFileToTrimmedStringPairs(pid_t pid,
                                       StringPiece filename,
                                       StringPairs* key_value_pairs) {
   std::string status_data;
-  {
-    // Synchronously reading files in /proc does not hit the disk.
-    ThreadRestrictions::ScopedAllowIO allow_io;
-    FilePath status_file = internal::GetProcPidDir(pid).Append(filename);
-    if (!ReadFileToString(status_file, &status_data))
-      return false;
-  }
+  FilePath status_file = internal::GetProcPidDir(pid).Append(filename);
+  if (!internal::ReadProcFile(status_file, &status_data))
+    return false;
   SplitStringIntoKeyValuePairs(status_data, ':', '\n', key_value_pairs);
   TrimKeyValuePairs(key_value_pairs);
   return true;
@@ -130,6 +127,13 @@ bool ReadProcStatusAndGetFieldAsUint64(pid_t pid,
 }
 #endif  // defined(OS_LINUX) || defined(OS_AIX)
 
+// Get the total CPU from a proc stat buffer.  Return value is number of jiffies
+// on success or 0 if parsing failed.
+int64_t ParseTotalCPUTimeFromStats(const std::vector<std::string>& proc_stats) {
+  return internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_UTIME) +
+         internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_STIME);
+}
+
 // Get the total CPU of a single process.  Return value is number of jiffies
 // on success or -1 on error.
 int64_t GetProcessCPU(pid_t pid) {
@@ -140,11 +144,7 @@ int64_t GetProcessCPU(pid_t pid) {
     return -1;
   }
 
-  int64_t total_cpu =
-      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_UTIME) +
-      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_STIME);
-
-  return total_cpu;
+  return ParseTotalCPUTimeFromStats(proc_stats);
 }
 
 #if defined(OS_CHROMEOS)
@@ -175,7 +175,7 @@ void ReadChromeOSGraphicsMemory(SystemMemoryInfoKB* meminfo) {
   // Incorporate Mali graphics memory if present.
   FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
   std::string mali_memory_data;
-  if (ReadFileToString(mali_memory_file, &mali_memory_data)) {
+  if (ReadFileToStringNonBlocking(mali_memory_file, &mali_memory_data)) {
     long long mali_size = -1;
     int num_res = sscanf(mali_memory_data.c_str(), "%lld bytes", &mali_size);
     if (num_res == 1)
@@ -200,6 +200,43 @@ size_t ProcessMetrics::GetResidentSetSize() const {
 
 TimeDelta ProcessMetrics::GetCumulativeCPUUsage() {
   return internal::ClockTicksToTimeDelta(GetProcessCPU(process_));
+}
+
+bool ProcessMetrics::GetCumulativeCPUUsagePerThread(
+    CPUUsagePerThread& cpu_per_thread) {
+  cpu_per_thread.clear();
+
+  // Iterate through the different threads tracked in /proc/<pid>/task.
+  FilePath fd_path = internal::GetProcPidDir(process_).Append("task");
+
+  DirReaderPosix dir_reader(fd_path.value().c_str());
+  if (!dir_reader.IsValid())
+    return false;
+
+  for (; dir_reader.Next();) {
+    const char* tid_str = dir_reader.name();
+    if (strcmp(tid_str, ".") == 0 || strcmp(tid_str, "..") == 0)
+      continue;
+
+    PlatformThreadId tid;
+    if (!StringToInt(tid_str, &tid))
+      continue;
+
+    FilePath thread_stat_path = fd_path.Append(tid_str).Append("stat");
+
+    std::string buffer;
+    std::vector<std::string> proc_stats;
+    if (!internal::ReadProcFile(thread_stat_path, &buffer) ||
+        !internal::ParseProcStats(buffer, &proc_stats)) {
+      continue;
+    }
+
+    TimeDelta thread_time =
+        internal::ClockTicksToTimeDelta(ParseTotalCPUTimeFromStats(proc_stats));
+    cpu_per_thread.emplace_back(tid, thread_time);
+  }
+
+  return !cpu_per_thread.empty();
 }
 
 // For the /proc/self/io file to exist, the Linux kernel must have
@@ -280,7 +317,7 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
   FilePath fd_path = internal::GetProcPidDir(process_).Append("limits");
 
   std::string limits_contents;
-  if (!ReadFileToString(fd_path, &limits_contents))
+  if (!ReadFileToStringNonBlocking(fd_path, &limits_contents))
     return -1;
 
   for (const auto& line : SplitStringPiece(
@@ -556,7 +593,7 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   // Used memory is: total - free - buffers - caches
   FilePath meminfo_file("/proc/meminfo");
   std::string meminfo_data;
-  if (!ReadFileToString(meminfo_file, &meminfo_data)) {
+  if (!ReadFileToStringNonBlocking(meminfo_file, &meminfo_data)) {
     DLOG(WARNING) << "Failed to open " << meminfo_file.value();
     return false;
   }
@@ -587,7 +624,7 @@ bool GetVmStatInfo(VmStatInfo* vmstat) {
 
   FilePath vmstat_file("/proc/vmstat");
   std::string vmstat_data;
-  if (!ReadFileToString(vmstat_file, &vmstat_data)) {
+  if (!ReadFileToStringNonBlocking(vmstat_file, &vmstat_data)) {
     DLOG(WARNING) << "Failed to open " << vmstat_file.value();
     return false;
   }
@@ -666,7 +703,7 @@ bool GetSystemDiskInfo(SystemDiskInfo* diskinfo) {
 
   FilePath diskinfo_file("/proc/diskstats");
   std::string diskinfo_data;
-  if (!ReadFileToString(diskinfo_file, &diskinfo_data)) {
+  if (!ReadFileToStringNonBlocking(diskinfo_file, &diskinfo_data)) {
     DLOG(WARNING) << "Failed to open " << diskinfo_file.value();
     return false;
   }
@@ -866,7 +903,7 @@ bool GetSwapInfoImpl(SwapInfo* swap_info) {
   }
 
   std::string mm_stat_data;
-  if (!ReadFileToString(zram_mm_stat_file, &mm_stat_data)) {
+  if (!ReadFileToStringNonBlocking(zram_mm_stat_file, &mm_stat_data)) {
     DLOG(WARNING) << "Failed to open " << zram_mm_stat_file.value();
     return false;
   }
@@ -879,7 +916,7 @@ bool GetSwapInfoImpl(SwapInfo* swap_info) {
 
   FilePath zram_stat_file("/sys/block/zram0/stat");
   std::string stat_data;
-  if (!ReadFileToString(zram_stat_file, &stat_data)) {
+  if (!ReadFileToStringNonBlocking(zram_stat_file, &stat_data)) {
     DLOG(WARNING) << "Failed to open " << zram_stat_file.value();
     return false;
   }

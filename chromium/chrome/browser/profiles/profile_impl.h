@@ -109,7 +109,6 @@ class ProfileImpl : public Profile {
   // Note that this implementation returns the Google-services username, if any,
   // not the Chrome user's display name.
   std::string GetProfileUserName() const override;
-  ProfileType GetProfileType() const override;
   base::FilePath GetPath() override;
   base::Time GetCreationTime() const override;
   bool IsOffTheRecord() override;
@@ -152,7 +151,7 @@ class ProfileImpl : public Profile {
   const policy::ProfilePolicyConnector* GetProfilePolicyConnector()
       const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
-  bool IsSameProfile(Profile* profile) override;
+  bool IsSameOrParent(Profile* profile) override;
   base::Time GetStartTime() const override;
   ProfileKey* GetProfileKey() const override;
   base::FilePath last_selected_directory() override;

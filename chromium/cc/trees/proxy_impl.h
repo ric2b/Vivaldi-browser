@@ -119,10 +119,18 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void NotifyPaintWorkletStateChange(
       Scheduler::PaintWorkletState state) override;
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override;
+  void SubmitThroughputData(ukm::SourceId source_id,
+                            int aggregated_percent,
+                            int impl_percent,
+                            base::Optional<int> main_percent) override;
+  void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) override;
 
   // SchedulerClient implementation
   bool WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
-  void DidFinishImplFrame() override;
+  void DidFinishImplFrame(
+      const viz::BeginFrameArgs& last_activated_args) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack,
                           FrameSkippedReason reason) override;
   void WillNotReceiveBeginFrame() override;
@@ -140,11 +148,7 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void ScheduledActionBeginMainFrameNotExpectedUntil(
       base::TimeTicks time) override;
   void FrameIntervalUpdated(base::TimeDelta interval) override {}
-  size_t CompositedAnimationsCount() const override;
-  size_t MainThreadAnimationsCount() const override;
   bool HasCustomPropertyAnimations() const override;
-  bool CurrentFrameHadRAF() const override;
-  bool NextFrameHasPendingRAF() const override;
 
   DrawResult DrawInternal(bool forced_draw);
 

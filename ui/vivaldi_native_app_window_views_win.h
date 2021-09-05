@@ -19,7 +19,6 @@ namespace ui {
 class MenuModel;
 }
 
-class GlassAppWindowFrameViewWin;
 class VivaldiSystemMenuModelBuilder;
 
 // Windows-specific parts of the views-backed native shell window implementation
@@ -28,10 +27,6 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
  public:
   VivaldiNativeAppWindowViewsWin();
   ~VivaldiNativeAppWindowViewsWin() override;
-
-  GlassAppWindowFrameViewWin* glass_frame_view() {
-    return glass_frame_view_;
-  }
 
   ui::MenuModel* GetSystemMenuModel();
 
@@ -50,13 +45,9 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   void EnsureCaptionStyleSet();
 
   // Overridden from VivaldiNativeAppWindowViews:
-  void OnBeforeWidgetInit(
-      const extensions::AppWindow::CreateParams& create_params,
-      views::Widget::InitParams* init_params,
-      views::Widget* widget) override;
+  void OnBeforeWidgetInit(views::Widget::InitParams& init_params) override;
   void InitializeDefaultWindow(
-      const extensions::AppWindow::CreateParams& create_params) override;
-  views::NonClientFrameView* CreateStandardDesktopAppFrame() override;
+      const VivaldiBrowserWindowParams& create_params) override;
   bool IsOnCurrentWorkspace() const override;
 
   // Overridden from views::WidgetDelegate:
@@ -66,12 +57,6 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   void UpdateEventTargeterWithInset() override;
 
   int GetCommandIDForAppCommandID(int app_command_id) const;
-
-  // Populated if there is a glass frame, which provides special information
-  // to the native widget implementation. This will be NULL if there is no
-  // glass frame. Note, this can change from NULL to non-NULL and back again
-  // throughout the life of a window, e.g. if DWM is enabled and disabled.
-  GlassAppWindowFrameViewWin* glass_frame_view_;
 
   // The Windows Application User Model ID identifying the app.
   base::string16 app_model_id_;

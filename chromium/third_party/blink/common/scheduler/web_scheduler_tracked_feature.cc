@@ -97,6 +97,18 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "WebDatabase";
     case WebSchedulerTrackedFeature::kPictureInPicture:
       return "PictureInPicture";
+    case WebSchedulerTrackedFeature::kPortal:
+      return "Portal";
+    case WebSchedulerTrackedFeature::kSpeechRecognizer:
+      return "SpeechRecognizer";
+    case WebSchedulerTrackedFeature::kIdleManager:
+      return "IdleManager";
+    case WebSchedulerTrackedFeature::kPaymentManager:
+      return "PaymentManager";
+    case WebSchedulerTrackedFeature::kSpeechSynthesis:
+      return "SpeechSynthesis";
+    case WebSchedulerTrackedFeature::kKeyboardLock:
+      return "KeyboardLock";
   }
 }
 

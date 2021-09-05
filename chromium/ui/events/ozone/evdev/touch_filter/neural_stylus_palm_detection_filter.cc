@@ -14,10 +14,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/values.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
+#include "ui/events/ozone/features.h"
 
 namespace ui {
 namespace {
@@ -33,6 +37,7 @@ NeuralStylusPalmDetectionFilter::NeuralStylusPalmDetectionFilter(
     std::unique_ptr<NeuralStylusPalmDetectionFilterModel> palm_model,
     SharedPalmDetectionFilterState* shared_palm_state)
     : PalmDetectionFilter(shared_palm_state),
+      tracking_ids_count_within_session_(0),
       palm_filter_dev_info_(CreatePalmFilterDeviceInfo(devinfo)),
       model_(std::move(palm_model)) {
   DCHECK(CompatibleWithNeuralStylusPalmDetectionFilter(devinfo))
@@ -120,6 +125,7 @@ void NeuralStylusPalmDetectionFilter::Filter(
   slots_to_hold->reset();
   slots_to_suppress->reset();
   std::unordered_set<int> slots_to_decide;
+  std::vector<int> ended_tracking_ids;
   uint32_t total_finger_touching = 0;
   for (const auto& touch : touches) {
     if (touch.touching && touch.tool_code != BTN_TOOL_PEN) {
@@ -156,6 +162,12 @@ void NeuralStylusPalmDetectionFilter::Filter(
     }
 
     DCHECK_NE(tracking_id, -1);
+
+    auto insert_result = active_tracking_ids_.insert(tracking_id);
+    // New tracking_id.
+    if (insert_result.second)
+      tracking_ids_count_within_session_++;
+
     // Find the stroke in the stroke list.
     auto stroke_it = strokes_.find(tracking_id);
 
@@ -172,6 +184,8 @@ void NeuralStylusPalmDetectionFilter::Filter(
       if (stroke.samples().size() < config.max_sample_count) {
         slots_to_decide.insert(slot);
       }
+
+      ended_tracking_ids.push_back(tracking_id);
       continue;
     }
 
@@ -212,6 +226,11 @@ void NeuralStylusPalmDetectionFilter::Filter(
       shared_palm_state_->latest_palm_touch_time = time;
     }
   }
+
+  for (const int tracking_id : ended_tracking_ids) {
+    active_tracking_ids_.erase(tracking_id);
+  }
+
   *slots_to_suppress |= is_palm_;
   *slots_to_hold |= is_delay_;
 
@@ -306,6 +325,14 @@ std::vector<float> NeuralStylusPalmDetectionFilter::ExtractFeatures(
     }
   }
 
+  if (config.use_tracking_id_count) {
+    features.push_back(tracking_ids_count_within_session_);
+  }
+
+  if (config.use_active_tracking_id_count) {
+    features.push_back(active_tracking_ids_.size());
+  }
+
   return features;
 }
 
@@ -367,12 +394,22 @@ std::string NeuralStylusPalmDetectionFilter::FilterNameForTesting() const {
   return kFilterName;
 }
 
+bool NeuralStylusPalmDetectionFilter::
+    CompatibleWithNeuralStylusPalmDetectionFilter(
+        const EventDeviceInfo& devinfo) {
+  return NeuralStylusPalmDetectionFilter::
+      CompatibleWithNeuralStylusPalmDetectionFilter(
+          devinfo, base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                       kOzoneNNPalmSwitchName));
+}
+
 const std::vector<int> NeuralStylusPalmDetectionFilter::kRequiredAbsMtCodes = {
     ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TOUCH_MAJOR};
 
 bool NeuralStylusPalmDetectionFilter::
     CompatibleWithNeuralStylusPalmDetectionFilter(
-        const EventDeviceInfo& devinfo) {
+        const EventDeviceInfo& devinfo,
+        const std::string& ozone_params_switch_string) {
   if (devinfo.HasStylus()) {
     return false;
   }
@@ -403,6 +440,33 @@ bool NeuralStylusPalmDetectionFilter::
   if (devinfo.device_type() != INPUT_DEVICE_INTERNAL) {
     return false;
   }
+
+  // Check the switch string.
+
+  base::Optional<base::Value> value =
+      base::JSONReader::Read(ozone_params_switch_string);
+  if (value != base::nullopt && !ozone_params_switch_string.empty()) {
+    if (!value->is_dict()) {
+      return false;
+    }
+    // If the key isn't set, default to false.
+    if (value->FindKey(kOzoneNNPalmTouchCompatibleProperty) == nullptr) {
+      return false;
+    }
+    std::string* touch_string_val =
+        value->FindStringKey(kOzoneNNPalmTouchCompatibleProperty);
+    if (touch_string_val != nullptr) {
+      if (*touch_string_val == "false") {
+        return false;
+      } else if (*touch_string_val == "true") {
+        return true;
+      } else {
+        LOG(DFATAL) << "Unexpected value for nnpalm touch compatible. expected "
+                       "\"true\" or \"false\" . Got: "
+                    << *touch_string_val;
+      }
+    }
+  }
   return true;
 }
 
@@ -419,5 +483,12 @@ void NeuralStylusPalmDetectionFilter::EraseOldStrokes(base::TimeTicks time) {
       ++it;
     }
   }
+
+  // If the blank time is more than max_blank_time, starts a new session.
+  if (time - previous_report_time_ > model_->config().max_blank_time) {
+    tracking_ids_count_within_session_ = 0;
+    active_tracking_ids_.clear();
+  }
+  previous_report_time_ = time;
 }
 }  // namespace ui

@@ -8,6 +8,7 @@
 #include "base/json/json_writer.h"
 #include "base/optional.h"
 #include "base/path_service.h"
+#include "components/enterprise/common/strings.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
@@ -20,7 +21,7 @@ namespace em = enterprise_management;
 namespace policy {
 
 const char RealtimeReportingJobConfiguration::kContextKey[] = "context";
-const char RealtimeReportingJobConfiguration::kEventListKey[] = "eventList";
+const char RealtimeReportingJobConfiguration::kEventListKey[] = "events";
 
 const char RealtimeReportingJobConfiguration::kBrowserIdKey[] =
     "browser.browserId";
@@ -43,6 +44,7 @@ const char RealtimeReportingJobConfiguration::kFailedUploadsKey[] =
 const char RealtimeReportingJobConfiguration::kPermanentFailedUploadsKey[] =
     "permanentFailedUploads";
 const char RealtimeReportingJobConfiguration::kEventIdKey[] = "eventId";
+const char RealtimeReportingJobConfiguration::kDeviceNameKey[] = "device.name";
 
 base::Value RealtimeReportingJobConfiguration::BuildReport(
     base::Value events,
@@ -56,17 +58,26 @@ base::Value RealtimeReportingJobConfiguration::BuildReport(
 RealtimeReportingJobConfiguration::RealtimeReportingJobConfiguration(
     CloudPolicyClient* client,
     std::unique_ptr<DMAuth> auth_data,
+    const std::string& server_url,
+    bool add_connector_url_params,
     Callback callback)
     : JobConfigurationBase(TYPE_UPLOAD_REAL_TIME_REPORT,
                            std::move(auth_data),
                            base::nullopt,
                            client->GetURLLoaderFactory()),
-      server_url_(client->service()->configuration()->GetReportingServerUrl()),
+      server_url_(server_url),
       payload_(base::Value::Type::DICTIONARY),
       callback_(std::move(callback)) {
   DCHECK(GetAuth().has_dm_token());
 
   AddParameter("key", google_apis::GetAPIKey());
+
+  // If specified add extra enterprise connector URL params.
+  if (add_connector_url_params) {
+    AddParameter(enterprise::kUrlParamConnector, "OnSecurityEvent");
+    AddParameter(enterprise::kUrlParamDeviceToken, client->dm_token());
+  }
+
   InitializePayload(client);
 }
 
@@ -104,6 +115,7 @@ void RealtimeReportingJobConfiguration::InitializePayload(
   payload_.SetStringPath(kChromeVersionKey, version_info::GetVersionNumber());
   payload_.SetStringPath(kOsPlatformKey, GetOSPlatform());
   payload_.SetStringPath(kOsVersionKey, GetOSVersion());
+  payload_.SetStringPath(kDeviceNameKey, GetDeviceName());
   payload_.SetPath(kEventsKey, base::Value(base::Value::Type::LIST));
 }
 

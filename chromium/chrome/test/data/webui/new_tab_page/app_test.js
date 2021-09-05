@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {$$, BackgroundManager, BackgroundSelectionType, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {isMac} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertNotStyle, assertStyle, createTestProxy, createTheme} from 'chrome://test/new_tab_page/test_support.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
@@ -111,6 +112,8 @@ suite('NewTabPageAppTest', () => {
     assertStyle($$(app, '#backgroundImageAttribution2'), 'display', 'none');
     assertTrue($$(app, '#logo').doodleAllowed);
     assertFalse($$(app, '#logo').singleColored);
+    assertFalse($$(app, '#logo').dark);
+    assertEquals(0xffff0000, $$(app, '#logo').backgroundColor.value);
   });
 
   test('setting 3p theme shows attribution', async () => {
@@ -150,28 +153,101 @@ suite('NewTabPageAppTest', () => {
 
     // Assert.
     assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
+    assertEquals(
+        newTabPage.mojom.VoiceSearchAction.ACTIVATE_SEARCH_BOX,
+        await testProxy.handler.whenCalled('onVoiceSearchAction'));
   });
 
-  test('setting background image shows image, disallows doodle', async () => {
-    // Arrange.
-    const theme = createTheme();
-    theme.backgroundImage = {url: {url: 'https://img.png'}};
-
+  test('voice search keyboard shortcut', async () => {
+    // Test correct shortcut opens voice search.
     // Act.
-    backgroundManager.resetResolver('setShowBackgroundImage');
-    testProxy.callbackRouterRemote.setTheme(theme);
-    await testProxy.callbackRouterRemote.$.flushForTesting();
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      ctrlKey: true,
+      shiftKey: true,
+      code: 'Period',
+    }));
+    await flushTasks();
 
     // Assert.
-    assertEquals(1, backgroundManager.getCallCount('setShowBackgroundImage'));
-    assertTrue(await backgroundManager.whenCalled('setShowBackgroundImage'));
-    assertNotStyle(
-        $$(app, '#backgroundImageAttribution'), 'text-shadow', 'none');
-    assertEquals(1, backgroundManager.getCallCount('setBackgroundImage'));
+    assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
     assertEquals(
-        'https://img.png',
-        (await backgroundManager.whenCalled('setBackgroundImage')).url.url);
-    assertFalse($$(app, '#logo').doodleAllowed);
+        newTabPage.mojom.VoiceSearchAction.ACTIVATE_KEYBOARD,
+        await testProxy.handler.whenCalled('onVoiceSearchAction'));
+
+    // Test other shortcut doesn't close voice search.
+    // Act
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      ctrlKey: true,
+      shiftKey: true,
+      code: 'Enter',
+    }));
+    await flushTasks();
+
+    // Assert.
+    assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
+  });
+
+  if (isMac) {
+    test('keyboard shortcut opens voice search overlay on mac', async () => {
+      // Act.
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        metaKey: true,
+        shiftKey: true,
+        code: 'Period',
+      }));
+      await flushTasks();
+
+      // Assert.
+      assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
+    });
+  }
+
+  [true, false].forEach(themeModeDoodlesEnabled => {
+    const allows = themeModeDoodlesEnabled ? 'allows' : 'disallows';
+    test(`setting background image shows image, ${allows} doodle`, async () => {
+      // Arrange.
+      loadTimeData.overrideValues({themeModeDoodlesEnabled});
+      const theme = createTheme();
+      theme.backgroundImage = {url: {url: 'https://img.png'}};
+
+      // Act.
+      backgroundManager.resetResolver('setShowBackgroundImage');
+      testProxy.callbackRouterRemote.setTheme(theme);
+      await testProxy.callbackRouterRemote.$.flushForTesting();
+
+      // Assert.
+      assertEquals(1, backgroundManager.getCallCount('setShowBackgroundImage'));
+      assertTrue(await backgroundManager.whenCalled('setShowBackgroundImage'));
+      assertNotStyle(
+          $$(app, '#backgroundImageAttribution'), 'text-shadow', 'none');
+      assertEquals(1, backgroundManager.getCallCount('setBackgroundImage'));
+      assertEquals(
+          'https://img.png',
+          (await backgroundManager.whenCalled('setBackgroundImage')).url.url);
+      assertEquals(null, $$(app, '#logo').backgroundColor);
+      if (themeModeDoodlesEnabled) {
+        assertTrue($$(app, '#logo').doodleAllowed);
+      } else {
+        assertFalse($$(app, '#logo').doodleAllowed);
+      }
+    });
+
+    test(`setting non-default theme ${allows} doodle`, async function() {
+      // Arrange.
+      const theme = createTheme();
+      theme.type = newTabPage.mojom.ThemeType.CHROME;
+
+      // Act.
+      testProxy.callbackRouterRemote.setTheme(theme);
+      await testProxy.callbackRouterRemote.$.flushForTesting();
+
+      // Assert.
+      if (themeModeDoodlesEnabled) {
+        assertTrue($$(app, '#logo').doodleAllowed);
+      } else {
+        assertFalse($$(app, '#logo').doodleAllowed);
+      }
+    });
   });
 
   test('setting attributions shows attributions', async function() {
@@ -195,19 +271,6 @@ suite('NewTabPageAppTest', () => {
         'foo', $$(app, '#backgroundImageAttribution1').textContent.trim());
     assertEquals(
         'bar', $$(app, '#backgroundImageAttribution2').textContent.trim());
-  });
-
-  test('setting non-default theme disallows doodle', async function() {
-    // Arrange.
-    const theme = createTheme();
-    theme.type = newTabPage.mojom.ThemeType.CHROME;
-
-    // Act.
-    testProxy.callbackRouterRemote.setTheme(theme);
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-
-    // Assert.
-    assertFalse($$(app, '#logo').doodleAllowed);
   });
 
   test('setting logo color colors logo', async function() {

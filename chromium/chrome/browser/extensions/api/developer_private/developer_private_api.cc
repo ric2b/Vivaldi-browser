@@ -19,7 +19,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -399,7 +398,8 @@ void DeveloperPrivateEventRouter::RemoveExtensionId(
 void DeveloperPrivateEventRouter::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_LOADED, extension->id());
 }
 
@@ -407,7 +407,8 @@ void DeveloperPrivateEventRouter::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
     UnloadedExtensionReason reason) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_UNLOADED, extension->id());
 }
 
@@ -415,7 +416,8 @@ void DeveloperPrivateEventRouter::OnExtensionInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_INSTALLED, extension->id());
 }
 
@@ -423,7 +425,8 @@ void DeveloperPrivateEventRouter::OnExtensionUninstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     extensions::UninstallReason reason) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_UNINSTALLED, extension->id());
 }
 
@@ -1491,8 +1494,8 @@ void DeveloperPrivateLoadDirectoryFunction::ClearExistingDirectoryContent(
 
   pending_copy_operations_count_ = 1;
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           &DeveloperPrivateLoadDirectoryFunction::ReadDirectoryByFileSystemAPI,
           this, project_path, project_path.BaseName()));
@@ -1560,8 +1563,8 @@ void DeveloperPrivateLoadDirectoryFunction::ReadDirectoryByFileSystemAPICb(
         response = NoArguments();
       else
         response = Error(error_);
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&DeveloperPrivateLoadDirectoryFunction::Respond, this,
                          std::move(response)));
     }
@@ -1602,8 +1605,8 @@ void DeveloperPrivateLoadDirectoryFunction::CopyFile(
   pending_copy_operations_count_--;
 
   if (!pending_copy_operations_count_) {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&DeveloperPrivateLoadDirectoryFunction::Load, this));
   }
 }

@@ -4,6 +4,7 @@
 
 #include "weblayer/browser/profile_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -11,7 +12,8 @@
 
 #include "base/bind.h"
 #include "base/callback_forward.h"
-#include "base/task/post_task.h"
+#include "base/no_destructor.h"
+#include "base/observer_list.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
@@ -23,10 +25,16 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_context_impl.h"
+#include "weblayer/browser/browser_impl.h"
+#include "weblayer/browser/browser_list.h"
+#include "weblayer/browser/browsing_data_remover_delegate.h"
 #include "weblayer/browser/cookie_manager_impl.h"
+#include "weblayer/browser/persistence/browser_persister_file_utils.h"
 #include "weblayer/browser/tab_impl.h"
 
 #if defined(OS_ANDROID)
@@ -34,6 +42,8 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/unified_consent/pref_names.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/java/jni/ProfileImpl_jni.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
@@ -63,6 +73,18 @@ base::SequencedTaskRunner* GetBackgroundDiskOperationTaskRunner() {
   return task_runner.get()->get();
 }
 
+std::set<ProfileImpl*>& GetProfiles() {
+  static base::NoDestructor<std::set<ProfileImpl*>> s_all_profiles;
+  return *s_all_profiles;
+}
+
+base::ObserverList<ProfileImpl::ProfileObserver>::Unchecked& GetObservers() {
+  static base::NoDestructor<
+      base::ObserverList<ProfileImpl::ProfileObserver>::Unchecked>
+      s_observers;
+  return *s_observers;
+}
+
 #if defined(OS_ANDROID)
 void PassFilePathsToJavaCallback(
     const base::android::ScopedJavaGlobalRef<jobject>& callback,
@@ -71,6 +93,24 @@ void PassFilePathsToJavaCallback(
       callback, base::android::ToJavaArrayOfStrings(
                     base::android::AttachCurrentThread(), file_paths));
 }
+
+void OnGotBrowserPersistenceIds(
+    const base::android::ScopedJavaGlobalRef<jobject>& callback,
+    base::flat_set<std::string> ids) {
+  std::vector<std::string> as_vector;
+  for (const std::string& id : ids)
+    as_vector.push_back(id);
+  base::android::RunObjectCallbackAndroid(
+      callback,
+      base::android::ToJavaArrayOfStrings(AttachCurrentThread(), as_vector));
+}
+
+void OnDidRemoveBrowserPersistenceStorage(
+    const base::android::ScopedJavaGlobalRef<jobject>& callback,
+    bool result) {
+  base::android::RunBooleanCallbackAndroid(callback, result);
+}
+
 #endif  // OS_ANDROID
 
 }  // namespace
@@ -87,8 +127,8 @@ class ProfileImpl::DataClearer : public content::BrowsingDataRemover::Observer {
 
   ~DataClearer() override { remover_->RemoveObserver(this); }
 
-  void ClearData(int mask, base::Time from_time, base::Time to_time) {
-    int origin_types =
+  void ClearData(uint64_t mask, base::Time from_time, base::Time to_time) {
+    uint64_t origin_types =
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
         content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
     remover_->RemoveAndReply(from_time, to_time, mask, origin_types, this);
@@ -118,6 +158,10 @@ ProfileImpl::ProfileImpl(const std::string& name)
     info_ = CreateProfileInfo(name);
   }
 
+  GetProfiles().insert(this);
+  for (auto& observer : GetObservers())
+    observer.ProfileCreated(this);
+
   if (!g_first_profile_created) {
     g_first_profile_created = true;
     GetBackgroundDiskOperationTaskRunner()->PostTask(
@@ -127,12 +171,18 @@ ProfileImpl::ProfileImpl(const std::string& name)
   // Ensure WebCacheManager is created so that it starts observing
   // OnRenderProcessHostCreated events.
   web_cache::WebCacheManager::GetInstance();
+
+#if defined(OS_ANDROID)
+  WebLayerMetricsServiceClient::GetInstance()->UpdateUkm(false);
+#endif
 }
 
 ProfileImpl::~ProfileImpl() {
-  DCHECK_EQ(num_browser_impl_, 0u);
   if (browser_context_)
     browser_context_->ShutdownStoragePartitions();
+  GetProfiles().erase(this);
+  for (auto& observer : GetObservers())
+    observer.ProfileDestroyed(this);
 }
 
 ProfileImpl* ProfileImpl::FromBrowserContext(
@@ -140,7 +190,19 @@ ProfileImpl* ProfileImpl::FromBrowserContext(
   return static_cast<BrowserContextImpl*>(browser_context)->profile_impl();
 }
 
-content::BrowserContext* ProfileImpl::GetBrowserContext() {
+std::set<ProfileImpl*> ProfileImpl::GetAllProfiles() {
+  return GetProfiles();
+}
+
+void ProfileImpl::AddProfileObserver(ProfileObserver* observer) {
+  GetObservers().AddObserver(observer);
+}
+
+void ProfileImpl::RemoveProfileObserver(ProfileObserver* observer) {
+  GetObservers().RemoveObserver(observer);
+}
+
+BrowserContextImpl* ProfileImpl::GetBrowserContext() {
   if (browser_context_)
     return browser_context_.get();
 
@@ -170,7 +232,7 @@ void ProfileImpl::ClearBrowsingData(
   // browser_context_ and then BrowsingDataRemover, which in turn would call
   // OnBrowsingDataRemoverDone(), even though the clearing hasn't been finished.
 
-  int remove_mask = 0;
+  uint64_t remove_mask = 0;
   // This follows what Chrome does: see browsing_data_bridge.cc.
   for (auto data_type : data_types) {
     switch (data_type) {
@@ -178,6 +240,7 @@ void ProfileImpl::ClearBrowsingData(
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_COOKIES;
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE;
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES;
+        remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_ISOLATED_ORIGINS;
         break;
       case BrowsingDataType::CACHE:
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_CACHE;
@@ -204,13 +267,33 @@ CookieManager* ProfileImpl::GetCookieManager() {
   return cookie_manager_.get();
 }
 
+void ProfileImpl::GetBrowserPersistenceIds(
+    base::OnceCallback<void(base::flat_set<std::string>)> callback) {
+  DCHECK(!browser_context_->IsOffTheRecord());
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&GetBrowserPersistenceIdsOnBackgroundThread,
+                     GetBrowserPersisterDataBaseDir()),
+      std::move(callback));
+}
+
+void ProfileImpl::RemoveBrowserPersistenceStorage(
+    base::OnceCallback<void(bool)> done_callback,
+    base::flat_set<std::string> ids) {
+  DCHECK(!browser_context_->IsOffTheRecord());
+  RemoveBrowserPersistenceStorageImpl(this, std::move(done_callback),
+                                      std::move(ids));
+}
+
 // static
 void ProfileImpl::NukeDataAfterRemovingData(
     std::unique_ptr<ProfileImpl> profile,
     base::OnceClosure done_callback) {
   // Need PostTask to avoid reentrancy for deleting |browser_context_|.
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&ProfileImpl::DoNukeData, std::move(profile),
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ProfileImpl::DoNukeData, std::move(profile),
                                 std::move(done_callback)));
 }
 
@@ -268,7 +351,7 @@ std::unique_ptr<Profile> Profile::DestroyAndDeleteDataFromDisk(
 std::unique_ptr<ProfileImpl> ProfileImpl::DestroyAndDeleteDataFromDisk(
     std::unique_ptr<ProfileImpl> profile,
     base::OnceClosure done_callback) {
-  if (profile->num_browser_impl_ > 0)
+  if (profile->GetNumberOfBrowsers() > 0)
     return profile;
 
   GetBackgroundDiskOperationTaskRunner()->PostTaskAndReply(
@@ -282,9 +365,7 @@ std::unique_ptr<ProfileImpl> ProfileImpl::DestroyAndDeleteDataFromDisk(
 void ProfileImpl::OnProfileMarked(std::unique_ptr<ProfileImpl> profile,
                                   base::OnceClosure done_callback) {
   // Try to finish all writes and remove all data before nuking the profile.
-  static_cast<BrowserContextImpl*>(profile->GetBrowserContext())
-      ->pref_service()
-      ->CommitPendingWrite();
+  profile->GetBrowserContext()->pref_service()->CommitPendingWrite();
 
   // Unretained is safe here because DataClearer is owned by
   // BrowserContextImpl which is owned by this.
@@ -292,7 +373,7 @@ void ProfileImpl::OnProfileMarked(std::unique_ptr<ProfileImpl> profile,
       profile->GetBrowserContext(),
       base::BindOnce(&ProfileImpl::NukeDataAfterRemovingData,
                      std::move(profile), std::move(done_callback)));
-  int remove_all_mask = 0x8fffffff;
+  uint64_t remove_all_mask = 0xffffffffffffffffull;
   clearer->ClearData(remove_all_mask, base::Time::Min(), base::Time::Max());
 }
 
@@ -329,7 +410,7 @@ static void JNI_ProfileImpl_EnumerateAllProfileNames(
 }
 
 jint ProfileImpl::GetNumBrowserImpl(JNIEnv* env) {
-  return num_browser_impl_;
+  return GetNumberOfBrowsers();
 }
 
 jlong ProfileImpl::GetBrowserContext(JNIEnv* env) {
@@ -397,39 +478,107 @@ jboolean ProfileImpl::GetBooleanSetting(JNIEnv* env, jint j_type) {
   return GetBooleanSetting(static_cast<SettingType>(j_type));
 }
 
+void ProfileImpl::GetBrowserPersistenceIds(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& j_callback) {
+  GetBrowserPersistenceIds(
+      base::BindOnce(&OnGotBrowserPersistenceIds,
+                     base::android::ScopedJavaGlobalRef<jobject>(j_callback)));
+}
+
+void ProfileImpl::RemoveBrowserPersistenceStorage(
+    JNIEnv* env,
+    const base::android::JavaRef<jobjectArray>& j_ids,
+    const base::android::JavaRef<jobject>& j_callback) {
+  std::vector<std::string> ids;
+  base::android::AppendJavaStringArrayToStringVector(env, j_ids, &ids);
+  RemoveBrowserPersistenceStorage(
+      base::BindOnce(&OnDidRemoveBrowserPersistenceStorage,
+                     base::android::ScopedJavaGlobalRef<jobject>(j_callback)),
+      base::flat_set<std::string>(ids.begin(), ids.end()));
+}
+
+void ProfileImpl::PrepareForPossibleCrossOriginNavigation(JNIEnv* env) {
+  PrepareForPossibleCrossOriginNavigation();
+}
+
 #endif  // OS_ANDROID
-
-void ProfileImpl::IncrementBrowserImplCount() {
-  num_browser_impl_++;
-}
-
-void ProfileImpl::DecrementBrowserImplCount() {
-  DCHECK_GT(num_browser_impl_, 0u);
-  num_browser_impl_--;
-}
 
 base::FilePath ProfileImpl::GetBrowserPersisterDataBaseDir() const {
   return ComputeBrowserPersisterDataBaseDir(info_);
 }
 
 void ProfileImpl::SetBooleanSetting(SettingType type, bool value) {
+  auto* pref_service = GetBrowserContext()->pref_service();
   switch (type) {
     case SettingType::BASIC_SAFE_BROWSING_ENABLED:
-      basic_safe_browsing_enabled_ = value;
 #if defined(OS_ANDROID)
-      BrowserProcess::GetInstance()
-          ->GetSafeBrowsingService(weblayer::GetUserAgent())
-          ->SetSafeBrowsingDisabled(!basic_safe_browsing_enabled_);
+      pref_service->SetBoolean(::prefs::kSafeBrowsingEnabled, value);
+      pref_service->SetBoolean(::prefs::kSafeBrowsingEnhanced, false);
 #endif
+      break;
+    case SettingType::UKM_ENABLED: {
+#if defined(OS_ANDROID)
+      bool old_value = pref_service->GetBoolean(prefs::kUkmEnabled);
+#endif
+      pref_service->SetBoolean(prefs::kUkmEnabled, value);
+#if defined(OS_ANDROID)
+      // Trigger a purge if the current state no longer allows UKM.
+      bool must_purge = old_value && !value;
+      WebLayerMetricsServiceClient::GetInstance()->UpdateUkm(must_purge);
+#endif
+      break;
+    }
+    case SettingType::EXTENDED_REPORTING_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      pref_service->SetBoolean(::prefs::kSafeBrowsingScoutReportingEnabled,
+                               value);
+#endif
+      break;
+    case SettingType::REAL_TIME_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      pref_service->SetBoolean(
+          unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+          value);
+#endif
+      break;
   }
 }
 
 bool ProfileImpl::GetBooleanSetting(SettingType type) {
+  auto* pref_service = GetBrowserContext()->pref_service();
   switch (type) {
     case SettingType::BASIC_SAFE_BROWSING_ENABLED:
-      return basic_safe_browsing_enabled_;
+#if defined(OS_ANDROID)
+      return safe_browsing::IsSafeBrowsingEnabled(*pref_service);
+#endif
+      return false;
+    case SettingType::UKM_ENABLED:
+      return pref_service->GetBoolean(prefs::kUkmEnabled);
+    case SettingType::EXTENDED_REPORTING_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      return pref_service->GetBoolean(
+          ::prefs::kSafeBrowsingScoutReportingEnabled);
+#endif
+      return false;
+    case SettingType::REAL_TIME_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      return pref_service->GetBoolean(
+          unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
+#endif
+      return false;
   }
   NOTREACHED();
+}
+
+void ProfileImpl::PrepareForPossibleCrossOriginNavigation() {
+  content::RenderProcessHost::WarmupSpareRenderProcessHost(GetBrowserContext());
+}
+
+int ProfileImpl::GetNumberOfBrowsers() {
+  const auto& browsers = BrowserList::GetInstance()->browsers();
+  return std::count_if(browsers.begin(), browsers.end(),
+                       [this](BrowserImpl* b) { return b->profile() == this; });
 }
 
 }  // namespace weblayer

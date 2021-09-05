@@ -3,13 +3,14 @@
 <translationbundle lang="es-419">
 <translation id="1006017844123154345">Abrir en línea</translation>
 <translation id="1044891598689252897">Los sitios funcionarán normalmente</translation>
-<translation id="1124090076051167250">Esta acción borrará <ph name="DATASIZE" /> de datos y cookies almacenados por los sitios o las apps que aparecen en la Pantalla principal.</translation>
+<translation id="1124090076051167250">Esta acción borrará <ph name="DATASIZE" /> de datos y cookies almacenados por los sitios o las apps que aparecen en la pantalla principal.</translation>
 <translation id="1124772482545689468">Usuario</translation>
 <translation id="1178581264944972037">Detener</translation>
 <translation id="1181037720776840403">Quitar</translation>
 <translation id="1201402288615127009">Siguiente</translation>
 <translation id="1242008676835033345">Incorporado en <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Interrumpir</translation>
+<translation id="1289742167380433257">Para ahorrar datos, Google optimizó las imágenes de esta página.</translation>
 <translation id="129382876167171263">Aquí se mostrarán los archivos que guarden los sitios web</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" />: <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Se agregó el sitio <ph name="SITE_NAME" />.</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Preguntar antes de permitir que los sitios creen un mapa 3D de tu entorno o hagan un seguimiento de la posición de la cámara (recomendado)</translation>
 <translation id="2212565012507486665">Permitir cookies</translation>
 <translation id="2289270750774289114">Preguntarme cuando un sitio intente conectarse a dispositivos Bluetooth cercanos (recomendado)</translation>
+<translation id="2315043854645842844">El sistema operativo no admite la selección de certificados del lado del cliente.</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Se completó la descarga <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Copiado</translation>
 <translation id="2822354292072154809">¿Confirmas que quieres restablecer todos los permisos de sitios para <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Sitio</translation>
+<translation id="2874939134665556319">Pista anterior</translation>
 <translation id="2910701580606108292">Preguntar antes de permitir que los sitios reproduzcan contenido protegido</translation>
 <translation id="2913331724188855103">Permitir que todos los sitios guarden y lean datos de cookies (recomendado)</translation>
 <translation id="2968755619301702150">Visualizador de certificados</translation>
 <translation id="300526633675317032">Se borrarán <ph name="SIZE_IN_KB" /> del almacenamiento del sitio web.</translation>
+<translation id="301521992641321250">Bloqueado de forma automática</translation>
 <translation id="3115898365077584848">Mostrar información</translation>
 <translation id="3123473560110926937">Bloqueados en algunos sitios</translation>
 <translation id="3190152372525844641">Activa los permisos para Chrome en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
 <translation id="3822502789641063741">¿Borrar el almacenamiento de sitios?</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="3859306556332390985">Buscar más adelante</translation>
 <translation id="3955193568934677022">Permitir que los sitios reproduzcan contenido protegido (recomendado)</translation>
 <translation id="3987993985790029246">Copiar vínculo</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Título</translation>
 <translation id="4008040567710660924">Permite las cookies para un sitio específico.</translation>
+<translation id="4046123991198612571">Siguiente pista</translation>
 <translation id="4165986682804962316">Configuración de sitios</translation>
 <translation id="4226663524361240545">Es posible que las notificaciones hagan vibrar el dispositivo</translation>
 <translation id="4242533952199664413">Abrir la configuración</translation>
 <translation id="4259722352634471385">Navegación bloqueada: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Permitido</translation>
+<translation id="429312253194641664">Un sitio está reproduciendo contenido multimedia</translation>
 <translation id="4433925000917964731">Google proporcionó la página básica</translation>
 <translation id="4434045419905280838">Ventanas emergentes y redireccionamientos</translation>
 <translation id="445467742685312942">Permitir que los sitios reproduzcan contenido protegido</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Revocar todos los permisos del dispositivo</translation>
 <translation id="4964199952259983386">Para permitir el uso de la RA en Chrome, también debes activar la cámara en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Avanzar</translation>
+<translation id="4996978546172906250">Compartir mediante</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5048398596102334565">Permitir que los sitios accedan a los sensores de movimiento (recomendado)</translation>
 <translation id="5063480226653192405">Uso</translation>
@@ -132,7 +140,7 @@
 <translation id="5689516760719285838">Ubicación</translation>
 <translation id="5690795753582697420">La cámara está desactivada en la configuración de Android</translation>
 <translation id="5710871682236653961">Preguntar antes de permitir que los sitios envíen y reciban información cuando presionas dispositivos NFC (recomendado)</translation>
-<translation id="5719847187258001597">Esta acción borrará todos los datos y cookies almacenados por <ph name="ORIGIN" /> o su app que aparece en la Pantalla principal.</translation>
+<translation id="5719847187258001597">Esta acción borrará todos los datos y cookies almacenados por <ph name="ORIGIN" /> o su app que aparece en la pantalla principal.</translation>
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5860033963881614850">Desactivado</translation>
 <translation id="5916664084637901428">Activado</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Borrar</translation>
 <translation id="6697925417670533197">Descargas activas</translation>
 <translation id="6746124502594467657">Mover hacia abajo</translation>
+<translation id="6766622839693428701">Desliza hacia abajo para cerrar.</translation>
 <translation id="6782111308708962316">Evitar que los sitios web de terceros guarden y lean datos de cookies</translation>
+<translation id="6790428901817661496">Reproducir</translation>
 <translation id="6818926723028410516">Seleccionar elementos</translation>
 <translation id="6864395892908308021">Este dispositivo no puede leer NFC</translation>
 <translation id="6910211073230771657">Eliminado</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Un sitio está utilizando la cámara</translation>
 <translation id="7817023149356982970">Saldrás de este sitio.</translation>
 <translation id="7828557259026017104">Las cookies son archivos que crean los sitios web que visitas para recordar tus preferencias. Las cookies de terceros son las que se generan desde otros sitios a los cuales pertenece parte del contenido que ves en la página web que visitas (como anuncios o imágenes).</translation>
+<translation id="7835852323729233924">Reproduciendo contenido multimedia</translation>
 <translation id="7846076177841592234">Cancelar la selección</translation>
 <translation id="7846621471902887024">Saldrás de todos los sitios.</translation>
 <translation id="7882806643839505685">Habilitar el sonido de un sitio específico</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">¿Quieres eliminar todos los datos locales de este sitio web, incluidas las cookies, y restablecer todos los permisos?</translation>
 <translation id="8007176423574883786">Desactivado para este dispositivo</translation>
 <translation id="802154636333426148">Error en la descarga</translation>
+<translation id="8068648041423924542">No es posible seleccionar un certificado</translation>
 <translation id="8087000398470557479">Este contenido es de <ph name="DOMAIN_NAME" />, publicado por Google.</translation>
 <translation id="8116925261070264013">Silenciados</translation>
 <translation id="8131740175452115882">Confirmar</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Un sitio está utilizando la cámara y el micrófono</translation>
 <translation id="8380167699614421159">Este sitio muestra anuncios intrusivos o engañosos</translation>
 <translation id="8394832520002899662">Presiona para volver al sitio</translation>
+<translation id="8425213833346101688">Cambiar</translation>
+<translation id="8441146129660941386">Buscar más atrás</translation>
 <translation id="8447861592752582886">Revocar permiso para el dispositivo</translation>
 <translation id="8463851957836045671">El sitio es rápido</translation>
 <translation id="851751545965956758">Impedir que los sitios se conecten a los dispositivos</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Bloquea las cookies en un sitio específico.</translation>
 <translation id="8959122750345127698">Navegación inaccesible: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Administrado por tus padres</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Acceso al micrófono</translation>
 <translation id="965817943346481315">Bloquear si el sitio muestra anuncios intrusivos o engañosos (opción recomendada)</translation>
 </translationbundle>

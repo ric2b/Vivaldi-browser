@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_BROWSING_DATA_REMOVER_DELEGATE_H_
 #define CONTENT_PUBLIC_BROWSER_BROWSING_DATA_REMOVER_DELEGATE_H_
 
+#include <string>
+#include <vector>
 #include "base/callback_forward.h"
 
 namespace base {
@@ -28,11 +30,16 @@ class BrowsingDataRemoverDelegate {
   // Determines whether |origin| matches |origin_type_mask| given
   // the |special_storage_policy|.
   using EmbedderOriginTypeMatcher =
-      base::RepeatingCallback<bool(int origin_type_mask,
+      base::RepeatingCallback<bool(uint64_t origin_type_mask,
                                    const url::Origin& origin,
                                    storage::SpecialStoragePolicy* policy)>;
 
   virtual ~BrowsingDataRemoverDelegate() {}
+
+  // The embedder can define domains, for which cookies are only deleted
+  // after all other deletions are finished.
+  virtual std::vector<std::string> GetDomainsForDeferredCookieDeletion(
+      uint64_t remove_mask) = 0;
 
   // Returns a MaskMatcherFunction to match embedder's origin types.
   // This MaskMatcherFunction will be called with an |origin_type_mask|
@@ -47,9 +54,9 @@ class BrowsingDataRemoverDelegate {
   // Removes embedder-specific data.
   virtual void RemoveEmbedderData(const base::Time& delete_begin,
                                   const base::Time& delete_end,
-                                  int remove_mask,
+                                  uint64_t remove_mask,
                                   BrowsingDataFilterBuilder* filter_builder,
-                                  int origin_type_mask,
+                                  uint64_t origin_type_mask,
                                   base::OnceClosure callback) = 0;
 };
 

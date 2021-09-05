@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nn">
-<translation id="1169602411434249000">Blokker sporing</translation>
 <translation id="1397811292916898096">Søk med <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Veksl mellom normale og private faner</translation>
 <translation id="1644574205037202324">Historikk</translation>
@@ -14,6 +13,7 @@
 <translation id="3234355010754616171">Ny privat fane</translation>
 <translation id="3518985090088779359">Godta og fortset</translation>
 <translation id="3700829948786686853">Velkomen til Vivaldi</translation>
+<translation id="4121750346708795461">Ved å nytta denne applikasjonen godtek du Vivaldi sin <ph name="BEGIN_LINK1" />sluttbrukarlisensavtale<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />personvernreglar<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Opna i privat fane</translation>
 <translation id="4526803704855831732">Privat faner</translation>
 <translation id="4883379392681899581">Gå ut av privatvisning</translation>

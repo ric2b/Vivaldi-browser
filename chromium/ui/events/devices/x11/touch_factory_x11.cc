@@ -147,7 +147,7 @@ void TouchFactory::UpdateDeviceList(XDisplay* display) {
 }
 
 bool TouchFactory::ShouldProcessXI2Event(XEvent* xev) {
-  DCHECK_EQ(GenericEvent, xev->type);
+  DCHECK_EQ(x11::GeGenericEvent::opcode, xev->type);
   XIEvent* event = static_cast<XIEvent*>(xev->xcookie.data);
   XIDeviceEvent* xiev = reinterpret_cast<XIDeviceEvent*>(event);
 
@@ -196,7 +196,7 @@ bool TouchFactory::ShouldProcessXI2Event(XEvent* xev) {
   return IsTouchDevice(xiev->deviceid) ? !is_touch_disabled : true;
 }
 
-void TouchFactory::SetupXI2ForXWindow(Window window) {
+void TouchFactory::SetupXI2ForXWindow(x11::Window window) {
   // Setup mask for mouse events. It is possible that a device is loaded/plugged
   // in after we have setup XInput2 on a window. In such cases, we need to
   // either resetup XInput2 for the window, so that we get events from the new
@@ -238,7 +238,7 @@ void TouchFactory::SetupXI2ForXWindow(Window window) {
   evmask.deviceid = XIAllDevices;
   evmask.mask_len = sizeof(mask);
   evmask.mask = mask;
-  XISelectEvents(display, window, &evmask, 1);
+  XISelectEvents(display, static_cast<uint32_t>(window), &evmask, 1);
   XFlush(display);
 }
 

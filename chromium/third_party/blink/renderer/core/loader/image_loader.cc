@@ -74,9 +74,9 @@ namespace blink {
 
 namespace {
 
-bool CheckForUnoptimizedImagePolicy(Document& document,
+bool CheckForUnoptimizedImagePolicy(ExecutionContext* context,
                                     ImageResourceContent* new_image) {
-  if (!new_image)
+  if (!context || !new_image)
     return false;
 
   // Render the image as a placeholder image if the image is not sufficiently
@@ -85,13 +85,48 @@ bool CheckForUnoptimizedImagePolicy(Document& document,
   // Note: UnoptimizedImagePolicies is currently part of DocumentPolicy.
   // The original runtime feature UnoptimizedImagePolicies is no longer used,
   // and are planned to be removed.
-  if (RuntimeEnabledFeatures::DocumentPolicyEnabled(&document) &&
-      !new_image->IsAcceptableCompressionRatio(
-          *document.GetExecutionContext())) {
+  if (RuntimeEnabledFeatures::DocumentPolicyEnabled(context) &&
+      !new_image->IsAcceptableCompressionRatio(*context)) {
     return true;
   }
 
   return false;
+}
+
+// Returns whether subresource redirect can be attempted for the image fetch.
+// Redirect to other origins could be disabled due to CSP or CORS restrictions.
+bool ShouldEnableSubresourceRedirect(HTMLImageElement* image_element,
+                                     const KURL& url) {
+  // Allow redirection only when DataSaver is enabled and subresource redirect
+  // feature is enabled which allows redirecting to better optimized versions.
+  if (!base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) ||
+      !GetNetworkStateNotifier().SaveDataEnabled()) {
+    return false;
+  }
+  // Enable subresource redirect only for <img> elements created by parser.
+  // Images created from javascript, fetched via XHR/Fetch API should not be
+  // subresource redirected due to the additional CORB/CORS handling needed for
+  // them.
+  if (!image_element || !image_element->ElementCreatedByParser()) {
+    return false;
+  }
+  // Create a cross origin URL by appending a string to the original host. This
+  // is used to find whether CSP is restricting image fetches from other
+  // origins.
+  KURL cross_origin_url = url;
+  cross_origin_url.SetHost(url.Host() + "crossorigin.com");
+  auto* content_security_policy =
+      image_element->GetExecutionContext()->GetContentSecurityPolicy();
+  if (content_security_policy &&
+      !content_security_policy->AllowImageFromSource(
+          cross_origin_url, cross_origin_url, RedirectStatus::kNoRedirect,
+          ReportingDisposition::kSuppressReporting)) {
+    return false;
+  }
+  // Allow subresource redirect only when cross-origin attribute is not set,
+  // which indicates CORS validation is not triggered for the image.
+  return (GetCrossOriginAttributeValue(image_element->FastGetAttribute(
+              html_names::kCrossoriginAttr)) == kCrossOriginAttributeNotSet);
 }
 
 }  // namespace
@@ -284,7 +319,7 @@ void ImageLoader::RejectPendingDecodes(UpdateType update_type) {
   }
 }
 
-void ImageLoader::Trace(Visitor* visitor) {
+void ImageLoader::Trace(Visitor* visitor) const {
   visitor->Trace(image_content_);
   visitor->Trace(image_content_for_image_document_);
   visitor->Trace(element_);
@@ -392,7 +427,8 @@ static void ConfigureRequest(
         element.GetDocument().GetSecurityOrigin(), cross_origin);
   }
 
-  if (RuntimeEnabledFeatures::PriorityHintsEnabled(&element.GetDocument())) {
+  if (RuntimeEnabledFeatures::PriorityHintsEnabled(
+          element.GetExecutionContext())) {
     mojom::FetchImportanceMode importance_mode =
         GetFetchImportanceAttributeValue(
             element.FastGetAttribute(html_names::kImportanceAttr));
@@ -535,10 +571,8 @@ void ImageLoader::DoUpdateFromElement(
     ConfigureRequest(params, bypass_behavior, *element_,
                      document.GetFrame()->GetClientHintsPreferences());
 
-    if ((update_behavior != kUpdateForcedReload &&
-         lazy_image_load_state_ == LazyImageLoadState::kNone) ||
-        (update_behavior == kUpdateSizeChanged &&
-         lazy_image_load_state_ == LazyImageLoadState::kDeferred)) {
+    if (update_behavior != kUpdateForcedReload &&
+        lazy_image_load_state_ != LazyImageLoadState::kFullImage) {
       const auto* frame = document.GetFrame();
       if (auto* html_image = DynamicTo<HTMLImageElement>(GetElement())) {
         LoadingAttributeValue loading_attr = GetLoadingAttributeValue(
@@ -568,21 +602,11 @@ void ImageLoader::DoUpdateFromElement(
       params.SetLazyImageNonBlocking();
     }
 
-    // Enable subresource redirect for <img> elements created by parser when
-    // data saver is on. Images created from javascript, fetched via XHR/Fetch
-    // API should not be subresource redirected due to the additional CORB/CORS
-    // handling needed for them.
-    // TODO(rajendrant): Disable subresource redirect when CORS,
-    // content-security-policy does not allow cross-origin accesses.
-    if (auto* html_image = DynamicTo<HTMLImageElement>(GetElement())) {
-      if (base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) &&
-          html_image->ElementCreatedByParser() &&
-          GetNetworkStateNotifier().SaveDataEnabled()) {
-        auto& resource_request = params.MutableResourceRequest();
-        resource_request.SetPreviewsState(
-            resource_request.GetPreviewsState() |
-            WebURLRequest::kSubresourceRedirectOn);
-      }
+    if (ShouldEnableSubresourceRedirect(
+            DynamicTo<HTMLImageElement>(GetElement()), params.Url())) {
+      auto& resource_request = params.MutableResourceRequest();
+      resource_request.SetPreviewsState(resource_request.GetPreviewsState() |
+                                        WebURLRequest::kSubresourceRedirectOn);
     }
 
     new_image_content = ImageResourceContent::Fetch(params, document.Fetcher());
@@ -712,8 +736,7 @@ void ImageLoader::UpdateFromElement(
   // Don't load images for inactive documents or active documents without V8
   // context. We don't want to slow down the raw HTML parsing case by loading
   // images we don't intend to display.
-  Document& document = element_->GetDocument();
-  if (!document.IsContextDestroyed() && document.IsActive())
+  if (element_->GetDocument().IsActive())
     EnqueueImageLoadingMicroTask(update_behavior, referrer_policy);
 }
 
@@ -766,13 +789,13 @@ void ImageLoader::ImageChanged(ImageResourceContent* content,
       std::make_unique<IncrementLoadEventDelayCount>(document);
 }
 
-void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
+void ImageLoader::ImageNotifyFinished(ImageResourceContent* content) {
   RESOURCE_LOADING_DVLOG(1)
       << "ImageLoader::imageNotifyFinished " << this
       << "; has pending load event=" << pending_load_event_.IsActive();
 
   DCHECK(failed_load_url_.IsEmpty());
-  DCHECK_EQ(resource, image_content_.Get());
+  DCHECK_EQ(content, image_content_.Get());
 
   CHECK(!image_complete_);
 
@@ -816,7 +839,8 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
   // HTMLImageElement.
   // crbug.com/930281
   auto* html_image_element = DynamicTo<HTMLImageElement>(element_.Get());
-  if (CheckForUnoptimizedImagePolicy(element_->GetDocument(), image_content_) &&
+  if (CheckForUnoptimizedImagePolicy(element_->GetExecutionContext(),
+                                     image_content_) &&
       html_image_element)
     html_image_element->SetImagePolicyViolated();
 
@@ -825,10 +849,10 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
   if (html_image_element)
     LazyImageHelper::RecordMetricsOnLoadFinished(html_image_element);
 
-  if (resource->ErrorOccurred()) {
+  if (content->ErrorOccurred()) {
     pending_load_event_.Cancel();
 
-    base::Optional<ResourceError> error = resource->GetResourceError();
+    base::Optional<ResourceError> error = content->GetResourceError();
     if (error && error->IsAccessCheck())
       CrossSiteOrCSPViolationOccurred(AtomicString(error->FailingURL()));
 
@@ -1015,7 +1039,7 @@ void ImageLoader::DecodeRequest::NotifyDecodeDispatched() {
   state_ = kDispatched;
 }
 
-void ImageLoader::DecodeRequest::Trace(Visitor* visitor) {
+void ImageLoader::DecodeRequest::Trace(Visitor* visitor) const {
   visitor->Trace(resolver_);
   visitor->Trace(loader_);
 }

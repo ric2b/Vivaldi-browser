@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Vers la droite</translation>
 <translation id="1781173782405573156">Ignorer la touche</translation>
 <translation id="1787176709638001873">Modifier le texte du mot de passe</translation>
+<translation id="180203835522132923">Recherche+O, puis W</translation>
 <translation id="1810107444790159527">Zone de liste</translation>
 <translation id="1812527064848182527">paysage</translation>
 <translation id="1829244130665387512">Rechercher sur la page</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Balayer l'écran vers la gauche avec deux doigts</translation>
 <translation id="2998131015536248178">Caractère précédent</translation>
 <translation id="2999559350546931576">Diminuer le timbre de la voix</translation>
+<translation id="3009352964623081324">Recherche+O, puis S. Utilisez ce raccourci pour installer, gérer et personnaliser des voix.</translation>
 <translation id="3014130421870723208">mod@ 8pt</translation>
 <translation id="3030432017085518523">Case d'option d'élément de menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrophe}one{# apostrophe}other{# apostrophes}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Insertion</translation>
 <translation id="4511186779140817916">Amande blanchie</translation>
 <translation id="451510441928265982">Aucun titre de niveau 2 précédent</translation>
+<translation id="4515799157838123044">Estomper le contenu en arrière-plan</translation>
 <translation id="4517854969512651305">Augmenter la valeur</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{barre oblique}one{# barre oblique}other{# barres obliques}}</translation>
 <translation id="4537277403911487429">Élément similaire suivant</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Partie</translation>
 <translation id="6637586476836377253">journal</translation>
 <translation id="6657128831881431364">Barre de progression</translation>
+<translation id="6660819301598582123">Voici à quoi ressemblera votre texte.</translation>
 <translation id="667999046851023355">Document</translation>
 <translation id="6688209025607531203">Une alerte non modale</translation>
 <translation id="6689672606256159458">Saumon foncé</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Aucun titre de niveau 5 suivant</translation>
 <translation id="6955705049214951590">Garance rose</translation>
 <translation id="696356426651109308">Aller au début</translation>
-<translation id="699159175332639490">Recherche + O + W</translation>
 <translation id="6994042831499278539">Référence de glossaire</translation>
 <translation id="6996566555547746822">Liste déroulante suivante</translation>
 <translation id="6997224546856374593">Lors de la lecture de majuscules :</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Saumon</translation>
 <translation id="7140168702531682811">Exposant</translation>
 <translation id="7143034430156387447">Alterner entre les méthodes braille à six et huit points</translation>
-<translation id="7143207342074048698">Connexion en cours</translation>
+<translation id="7143207342074048698">Connexion</translation>
 <translation id="7153618581592392745">Lavande</translation>
 <translation id="7157306005867877619">Résumé</translation>
 <translation id="7161771961008409533">Bouton pop-up</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Exemple</translation>
 <translation id="7439060726180460871">Répertoire</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Changez de ton en fonction du contenu prononcé : types d'élément et texte entre guillemets, supprimé, mis en gras, entre parenthèses ou en majuscules.</translation>
 <translation id="7491962110804786152">tabulation</translation>
 <translation id="7505149250476994901">Dire "maj" après la lettre</translation>
 <translation id="7518543783849163354">Pour arrêter temporairement les commentaires audio ChromeVox, appuyez sur la touche Ctrl.</translation>

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/jumbo.gni")
@@ -66,6 +67,7 @@ buildflag_header("buildflags") {
   flags = [
     "ENABLE_HIDPI=$enable_hidpi",
     "ENABLE_MESSAGE_CENTER=$enable_message_center",
+    "LACROS=$chromeos_is_browser_only",
     "USE_ATK=$use_atk",
     "USE_XKBCOMMON=$use_xkbcommon",
     "HAS_NATIVE_ACCESSIBILITY=$has_native_accessibility",
@@ -93,9 +95,6 @@ jumbo_component("base") {
   sources = [
     "class_property.cc",
     "class_property.h",
-    "cursor/cursor_loader.h",
-    "cursor/cursor_lookup.cc",
-    "cursor/cursor_lookup.h",
     "default_style.h",
     "device_form_factor.h",
     "device_form_factor_desktop.cc",
@@ -158,7 +157,6 @@ jumbo_component("base") {
     "template_expressions.h",
     "theme_provider.cc",
     "theme_provider.h",
-    "ui_base_export.h",
     "ui_base_exports.cc",
     "ui_base_paths.cc",
     "ui_base_paths.h",
@@ -177,6 +175,8 @@ jumbo_component("base") {
     "window_open_disposition.cc",
     "window_open_disposition.h",
   ]
+
+  libs = []
 
   if (is_android) {
     sources += [
@@ -207,6 +207,8 @@ jumbo_component("base") {
       "win/accessibility_misc_utils.cc",
       "win/accessibility_misc_utils.h",
       "win/atl_module.h",
+      "win/event_creation_utils.cc",
+      "win/event_creation_utils.h",
       "win/foreground_helper.cc",
       "win/foreground_helper.h",
       "win/hidden_window.cc",
@@ -233,6 +235,11 @@ jumbo_component("base") {
       "win/touch_input.h",
       "win/window_event_target.cc",
       "win/window_event_target.h",
+    ]
+    ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
+    libs += [
+      "dwmapi.lib",
+      "wtsapi32.lib",
     ]
   }
 
@@ -333,8 +340,6 @@ jumbo_component("base") {
       "accelerators/system_media_controls_media_keys_listener.h",
       "base_window.cc",
       "base_window.h",
-      "cursor/cursor_util.cc",
-      "cursor/cursor_util.h",
       "emoji/emoji_panel_helper.h",
       "pointer/pointer_device.h",
       "pointer/pointer_device_util.cc",
@@ -416,7 +421,7 @@ jumbo_component("base") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
-  defines = [ "UI_BASE_IMPLEMENTATION" ]
+  defines = [ "IS_UI_BASE_IMPL" ]
 
   public_deps = [
     ":buildflags",
@@ -425,11 +430,10 @@ jumbo_component("base") {
     ":ui_data_pack",
     "//base",
     "//skia",
-    "//ui/base/cursor",
-    "//ui/base/cursor/mojom:cursor_type",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
+
   deps = [
     "//base:base_static",
     "//base:i18n",
@@ -445,7 +449,7 @@ jumbo_component("base") {
     "//ui/display",
     "//ui/events",
     "//ui/events/devices",
-    "//ui/resources",
+    "//ui/resources:webui_resources_grd",
     "//ui/strings",
     "//url",
   ]
@@ -479,7 +483,7 @@ jumbo_component("base") {
     deps += [ "//ui/events" ]
   }
 
-  if (is_desktop_linux && (use_x11 || ozone_platform_x11)) {
+  if ((is_desktop_linux || is_chromeos) && (use_x11 || ozone_platform_x11)) {
     public_deps += [ "//ui/base/x" ]
 
     # X11 drag and drop wants to use common drag and drop types.
@@ -494,8 +498,6 @@ jumbo_component("base") {
 
   if (use_x11 && use_aura) {
     sources += [
-      "cursor/cursor_loader_x11.cc",
-      "cursor/cursor_loader_x11.h",
       "x/selection_requestor.cc",
       "x/selection_requestor.h",
     ]
@@ -521,14 +523,6 @@ jumbo_component("base") {
     deps += [ "//third_party/fontconfig" ]
   }
 
-  if (is_desktop_linux) {
-    sources += [
-      "cursor/cursor_theme_manager_linux.cc",
-      "cursor/cursor_theme_manager_linux.h",
-      "cursor/cursor_theme_manager_linux_observer.h",
-    ]
-  }
-
   if (use_glib) {
     configs += [ "//build/config/linux:glib" ]
     sources += [
@@ -540,8 +534,8 @@ jumbo_component("base") {
 
   if (is_chromeos || (use_aura && is_linux && !use_x11)) {
     sources += [
-      "dragdrop/os_exchange_data_provider_aura.cc",
-      "dragdrop/os_exchange_data_provider_aura.h",
+      "dragdrop/os_exchange_data_provider_non_backed.cc",
+      "dragdrop/os_exchange_data_provider_non_backed.h",
     ]
   }
 
@@ -549,37 +543,11 @@ jumbo_component("base") {
     deps += [ "//ui/base/clipboard" ]
   }
 
-  libs = []
-  if (is_win) {
-    sources += [
-      "cursor/cursor_loader_win.cc",
-      "cursor/cursor_loader_win.h",
+  if (!use_aura) {
+    sources -= [
+      "view_prop.cc",
+      "view_prop.h",
     ]
-    deps += [ "//third_party/wtl" ]
-    cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()),
-                            # which is uninteresting.
-
-    ldflags = [
-      "/DELAYLOAD:d2d1.dll",
-      "/DELAYLOAD:d3d10_1.dll",
-      "/DELAYLOAD:dwmapi.dll",
-    ]
-    libs += [
-      "d2d1.lib",
-      "d3d10_1.lib",
-      "dwmapi.lib",
-      "d2d1.lib",
-      "dwmapi.lib",
-      "oleacc.lib",
-      "wtsapi32.lib",
-    ]
-  } else {
-    if (!use_aura) {
-      sources -= [
-        "view_prop.cc",
-        "view_prop.h",
-      ]
-    }
   }
 
   if (is_mac) {
@@ -593,20 +561,6 @@ jumbo_component("base") {
       "Carbon.framework",
       "CoreVideo.framework",
       "Foundation.framework",
-    ]
-  }
-
-  if (use_ozone) {
-    sources += [
-      "cursor/cursor_loader_ozone.cc",
-      "cursor/cursor_loader_ozone.h",
-      "cursor/ozone/bitmap_cursor_factory_ozone.cc",
-      "cursor/ozone/bitmap_cursor_factory_ozone.h",
-    ]
-
-    deps += [
-      "//ui/events/ozone/layout",
-      "//ui/ozone:ozone_base",
     ]
   }
 
@@ -634,16 +588,6 @@ jumbo_component("base") {
       "pointer/touch_editing_controller.cc",
       "theme_provider.cc",
       "ui_base_types.cc",
-    ]
-  }
-
-  if (use_aura) {
-    # Cursor
-    sources += [
-      "cursor/cursors_aura.cc",
-      "cursor/cursors_aura.h",
-      "cursor/image_cursors.cc",
-      "cursor/image_cursors.h",
     ]
   }
 
@@ -690,10 +634,13 @@ component("features") {
   ]
 }
 
+# TODO(crbug.com/1091985): Support CrOS.
 if (is_win || is_mac || (is_linux && !is_chromeos)) {
   jumbo_static_library("pixel_diff_test_support") {
     testonly = true
     sources = [
+      "test/skia_gold_matching_algorithm.cc",
+      "test/skia_gold_matching_algorithm.h",
       "test/skia_gold_pixel_diff.cc",
       "test/skia_gold_pixel_diff.h",
     ]
@@ -969,6 +916,7 @@ test("ui_base_unittests") {
     "//ui/base:ui_data_pack",
     "//ui/base/clipboard:clipboard_test",
     "//ui/base/clipboard:clipboard_types",
+    "//ui/base/cursor:unittests",
     "//ui/display",
     "//ui/events:events_base",
     "//ui/events:test_support",
@@ -999,18 +947,13 @@ test("ui_base_unittests") {
       "accelerators/accelerator_unittest.cc",
       "accelerators/menu_label_accelerator_util_unittest.cc",
       "accelerators/system_media_controls_media_keys_listener_unittest.cc",
-      "cursor/cursor_unittest.cc",
-      "cursor/cursor_util_unittest.cc",
       "models/list_model_unittest.cc",
       "models/list_selection_model_unittest.cc",
       "models/tree_node_model_unittest.cc",
       "text/bytes_formatting_unittest.cc",
       "webui/web_ui_util_unittest.cc",
     ]
-    deps += [
-      "//components/system_media_controls:test_support",
-      "//ui/base/cursor/mojom:cursor_type",
-    ]
+    deps += [ "//components/system_media_controls:test_support" ]
 
     if (is_linux) {
       sources +=
@@ -1033,8 +976,12 @@ test("ui_base_unittests") {
     }
   }
 
+  # TODO(crbug.com/1091985): Support CrOS.
   if (is_win || is_mac || (is_linux && !is_chromeos)) {
-    sources += [ "test/skia_gold_pixel_diff_unittest.cc" ]
+    sources += [
+      "test/skia_gold_matching_algorithm_unittest.cc",
+      "test/skia_gold_pixel_diff_unittest.cc",
+    ]
     deps += [ ":pixel_diff_test_support" ]
   }
 
@@ -1114,23 +1061,9 @@ test("ui_base_unittests") {
   if (is_win) {
     sources += [
       "dragdrop/os_exchange_data_win_unittest.cc",
+      "view_prop_unittest.cc",
       "win/hwnd_subclass_unittest.cc",
     ]
-
-    ldflags = [
-      "/DELAYLOAD:d2d1.dll",
-      "/DELAYLOAD:d3d10_1.dll",
-    ]
-    libs = [
-      "d2d1.lib",
-      "d3d10_1.lib",
-      "imm32.lib",
-      "oleacc.lib",
-    ]
-  }
-
-  if (is_win) {
-    sources += [ "view_prop_unittest.cc" ]
   }
 
   if (is_android) {
@@ -1146,6 +1079,7 @@ test("ui_base_unittests") {
 
   if (use_x11) {
     deps += [
+      "//ui/base/x:unittests",
       "//ui/events/platform/x11",
       "//ui/gfx/x",
     ]
@@ -1173,6 +1107,7 @@ test("ui_base_unittests") {
       "dragdrop/os_exchange_data_provider_x11_unittest.cc",
       "x/selection_requestor_unittest.cc",
     ]
+    deps += [ "//ui/gfx/x:unit_test" ]
   }
 
   if (is_chromeos) {

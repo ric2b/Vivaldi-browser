@@ -13,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/input_method/assistive_window_properties.h"
 #include "chrome/browser/chromeos/input_method/input_method_engine.h"
 #include "chrome/browser/chromeos/input_method/native_input_method_engine.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
@@ -43,6 +44,8 @@ namespace SetCursorPosition = extensions::api::input_ime::SetCursorPosition;
 namespace SetCandidates = extensions::api::input_ime::SetCandidates;
 namespace SetCandidateWindowProperties =
     extensions::api::input_ime::SetCandidateWindowProperties;
+namespace SetAssistiveWindowProperties =
+    extensions::api::input_ime::SetAssistiveWindowProperties;
 namespace ClearComposition = extensions::api::input_ime::ClearComposition;
 namespace OnCompositionBoundsChanged =
     extensions::api::input_method_private::OnCompositionBoundsChanged;
@@ -54,9 +57,9 @@ namespace SetSelectionRange =
     extensions::api::input_method_private::SetSelectionRange;
 namespace FinishComposingText =
     extensions::api::input_method_private::FinishComposingText;
-using ui::IMEEngineHandlerInterface;
-using input_method::InputMethodEngineBase;
 using chromeos::InputMethodEngine;
+using chromeos::InputMethodEngineBase;
+using ui::IMEEngineHandlerInterface;
 
 namespace {
 const char kErrorEngineNotAvailable[] = "The engine is not available.";
@@ -99,6 +102,43 @@ keyboard::KeyboardConfig GetKeyboardConfig() {
   return ChromeKeyboardControllerClient::Get()->GetKeyboardConfig();
 }
 
+ui::ime::AssistiveWindowType ConvertAssistiveWindowType(
+    input_ime::AssistiveWindowType type) {
+  switch (type) {
+    case input_ime::ASSISTIVE_WINDOW_TYPE_NONE:
+      return ui::ime::AssistiveWindowType::kNone;
+    case input_ime::ASSISTIVE_WINDOW_TYPE_UNDO:
+      return ui::ime::AssistiveWindowType::kUndoWindow;
+  }
+}
+
+input_ime::AssistiveWindowButton ConvertAssistiveWindowButton(
+    const ui::ime::ButtonId id) {
+  switch (id) {
+    case ui::ime::ButtonId::kNone:
+    case ui::ime::ButtonId::kSmartInputsSettingLink:
+    case ui::ime::ButtonId::kSuggestion:
+    case ui::ime::ButtonId::kLearnMore:
+      return input_ime::ASSISTIVE_WINDOW_BUTTON_NONE;
+    case ui::ime::ButtonId::kUndo:
+      return input_ime::ASSISTIVE_WINDOW_BUTTON_UNDO;
+    case ui::ime::ButtonId::kAddToDictionary:
+      return input_ime::ASSISTIVE_WINDOW_BUTTON_ADDTODICTIONARY;
+  }
+}
+
+input_ime::AssistiveWindowType ConvertAssistiveWindowType(
+    const ui::ime::AssistiveWindowType& type) {
+  switch (type) {
+    case ui::ime::AssistiveWindowType::kNone:
+    case ui::ime::AssistiveWindowType::kEmojiSuggestion:
+    case ui::ime::AssistiveWindowType::kPersonalInfoSuggestion:
+      return input_ime::AssistiveWindowType::ASSISTIVE_WINDOW_TYPE_NONE;
+    case ui::ime::AssistiveWindowType::kUndoWindow:
+      return input_ime::AssistiveWindowType::ASSISTIVE_WINDOW_TYPE_UNDO;
+  }
+}
+
 class ImeObserverChromeOS : public ui::ImeObserver {
  public:
   ImeObserverChromeOS(const std::string& extension_id, Profile* profile)
@@ -106,7 +146,7 @@ class ImeObserverChromeOS : public ui::ImeObserver {
 
   ~ImeObserverChromeOS() override = default;
 
-  // input_method::InputMethodEngineBase::Observer overrides.
+  // chromeos::InputMethodEngineBase::Observer overrides.
   void OnInputContextUpdate(
       const IMEEngineHandlerInterface::InputContext& context) override {
     if (extension_id_.empty() ||
@@ -255,6 +295,33 @@ class ImeObserverChromeOS : public ui::ImeObserver {
     }
 
     ImeObserver::OnFocus(context);
+  }
+
+  void OnAssistiveWindowButtonClicked(
+      const ui::ime::AssistiveWindowButton& button) override {
+    if (extension_id_.empty() ||
+        !HasListener(input_ime::OnAssistiveWindowButtonClicked::kEventName)) {
+      return;
+    }
+    input_ime::OnAssistiveWindowButtonClicked::Details details;
+    details.button_id = ConvertAssistiveWindowButton(button.id);
+    details.window_type = ConvertAssistiveWindowType(button.window_type);
+
+    std::unique_ptr<base::ListValue> args(
+        input_ime::OnAssistiveWindowButtonClicked::Create(details));
+    DispatchEventToExtension(
+        extensions::events::INPUT_IME_ON_ASSISTIVE_WINDOW_BUTTON_CLICKED,
+        input_ime::OnAssistiveWindowButtonClicked::kEventName, std::move(args));
+  }
+
+  void OnSuggestionsChanged(
+      const std::vector<std::string>& suggestions) override {
+    std::unique_ptr<base::ListValue> args(
+        input_method_private::OnSuggestionsChanged::Create(suggestions));
+    DispatchEventToExtension(
+        extensions::events::INPUT_IME_ON_SUGGESTIONS_CHANGED,
+        input_method_private::OnSuggestionsChanged::kEventName,
+        std::move(args));
   }
 
  private:
@@ -585,6 +652,33 @@ ExtensionFunction::ResponseAction InputImeHideInputViewFunction::Run() {
     return RespondNow(Error(InformativeError(error, function_name())));
   engine->HideInputView();
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+InputImeSetAssistiveWindowPropertiesFunction::Run() {
+  std::string error;
+  InputMethodEngine* engine = GetEngineIfActive(
+      Profile::FromBrowserContext(browser_context()), extension_id(), &error);
+  if (!engine) {
+    return RespondNow(Error(InformativeError(error, function_name())));
+  }
+  std::unique_ptr<SetAssistiveWindowProperties::Params> parent_params(
+      SetAssistiveWindowProperties::Params::Create(*args_));
+  const SetAssistiveWindowProperties::Params::Parameters& params =
+      parent_params->parameters;
+  const input_ime::AssistiveWindowProperties& window = params.properties;
+  chromeos::AssistiveWindowProperties assistive_window;
+
+  assistive_window.visible = window.visible;
+  assistive_window.type = ConvertAssistiveWindowType(window.type);
+  if (window.announce_string)
+    assistive_window.announce_string = *window.announce_string;
+
+  engine->SetAssistiveWindowProperties(params.context_id, assistive_window,
+                                       &error);
+  if (!error.empty())
+    return RespondNow(Error(InformativeError(error, function_name())));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
 }
 
 ExtensionFunction::ResponseAction

@@ -15,6 +15,11 @@ import subprocess
 import sys
 import tempfile
 
+try:  # py3
+    from shlex import quote as shell_quote
+except ImportError:  # py2
+    from pipes import quote as shell_quote
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 
@@ -102,6 +107,16 @@ def main(argv):
   parser.add_option('--no-static-libstdc++', action='store_true',
                     default=False, dest='no_static_libstdcpp',
                     help='Don\'t link libstdc++ statically')
+  parser.add_option('--link-lib',
+                    action='append',
+                    metavar='LINK_LIB',
+                    default=[],
+                    dest='link_libs',
+                    help=('Add a library to the final executable link. ' +
+                          'LINK_LIB must be the path to a static or shared ' +
+                          'library, or \'-l<name>\' on POSIX systems. Can be ' +
+                          'used multiple times. Useful to link custom malloc ' +
+                          'or cpu profiling libraries.'))
   options, args = parser.parse_args(argv)
 
   if args:
@@ -160,16 +175,20 @@ def WriteGenericNinja(path, static_libraries, executables,
                       cflags=[], ldflags=[], libflags=[],
                       include_dirs=[], solibs=[]):
   rel_source_path = os.path.relpath(path, REPO_ROOT).replace("\\","/")
+
+  args = ' -d' if options.debug else ''
+  for link_lib in options.link_libs:
+    args +=  ' --link-lib=' + shell_quote(link_lib)
+
   ninja_header_lines = [
     'cxx = ' + cxx,
     'ar = ' + ar,
     'ld = ' + ld,
     '',
     'rule regen',
-    '  command = %s %s/build/gen.py%s' % (
-        sys.executable,
+    '  command = %s %s/build/gen.py%s' % (sys.executable,
         REPO_ROOT.replace('$ ', '$$ ').replace(' ', '$ ').replace(':', '$:'),
-       ' -d' if options.debug else ''),
+    		args),
     '  description = Regenerating ninja files',
     '',
     'build build.ninja: regen',
@@ -474,6 +493,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/command_refs.cc',
         'src/gn/commands.cc',
         'src/gn/compile_commands_writer.cc',
+        'src/gn/rust_project_writer.cc',
         'src/gn/config.cc',
         'src/gn/config_values.cc',
         'src/gn/config_values_extractors.cc',
@@ -487,6 +507,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/escape.cc',
         'src/gn/exec_process.cc',
         'src/gn/filesystem_utils.cc',
+        'src/gn/file_writer.cc',
         'src/gn/frameworks_utils.cc',
         'src/gn/function_exec_script.cc',
         'src/gn/function_filter.cc',
@@ -563,6 +584,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/source_file.cc',
         'src/gn/standard_out.cc',
         'src/gn/string_atom.cc',
+        'src/gn/string_output_buffer.cc',
         'src/gn/string_utils.cc',
         'src/gn/substitution_list.cc',
         'src/gn/substitution_pattern.cc',
@@ -580,6 +602,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/value.cc',
         'src/gn/value_extractors.cc',
         'src/gn/variables.cc',
+        'src/gn/version.cc',
         'src/gn/visibility.cc',
         'src/gn/visual_studio_utils.cc',
         'src/gn/visual_studio_writer.cc',
@@ -611,6 +634,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/escape_unittest.cc',
         'src/gn/exec_process_unittest.cc',
         'src/gn/filesystem_utils_unittest.cc',
+        'src/gn/file_writer_unittest.cc',
         'src/gn/frameworks_utils_unittest.cc',
         'src/gn/function_filter_unittest.cc',
         'src/gn/function_foreach_unittest.cc',
@@ -631,6 +655,8 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/inherited_libraries_unittest.cc',
         'src/gn/input_conversion_unittest.cc',
         'src/gn/json_project_writer_unittest.cc',
+        'src/gn/rust_project_writer_unittest.cc',
+        'src/gn/rust_project_writer_helpers_unittest.cc',
         'src/gn/label_pattern_unittest.cc',
         'src/gn/label_unittest.cc',
         'src/gn/loader_unittest.cc',
@@ -662,6 +688,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/source_dir_unittest.cc',
         'src/gn/source_file_unittest.cc',
         'src/gn/string_atom_unittest.cc',
+        'src/gn/string_output_buffer_unittest.cc',
         'src/gn/string_utils_unittest.cc',
         'src/gn/substitution_pattern_unittest.cc',
         'src/gn/substitution_writer_unittest.cc',
@@ -672,6 +699,8 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/tokenizer_unittest.cc',
         'src/gn/unique_vector_unittest.cc',
         'src/gn/value_unittest.cc',
+        'src/gn/vector_utils_unittest.cc',
+        'src/gn/version_unittest.cc',
         'src/gn/visibility_unittest.cc',
         'src/gn/visual_studio_utils_unittest.cc',
         'src/gn/visual_studio_writer_unittest.cc',
@@ -729,6 +758,8 @@ def WriteGNNinja(path, platform, host, options):
           '-lshlwapi',
       ])
 
+
+  libs.extend(options.link_libs)
 
   # we just build static libraries that GN needs
   executables['gn']['libs'].extend(static_libraries.keys())

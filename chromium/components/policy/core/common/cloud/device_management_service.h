@@ -85,6 +85,7 @@ class POLICY_EXPORT DeviceManagementService {
   static constexpr int kPolicyNotFound = 902;
   static constexpr int kDeprovisioned = 903;
   static constexpr int kArcDisabled = 904;
+  static constexpr int kInvalidDomainlessCustomer = 905;
   static constexpr int kTosHasNotBeenAccepted = 906;
 
   // Number of times to retry on ERR_NETWORK_CHANGED errors.
@@ -109,6 +110,10 @@ class POLICY_EXPORT DeviceManagementService {
 
     // Server at which to contact the real time reporting service.
     virtual std::string GetReportingServerUrl() = 0;
+
+    // Server at which to contact the real time reporting service for
+    // enterprise connectors.
+    virtual std::string GetReportingConnectorServerUrl() = 0;
   };
 
   // A DeviceManagementService job manages network requests to the device

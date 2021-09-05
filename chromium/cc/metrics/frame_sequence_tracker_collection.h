@@ -6,6 +6,8 @@
 #define CC_METRICS_FRAME_SEQUENCE_TRACKER_COLLECTION_H_
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
@@ -47,8 +49,12 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   FrameSequenceTrackerCollection& operator=(
       const FrameSequenceTrackerCollection&) = delete;
 
-  // Creates a tracker for the specified sequence-type.
-  FrameSequenceMetrics* StartSequence(FrameSequenceTrackerType type);
+  // Creates a new tracker for the specified sequence-type if one doesn't
+  // already exist. Returns the associated FrameSequenceTracker instance.
+  FrameSequenceTracker* StartSequence(FrameSequenceTrackerType type);
+  FrameSequenceTracker* StartScrollSequence(
+      FrameSequenceTrackerType type,
+      FrameSequenceMetrics::ThreadType scrolling_thread);
 
   // Schedules |tracker| for destruction. This is preferred instead of outright
   // desrtruction of the tracker, since this ensures that the actual tracker
@@ -103,22 +109,34 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   // Reports the accumulated kCustom tracker results and clears it.
   CustomTrackerResults TakeCustomTrackerResults();
 
-  FrameSequenceTracker* GetTrackerForTesting(FrameSequenceTrackerType type);
   FrameSequenceTracker* GetRemovalTrackerForTesting(
       FrameSequenceTrackerType type);
 
   void SetUkmManager(UkmManager* manager);
 
-  base::Optional<int> current_universal_throughput() {
-    return current_universal_throughput_;
-  }
+  // These methods directly calls corresponding APIs in ThroughputUkmReporter,
+  // please refer to the ThroughputUkmReporter for details.
+  bool HasThroughputData() const;
+  int TakeLastAggregatedPercent();
+  int TakeLastImplPercent();
+  base::Optional<int> TakeLastMainPercent();
+
+  void ComputeUniversalThroughputForTesting();
 
  private:
   friend class FrameSequenceTrackerTest;
 
+  FrameSequenceTracker* StartSequenceInternal(
+      FrameSequenceTrackerType type,
+      FrameSequenceMetrics::ThreadType scrolling_thread);
+
   void RecreateTrackers(const viz::BeginFrameArgs& args);
   // Destroy the trackers that are ready to be terminated.
   void DestroyTrackers();
+
+  // Ask all trackers to report their metrics if there is any, must be the first
+  // thing in the destructor.
+  void CleanUp();
 
   // Adds collected metrics data for |custom_sequence_id| to be picked up via
   // TakeCustomTrackerResults() below.
@@ -127,9 +145,19 @@ class CC_EXPORT FrameSequenceTrackerCollection {
       FrameSequenceMetrics::ThroughputData throughput_data);
 
   const bool is_single_threaded_;
+  // The reporter takes throughput data and connect to UkmManager to report it.
+  // Note: this has to be before the frame_trackers_. The reason is that a
+  // FrameSequenceTracker owners a FrameSequenceMetrics, so the destructor of
+  // the former calls the destructor of the later. FrameSequenceMetrics's
+  // destructor calls its ReportMetrics() which requires
+  // |throughput_ukm_reporter_| to be alive. So putting it before
+  // |frame_trackers_| to ensure that it is destroyed after the tracker.
+  std::unique_ptr<ThroughputUkmReporter> throughput_ukm_reporter_;
+
   // The callsite can use the type to manipulate the tracker.
-  base::flat_map<FrameSequenceTrackerType,
-                 std::unique_ptr<FrameSequenceTracker>>
+  base::flat_map<
+      std::pair<FrameSequenceTrackerType, FrameSequenceMetrics::ThreadType>,
+      std::unique_ptr<FrameSequenceTracker>>
       frame_trackers_;
 
   // Custom trackers are keyed by a custom sequence id.
@@ -141,14 +169,10 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   CompositorFrameReportingController* const
       compositor_frame_reporting_controller_;
 
-  // The reporter takes throughput data and connect to UkmManager to report it.
-  std::unique_ptr<ThroughputUkmReporter> throughput_ukm_reporter_;
-
   base::flat_map<
       std::pair<FrameSequenceTrackerType, FrameSequenceMetrics::ThreadType>,
       std::unique_ptr<FrameSequenceMetrics>>
       accumulated_metrics_;
-  base::Optional<int> current_universal_throughput_;
 };
 
 }  // namespace cc

@@ -1,5 +1,5 @@
 include_rules = [
-    # To whitelist base/ stuff Blink is allowed to include, we list up all
+    # To only allow a subset of base/ in Blink, we explicitly list all
     # directories and files instead of writing 'base/'.
     "+base/allocator/partition_allocator",
     "+base/atomic_ref_count.h",
@@ -42,6 +42,7 @@ include_rules = [
     "+base/test",
     "+base/test/fuzzed_data_provider.h",
     "+base/threading/thread_task_runner_handle.h",
+    "+base/threading/thread_restrictions.h",
     "+base/time",
     "+base/timer",
     "+base/trace_event",

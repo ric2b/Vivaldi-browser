@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -36,6 +37,7 @@ import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestio
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -98,6 +100,7 @@ public class TabSwitcherCoordinator
     private final TabModelSelector mTabModelSelector;
     private final @TabListCoordinator.TabListMode int mMode;
     private final MessageCardProviderCoordinator mMessageCardProviderCoordinator;
+    private final MultiWindowModeStateDispatcher mMultiWindowModeStateDispatcher;
 
     private TabSelectionEditorCoordinator mTabSelectionEditorCoordinator;
     private TabGroupManualSelectionMode mTabGroupManualSelectionMode;
@@ -144,24 +147,25 @@ public class TabSwitcherCoordinator
             ChromeFullscreenManager fullscreenManager, TabCreatorManager tabCreatorManager,
             MenuOrKeyboardActionController menuOrKeyboardActionController, ViewGroup container,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier,
-            @TabListCoordinator.TabListMode int mode) {
+            MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
+            ScrimCoordinator scrimCoordinator, @TabListCoordinator.TabListMode int mode) {
         mMode = mode;
         mTabModelSelector = tabModelSelector;
         mContainer = container;
         mTabCreatorManager = tabCreatorManager;
+        mMultiWindowModeStateDispatcher = multiWindowModeStateDispatcher;
 
         PropertyModel containerViewModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
 
         mMediator = new TabSwitcherMediator(this, containerViewModel, tabModelSelector,
-                fullscreenManager, container, tabContentManager, this, mode);
+                fullscreenManager, container, tabContentManager, this,
+                multiWindowModeStateDispatcher, mode);
 
         mMultiThumbnailCardProvider =
                 new MultiThumbnailCardProvider(context, tabContentManager, tabModelSelector);
 
         PseudoTab.TitleProvider titleProvider = tab -> {
-            int numRelatedTabs =
-                    PseudoTab.getRelatedTabs(tab, tabModelSelector.getTabModelFilterProvider())
-                            .size();
+            int numRelatedTabs = PseudoTab.getRelatedTabs(tab, tabModelSelector).size();
             if (numRelatedTabs == 1) return tab.getTitle();
             return context.getResources().getQuantityString(
                     R.plurals.bottom_tab_grid_title_placeholder, numRelatedTabs, numRelatedTabs);
@@ -209,17 +213,19 @@ public class TabSwitcherCoordinator
                 mTabListCoordinator.getContainerView(), TabListContainerViewBinder::bind);
         }
 
-        mMessageCardProviderCoordinator = new MessageCardProviderCoordinator(context,
-                (identifier)
-                        -> mTabListCoordinator.removeSpecialListItem(
-                                TabProperties.UiType.MESSAGE, identifier));
+        mMessageCardProviderCoordinator =
+                new MessageCardProviderCoordinator(context, (identifier) -> {
+                    mTabListCoordinator.removeSpecialListItem(
+                            TabProperties.UiType.MESSAGE, identifier);
+                    appendNextMessage(identifier);
+                });
 
         if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
             mTabGridDialogCoordinator = new TabGridDialogCoordinator(context, tabModelSelector,
                     tabContentManager, tabCreatorManager,
-                    ((ChromeTabbedActivity) context).getCompositorViewHolder(), this, mMediator,
-                    this::getTabGridDialogAnimationSourceView, shareDelegateSupplier);
-
+                    ((ChromeTabbedActivity) context).findViewById(R.id.coordinator), this,
+                    mMediator, this::getTabGridDialogAnimationSourceView, shareDelegateSupplier,
+                    scrimCoordinator);
             mMediator.setTabGridDialogController(mTabGridDialogCoordinator.getDialogController());
         } else {
             mTabGridDialogCoordinator = null;
@@ -431,7 +437,7 @@ public class TabSwitcherCoordinator
     @Override
     @VisibleForTesting
     public void setSourceRectCallbackForTesting(Callback<RectF> callback) {
-        TabGridDialogParent.setSourceRectCallbackForTesting(callback);
+        TabGridDialogView.setSourceRectCallbackForTesting(callback);
     }
 
     // ResetHandler implementation.
@@ -488,6 +494,7 @@ public class TabSwitcherCoordinator
     }
 
     private void appendMessagesTo(int index) {
+        if (mMultiWindowModeStateDispatcher.isInMultiWindowMode()) return;
         sAppendedMessagesForTesting = false;
         List<MessageCardProviderMediator.Message> messages =
                 mMessageCardProviderCoordinator.getMessageItems();
@@ -496,6 +503,16 @@ public class TabSwitcherCoordinator
                     index + i, TabProperties.UiType.MESSAGE, messages.get(i).model);
         }
         if (messages.size() > 0) sAppendedMessagesForTesting = true;
+    }
+
+    private void appendNextMessage(@MessageService.MessageType int messageType) {
+        assert mMessageCardProviderCoordinator != null;
+
+        MessageCardProviderMediator.Message nextMessage =
+                mMessageCardProviderCoordinator.getNextMessageItemForType(messageType);
+        if (nextMessage == null) return;
+        mTabListCoordinator.addSpecialListItemToEnd(
+                TabProperties.UiType.MESSAGE, nextMessage.model);
     }
 
     private View getTabGridDialogAnimationSourceView(int tabId) {

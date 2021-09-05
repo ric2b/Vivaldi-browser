@@ -1193,7 +1193,7 @@ util.getEntryLabel = (locationInfo, entry) => {
     if (entry.fullPath == '/Downloads') {
       return str('DOWNLOADS_DIRECTORY_LABEL');
     }
-    if (util.isPluginVmEnabled() && entry.fullPath == '/PvmDefault') {
+    if (entry.fullPath == '/PvmDefault') {
       return str('PLUGIN_VM_DIRECTORY_LABEL');
     }
   }
@@ -1406,6 +1406,15 @@ util.isFilesNg = () => {
  */
 util.isUnifiedMediaViewEnabled = () => {
   return loadTimeData.getBoolean('UNIFIED_MEDIA_VIEW_ENABLED');
+};
+
+/**
+ * Returns true when FilesZipNoNacl is enabled.
+ * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
+ * @return {boolean}
+ */
+util.isZipNoNacl = () => {
+  return loadTimeData.getBoolean('ZIP_NO_NACL');
 };
 
 /**
@@ -1640,4 +1649,33 @@ util.isSameVolume = (entries, volumeManager) => {
   }
 
   return true;
+};
+
+/**
+ * Sets line clamp properties on elements to limit element's text to specified
+ * number of lines and add ellipsis.
+ *
+ * @param {!Element} element Element to clamp.
+ * @param {string} lines Maximum number of lines in element.
+ * @return {!Element}
+ */
+util.setClampLine = (element, lines) => {
+  element.style.overflow = 'hidden';
+  element.style.textOverflow = 'ellipsis';
+  element.style.webkitBoxOrient = 'vertical';
+  element.style.display = '-webkit-box';
+  element.style.webkitLineClamp = lines;
+
+  return element;
+};
+
+/**
+ * Returns true if the element's content has overflowed.
+ *
+ * @param {!Element} element The element to check.
+ * @returns {boolean}
+ */
+util.hasOverflow = (element) => {
+  return element.clientWidth < element.scrollWidth ||
+      element.clientHeight < element.scrollHeight;
 };

@@ -42,9 +42,8 @@ class LoginDisplayMojo : public LoginDisplay,
   void ShowError(int error_msg_id,
                  int login_attempts,
                  HelpAppLauncher::HelpTopic help_topic_id) override;
-  void ShowErrorScreen(LoginDisplay::SigninError error_id) override;
   void ShowPasswordChangedDialog(bool show_password_error,
-                                 const std::string& email) override;
+                                 const AccountId& account_id) override;
   void ShowSigninUI(const std::string& email) override;
   void ShowWhitelistCheckFailedError() override;
 
@@ -59,9 +58,7 @@ class LoginDisplayMojo : public LoginDisplay,
   void ShowKioskEnableScreen() override;
   void ShowKioskAutolaunchScreen() override;
   void ShowWrongHWIDScreen() override;
-  void ShowUpdateRequiredScreen() override;
   void CancelUserAdding() override;
-  void RemoveUser(const AccountId& account_id) override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
   bool IsShowGuest() const override;
   bool IsShowUsers() const override;

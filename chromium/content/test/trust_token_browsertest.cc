@@ -9,6 +9,8 @@
 #include "base/strings/string_piece.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -24,6 +26,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/trust_token_parameterization.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/trust_tokens/test/test_server_handler_registration.h"
 #include "services/network/trust_tokens/test/trust_token_request_handler.h"
@@ -275,9 +278,45 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
   EXPECT_EQ(request_handler_.LastVerificationError(), base::nullopt);
 }
 
+IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEndInIsolatedWorld) {
+  // Ensure an isolated world can execute Trust Tokens operations when its
+  // window's main world can. In particular, this ensures that the
+  // redemtion-and-signing feature policy is appropriately propagated by the
+  // browser process.
+  base::RunLoop run_loop;
+  GetNetworkService()->SetTrustTokenKeyCommitments(
+      network::WrapKeyCommitmentForIssuer(
+          url::Origin::Create(server_.base_url()),
+          request_handler_.GetKeyCommitmentRecord()),
+      run_loop.QuitClosure());
+  run_loop.Run();
+
+  GURL start_url(server_.GetURL("/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+  std::string cmd = R"(
+  (async () => {
+    await fetch("/issue", {trustToken: {type: 'token-request'}});
+    await fetch("/redeem", {trustToken: {type: 'srr-token-redemption'}});
+    await fetch("/sign", {trustToken: {type: 'send-srr',
+                                  signRequestData: 'include',
+                                  issuer: $1}}); })(); )";
+
+  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
+  // resolve.
+  EXPECT_EQ(
+      EvalJs(
+          shell(),
+          JsReplace(cmd, url::Origin::Create(server_.base_url()).Serialize()),
+          EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+          /*world_id=*/30)
+          .error,
+      "");
+  EXPECT_EQ(request_handler_.LastVerificationError(), base::nullopt);
+}
+
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, RecordsTimers) {
   base::HistogramTester histograms;
-
   base::RunLoop run_loop;
   GetNetworkService()->SetTrustTokenKeyCommitments(
       network::WrapKeyCommitmentForIssuer(
@@ -357,6 +396,167 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, OperationsRequireSecureContext) {
   EXPECT_THAT(monitor.GetRequestInfo(issuance_url),
               Optional(Field(&network::ResourceRequest::trust_token_params,
                              IsFalse())));
+}
+
+IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, AdditionalSigningData) {
+  base::RunLoop run_loop;
+  GetNetworkService()->SetTrustTokenKeyCommitments(
+      network::WrapKeyCommitmentForIssuer(
+          url::Origin::Create(server_.base_url()),
+          request_handler_.GetKeyCommitmentRecord()),
+      run_loop.QuitClosure());
+  run_loop.Run();
+
+  GURL start_url(server_.GetURL("/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+  std::string cmd = R"(
+  (async () => {
+    await fetch("/issue", {trustToken: {type: 'token-request'}});
+    await fetch("/redeem", {trustToken: {type: 'srr-token-redemption'}});
+    await fetch("/sign", {trustToken: {type: 'send-srr',
+      signRequestData: 'include',
+      issuer: $1,
+      additionalSigningData: 'some additional data to sign'}});
+    return "Success"; })(); )";
+
+  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
+  // resolve.
+  EXPECT_EQ(
+      "Success",
+      EvalJs(
+          shell(),
+          JsReplace(cmd, url::Origin::Create(server_.base_url()).Serialize())));
+
+  EXPECT_EQ(request_handler_.LastVerificationError(), base::nullopt);
+}
+
+IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, OverlongAdditionalSigningData) {
+  TrustTokenRequestHandler::Options options;
+  options.client_signing_outcome =
+      TrustTokenRequestHandler::SigningOutcome::kFailure;
+  request_handler_.UpdateOptions(std::move(options));
+
+  base::RunLoop run_loop;
+  GetNetworkService()->SetTrustTokenKeyCommitments(
+      network::WrapKeyCommitmentForIssuer(
+          url::Origin::Create(server_.base_url()),
+          request_handler_.GetKeyCommitmentRecord()),
+      run_loop.QuitClosure());
+  run_loop.Run();
+
+  GURL start_url = server_.GetURL("/title1.html");
+  ASSERT_TRUE(NavigateToURL(shell(), start_url));
+
+  std::string cmd = R"(
+  (async () => {
+    await fetch("/issue", {trustToken: {type: 'token-request'}});
+    await fetch("/redeem", {trustToken: {type: 'srr-token-redemption'}});
+    return "Success"; })(); )";
+
+  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
+  // resolve.
+  EXPECT_EQ("Success", EvalJs(shell(), cmd));
+
+  // Even though this contains fewer than
+  // network::kTrustTokenAdditionalSigningDataMaxSizeBytes code units, once it's
+  // converted to UTF-8 it will contain more than that many bytes, so we expect
+  // that it will get rejected by the network service.
+  base::string16 overlong_signing_data(
+      network::kTrustTokenAdditionalSigningDataMaxSizeBytes,
+      u'€' /* char16 literal */);
+  ASSERT_LE(overlong_signing_data.size(),
+            network::kTrustTokenAdditionalSigningDataMaxSizeBytes);
+
+  cmd = R"(
+    fetch("/sign", {trustToken: {type: 'send-srr',
+      signRequestData: 'include',
+      issuer: $1,
+      additionalSigningData: $2}}).then(()=>"Success");)";
+
+  EXPECT_EQ(
+      "Success",
+      EvalJs(shell(),
+             JsReplace(cmd, url::Origin::Create(server_.base_url()).Serialize(),
+                       overlong_signing_data)));
+  EXPECT_EQ(request_handler_.LastVerificationError(), base::nullopt);
+}
+
+IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
+                       AdditionalSigningDataNotAValidHeader) {
+  TrustTokenRequestHandler::Options options;
+  options.client_signing_outcome =
+      TrustTokenRequestHandler::SigningOutcome::kFailure;
+  request_handler_.UpdateOptions(std::move(options));
+
+  base::RunLoop run_loop;
+  GetNetworkService()->SetTrustTokenKeyCommitments(
+      network::WrapKeyCommitmentForIssuer(
+          url::Origin::Create(server_.base_url()),
+          request_handler_.GetKeyCommitmentRecord()),
+      run_loop.QuitClosure());
+  run_loop.Run();
+
+  GURL start_url = server_.GetURL("/title1.html");
+  ASSERT_TRUE(NavigateToURL(shell(), start_url));
+
+  std::string command = R"(
+  (async () => {
+    await fetch("/issue", {trustToken: {type: 'token-request'}});
+    await fetch("/redeem", {trustToken: {type: 'srr-token-redemption'}});
+    return "Success"; })(); )";
+
+  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
+  // resolve.
+  EXPECT_EQ("Success", EvalJs(shell(), command));
+
+  command = R"(
+    fetch("/sign", {trustToken: {type: 'send-srr',
+      signRequestData: 'include',
+      issuer: $1,
+      additionalSigningData: '\r'}}).then(()=>"Success");)";
+
+  EXPECT_EQ(
+      "Success",
+      EvalJs(shell(),
+             JsReplace(command,
+                       url::Origin::Create(server_.base_url()).Serialize())));
+  EXPECT_EQ(request_handler_.LastVerificationError(), base::nullopt);
+}
+
+// This regression test for crbug.com/1111735 ensures it's possible to execute
+// redemption from a nested same-origin frame that hasn't committed a
+// navigation.
+//
+// How it works: The main frame embeds a same-origin iframe that does not
+// commit a navigation (here, specifically because of an HTTP 204 return). From
+// this iframe, we execute a Trust Tokens redemption operation via the iframe
+// interface (in other words, the Trust Tokens operation executes during the
+// process of navigating to a grandchild frame).  The grandchild frame's load
+// will result in a renderer kill without the fix for the bug applied.
+IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
+                       SignFromFrameLackingACommittedNavigation) {
+  GURL start_url = server_.GetURL(
+      "/page-executing-trust-token-signing-from-204-subframe.html");
+
+  // Execute a signing operation from a child iframe that has not committed a
+  // navigation (see the html source).
+  ASSERT_TRUE(NavigateToURL(shell(), start_url));
+
+  // For good measure, make sure the analogous signing operation works from
+  // fetch, too, even though it wasn't broken by the same bug.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  EXPECT_EQ("Success", EvalJs(root->child_at(0)->current_frame_host(),
+                              JsReplace(R"(
+                              fetch($1, {mode: 'no-cors',
+                                         trustToken: {
+                                           type: 'send-srr',
+                                           issuer: 'https://issuer.example'
+                                         }}).then(()=>'Success');)",
+                                        server_.GetURL("/issue"))));
 }
 
 }  // namespace content

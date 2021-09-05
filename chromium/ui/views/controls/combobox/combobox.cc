@@ -17,12 +17,14 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_model.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/themed_vector_icon.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/background.h"
@@ -52,6 +54,15 @@ constexpr int kNoSelection = -1;
 SkColor GetTextColorForEnableState(const Combobox& combobox, bool enabled) {
   const int style = enabled ? style::STYLE_PRIMARY : style::STYLE_DISABLED;
   return style::GetColor(combobox, style::CONTEXT_TEXTFIELD, style);
+}
+
+gfx::ImageSkia GetImageSkiaFromImageModel(const ui::ImageModel* model,
+                                          const ui::NativeTheme* native_theme) {
+  DCHECK(model);
+  DCHECK(!model->IsEmpty());
+  return model->IsImage() ? model->GetImage().AsImageSkia()
+                          : ui::ThemedVectorIcon(model->GetVectorIcon())
+                                .GetImageSkia(native_theme);
 }
 
 // The transparent button which holds a button state but is not rendered.
@@ -132,7 +143,13 @@ class Combobox::ComboboxMenuModel : public ui::MenuModel {
   }
 
   // Overridden from MenuModel:
-  bool HasIcons() const override { return false; }
+  bool HasIcons() const override {
+    for (int i = 0; i < GetItemCount(); ++i) {
+      if (!GetIconAt(i).IsEmpty())
+        return true;
+    }
+    return false;
+  }
 
   int GetItemCount() const override { return model_->GetItemCount(); }
 
@@ -155,7 +172,13 @@ class Combobox::ComboboxMenuModel : public ui::MenuModel {
   base::string16 GetLabelAt(int index) const override {
     // Inserting the Unicode formatting characters if necessary so that the
     // text is displayed correctly in right-to-left UIs.
-    base::string16 text = model_->GetItemAt(index);
+    base::string16 text = model_->GetDropDownTextAt(index);
+    base::i18n::AdjustStringForLocaleDirection(&text);
+    return text;
+  }
+
+  base::string16 GetSecondaryLabelAt(int index) const override {
+    base::string16 text = model_->GetDropDownSecondaryTextAt(index);
     base::i18n::AdjustStringForLocaleDirection(&text);
     return text;
   }
@@ -178,7 +201,7 @@ class Combobox::ComboboxMenuModel : public ui::MenuModel {
   int GetGroupIdAt(int index) const override { return -1; }
 
   ui::ImageModel GetIconAt(int index) const override {
-    return ui::ImageModel();
+    return model_->GetDropDownIconAt(index);
   }
 
   ui::ButtonMenuItemModel* GetButtonMenuItemAt(int index) const override {
@@ -443,7 +466,7 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
 
 void Combobox::OnPaint(gfx::Canvas* canvas) {
   OnPaintBackground(canvas);
-  PaintText(canvas);
+  PaintIconAndText(canvas);
   OnPaintBorder(canvas);
 }
 
@@ -504,16 +527,8 @@ void Combobox::ButtonPressed(Button* sender, const ui::Event& event) {
 
   // TODO(hajimehoshi): Fix the problem that the arrow button blinks when
   // cliking this while the dropdown menu is opened.
-  const base::TimeDelta delta = base::TimeTicks::Now() - closed_time_;
-  if (delta <= kMinimumTimeBetweenButtonClicks)
-    return;
-
-  ui::MenuSourceType source_type = ui::MENU_SOURCE_MOUSE;
-  if (event.IsKeyEvent())
-    source_type = ui::MENU_SOURCE_KEYBOARD;
-  else if (event.IsGestureEvent() || event.IsTouchEvent())
-    source_type = ui::MENU_SOURCE_TOUCH;
-  ShowDropDownMenu(source_type);
+  if ((base::TimeTicks::Now() - closed_time_) > kMinimumTimeBetweenButtonClicks)
+    ShowDropDownMenu(ui::GetMenuSourceTypeForEvent(event));
 }
 
 void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
@@ -543,7 +558,7 @@ void Combobox::AdjustBoundsForRTLUI(gfx::Rect* rect) const {
   rect->set_x(GetMirroredXForRect(*rect));
 }
 
-void Combobox::PaintText(gfx::Canvas* canvas) {
+void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
   gfx::Insets insets = GetInsets();
   insets += gfx::Insets(0, LayoutProvider::Get()->GetDistanceMetric(
                                DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
@@ -553,7 +568,20 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
 
   int x = insets.left();
   int y = insets.top();
-  int text_height = height() - insets.height();
+  int contents_height = height() - insets.height();
+
+  // Draw the icon.
+  ui::ImageModel icon = model()->GetIconAt(selected_index_);
+  if (!icon.IsEmpty()) {
+    gfx::ImageSkia icon_skia =
+        GetImageSkiaFromImageModel(&icon, GetNativeTheme());
+    int icon_y = y + (contents_height - icon_skia.height()) / 2;
+    canvas->DrawImageInt(icon_skia, x, icon_y);
+    x += icon_skia.width() + LayoutProvider::Get()->GetDistanceMetric(
+                                 DISTANCE_RELATED_LABEL_HORIZONTAL);
+  }
+
+  // Draw the text.
   SkColor text_color = GetTextColorForEnableState(*this, GetEnabled());
   DCHECK_GE(selected_index_, 0);
   DCHECK_LT(selected_index_, model()->GetItemCount());
@@ -565,10 +593,10 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
 
   const gfx::FontList& font_list = GetFontList();
   int text_width = gfx::GetStringWidth(text, font_list);
-  if ((text_width + insets.width()) > disclosure_arrow_offset)
-    text_width = disclosure_arrow_offset - insets.width();
+  text_width =
+      std::min(text_width, disclosure_arrow_offset - insets.right() - x);
 
-  gfx::Rect text_bounds(x, y, text_width, text_height);
+  gfx::Rect text_bounds(x, y, text_width, contents_height);
   AdjustBoundsForRTLUI(&text_bounds);
   canvas->DrawStringRect(text, font_list, text_color, text_bounds);
 
@@ -581,20 +609,14 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
 }
 
 void Combobox::ShowDropDownMenu(ui::MenuSourceType source_type) {
-  // Menu border widths.
-  constexpr int kMenuBorderWidthLeft = 1;
   constexpr int kMenuBorderWidthTop = 1;
-  constexpr int kMenuBorderWidthRight = 1;
-
+  // Menu's requested position's width should be the same as local bounds so the
+  // border of the menu lines up with the border of the combobox. The y
+  // coordinate however should be shifted to the bottom with the border with not
+  // to overlap with the combobox border.
   gfx::Rect lb = GetLocalBounds();
   gfx::Point menu_position(lb.origin());
-
-  // Inset the menu's requested position so the border of the menu lines up
-  // with the border of the combobox.
-  menu_position.set_x(menu_position.x() + kMenuBorderWidthLeft);
   menu_position.set_y(menu_position.y() + kMenuBorderWidthTop);
-
-  lb.set_width(lb.width() - (kMenuBorderWidthLeft + kMenuBorderWidthRight));
 
   View::ConvertPointToScreen(this, &menu_position);
 
@@ -633,18 +655,27 @@ void Combobox::OnPerformAction() {
 
 gfx::Size Combobox::GetContentSize() const {
   const gfx::FontList& font_list = GetFontList();
-
+  int height = font_list.GetHeight();
   int width = 0;
   for (int i = 0; i < model()->GetItemCount(); ++i) {
     if (model_->IsItemSeparatorAt(i))
       continue;
 
     if (size_to_largest_label_ || i == selected_index_) {
-      width = std::max(
-          width, gfx::GetStringWidth(menu_model_->GetLabelAt(i), font_list));
+      int item_width = gfx::GetStringWidth(model()->GetItemAt(i), font_list);
+      ui::ImageModel icon = model()->GetIconAt(i);
+      if (!icon.IsEmpty()) {
+        gfx::ImageSkia icon_skia =
+            GetImageSkiaFromImageModel(&icon, GetNativeTheme());
+        item_width +=
+            icon_skia.width() + LayoutProvider::Get()->GetDistanceMetric(
+                                    DISTANCE_RELATED_LABEL_HORIZONTAL);
+        height = std::max(height, icon_skia.height());
+      }
+      width = std::max(width, item_width);
     }
   }
-  return gfx::Size(width, font_list.GetHeight());
+  return gfx::Size(width, height);
 }
 
 PrefixSelector* Combobox::GetPrefixSelector() {

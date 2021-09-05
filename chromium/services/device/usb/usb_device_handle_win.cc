@@ -26,6 +26,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/win/object_watcher.h"
@@ -335,8 +336,8 @@ void UsbDeviceHandleWin::SetInterfaceAlternateSetting(int interface_number,
 
   // Use a strong reference to |this| rather than a weak pointer to prevent
   // |interface.handle| from being freed because |this| was destroyed.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(&SetCurrentAlternateSettingBlocking,
                      interface.handle.Get(), alternate_setting),
       base::BindOnce(&UsbDeviceHandleWin::OnSetAlternateInterfaceSetting, this,
@@ -388,8 +389,8 @@ void UsbDeviceHandleWin::ClearHalt(mojom::UsbTransferDirection direction,
 
   // Use a strong reference to |this| rather than a weak pointer to prevent
   // |interface.handle| from being freed because |this| was destroyed.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(&ResetPipeBlocking, interface.handle.Get(),
                      endpoint_address),
       base::BindOnce(&UsbDeviceHandleWin::OnClearHalt, this,
@@ -1017,13 +1018,22 @@ void UsbDeviceHandleWin::GotDescriptorFromNodeConnection(
   if (win32_result != ERROR_SUCCESS) {
     SetLastError(win32_result);
     USB_PLOG(ERROR) << "Failed to read descriptor from node connection";
-    std::move(callback).Run(UsbTransferStatus::TRANSFER_ERROR, nullptr, 0);
+    std::move(callback).Run(UsbTransferStatus::TRANSFER_ERROR,
+                            /*buffer=*/nullptr, /*length=*/0);
     return;
   }
 
-  DCHECK_GE(bytes_transferred, sizeof(USB_DESCRIPTOR_REQUEST));
+  if (bytes_transferred < sizeof(USB_DESCRIPTOR_REQUEST)) {
+    USB_LOG(ERROR) << "Descriptor response too short (" << bytes_transferred
+                   << " < " << sizeof(USB_DESCRIPTOR_REQUEST) << ")";
+    std::move(callback).Run(UsbTransferStatus::TRANSFER_ERROR,
+                            /*buffer=*/nullptr, /*length=*/0);
+    return;
+  }
+
   bytes_transferred -= sizeof(USB_DESCRIPTOR_REQUEST);
-  DCHECK_LE(bytes_transferred, original_buffer->size());
+  bytes_transferred = std::min(bytes_transferred, original_buffer->size());
+
   memcpy(original_buffer->front(),
          request_buffer->front() + sizeof(USB_DESCRIPTOR_REQUEST),
          bytes_transferred);

@@ -121,7 +121,7 @@ public class QueryTileSection {
         boolean isLastLevelTile = queryTile.children.isEmpty();
         if (isLastLevelTile) {
             if (QueryTileUtils.isQueryEditingEnabled()) {
-                mSearchBoxCoordinator.setSearchText(queryTile.queryText);
+                mSearchBoxCoordinator.setSearchText(queryTile.queryText, true);
             } else {
                 mSubmitQueryCallback.onResult(
                         new QueryInfo(queryTile.queryText, queryTile.searchParams));

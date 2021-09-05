@@ -12,6 +12,7 @@
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/session/session_observer.h"
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -71,6 +72,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     kStickyKeys,
     kSwitchAccess,
     kVirtualKeyboard,
+    kCursorColor,
 
     kFeatureCount,
     kNoConflictingFeature
@@ -180,6 +182,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   Feature& sticky_keys() const;
   Feature& switch_access() const;
   Feature& virtual_keyboard() const;
+  Feature& cursor_color() const;
 
   // The following functions read and write to their associated preference.
   // These values are then used to determine whether the accelerator
@@ -281,6 +284,9 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   void SetSwitchAccessEnabled(bool enabled);
   bool switch_access_enabled() const { return switch_access().enabled(); }
+  // Switch access may be disabled in prefs but still running when the disable
+  // dialog is displaying.
+  bool IsSwitchAccessRunning() const;
   bool IsSwitchAccessSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSwitchAccess();
 
@@ -288,6 +294,9 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   bool virtual_keyboard_enabled() const { return virtual_keyboard().enabled(); }
   bool IsVirtualKeyboardSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForVirtualKeyboard();
+
+  void SetCursorColorEnabled(bool enabled);
+  bool cursor_color_enabled() const { return cursor_color().enabled(); }
 
   void SetTabletModeShelfNavigationButtonsEnabled(bool enabled);
   bool tablet_mode_shelf_navigation_buttons_enabled() const {
@@ -400,10 +409,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   SwitchAccessMenuBubbleController* GetSwitchAccessBubbleControllerForTest() {
     return switch_access_bubble_controller_.get();
   }
-  void no_switch_access_disable_confirmation_dialog_for_testing(
-      bool skip_dialog) {
-    no_switch_access_disable_confirmation_dialog_for_testing_ = skip_dialog;
-  }
+  void DisableSwitchAccessDisableConfirmationDialogTesting() override;
 
  private:
   // Populate |features_| with the feature of the correct type.
@@ -431,6 +437,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void UpdateAutoclickMenuPositionFromPref();
   void UpdateFloatingMenuPositionFromPref();
   void UpdateLargeCursorFromPref();
+  void UpdateCursorColorFromPrefs();
   void UpdateSwitchAccessKeyCodesFromPref(SwitchAccessCommand command);
   void UpdateSwitchAccessAutoScanEnabledFromPref();
   void UpdateSwitchAccessAutoScanSpeedFromPref();
@@ -469,6 +476,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   SwitchAccessEventHandlerDelegate* switch_access_event_handler_delegate_ =
       nullptr;
   bool no_switch_access_disable_confirmation_dialog_for_testing_ = false;
+  bool switch_access_disable_dialog_showing_ = false;
 
   // Used to control the highlights of caret, cursor and focus.
   std::unique_ptr<AccessibilityHighlightController>

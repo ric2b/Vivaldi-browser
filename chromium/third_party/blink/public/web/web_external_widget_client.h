@@ -5,12 +5,15 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_EXTERNAL_WIDGET_CLIENT_H_
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_EXTERNAL_WIDGET_CLIENT_H_
 
+#include <vector>
+
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
 class WebCoalescedInputEvent;
+class WebGestureEvent;
 
 // The interface from blink to Widgets with implementations outside of blink.
 class WebExternalWidgetClient {
@@ -49,6 +52,49 @@ class WebExternalWidgetClient {
   // Notification that the BeginMainFrame completed, was committed into the
   // compositor (thread) and submitted to the display compositor.
   virtual void DidCommitAndDrawCompositorFrame() = 0;
+
+  // Called before gesture events are processed and allows the
+  // client to handle the event itself. Return true if event was handled
+  // and further processing should stop.
+  virtual bool WillHandleGestureEvent(const WebGestureEvent& event) {
+    return false;
+  }
+
+  virtual bool SupportsBufferedTouchEvents() { return false; }
+
+  // Returns whether we handled a GestureScrollEvent.
+  virtual void DidHandleGestureScrollEvent(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) {}
+
+  // Connect the Widget Input Handler to the channels provided.
+  virtual void GetWidgetInputHandler(
+      CrossVariantMojoReceiver<mojom::WidgetInputHandlerInterfaceBase>
+          widget_input_receiver,
+      CrossVariantMojoRemote<mojom::WidgetInputHandlerHostInterfaceBase>
+          widget_input_host_remote) {}
+
+  // Since the widget input IPC channel is still on the content side send this
+  // message back to the embedder to then send it on that channel. All bounds
+  // are in window coordinates.
+  virtual void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) {}
+
+  // The IME guard prevents sending IPC messages while messages are being
+  // processed. Returns true if there is a current guard.
+  // |request_to_show_virtual_keyboard| is whether the message that would have
+  // been sent would have requested the keyboard. This method will eventually be
+  // removed when all input handling is moved into blink.
+  virtual bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) {
+    return false;
+  }
+
+  // The state of the focus has changed for the WebWidget. |enabled|
+  // is the new state.
+  virtual void FocusChanged(bool enabled) {}
 };
 
 }  // namespace blink

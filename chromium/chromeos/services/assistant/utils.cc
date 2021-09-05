@@ -51,6 +51,10 @@ base::FilePath GetRootPath() {
   return home_dir;
 }
 
+base::FilePath GetBaseAssistantDir() {
+  return GetRootPath().Append(FILE_PATH_LITERAL("google-assistant-library"));
+}
+
 std::string CreateLibAssistantConfig(
     base::Optional<std::string> s3_server_uri_override) {
   using Value = base::Value;
@@ -138,11 +142,21 @@ std::string CreateLibAssistantConfig(
 
   config.SetKey("audio_input", std::move(audio_input));
 
+  if (features::IsOnDeviceAssistantEnabled()) {
+    config.SetStringPath("internal.base_oda_resources_dir",
+                         GetBaseAssistantDir().AsUTF8Unsafe());
+  }
+
+  if (features::IsLibAssistantBetaBackendEnabled())
+    config.SetStringPath("internal.backend_type", "BETA_DOGFOOD");
+
   // Use http unless we're using the fake s3 server, which requires grpc.
   if (s3_server_uri_override)
     config.SetStringPath("internal.transport_type", "GRPC");
   else
     config.SetStringPath("internal.transport_type", "HTTP");
+
+  config.SetBoolPath("internal.enable_on_device_assistant_tts_as_text", true);
 
   // Finally add in the server uri override.
   if (s3_server_uri_override) {

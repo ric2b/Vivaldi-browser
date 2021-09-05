@@ -38,6 +38,8 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     private boolean mPendingSearchPromoDecision;
     private boolean mPendingBeginQuery;
     private boolean mNativeLibraryReady;
+    private boolean mHasWindowFocus;
+    private boolean mUrlBarFocusRequested;
 
     public SearchActivityLocationBarLayout(Context context, AttributeSet attrs) {
         super(context, attrs, R.layout.location_bar_base);
@@ -159,8 +161,8 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     //                we don't start processing non-cached suggestion requests until that state
     //                is finalized after native has been initialized.
     private void focusTextBox() {
-        if (!mUrlBar.hasFocus()) mUrlBar.requestFocus();
-        getAutocompleteCoordinator().setShowCachedZeroSuggestResults(true);
+        mUrlBarFocusRequested |= !mUrlBar.hasFocus();
+        ensureUrlBarFocusedAndTriggerZeroSuggest();
 
         new Handler().post(new Runnable() {
             @Override
@@ -168,5 +170,31 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
                 getWindowAndroid().getKeyboardDelegate().showKeyboard(mUrlBar);
             }
         });
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        mHasWindowFocus = hasFocus;
+        if (hasFocus) {
+            ensureUrlBarFocusedAndTriggerZeroSuggest();
+        } else {
+            mUrlBar.clearFocus();
+        }
+    }
+
+    /**
+     * Since there is a race condition between {@link #focusTextBox()} and {@link
+     * #onWindowFocusChanged(boolean)}, if call mUrlBar.requestFocus() before onWindowFocusChanged
+     * is called, clipboard data will not been received since receive clipboard data needs focus
+     * (https://developer.android.com/reference/android/content/ClipboardManager#getPrimaryClip()).
+     */
+    private void ensureUrlBarFocusedAndTriggerZeroSuggest() {
+        if (mUrlBarFocusRequested && mHasWindowFocus) {
+            mUrlBar.requestFocus();
+            mUrlBarFocusRequested = false;
+        }
+        // Use cached suggestions only if native is not yet ready.
+        getAutocompleteCoordinator().setShowCachedZeroSuggestResults(!mNativeLibraryReady);
     }
 }

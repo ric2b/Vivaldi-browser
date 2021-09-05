@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">जापानी इनपुट (सं. रा. अमेरिकाको किबोर्डका लागि)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> वस्तुहरू मेटाउँदै...</translation>
 <translation id="1049926623896334335">शब्द कागजात</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> मार्फत फाइलहरू खोल्न सर्वप्रथम ती फाइलहरू सारेर 'Windows फाइलहरू' फोल्डरमा लैजानुहोस्।</translation>
 <translation id="1062407476771304334">बदल्नुहोस्</translation>
 <translation id="1065449928621190041">क्यानाडा फ्रान्सेली किबोर्ड</translation>
 <translation id="1119069657431255176">Bzip2 खाँदिएको टार सङ्ग्रह</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">सिक स्लाइडर</translation>
 <translation id="1399648040768741453">तेलुगु किबोर्ड (ध्वन्यात्मक)</translation>
 <translation id="1430915738399379752">प्रिन्ट गर्नुहोस्</translation>
+<translation id="1433600251059882049">यो फोल्डर Linux र Windows सँग सेयर गरिएको छ</translation>
+<translation id="1435838927755162558">Parallels Desktop सँग फोल्डर सेयर गर्नुहोस्</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" />मा सारियो।</translation>
 <translation id="1441841714100794440">भियतनामी किबोर्ड (टेलेक्स)</translation>
 <translation id="1455548678241328678">नर्वेजियन किबोर्ड</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">यो फाइल अफलाइन उपलब्ध छैन।</translation>
 <translation id="184633654410729720">थाई किबोर्ड (केदमानी)</translation>
 <translation id="1847880352285315359">सुरक्षित गरियो</translation>
+<translation id="1853795129690976061">यो फोल्डर Linux सँग सेयर गरिएको छ</translation>
 <translation id="1864756863218646478">फाइल फेला पर्न सकेन।</translation>
 <translation id="1921986354447415460">टर्किस-एफ किबोर्ड</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> फर्म्याट गरियो</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">सिन्हाला किबोर्ड</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> उपलब्ध छ</translation>
 <translation id="2425665904502185219">कुल फाइलको आकार</translation>
+<translation id="2428749644083375155"><ph name="FOLDER_NAME" /> मा <ph name="NUMBER_OF_ITEMS" /> वटा वस्तु कपी गरिँदै छन्</translation>
 <translation id="2448312741937722512">प्रकार</translation>
 <translation id="2453576648990281505">फाइल पहिले नै अवस्थित छ</translation>
 <translation id="2464079411014186876">आइसक्रिम</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">भूगोल</translation>
 <translation id="3057861065630527966">तपाईँको तस्बिर र भिडियोहरू जगेडा गर्नुहोस्</translation>
 <translation id="3064388234319122767">ट्रान्सलिटेरेशन (Zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows फाइलहरू</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> मार्फत सेयर गर्नुहोस्</translation>
 <translation id="3088034400796962477">ट्रान्सलिटेरेशन (सलाम ← سلام)</translation>
 <translation id="3116361045094675131">बेलायत किबोर्ड</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">चेतावनी: यी फाइलहरू अस्थायी हुन् र भण्डारण स्थान खाली गर्नका निम्ति यी फाइल स्वतः मेटाइन सक्छन्।  <ph name="BEGIN_LINK" />थप जान्नुहोस्<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">फोल्डर</translation>
 <translation id="3549797760399244642">drive.google.com मा जानुहोस् ...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> मार्फत फाइलहरू खोल्न सर्वप्रथम ती फाइलहरू कपी गरेर 'Windows फाइलहरू' फोल्डरमा पेस्ट गर्नुहोस्।</translation>
 <translation id="357479282490346887">लिथुएनियन</translation>
 <translation id="3583509704582854624">अङ्क र अक्षरमिश्रित वर्णका इनपुट (जापानी किबोर्डका लागि)</translation>
 <translation id="3603385196401704894">क्यानाडाली फ्रान्सेली</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">संस्करण</translation>
 <translation id="3801082500826908679">फारोइज</translation>
 <translation id="3809272675881623365">खरायो</translation>
+<translation id="3810973564298564668">व्यवस्थित गर्नुहोस्</translation>
 <translation id="3811494700605067549">१ फाइललाई चयन गरियो</translation>
 <translation id="3815016854028376614">ज्हुयीन आगत विधि</translation>
 <translation id="3825863595139017598">मङ्गोलियाली किबोर्ड</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">टाँस्नुहोस्</translation>
 <translation id="3958548648197196644">कीवी</translation>
 <translation id="3966388904776714213">अडियो प्लेयर</translation>
+<translation id="3984317463833596033">Parallels Desktop लाई <ph name="FOLDER_NAME" /> फोल्डरमा रहेका फाइलहरू परिमार्जन गर्ने अनुमति दिनुहोस्</translation>
 <translation id="4002066346123236978">शीर्षक</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> का एप प्रयोग गरी फाइलहरू खोल्न सर्वप्रथम ती फाइललाई सारेर <ph name="SHARED_DIRECTORY_LABEL" /> फोल्डरमा लैजानुहोस्।</translation>
 <translation id="4070370845051020638">क्यान्टोनिज इनपुट विधि</translation>
 <translation id="4072248638558688893">तामिल किबोर्ड (ध्वन्यात्मक)</translation>
 <translation id="4124935795427217608">एक सिङे घोडा</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">हंगुल 2 सेट</translation>
 <translation id="4477219268485577442">बुल्गेरियन फोनेटिक</translation>
 <translation id="4479812471636796472">अमेरिकी ड्भोराक किबोर्ड</translation>
+<translation id="4481711095103932593">यो फोल्डर Windows सँग सेयर गरिएको छ</translation>
 <translation id="4487088045714738411">बेल्जियम किबोर्ड</translation>
 <translation id="4522570452068850558">विवरणहरू</translation>
 <translation id="4552678318981539154">थप भण्डारण खरीद गर्नुहोस्</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">चयनमा <ph name="ENTRY_NAME" /> थपियो।</translation>
 <translation id="4582497162516204941">Linux (बिटा) मार्फत स्थापना गर्नुहोस्</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> का परिणामहरू देखाउँदै।</translation>
+<translation id="4603392156942865207"><ph name="FOLDER_NAME" /> मा <ph name="FILE_NAME" /> कपी गरिँदै छ</translation>
 <translation id="4631887759990505102">कलाकार</translation>
 <translation id="4656293982926141856">यो कम्प्युटर</translation>
 <translation id="4669606053856530811">यी वस्तुहरूलाई '<ph name="SOURCE_NAME" />' का सदस्यहरूसँग आदान प्रदान नगरेसम्म तिनीहरू ले यी वस्तुहरूमाथिको पहुँच गुमाउनुहुनेछन्।</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">स्वत: मिलाउनुहोस्</translation>
 <translation id="4881695831933465202">खोल्नुहोस्</translation>
 <translation id="4886021172213954916">तामिल किबोर्ड (टाइपराइटर)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> मार्फत खोल्न सकिएन</translation>
+<translation id="4900532980794411603">Parallels Desktop सँग सेयर गर्नुहोस्</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ब्याकअपको लागि तयार छ</translation>
 <translation id="4924638091161556692">स्थिर</translation>
 <translation id="4935975195727477204">गाजानिया फुल</translation>
 <translation id="4943368462779413526">फुटबल</translation>
+<translation id="4961158930123534723">Parallels Desktop सँग एउटा फोल्डर सेयर गरियो</translation>
 <translation id="4969785127455456148">एल्बम</translation>
 <translation id="497244430928947428">मलयालम किबोर्ड (ध्वन्यात्मक)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> वा सोभन्दा कम वर्णहरू भएको कुनै नाम प्रयोग गर्नुहोस्</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">कम्प्युटरहरू</translation>
 <translation id="5011233892417813670">Chromeपुस्तिका</translation>
 <translation id="5024856940085636730">एउटा कार्यले अपेक्षा गरेभन्दा बढी समय लिइरहेको छ। के तपाईं त्यसलाई रद्द गर्न चाहनुहुन्छ?</translation>
+<translation id="5036159836254554629">Parallels Desktop सँग कुन कुन फाइल तथा फोल्डरहरू सेयर गर्ने भन्ने कुरा व्यवस्थापन गर्नुहोस्</translation>
 <translation id="5038625366300922036">थप हेर्नुहोस्...</translation>
 <translation id="5061708541166515394">कन्ट्रास्ट</translation>
 <translation id="5068919226082848014">पिजा</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> फाइलहरू मेटाइने छन्</translation>
+<translation id="508423945471810158"><ph name="FOLDER_NAME" /> मा <ph name="NUMBER_OF_ITEMS" /> वटा वस्तु सारिँदै छन्</translation>
 <translation id="509429900233858213">त्रुटि भयो।</translation>
 <translation id="5098629044894065541">हिब्रु</translation>
 <translation id="5123433949759960244">बास्केटबल</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">फ्रान्सेली किबोर्ड</translation>
 <translation id="6074825444536523002">Google फारम</translation>
 <translation id="6096979789310008754">खोज पाठ मेटाइयो, सबै फाइल र फोल्डरहरू देखाउँदै।</translation>
+<translation id="610101264611565198"><ph name="FOLDER_NAME" /> मा <ph name="FILE_NAME" /> सारिँदै छ</translation>
 <translation id="6111770213269631447">ट्रान्सलिटेरेशन (नमस्कार → নমস্কার)</translation>
 <translation id="6129953537138746214">क्षेत्र</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> सार्दै...</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" लाई मेटाउँदै...</translation>
 <translation id="6581162200855843583">Google ड्राइभ लिङ्क</translation>
 <translation id="6607272825297743757">फाइल बारे जानकारी</translation>
+<translation id="6609332149380188670">Parallels Desktop सँग <ph name="NUMBER_OF_ITEMS" /> वटा फोल्डर सेयर गरियो</translation>
 <translation id="6629841649550503054">सबै <ph name="BEGIN_LINK" />Google ड्राइभ<ph name="END_LINK" /> मा जगेडा गरियो!</translation>
 <translation id="6643016212128521049">खालि गर्नुहोस्</translation>
 <translation id="6650726141019353908">गुलाफी पुतली</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">स्थापना असफल भयो।</translation>
 <translation id="7040138676081995583">यससँग खोल्नुहोस्...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> भन्दा कम समय बाँकी</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> वस्तुहरू चयन गरियो</translation>
 <translation id="7106346894903675391">थप भण्डारण खरिद गर्नुहोस्...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ड्राइभमा खोज्नुहोस्&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">यन्त्र मोडल</translation>
 <translation id="8208580316430297579">कलाकृति</translation>
 <translation id="8223479393428528563">अफलाइन प्रयोगको लागि यी फाइलहरू सुरक्षित गर्न, अनलाइनमा फिर्ता जानुहोस्, फाइलमा दायाँ क्लिक गर्नुहोस्, र <ph name="OFFLINE_CHECKBOX_NAME" /> विकल्प चयन गर्नुहोस्।</translation>
+<translation id="8231972167769262174">लगभग <ph name="REMAINING_TIME" /> बाँकी</translation>
 <translation id="8249296373107784235">रद्द गर्नुहोस्</translation>
 <translation id="8261506727792406068">मेट्नुहोस्</translation>
 <translation id="8269755669432358899">फाइलका प्रतिक्रियाका प्यानलहरू संक्षिप्त गर्नुहोस्</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">Google ड्राइभ अहिले "<ph name="FILENAME" />" सिंक गर्न असमर्थ थियो। Google ड्राइभले फेरि पछि प्रयास गर्ने छ।</translation>
 <translation id="8477649328507734757">स्पिन</translation>
 <translation id="8487700953926739672">अफलाईन उपलब्ध</translation>
+<translation id="8490342535582768689">Parallels Desktop लाई आफ्नो Google Drive मा रहेका फाइलहरू परिमार्जन गर्ने अनुमति दिनुहोस्। परिवर्तनहरू तपाईंका अन्य यन्त्रमा पनि सिंक हुने छन्।</translation>
 <translation id="8521441079177373948">बेलायत</translation>
 <translation id="8525306231823319788">पूर्ण स्क्रीन</translation>
 <translation id="8551494947769799688">लाट्भियन</translation>

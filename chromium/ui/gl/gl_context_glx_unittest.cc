@@ -35,21 +35,19 @@ TEST(GLContextGLXTest, MAYBE_DoNotDestroyOnFailedMakeCurrent) {
   memset(&swa, 0, sizeof(swa));
   swa.background_pixmap = 0;
   swa.override_redirect = x11::True;
-  auto xwindow = XCreateWindow(xdisplay, DefaultRootWindow(xdisplay), 0, 0, 10,
-                               10,              // x, y, width, height
-                               0,               // border width
-                               CopyFromParent,  // depth
-                               InputOutput,
-                               CopyFromParent,  // visual
-                               CWBackPixmap | CWOverrideRedirect, &swa);
-  XSelectInput(xdisplay, xwindow, StructureNotifyMask);
+  auto xwindow = static_cast<x11::Window>(XCreateWindow(
+      xdisplay, DefaultRootWindow(xdisplay), 0, 0, 10,
+      10,  // x, y, width, height
+      0,   // border width
+      static_cast<int>(x11::WindowClass::CopyFromParent),  // depth
+      static_cast<int>(x11::WindowClass::InputOutput),
+      nullptr,  // visual
+      CWBackPixmap | CWOverrideRedirect, &swa));
 
-  XEvent xevent;
-  XMapWindow(xdisplay, xwindow);
-  // Wait until the window is mapped.
-  while (XNextEvent(xdisplay, &xevent) && xevent.type != MapNotify &&
-         xevent.xmap.window != xwindow) {
-  }
+  XMapWindow(xdisplay, static_cast<uint32_t>(xwindow));
+  // Since this window is override-redirect, syncing is sufficient
+  // to ensure the map is complete.
+  XSync(xdisplay, x11::False);
 
   GLImageTestSupport::InitializeGL(base::nullopt);
   auto surface =
@@ -62,12 +60,11 @@ TEST(GLContextGLXTest, MAYBE_DoNotDestroyOnFailedMakeCurrent) {
   ASSERT_TRUE(context->MakeCurrent(surface.get()));
   EXPECT_TRUE(context->GetHandle());
 
-  // Destroy the window, and wait until the window is unmapped. There should be
-  // no x11 errors.
   context->ReleaseCurrent(surface.get());
-  XDestroyWindow(xdisplay, xwindow);
-  while (XNextEvent(xdisplay, &xevent) && xevent.type != UnmapNotify) {
-  }
+  XDestroyWindow(xdisplay, static_cast<uint32_t>(xwindow));
+  // Since this window is override-redirect, syncing is sufficient
+  // to ensure the window is destroyed and unmapped.
+  XSync(xdisplay, x11::False);
   ASSERT_FALSE(error_tracker.FoundNewError());
 
   if (context->MakeCurrent(surface.get())) {

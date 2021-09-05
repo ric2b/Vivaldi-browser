@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/guid.h"
@@ -35,8 +36,8 @@
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/service_worker/service_worker_installed_scripts_sender.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -388,11 +389,18 @@ ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
       script_origin(), registration_id(), version_id(),
       embedded_worker()->process_id(), embedded_worker()->thread_id(),
       embedded_worker()->worker_devtools_agent_route_id());
+
+  UMA_HISTOGRAM_COUNTS_10000("ServiceWorker.VersionInfo.ScriptURLLength",
+                             info.script_url.spec().length());
+
   for (const auto& controllee : controllee_map_) {
     ServiceWorkerContainerHost* container_host = controllee.second;
     info.clients.emplace(container_host->client_uuid(),
                          container_host->GetServiceWorkerClientInfo());
   }
+
+  UMA_HISTOGRAM_COUNTS_10000("ServiceWorker.VersionInfo.ClientCount",
+                             info.clients.size());
 
   info.script_response_time = script_response_time_for_devtools_;
   if (!main_script_response_)
@@ -458,7 +466,7 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
 
   // Ensure the live registration during starting worker so that the worker can
   // get associated with it in
-  // ServiceWorkerProviderHost::CompleteStartWorkerPreparation.
+  // ServiceWorkerHost::CompleteStartWorkerPreparation.
   context_->registry()->FindRegistrationForId(
       registration_id_, scope_.GetOrigin(),
       base::BindOnce(
@@ -476,6 +484,12 @@ void ServiceWorkerVersion::StopWorker(base::OnceClosure callback) {
   switch (running_status()) {
     case EmbeddedWorkerStatus::STARTING:
     case EmbeddedWorkerStatus::RUNNING: {
+      // Endpoint isn't available after calling StopWorker(). This needs to be
+      // set here without waiting until the worker is actually stopped because
+      // subsequent StartWorker() may read the flag to decide whether an event
+      // can be dispatched or not.
+      is_endpoint_ready_ = false;
+
       // EmbeddedWorkerInstance::Stop() may synchronously call
       // ServiceWorkerVersion::OnStopped() and destroy |this|. This protection
       // avoids it.
@@ -582,8 +596,9 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
     StatusCallback error_callback,
     const base::TimeDelta& timeout,
     TimeoutBehavior timeout_behavior) {
-  DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, running_status())
-      << "Can only start a request with a running worker.";
+  DCHECK(EmbeddedWorkerStatus::RUNNING == running_status() ||
+         EmbeddedWorkerStatus::STARTING == running_status())
+      << "Can only start a request with a running or starting worker.";
   DCHECK(event_type == ServiceWorkerMetrics::EventType::INSTALL ||
          event_type == ServiceWorkerMetrics::EventType::ACTIVATE ||
          event_type == ServiceWorkerMetrics::EventType::MESSAGE ||
@@ -753,14 +768,11 @@ void ServiceWorkerVersion::AddControllee(
   CHECK_NE(status_, INSTALLED);
   CHECK_NE(status_, REDUNDANT);
 
-  if (base::FeatureList::IsEnabled(
-          features::kServiceWorkerTerminationOnNoControllee) &&
-      !HasControllee()) {
-    // If the service worker starts to control a new client and the service
-    // worker needs to work, let's extend the idle timeout to the default value.
-    UpdateIdleDelayIfNeeded(base::TimeDelta::FromSeconds(
-        blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds));
-  }
+  // Set the idle timeout to the default value if there's no controllee and the
+  // worker is running because the worker's idle delay has been set to a shorter
+  // value when all controllee are gone.
+  MaybeUpdateIdleDelayForTerminationOnNoControllee(base::TimeDelta::FromSeconds(
+      blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds));
 
   controllee_map_[uuid] = container_host;
   embedded_worker_->UpdateForegroundPriority();
@@ -777,6 +789,14 @@ void ServiceWorkerVersion::AddControllee(
       FROM_HERE, base::BindOnce(&ServiceWorkerVersion::NotifyControlleeAdded,
                                 weak_factory_.GetWeakPtr(), uuid,
                                 container_host->GetServiceWorkerClientInfo()));
+
+  // Also send a notification if OnEndNavigationCommit() was already invoked for
+  // this container.
+  if (container_host->navigation_commit_ended()) {
+    OnControlleeNavigationCommitted(container_host->client_uuid(),
+                                    container_host->process_id(),
+                                    container_host->frame_id());
+  }
 }
 
 void ServiceWorkerVersion::RemoveControllee(const std::string& client_uuid) {
@@ -787,22 +807,38 @@ void ServiceWorkerVersion::RemoveControllee(const std::string& client_uuid) {
   embedded_worker_->UpdateForegroundPriority();
 
   // Notify observers asynchronously since this gets called during
-  // ServiceWorkerProviderHost's destructor, and we don't want observers to do
-  // work during that.
+  // ServiceWorkerHost's destructor, and we don't want observers to do work
+  // during that.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&ServiceWorkerVersion::NotifyControlleeRemoved,
                                 weak_factory_.GetWeakPtr(), client_uuid));
 
-  if (base::FeatureList::IsEnabled(
-          features::kServiceWorkerTerminationOnNoControllee) &&
-      !HasControllee()) {
-    // Terminate the worker after all controllees are gone with a delay set by
-    // |kTerminationDelayParam|, which is provided by the field trial.
-    // When a new controllee checks in before the delay passes, the idle delay
-    // is set to the default in AddControllee().
-    UpdateIdleDelayIfNeeded(
-        base::TimeDelta::FromMilliseconds(kTerminationDelayParam.Get()));
-  }
+  // When a new controllee checks in before the delay passes, the idle delay
+  // is set to the default in AddControllee().
+  MaybeUpdateIdleDelayForTerminationOnNoControllee(
+      base::TimeDelta::FromMilliseconds(kTerminationDelayParam.Get()));
+}
+
+void ServiceWorkerVersion::OnControlleeNavigationCommitted(
+    const std::string& client_uuid,
+    int process_id,
+    int frame_id) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+#if DCHECK_IS_ON()
+  // Ensures this function is only called for a known window client.
+  auto it = controllee_map_.find(client_uuid);
+  DCHECK(it != controllee_map_.end());
+
+  DCHECK_EQ(it->second->GetClientType(),
+            blink::mojom::ServiceWorkerClientType::kWindow);
+#endif  // DCHECK_IS_ON()
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ServiceWorkerVersion::NotifyControlleeNavigationCommitted,
+                     weak_factory_.GetWeakPtr(), client_uuid,
+                     GlobalFrameRoutingId(process_id, frame_id)));
 }
 
 void ServiceWorkerVersion::MoveControlleeToBackForwardCacheMap(
@@ -998,15 +1034,17 @@ void ServiceWorkerVersion::InitializeGlobalScope(
         /*subresource_loader_factories=*/nullptr);
   }
 
-  DCHECK(provider_host_);
+  DCHECK(worker_host_);
+  DCHECK(service_worker_remote_);
   service_worker_remote_->InitializeGlobalScope(
       std::move(service_worker_host_),
-      provider_host_->container_host()
-          ->CreateServiceWorkerRegistrationObjectInfo(std::move(registration)),
-      provider_host_->container_host()->CreateServiceWorkerObjectInfoToSend(
-          this),
+      worker_host_->container_host()->CreateServiceWorkerRegistrationObjectInfo(
+          std::move(registration)),
+      worker_host_->container_host()->CreateServiceWorkerObjectInfoToSend(this),
       fetch_handler_existence_, std::move(subresource_loader_factories),
       std::move(reporting_observer_receiver_));
+
+  is_endpoint_ready_ = true;
 }
 
 void ServiceWorkerVersion::SetValidOriginTrialTokens(
@@ -1170,6 +1208,9 @@ void ServiceWorkerVersion::OnStarted(
     for (const std::string& request_uuid : pending_external_requests)
       StartExternalRequest(request_uuid);
   }
+
+  MaybeUpdateIdleDelayForTerminationOnNoControllee(
+      base::TimeDelta::FromMilliseconds(kTerminationDelayParam.Get()));
 }
 
 void ServiceWorkerVersion::OnStopping() {
@@ -1807,8 +1848,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
 
   auto provider_info =
       blink::mojom::ServiceWorkerProviderInfoForStartWorker::New();
-  DCHECK(!provider_host_);
-  provider_host_ = std::make_unique<ServiceWorkerProviderHost>(
+  DCHECK(!worker_host_);
+  worker_host_ = std::make_unique<content::ServiceWorkerHost>(
       provider_info->host_remote.InitWithNewEndpointAndPassReceiver(), this,
       context());
 
@@ -1844,11 +1885,13 @@ void ServiceWorkerVersion::StartWorkerInternal() {
       base::BindOnce(&OnConnectionError, embedded_worker_->AsWeakPtr()));
   receiver_.reset();
   receiver_.Bind(service_worker_host_.InitWithNewEndpointAndPassReceiver());
+
   // Initialize the global scope now if the worker won't be paused. Otherwise,
   // delay initialization until the main script is loaded.
-  if (!initialize_global_scope_after_main_script_loaded_)
+  if (!initialize_global_scope_after_main_script_loaded_) {
     InitializeGlobalScope(/*script_loader_factories=*/nullptr,
                           /*subresource_loader_factories=*/nullptr);
+  }
 
   if (!controller_receiver_.is_valid()) {
     controller_receiver_ = remote_controller_.BindNewPipeAndPassReceiver();
@@ -1926,8 +1969,8 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
     // Detach the worker. Remove |this| as a listener first; otherwise
     // OnStoppedInternal might try to restart before the new worker
     // is created. Also, protect |this|, since swapping out the
-    // EmbeddedWorkerInstance could destroy our ServiceWorkerProviderHost
-    // which could in turn destroy |this|.
+    // EmbeddedWorkerInstance could destroy our ServiceWorkerHost which could in
+    // turn destroy |this|.
     scoped_refptr<ServiceWorkerVersion> protect_this(this);
     embedded_worker_->RemoveObserver(this);
     embedded_worker_->Detach();
@@ -2206,13 +2249,14 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
   request_timeouts_.clear();
   external_request_uuid_to_request_id_.clear();
   service_worker_remote_.reset();
+  is_endpoint_ready_ = false;
   remote_controller_.reset();
   DCHECK(!controller_receiver_.is_valid());
   installed_scripts_sender_.reset();
   receiver_.reset();
   pending_external_requests_.clear();
   worker_is_idle_on_renderer_ = true;
-  provider_host_.reset();
+  worker_host_.reset();
 
   for (auto& observer : observers_)
     observer.OnRunningStateChanged(this);
@@ -2298,6 +2342,13 @@ void ServiceWorkerVersion::NotifyControlleeRemoved(const std::string& uuid) {
   }
 }
 
+void ServiceWorkerVersion::NotifyControlleeNavigationCommitted(
+    const std::string& uuid,
+    GlobalFrameRoutingId render_frame_host_id) {
+  if (context_)
+    context_->OnControlleeNavigationCommitted(this, uuid, render_frame_host_id);
+}
+
 void ServiceWorkerVersion::PrepareForUpdate(
     std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>
         compared_script_info_map,
@@ -2377,10 +2428,16 @@ void ServiceWorkerVersion::MaybeReportConsoleMessageToInternals(
                          script_url_);
 }
 
-void ServiceWorkerVersion::UpdateIdleDelayIfNeeded(base::TimeDelta delay) {
-  // The idle delay can be updated only when the worker is still running.
-  bool update_idle_delay = running_status() == EmbeddedWorkerStatus::STARTING ||
-                           running_status() == EmbeddedWorkerStatus::RUNNING;
+void ServiceWorkerVersion::MaybeUpdateIdleDelayForTerminationOnNoControllee(
+    base::TimeDelta delay) {
+  if (!base::FeatureList::IsEnabled(
+          features::kServiceWorkerTerminationOnNoControllee) ||
+      HasControllee() || running_status() != EmbeddedWorkerStatus::RUNNING) {
+    return;
+  }
+
+  // The idle delay can be updated only when the worker is running.
+  bool update_idle_delay = running_status() == EmbeddedWorkerStatus::RUNNING;
 
   // The idle delay should not be updated when the worker needs to be
   // terminated ASAP so that the new worker can be activated soon.

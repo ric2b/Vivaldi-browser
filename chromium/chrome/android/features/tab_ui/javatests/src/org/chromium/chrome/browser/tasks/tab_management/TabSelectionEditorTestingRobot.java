@@ -4,21 +4,21 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition;
-import static android.support.test.espresso.contrib.RecyclerViewActions.scrollToPosition;
-import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
-import static android.support.test.espresso.matcher.ViewMatchers.isClickable;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
-import static android.support.test.espresso.matcher.ViewMatchers.isFocusable;
-import static android.support.test.espresso.matcher.ViewMatchers.withClassName;
-import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withParent;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition;
+import static androidx.test.espresso.contrib.RecyclerViewActions.scrollToPosition;
+import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
+import static androidx.test.espresso.matcher.ViewMatchers.isClickable;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.isFocusable;
+import static androidx.test.espresso.matcher.ViewMatchers.withClassName;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.is;
@@ -29,13 +29,15 @@ import static org.chromium.chrome.browser.tasks.tab_management.RecyclerViewMatch
 import static org.chromium.chrome.browser.tasks.tab_management.RecyclerViewMatcherUtils.withItemType;
 
 import android.os.Build;
-import android.support.test.espresso.NoMatchingRootException;
-import android.support.test.espresso.NoMatchingViewException;
-import android.support.test.espresso.Root;
-import android.support.test.espresso.matcher.BoundedMatcher;
 import android.view.View;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.NoMatchingRootException;
+import androidx.test.espresso.NoMatchingViewException;
+import androidx.test.espresso.Root;
+import androidx.test.espresso.UiController;
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.matcher.BoundedMatcher;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -163,6 +165,35 @@ public class TabSelectionEditorTestingRobot {
                            withParent(withId(org.chromium.chrome.tab_ui.R.id.action_bar))))
                     .inRoot(isTabSelectionEditorPopup())
                     .perform(click());
+            return this;
+        }
+
+        public TabSelectionEditorTestingRobot.Action clickEndButtonAtAdapterPosition(int position) {
+            onView(withId(org.chromium.chrome.tab_ui.R.id.tab_list_view))
+                    .inRoot(isTabSelectionEditorPopup())
+                    .perform(new ViewAction() {
+                        @Override
+                        public Matcher<View> getConstraints() {
+                            return isDisplayed();
+                        }
+
+                        @Override
+                        public String getDescription() {
+                            return "click on end button of item with index "
+                                    + String.valueOf(position);
+                        }
+
+                        @Override
+                        public void perform(UiController uiController, View view) {
+                            RecyclerView recyclerView = (RecyclerView) view;
+                            RecyclerView.ViewHolder viewHolder =
+                                    recyclerView.findViewHolderForAdapterPosition(position);
+                            if (viewHolder.itemView == null) return;
+                            viewHolder.itemView
+                                    .findViewById(org.chromium.chrome.tab_ui.R.id.end_button)
+                                    .performClick();
+                        }
+                    });
             return this;
         }
     }

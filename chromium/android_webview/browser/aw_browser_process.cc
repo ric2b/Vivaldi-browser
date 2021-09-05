@@ -5,11 +5,15 @@
 #include "android_webview/browser/aw_browser_process.h"
 
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/lifecycle/aw_contents_lifecycle_notifier.h"
 #include "android_webview/browser/metrics/visibility_metrics_logger.h"
+#include "android_webview/browser_jni_headers/AwBrowserProcess_jni.h"
+#include "android_webview/common/crash_reporter/crash_keys.h"
+#include "base/android/jni_string.h"
 #include "base/base_paths_posix.h"
 #include "base/path_service.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "components/crash/core/common/crash_key.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -42,6 +46,9 @@ AwBrowserProcess::AwBrowserProcess(
     AwFeatureListCreator* aw_feature_list_creator) {
   g_aw_browser_process = this;
   aw_feature_list_creator_ = aw_feature_list_creator;
+  aw_contents_lifecycle_notifier_ =
+      std::make_unique<AwContentsLifecycleNotifier>(base::BindRepeating(
+          &AwBrowserProcess::OnLoseForeground, base::Unretained(this)));
 }
 
 AwBrowserProcess::~AwBrowserProcess() {
@@ -70,6 +77,11 @@ void AwBrowserProcess::CreateLocalState() {
 
   local_state_ = aw_feature_list_creator_->TakePrefService();
   DCHECK(local_state_);
+}
+
+void AwBrowserProcess::OnLoseForeground() {
+  if (local_state_)
+    local_state_->CommitPendingWrite();
 }
 
 AwBrowserPolicyConnector* AwBrowserProcess::browser_policy_connector() {
@@ -106,7 +118,7 @@ void AwBrowserProcess::CreateSafeBrowsingWhitelistManager() {
       base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      base::CreateSingleThreadTaskRunner({BrowserThread::IO});
+      content::GetIOThreadTaskRunner({});
   safe_browsing_whitelist_manager_ =
       std::make_unique<AwSafeBrowsingWhitelistManager>(background_task_runner,
                                                        io_task_runner);
@@ -182,6 +194,20 @@ AwBrowserProcess::CreateHttpAuthDynamicParams() {
 void AwBrowserProcess::OnAuthPrefsChanged() {
   content::GetNetworkService()->ConfigureHttpAuthPrefs(
       CreateHttpAuthDynamicParams());
+}
+
+// static
+void AwBrowserProcess::TriggerMinidumpUploading() {
+  Java_AwBrowserProcess_triggerMinidumpUploading(
+      base::android::AttachCurrentThread());
+}
+
+static void JNI_AwBrowserProcess_SetProcessNameCrashKey(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& processName) {
+  static ::crash_reporter::CrashKeyString<64> crash_key(
+      crash_keys::kAppProcessName);
+  crash_key.Set(ConvertJavaStringToUTF8(env, processName));
 }
 
 }  // namespace android_webview

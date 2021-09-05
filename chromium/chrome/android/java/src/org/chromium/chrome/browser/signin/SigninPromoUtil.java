@@ -37,10 +37,15 @@ public class SigninPromoUtil {
      * @return Whether the signin promo is shown.
      */
     public static boolean launchSigninPromoIfNeeded(final Activity activity) {
+        if (!AccountManagerFacadeProvider.getInstance().isCachePopulated()) {
+            // Suppress the promo if the account list isn't available yet.
+            return false;
+        }
+
         SigninPreferencesManager preferencesManager = SigninPreferencesManager.getInstance();
         int currentMajorVersion = ChromeVersionInfo.getProductMajorVersion();
         boolean wasSignedIn = TextUtils.isEmpty(
-                PrefServiceBridge.getInstance().getString(Pref.SYNC_LAST_ACCOUNT_NAME));
+                PrefServiceBridge.getInstance().getString(Pref.GOOGLE_SERVICES_LAST_USERNAME));
         List<String> accountNames = AccountUtils.toAccountNames(
                 AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts());
         Supplier<Set<String>> accountNamesSupplier = () -> new ArraySet<>(accountNames);

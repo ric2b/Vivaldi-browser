@@ -225,13 +225,7 @@ void NetErrorHelper::DidStartNavigation(
   core_->OnStartLoad(GetFrameType(render_frame()), GetLoadingPageType(url));
 }
 
-void NetErrorHelper::DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                              ui::PageTransition transition) {
-  // If this is a "same-document" navigation, it's not a real navigation.  There
-  // wasn't a start event for it, either, so just ignore it.
-  if (is_same_document_navigation)
-    return;
-
+void NetErrorHelper::DidCommitProvisionalLoad(ui::PageTransition transition) {
   // Invalidate weak pointers from old error page controllers. If loading a new
   // error page, the controller has not yet been attached, so this won't affect
   // it.
@@ -321,6 +315,15 @@ chrome::mojom::NetworkEasterEgg* NetErrorHelper::GetRemoteNetworkEasterEgg() {
         &remote_network_easter_egg_);
   }
   return remote_network_easter_egg_.get();
+}
+
+chrome::mojom::NetErrorPageSupport*
+NetErrorHelper::GetRemoteNetErrorPageSupport() {
+  if (!remote_net_error_page_support_) {
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
+        &remote_net_error_page_support_);
+  }
+  return remote_net_error_page_support_.get();
 }
 
 LocalizedError::PageState NetErrorHelper::GenerateLocalizedErrorPage(
@@ -476,18 +479,15 @@ void NetErrorHelper::DiagnoseError(const GURL& page_url) {
 }
 
 void NetErrorHelper::DownloadPageLater() {
-#if defined(OS_ANDROID)
-  render_frame()->Send(new ChromeViewHostMsg_DownloadPageLater(
-      render_frame()->GetRoutingID()));
-#endif  // defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  GetRemoteNetErrorPageSupport()->DownloadPageLater();
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 }
 
 void NetErrorHelper::SetIsShowingDownloadButton(bool show) {
-#if defined(OS_ANDROID)
-  render_frame()->Send(
-      new ChromeViewHostMsg_SetIsShowingDownloadButtonInErrorPage(
-          render_frame()->GetRoutingID(), show));
-#endif  // defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  GetRemoteNetErrorPageSupport()->SetIsShowingDownloadButtonInErrorPage(show);
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 }
 
 void NetErrorHelper::OfflineContentAvailable(

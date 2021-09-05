@@ -152,7 +152,6 @@ class StyleBuilderConverter {
   static StyleContentAlignmentData ConvertContentAlignmentData(
       StyleResolverState&,
       const CSSValue&);
-  static GapLength ConvertGapLength(StyleResolverState&, const CSSValue&);
   static GridAutoFlow ConvertGridAutoFlow(StyleResolverState&, const CSSValue&);
   static GridPosition ConvertGridPosition(StyleResolverState&, const CSSValue&);
   static GridTrackSize ConvertGridTrackSize(StyleResolverState&,
@@ -163,7 +162,8 @@ class StyleBuilderConverter {
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
   static float ConvertBorderWidth(StyleResolverState&, const CSSValue&);
   static LayoutUnit ConvertLayoutUnit(StyleResolverState&, const CSSValue&);
-  static GapLength ConvertGapLength(const StyleResolverState&, const CSSValue&);
+  static base::Optional<Length> ConvertGapLength(const StyleResolverState&,
+                                                 const CSSValue&);
   static Length ConvertLength(const StyleResolverState&, const CSSValue&);
   static UnzoomedLength ConvertUnzoomedLength(const StyleResolverState&,
                                               const CSSValue&);
@@ -201,6 +201,7 @@ class StyleBuilderConverter {
   static StyleColor ConvertStyleColor(StyleResolverState&,
                                       const CSSValue&,
                                       bool for_visited_link = false);
+  static CSSValueID ConvertCSSValueID(StyleResolverState&, const CSSValue&);
   static StyleAutoColor ConvertStyleAutoColor(StyleResolverState&,
                                               const CSSValue&,
                                               bool for_visited_link = false);
@@ -289,6 +290,9 @@ class StyleBuilderConverter {
 
   static RubyPosition ConvertRubyPosition(StyleResolverState& state,
                                           const CSSValue& value);
+
+  static ScrollbarGutter ConvertScrollbarGutter(StyleResolverState& state,
+                                                const CSSValue& value);
 };
 
 template <typename T>

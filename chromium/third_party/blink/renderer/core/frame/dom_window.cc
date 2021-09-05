@@ -228,8 +228,8 @@ String DOMWindow::CrossDomainAccessErrorMessage(
   // access. See https://crbug.com/601629.
   DCHECK(GetFrame()->IsRemoteFrame() ||
          !active_origin->CanAccess(target_origin) ||
-         (local_dom_window && accessing_window->document()->GetAgent() !=
-                                  local_dom_window->document()->GetAgent()));
+         (local_dom_window &&
+          accessing_window->GetAgent() != local_dom_window->GetAgent()));
 
   String message = "Blocked a frame with origin \"" +
                    active_origin->ToString() +
@@ -322,6 +322,9 @@ void DOMWindow::Close(LocalDOMWindow* incumbent_window) {
   if (!page)
     return;
 
+  if (page->InsidePortal())
+    return;
+
   Document* active_document = incumbent_window->document();
   if (!(active_document && active_document->GetFrame() &&
         active_document->GetFrame()->CanNavigate(*GetFrame()))) {
@@ -361,10 +364,11 @@ void DOMWindow::Close(LocalDOMWindow* incumbent_window) {
 }
 
 void DOMWindow::focus(v8::Isolate* isolate) {
-  if (!GetFrame())
+  Frame* frame = GetFrame();
+  if (!frame)
     return;
 
-  Page* page = GetFrame()->GetPage();
+  Page* page = frame->GetPage();
   if (!page)
     return;
 
@@ -388,9 +392,9 @@ void DOMWindow::focus(v8::Isolate* isolate) {
   }
 
   // If we're a top level window, bring the window to the front.
-  if (GetFrame()->IsMainFrame() && allow_focus) {
-    page->GetChromeClient().Focus(incumbent_window->GetFrame());
-  } else if (auto* local_frame = DynamicTo<LocalFrame>(GetFrame())) {
+  if (frame->IsMainFrame() && allow_focus) {
+    frame->FocusPage(incumbent_window->GetFrame());
+  } else if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
     // We are depending on user activation twice since IsFocusAllowed() will
     // check for activation. This should be addressed in
     // https://crbug.com/959815.
@@ -480,7 +484,7 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
   }
 
   if (!source_document->GetContentSecurityPolicy()->AllowConnectToSource(
-          target_url, RedirectStatus::kNoRedirect,
+          target_url, target_url, RedirectStatus::kNoRedirect,
           ReportingDisposition::kSuppressReporting)) {
     UseCounter::Count(
         source_document,
@@ -528,10 +532,10 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
       GetFrame()->Client()->TransferUserActivationFrom(source->GetFrame());
   }
 
-  SchedulePostMessage(event, std::move(target), source_document);
+  SchedulePostMessage(event, std::move(target), source);
 }
 
-void DOMWindow::Trace(Visitor* visitor) {
+void DOMWindow::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(window_proxy_manager_);
   visitor->Trace(input_capabilities_);

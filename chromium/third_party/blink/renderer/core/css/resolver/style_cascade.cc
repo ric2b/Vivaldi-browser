@@ -154,12 +154,11 @@ void StyleCascade::Apply(CascadeFilter filter) {
   ApplyMatchResult(resolver);
   ApplyInterpolations(resolver);
 
-  if (map_.Find(CSSPropertyName(CSSPropertyID::kAppearance)) &&
-      !resolver.filter_.Rejects(GetCSSPropertyAppearance()) &&
-      state_.Style()->HasAppearance()) {
-    CSSProperty::Flags flags = resolver.AuthorFlags();
-    state_.Style()->SetHasAuthorBackground(flags & CSSProperty::kBackground);
-    state_.Style()->SetHasAuthorBorder(flags & CSSProperty::kBorder);
+  if (state_.Style()->HasAppearance()) {
+    if (resolver.AuthorFlags() & CSSProperty::kBackground)
+      state_.Style()->SetHasAuthorBackground(true);
+    if (resolver.AuthorFlags() & CSSProperty::kBorder)
+      state_.Style()->SetHasAuthorBorder(true);
   }
 }
 
@@ -268,11 +267,18 @@ void StyleCascade::ApplyCascadeAffecting(CascadeResolver& resolver) {
 
   LookupAndApply(GetCSSPropertyDirection(), resolver);
   LookupAndApply(GetCSSPropertyWritingMode(), resolver);
+  LookupAndApply(GetCSSPropertyForcedColorAdjust(), resolver);
 
-  if (depends_on_cascade_affecting_property_ &&
-      (direction != state_.Style()->Direction() ||
-       writing_mode != state_.Style()->GetWritingMode())) {
-    Reanalyze();
+  if (depends_on_cascade_affecting_property_) {
+    // We could avoid marking these if this cascade provided a value, but
+    // marking them unconditionally keeps it simple. See also note about
+    // over-marking in StyleResolverState::Dependencies.
+    MarkDependency(GetCSSPropertyDirection());
+    MarkDependency(GetCSSPropertyWritingMode());
+    if (direction != state_.Style()->Direction() ||
+        writing_mode != state_.Style()->GetWritingMode()) {
+      Reanalyze();
+    }
   }
 }
 
@@ -293,17 +299,6 @@ void StyleCascade::ApplyHighPriority(CascadeResolver& resolver) {
   state_.SetConversionFontSizes(CSSToLengthConversionData::FontSizes(
       state_.Style(), state_.RootElementStyle()));
   state_.SetConversionZoom(state_.Style()->EffectiveZoom());
-
-  // Force color-scheme sensitive initial color for the document element,
-  // if no value is present in the cascade.
-  //
-  // TODO(crbug.com/1046753): This should be unnecessary when canvastext is
-  // supported.
-  uint64_t color_bit = 1ull << static_cast<uint64_t>(CSSPropertyID::kColor);
-  if (~bits & color_bit) {
-    if (state_.GetElement() == GetDocument().documentElement())
-      state_.Style()->SetColor(state_.Style()->InitialColorForColorScheme());
-  }
 }
 
 void StyleCascade::ApplyWebkitBorderImage(CascadeResolver& resolver) {
@@ -375,8 +370,6 @@ void StyleCascade::ApplyInterpolationMap(const ActiveInterpolationsMap& map,
 
     CascadePriority* p = map_.Find(property.GetCSSPropertyName());
     if (!p || *p >= priority) {
-      if (p->IsImportant())
-        state_.SetHasImportantOverrides();
       continue;
     }
     *p = priority;
@@ -414,7 +407,6 @@ void StyleCascade::ApplyInterpolation(
         map_.Find(visited->GetCSSPropertyName());
     if (visited_priority && priority < *visited_priority) {
       DCHECK(visited_priority->IsImportant());
-      state_.SetHasImportantOverrides();
       // Resetting generation to zero makes it possible to apply the
       // visited property again.
       *visited_priority = CascadePriority(*visited_priority, 0);
@@ -435,7 +427,7 @@ void StyleCascade::LookupAndApply(const CSSProperty& property,
   DCHECK(!property.IsSurrogate());
 
   CSSPropertyName name = property.GetCSSPropertyName();
-  DCHECK(!resolver.IsLocked(name));
+  DCHECK(!resolver.IsLocked(property));
 
   CascadePriority* p = map_.Find(name);
   if (!p)
@@ -537,12 +529,24 @@ StyleCascade::TokenSequence::BuildVariableData() {
       has_font_units_, has_root_font_units_, absolutized, base_url_, charset_);
 }
 
+bool StyleCascade::ShouldRevert(const CSSProperty& property,
+                                const CSSValue& value,
+                                CascadeOrigin origin) {
+  return value.IsRevertValue() ||
+         (state_.GetDocument().InForcedColorsMode() &&
+          state_.Style()->ForcedColorAdjust() != EForcedColorAdjust::kNone &&
+          property.IsAffectedByForcedColors() &&
+          !(property.PropertyID() == CSSPropertyID::kBackgroundImage &&
+            value.MayContainUrl()) &&
+          origin >= CascadeOrigin::kAuthor);
+}
+
 const CSSValue* StyleCascade::Resolve(const CSSProperty& property,
                                       const CSSValue& value,
                                       CascadeOrigin origin,
                                       CascadeResolver& resolver) {
   DCHECK(!property.IsSurrogate());
-  if (value.IsRevertValue())
+  if (ShouldRevert(property, value, origin))
     return ResolveRevert(property, origin, resolver);
   resolver.CollectAuthorFlags(property, origin);
   if (const auto* v = DynamicTo<CSSCustomPropertyDeclaration>(value))
@@ -752,7 +756,8 @@ bool StyleCascade::ResolveVarInto(CSSParserTokenRange range,
   // Any custom property referenced (by anything, even just once) in the
   // document can currently not be animated on the compositor. Hence we mark
   // properties that have been referenced.
-  MarkIsReferenced(property);
+  DCHECK(resolver.CurrentProperty());
+  MarkIsReferenced(*resolver.CurrentProperty(), property);
 
   if (!resolver.DetectCycle(property)) {
     // We are about to substitute var(property). In order to do that, we must
@@ -873,10 +878,16 @@ bool StyleCascade::ValidateFallback(const CustomProperty& property,
   return property.ParseSingleValue(range, *context, local_context);
 }
 
-void StyleCascade::MarkIsReferenced(const CustomProperty& property) {
-  if (!property.IsRegistered())
+void StyleCascade::MarkIsReferenced(const CSSProperty& referencer,
+                                    const CustomProperty& referenced) {
+  // For simplicity, we mark all inherited custom property references as
+  // dependencies, even though it might not be a dependency if this cascade
+  // defines a value for that property.
+  if (!referencer.IsInherited() && referenced.IsInherited())
+    MarkDependency(referenced);
+  if (!referenced.IsRegistered())
     return;
-  const AtomicString& name = property.GetPropertyNameAtomicString();
+  const AtomicString& name = referenced.GetPropertyNameAtomicString();
   state_.GetDocument().EnsurePropertyRegistry().MarkReferenced(name);
 }
 
@@ -884,6 +895,10 @@ void StyleCascade::MarkHasVariableReference(const CSSProperty& property) {
   if (!property.IsInherited())
     state_.Style()->SetHasVariableReferenceFromNonInheritedProperty();
   state_.Style()->SetHasVariableReference();
+}
+
+void StyleCascade::MarkDependency(const CSSProperty& property) {
+  state_.MarkDependency(property);
 }
 
 const Document& StyleCascade::GetDocument() const {

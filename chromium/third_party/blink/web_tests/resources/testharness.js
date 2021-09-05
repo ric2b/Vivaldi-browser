@@ -1190,6 +1190,8 @@ policies and contribution forms [3].
     }
     expose(assert_in_array, "assert_in_array");
 
+    // This function was deprecated in July of 2015.
+    // See https://github.com/web-platform-tests/wpt/issues/2033
     function assert_object_equals(actual, expected, description)
     {
          assert(typeof actual === "object" && actual !== null, "assert_object_equals", description,
@@ -1867,23 +1869,10 @@ policies and contribution forms [3].
      */
     function assert_implements_optional(condition, description) {
         if (!condition) {
-            // Due to the difficulty of changing logging statuses, we re-use
-            // the PRECONDITION_FAILED status for assert_implements_optional.
-            // See the RFC: https://github.com/web-platform-tests/rfcs/pull/48
-            //
-            // TODO(smcgruer): Once assert_precondition is removed, rename the
-            // exception and move this comment to where PRECONDITION_FAILED is used.
-            throw new PreconditionFailedError(description);
+            throw new OptionalFeatureUnsupportedError(description);
         }
     }
     expose(assert_implements_optional, "assert_implements_optional")
-
-    function assert_precondition(precondition, description) {
-        if (!precondition) {
-            throw new PreconditionFailedError(description);
-        }
-    }
-    expose(assert_precondition, "assert_precondition");
 
     function Test(name, properties)
     {
@@ -1990,7 +1979,7 @@ policies and contribution forms [3].
             if (this.phase >= this.phases.HAS_RESULT) {
                 return;
             }
-            var status = e instanceof PreconditionFailedError ? this.PRECONDITION_FAILED : this.FAIL;
+            var status = e instanceof OptionalFeatureUnsupportedError ? this.PRECONDITION_FAILED : this.FAIL;
             var message = String((typeof e === "object" && e !== null) ? e.message : e);
             var stack = e.stack ? e.stack : null;
 
@@ -2046,6 +2035,105 @@ policies and contribution forms [3].
         return setTimeout(this.step_func(function() {
             return f.apply(test_this, args);
         }), timeout * tests.timeout_multiplier);
+    };
+
+    Test.prototype.step_wait_func = function(cond, func, description,
+                                             timeout=3000, interval=100) {
+        /**
+         * Poll for a function to return true, and call a callback
+         * function once it does, or assert if a timeout is
+         * reached. This is preferred over a simple step_timeout
+         * whenever possible since it allows the timeout to be longer
+         * to reduce intermittents without compromising test execution
+         * speed when the condition is quickly met.
+         *
+         * @param {Function} cond A function taking no arguments and
+         *                        returning a boolean. The callback is called
+         *                        when this function returns true.
+         * @param {Function} func A function taking no arguments to call once
+         *                        the condition is met.
+         * @param {string} description Error message to add to assert in case of
+         *                             failure.
+         * @param {number} timeout Timeout in ms. This is multiplied by the global
+         *                         timeout_multiplier
+         * @param {number} interval Polling interval in ms
+         *
+         **/
+
+        var timeout_full = timeout * tests.timeout_multiplier;
+        var remaining = Math.ceil(timeout_full / interval);
+        var test_this = this;
+
+        var wait_for_inner = test_this.step_func(() => {
+            if (cond()) {
+                func();
+            } else {
+                if(remaining === 0) {
+                    assert(false, "wait_for", description,
+                           "Timed out waiting on condition");
+                }
+                remaining--;
+                setTimeout(wait_for_inner, interval);
+            }
+        });
+
+        wait_for_inner();
+    };
+
+    Test.prototype.step_wait_func_done = function(cond, func, description,
+                                                  timeout=3000, interval=100) {
+        /**
+         * Poll for a function to return true, and invoke a callback
+         * followed this.done() once it does, or assert if a timeout
+         * is reached. This is preferred over a simple step_timeout
+         * whenever possible since it allows the timeout to be longer
+         * to reduce intermittents without compromising test execution speed
+         * when the condition is quickly met.
+         *
+         * @param {Function} cond A function taking no arguments and
+         *                        returning a boolean. The callback is called
+         *                        when this function returns true.
+         * @param {Function} func A function taking no arguments to call once
+         *                        the condition is met.
+         * @param {string} description Error message to add to assert in case of
+         *                             failure.
+         * @param {number} timeout Timeout in ms. This is multiplied by the global
+         *                         timeout_multiplier
+         * @param {number} interval Polling interval in ms
+         *
+         **/
+
+         this.step_wait_func(cond, () => {
+            if (func) {
+                func();
+            }
+            this.done();
+         }, description, timeout, interval);
+    }
+
+    Test.prototype.step_wait = function(cond, description, timeout=3000, interval=100) {
+        /**
+         * Poll for a function to return true, and resolve a promise
+         * once it does, or assert if a timeout is reached. This is
+         * preferred over a simple step_timeout whenever possible
+         * since it allows the timeout to be longer to reduce
+         * intermittents without compromising test execution speed
+         * when the condition is quickly met.
+         *
+         * @param {Function} cond A function taking no arguments and
+         *                        returning a boolean.
+         * @param {string} description Error message to add to assert in case of
+         *                             failure.
+         * @param {number} timeout Timeout in ms. This is multiplied by the global
+         *                         timeout_multiplier
+         * @param {number} interval Polling interval in ms
+         * @returns {Promise} Promise resolved once cond is met.
+         *
+         **/
+
+        return new Promise(resolve => {
+            this.step_wait_func(cond, resolve, description, timeout, interval);
+        });
     }
 
     /*
@@ -2576,7 +2664,7 @@ policies and contribution forms [3].
             try {
                 func();
             } catch (e) {
-                this.status.status = e instanceof PreconditionFailedError ? this.status.PRECONDITION_FAILED : this.status.ERROR;
+                this.status.status = e instanceof OptionalFeatureUnsupportedError ? this.status.PRECONDITION_FAILED : this.status.ERROR;
                 this.status.message = String(e);
                 this.status.stack = e.stack ? e.stack : null;
                 this.complete();
@@ -3118,14 +3206,14 @@ policies and contribution forms [3].
         status_text_harness[harness_status.OK] = "OK";
         status_text_harness[harness_status.ERROR] = "Error";
         status_text_harness[harness_status.TIMEOUT] = "Timeout";
-        status_text_harness[harness_status.PRECONDITION_FAILED] = "Precondition Failed";
+        status_text_harness[harness_status.PRECONDITION_FAILED] = "Optional Feature Unsupported";
 
         var status_text = {};
         status_text[Test.prototype.PASS] = "Pass";
         status_text[Test.prototype.FAIL] = "Fail";
         status_text[Test.prototype.TIMEOUT] = "Timeout";
         status_text[Test.prototype.NOTRUN] = "Not Run";
-        status_text[Test.prototype.PRECONDITION_FAILED] = "Precondition Failed";
+        status_text[Test.prototype.PRECONDITION_FAILED] = "Optional Feature Unsupported";
 
         var status_number = {};
         forEach(tests,
@@ -3507,12 +3595,12 @@ policies and contribution forms [3].
         return lines.slice(i).join("\n");
     }
 
-    function PreconditionFailedError(message)
+    function OptionalFeatureUnsupportedError(message)
     {
         AssertionError.call(this, message);
     }
-    PreconditionFailedError.prototype = Object.create(AssertionError.prototype);
-    expose(PreconditionFailedError, "PreconditionFailedError");
+    OptionalFeatureUnsupportedError.prototype = Object.create(AssertionError.prototype);
+    expose(OptionalFeatureUnsupportedError, "OptionalFeatureUnsupportedError");
 
     function make_message(function_name, description, error, substitutions)
     {
@@ -3742,17 +3830,17 @@ policies and contribution forms [3].
 
     if (global_scope.addEventListener) {
         var error_handler = function(error, message, stack) {
-            var precondition_failed = error instanceof PreconditionFailedError;
+            var optional_unsupported = error instanceof OptionalFeatureUnsupportedError;
             if (tests.file_is_test) {
                 var test = tests.tests[0];
                 if (test.phase >= test.phases.HAS_RESULT) {
                     return;
                 }
-                var status = precondition_failed ? test.PRECONDITION_FAILED : test.FAIL;
+                var status = optional_unsupported ? test.PRECONDITION_FAILED : test.FAIL;
                 test.set_status(status, message, stack);
                 test.phase = test.phases.HAS_RESULT;
             } else if (!tests.allow_uncaught_exception) {
-                var status = precondition_failed ? tests.status.PRECONDITION_FAILED : tests.status.ERROR;
+                var status = optional_unsupported ? tests.status.PRECONDITION_FAILED : tests.status.ERROR;
                 tests.status.status = status;
                 tests.status.message = message;
                 tests.status.stack = stack;
@@ -3868,11 +3956,11 @@ tr.notrun > td:first-child {\
     color:blue;\
 }\
 \
-tr.preconditionfailed > td:first-child {\
+tr.optionalunsupported > td:first-child {\
     color:blue;\
 }\
 \
-.pass > td:first-child, .fail > td:first-child, .timeout > td:first-child, .notrun > td:first-child, .preconditionfailed > td:first-child {\
+.pass > td:first-child, .fail > td:first-child, .timeout > td:first-child, .notrun > td:first-child, .optionalunsupported > td:first-child {\
     font-variant:small-caps;\
 }\
 \

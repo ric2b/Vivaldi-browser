@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "menus/menu_node.h"
@@ -34,7 +35,8 @@ bool MenuCodec::GetVersion(std::string* version, const base::Value& value) {
 }
 
 bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
-                       const base::Value& value, bool is_bundle) {
+                       const base::Value& value, bool is_bundle,
+                       const std::string& force_version) {
   if (!value.is_list()) {
     LOG(ERROR) << "Menu Codec: No list";
     return false;
@@ -49,11 +51,10 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
         const std::string* action = menu.FindStringPath("action");
         const std::string* role = menu.FindStringPath("role");
         if (action && role) {
-          std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>();
-          node->SetGuid(*guid);
+          std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(*guid,
+              Menu_Node::GetNewId());
           node->SetType(Menu_Node::MENU);
           node->SetRole(*role);
-          node->SetId(Menu_Node::GetNewId());
           node->SetAction(*action);
           // We add the menu even when there is no children added, but not
           // if parsing failed.
@@ -75,7 +76,8 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
         }
       } else if (type && *type == "control") {
         const std::string* format = menu.FindStringPath("format");
-        const std::string* version = menu.FindStringPath("version");
+        const std::string* version = force_version.empty() ?
+          menu.FindStringPath("version") : &force_version;
         const base::Value* deleted_list = menu.FindPath("deleted");
         if (format) {
           control->format = *format;
@@ -125,7 +127,6 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
       }
     }
   } else if (value.is_dict()) {
-    std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>();
     const std::string* type = value.FindStringPath("type");
     const std::string* action = value.FindStringPath("action");
     const std::string* title = value.FindStringPath("title");
@@ -151,13 +152,13 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
         LOG(ERROR) << "Menu Codec: Action missing for " << *type;
         return false;
       }
-      node->SetGuid(*guid);
-      node->SetId(node->GetNewId());
+      std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(*guid,
+          Menu_Node::GetNewId());
       node->SetAction(action ? *action : "");
       if (origin == Menu_Node::BUNDLE)
         node->SetOrigin(Menu_Node::BUNDLE);
-      else if (origin == Menu_Node::DELETED_BUNDLE)
-        node->SetOrigin(Menu_Node::DELETED_BUNDLE);
+      else if (origin == Menu_Node::MODIFIED_BUNDLE)
+        node->SetOrigin(Menu_Node::MODIFIED_BUNDLE);
       else if (origin == Menu_Node::USER)
         node->SetOrigin(Menu_Node::USER);
       else {
@@ -216,11 +217,11 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
          LOG(ERROR) << "Menu Codec: Illegal type: " << type;
         return false;
       }
+      parent->Add(std::move(node));
     } else {
        LOG(ERROR) << "Menu Codec: Type missing";
       return false;
     }
-    parent->Add(std::move(node));
   } else {
      LOG(ERROR) << "Menu Codec: Illegal category";
     return false;
@@ -229,7 +230,12 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
 }
 
 base::Value MenuCodec::Encode(Menu_Model* model) {
-  base::Value list = EncodeNode(&model->GetRoot());
+  base::Value list;
+  if (model->mainmenu_node()) {
+    list = EncodeNode(model->mainmenu_node());
+  } else {
+    list = base::Value(base::Value::Type::LIST);
+  }
 
   Menu_Control* control = model->GetControl();
   if (control) {
@@ -249,7 +255,7 @@ base::Value MenuCodec::Encode(Menu_Model* model) {
 }
 
 base::Value MenuCodec::EncodeNode(Menu_Node* node) {
-  if (node->is_root()) {
+  if (node->id() == Menu_Node::mainmenu_node_id()) {
     base::Value list(base::Value::Type::LIST);
     for (const auto& child : node->children()) {
       list.Append(EncodeNode(child.get()));

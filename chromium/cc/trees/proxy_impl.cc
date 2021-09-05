@@ -370,24 +370,8 @@ void ProxyImpl::SetVideoNeedsBeginFrames(bool needs_begin_frames) {
     scheduler_->SetVideoNeedsBeginFrames(needs_begin_frames);
 }
 
-size_t ProxyImpl::CompositedAnimationsCount() const {
-  return host_impl_->mutator_host()->CompositedAnimationsCount();
-}
-
-size_t ProxyImpl::MainThreadAnimationsCount() const {
-  return host_impl_->mutator_host()->MainThreadAnimationsCount();
-}
-
 bool ProxyImpl::HasCustomPropertyAnimations() const {
   return host_impl_->mutator_host()->HasCustomPropertyAnimations();
-}
-
-bool ProxyImpl::CurrentFrameHadRAF() const {
-  return host_impl_->mutator_host()->CurrentFrameHadRAF();
-}
-
-bool ProxyImpl::NextFrameHasPendingRAF() const {
-  return host_impl_->mutator_host()->NextFrameHasPendingRAF();
 }
 
 bool ProxyImpl::IsInsideDraw() {
@@ -542,14 +526,37 @@ void ProxyImpl::NotifyThroughputTrackerResults(CustomTrackerResults results) {
                                 proxy_main_weak_ptr_, std::move(results)));
 }
 
+void ProxyImpl::SubmitThroughputData(ukm::SourceId source_id,
+                                     int aggregated_percent,
+                                     int impl_percent,
+                                     base::Optional<int> main_percent) {
+  DCHECK(IsImplThread());
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ProxyMain::SubmitThroughputData, proxy_main_weak_ptr_,
+                     source_id, aggregated_percent, impl_percent,
+                     main_percent));
+}
+
+void ProxyImpl::DidObserveFirstScrollDelay(
+    base::TimeDelta first_scroll_delay,
+    base::TimeTicks first_scroll_timestamp) {
+  DCHECK(IsImplThread());
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyMain::DidObserveFirstScrollDelay,
+                                proxy_main_weak_ptr_, first_scroll_delay,
+                                first_scroll_timestamp));
+}
+
 bool ProxyImpl::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
   DCHECK(IsImplThread());
   return host_impl_->WillBeginImplFrame(args);
 }
 
-void ProxyImpl::DidFinishImplFrame() {
+void ProxyImpl::DidFinishImplFrame(
+    const viz::BeginFrameArgs& last_activated_args) {
   DCHECK(IsImplThread());
-  host_impl_->DidFinishImplFrame(scheduler_->last_activate_origin_frame_args());
+  host_impl_->DidFinishImplFrame(last_activated_args);
 }
 
 void ProxyImpl::DidNotProduceFrame(const viz::BeginFrameAck& ack,
@@ -703,9 +710,6 @@ DrawResult ProxyImpl::DrawInternal(bool forced_draw) {
 
   base::AutoReset<bool> mark_inside(&inside_draw_, true);
 
-  if (host_impl_->pending_tree())
-    host_impl_->pending_tree()->UpdateDrawProperties();
-
   // This method is called on a forced draw, regardless of whether we are able
   // to produce a frame, as the calling site on main thread is blocked until its
   // request completes, and we signal completion here. If CanDraw() is false, we
@@ -755,6 +759,12 @@ DrawResult ProxyImpl::DrawInternal(bool forced_draw) {
         FROM_HERE, base::BindOnce(&ProxyMain::DidCommitAndDrawFrame,
                                   proxy_main_weak_ptr_));
   }
+
+  // The tile visibility/priority of the pending tree needs to be updated so
+  // that it doesn't get activated before the raster is complete. But this needs
+  // to happen after the draw, off of the critical path to draw.
+  if (host_impl_->pending_tree())
+    host_impl_->pending_tree()->UpdateDrawProperties();
 
   DCHECK_NE(INVALID_RESULT, result);
   return result;

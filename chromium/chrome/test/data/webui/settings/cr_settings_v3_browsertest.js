@@ -214,7 +214,60 @@ var CrSettingsPasswordsSectionV3Test = class extends CrSettingsV3BrowserTest {
   }
 };
 
-TEST_F('CrSettingsPasswordsSectionV3Test', 'All', function() {
+// Flaky on Mac and Debug builds https://crbug.com/1090931
+GEN('#if defined(OS_MACOSX) || !defined(NDEBUG)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+TEST_F('CrSettingsPasswordsSectionV3Test', 'MAYBE_All', function() {
+  mocha.run();
+});
+GEN('#undef MAYBE_All');
+
+// eslint-disable-next-line no-var
+var CrSettingsMultiStorePasswordUiEntryV3Test =
+    class extends CrSettingsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/multi_store_password_ui_entry_test.js';
+  }
+};
+
+TEST_F('CrSettingsMultiStorePasswordUiEntryV3Test', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var CrSettingsPasswordsDeviceSectionV3Test =
+    class extends CrSettingsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/passwords_device_section_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: ['password_manager::features::kEnablePasswordsAccountStorage']
+    };
+  }
+};
+
+TEST_F('CrSettingsPasswordsDeviceSectionV3Test', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var CrSettingsMultiStoreExceptionEntryV3Test =
+    class extends CrSettingsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/multi_store_exception_entry_test.js';
+  }
+};
+
+TEST_F('CrSettingsMultiStoreExceptionEntryV3Test', 'All', function() {
   mocha.run();
 });
 
@@ -234,6 +287,31 @@ var CrSettingsPasswordsCheckV3Test = class extends CrSettingsV3BrowserTest {
 TEST_F('CrSettingsPasswordsCheckV3Test', 'All', function() {
   mocha.run();
 });
+
+// eslint-disable-next-line no-var
+var CrSettingsSafetyCheckPageBrandedWindowsV3Test =
+    class extends CrSettingsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/safety_check_page_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'features::kPrivacySettingsRedesign',
+        'features::kSafetyCheckChromeCleanerChild',
+      ],
+    };
+  }
+};
+
+GEN('#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)');
+TEST_F('CrSettingsSafetyCheckPageBrandedWindowsV3Test', 'All', function() {
+  mocha.run();
+});
+GEN('#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)');
 
 // eslint-disable-next-line no-var
 var CrSettingsSafetyCheckPageV3Test = class extends CrSettingsV3BrowserTest {
@@ -258,6 +336,29 @@ TEST_F('CrSettingsSafetyCheckPageV3Test', 'All', function() {
 });
 
 // eslint-disable-next-line no-var
+var CrSettingsSafetyCheckChromeCleanerV3Test = class extends CrSettingsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/safety_check_chrome_cleaner_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'features::kPrivacySettingsRedesign',
+      ],
+    };
+  }
+};
+
+GEN('#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)');
+TEST_F('CrSettingsSafetyCheckChromeCleanerV3Test', 'All', function() {
+  mocha.run();
+});
+GEN('#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)');
+
+// eslint-disable-next-line no-var
 var CrSettingsSiteListV3Test = class extends CrSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
@@ -269,6 +370,12 @@ var CrSettingsSiteListV3Test = class extends CrSettingsV3BrowserTest {
 // TODO(crbug.com/929455): flaky, fix.
 TEST_F('CrSettingsSiteListV3Test', 'DISABLED_SiteList', function() {
   runMochaSuite('SiteList');
+});
+
+// TODO(crbug.com/929455): When the bug is fixed, merge
+// SiteListProperties into SiteList
+TEST_F('CrSettingsSiteListV3Test', 'SiteListProperties', function() {
+  runMochaSuite('SiteListProperties');
 });
 
 TEST_F('CrSettingsSiteListV3Test', 'EditExceptionDialog', function() {
@@ -469,7 +576,6 @@ TEST_F('CrSettingsAdvancedPageV3Test', 'MAYBE_Load', function() {
  ['SearchPage', 'search_page_test.js'],
  ['Search', 'search_settings_test.js'],
  ['SecurityKeysSubpage', 'security_keys_subpage_test.js'],
- ['SecurityPage', 'security_page_test.js'],
  ['SecureDns', 'secure_dns_test.js'],
  // Copied from P2 test: Disabled for flakiness, see https://crbug.com/1061249
  ['SiteData', 'site_data_test.js', 'DISABLED_All'],
@@ -498,6 +604,8 @@ GEN('#endif  // defined(OS_CHROMEOS)');
 
 GEN('#if !defined(OS_MACOSX)');
 [['EditDictionaryPage', 'edit_dictionary_page_test.js'],
+ // TODO(https://crbug.com/1081908): Flaky on Mac. Fix and re-enable.
+ ['SecurityPage', 'security_page_test.js'],
 ].forEach(test => registerTest(...test));
 GEN('#endif  //!defined(OS_MACOSX)');
 

@@ -32,6 +32,8 @@ const State = {
   SUCCEEDED: 'succeeded',
 };
 
+const kMaxUpgradeAttempts = 3;
+
 
 Polymer({
   is: 'crostini-upgrader-app',
@@ -89,6 +91,12 @@ Polymer({
     progressLineDisplayMs_: {
       type: Number,
       value: 300,
+    },
+
+    /** @private */
+    upgradeAttemptCount_: {
+      type: Number,
+      value: 0,
     },
 
     /**
@@ -155,6 +163,10 @@ Polymer({
       }),
       callbackRouter.onUpgradeFailed.addListener(() => {
         assert(this.state_ === State.UPGRADING);
+        if (this.upgradeAttemptCount_ < kMaxUpgradeAttempts) {
+          this.precheckThenUpgrade_();
+          return;
+        }
         if (this.backupCheckboxChecked_) {
           this.state_ = State.OFFER_RESTORE;
         } else {
@@ -178,8 +190,13 @@ Polymer({
           this.state_ = State.ERROR;
           return;
         }
-        this.closeDialog_();
+        this.closePage_();
       }),
+      callbackRouter.requestClose.addListener(() => {
+        if (this.canCancel_(this.state_)) {
+          this.onCancelButtonClick_();
+        }
+      })
     ];
 
     document.addEventListener('keyup', event => {
@@ -199,24 +216,28 @@ Polymer({
   },
 
   /** @private */
+  precheckThenUpgrade_() {
+    this.startPrechecks_(() => {
+      this.startUpgrade_();
+    }, () => {});
+  },
+
+  /** @private */
   onActionButtonClick_() {
     switch (this.state_) {
       case State.SUCCEEDED:
       case State.RESTORE_SUCCEEDED:
         BrowserProxy.getInstance().handler.launch();
-        this.closeDialog_();
+        this.closePage_();
         break;
       case State.PRECHECKS_FAILED:
-        this.startPrechecks_(() => {
-          this.startUpgrade_();
-        }, () => {});
+        this.precheckThenUpgrade_();
+        break;
       case State.PROMPT:
         if (this.backupCheckboxChecked_) {
           this.startBackup_(/*showFileChooser=*/ false);
         } else {
-          this.startPrechecks_(() => {
-            this.startUpgrade_();
-          }, () => {});
+          this.precheckThenUpgrade_();
         }
         break;
       case State.OFFER_RESTORE:
@@ -239,7 +260,7 @@ Polymer({
       case State.ERROR:
       case State.OFFER_RESTORE:
       case State.SUCCEEDED:
-        this.closeDialog_();
+        this.closePage_();
         break;
       case State.CANCELING:
         break;
@@ -271,6 +292,7 @@ Polymer({
   /** @private */
   startUpgrade_() {
     this.state_ = State.UPGRADING;
+    this.upgradeAttemptCount_++;
     BrowserProxy.getInstance().handler.upgrade();
   },
 
@@ -281,8 +303,8 @@ Polymer({
   },
 
   /** @private */
-  closeDialog_() {
-    BrowserProxy.getInstance().handler.close();
+  closePage_() {
+    BrowserProxy.getInstance().handler.onPageClosed();
   },
 
   /**

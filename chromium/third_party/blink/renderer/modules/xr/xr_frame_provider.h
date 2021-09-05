@@ -6,10 +6,13 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_FRAME_PROVIDER_H_
 
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
+#include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
@@ -45,7 +48,7 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
     return immersive_data_provider_.get();
   }
 
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
  private:
   void OnImmersiveFrameData(device::mojom::blink::XRFrameDataPtr data);
@@ -77,16 +80,26 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   // Immersive session state
   Member<XRSession> immersive_session_;
   Member<XRFrameTransport> frame_transport_;
-  mojo::Remote<device::mojom::blink::XRFrameDataProvider>
+  HeapMojoRemote<device::mojom::blink::XRFrameDataProvider,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
       immersive_data_provider_;
-  mojo::Remote<device::mojom::blink::XRPresentationProvider>
+  HeapMojoRemote<device::mojom::blink::XRPresentationProvider,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
       immersive_presentation_provider_;
   device::mojom::blink::VRPosePtr immersive_frame_pose_;
   bool is_immersive_frame_position_emulated_ = false;
 
+  // Time the first immersive frame has arrived - used to align the monotonic
+  // clock the devices use with the base::TimeTicks.
+  base::Optional<base::TimeTicks> first_immersive_frame_time_;
+  // The time_delta value of the first immersive frame that has arrived.
+  base::Optional<base::TimeDelta> first_immersive_frame_time_delta_;
+
   // Non-immersive session state
   HeapHashMap<Member<XRSession>,
-              mojo::Remote<device::mojom::blink::XRFrameDataProvider>>
+              Member<DisallowNewWrapper<HeapMojoRemote<
+                  device::mojom::blink::XRFrameDataProvider,
+                  HeapMojoWrapperMode::kWithoutContextObserver>>>>
       non_immersive_data_providers_;
   HeapHashMap<Member<XRSession>, device::mojom::blink::XRFrameDataPtr>
       requesting_sessions_;

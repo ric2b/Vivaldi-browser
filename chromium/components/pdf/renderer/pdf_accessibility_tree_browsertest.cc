@@ -448,6 +448,7 @@ TEST_F(PdfAccessibilityTreeTest, TestHighlightCreation) {
       chrome_pdf::features::kAccessiblePDFHighlight);
 
   constexpr uint32_t kHighlightWhiteColor = MakeARGB(255, 255, 255, 255);
+  const char kPopupNoteText[] = "Text Note";
 
   text_runs_.emplace_back(kFirstTextRun);
   text_runs_.emplace_back(kSecondTextRun);
@@ -460,6 +461,7 @@ TEST_F(PdfAccessibilityTreeTest, TestHighlightCreation) {
     highlight.text_run_index = 0;
     highlight.text_run_count = 2;
     highlight.color = kHighlightWhiteColor;
+    highlight.note_text = kPopupNoteText;
     page_objects_.highlights.push_back(std::move(highlight));
   }
 
@@ -486,6 +488,7 @@ TEST_F(PdfAccessibilityTreeTest, TestHighlightCreation) {
    * ++++ Paragraph
    * ++++++ Highlight
    * ++++++++ Static Text
+   * ++++++++ Note
    */
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
@@ -517,12 +520,23 @@ TEST_F(PdfAccessibilityTreeTest, TestHighlightCreation) {
   EXPECT_EQ(kHighlightWhiteColor,
             static_cast<uint32_t>(highlight_node->GetIntAttribute(
                 ax::mojom::IntAttribute::kBackgroundColor)));
-  ASSERT_EQ(1u, highlight_node->children().size());
+  ASSERT_EQ(2u, highlight_node->children().size());
 
   ui::AXNode* static_text_node = highlight_node->children()[0];
   ASSERT_TRUE(static_text_node);
   EXPECT_EQ(ax::mojom::Role::kStaticText, static_text_node->data().role);
   ASSERT_EQ(2u, static_text_node->children().size());
+
+  ui::AXNode* popup_note_node = highlight_node->children()[1];
+  ASSERT_TRUE(popup_note_node);
+  EXPECT_EQ(ax::mojom::Role::kNote, popup_note_node->data().role);
+  EXPECT_EQ(kPopupNoteText, popup_note_node->GetStringAttribute(
+                                ax::mojom::StringAttribute::kName));
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_AX_ROLE_DESCRIPTION_PDF_POPUP_NOTE),
+            popup_note_node->GetStringAttribute(
+                ax::mojom::StringAttribute::kRoleDescription));
+  EXPECT_EQ(gfx::RectF(1.0f, 1.0f, 5.0f, 6.0f),
+            popup_note_node->data().relative_bounds.bounds);
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestTextFieldNodeCreation) {
@@ -545,7 +559,7 @@ TEST_F(PdfAccessibilityTreeTest, TestTextFieldNodeCreation) {
     text_field.is_read_only = false;
     text_field.is_required = false;
     text_field.is_password = false;
-    page_objects_.text_fields.push_back(std::move(text_field));
+    page_objects_.form_fields.text_fields.push_back(std::move(text_field));
   }
 
   {
@@ -558,7 +572,7 @@ TEST_F(PdfAccessibilityTreeTest, TestTextFieldNodeCreation) {
     text_field.is_read_only = true;
     text_field.is_required = true;
     text_field.is_password = true;
-    page_objects_.text_fields.push_back(std::move(text_field));
+    page_objects_.form_fields.text_fields.push_back(std::move(text_field));
   }
 
   page_info_.text_run_count = text_runs_.size();
@@ -1262,7 +1276,6 @@ TEST_F(PdfAccessibilityTreeTest, TestEmptyPdfAxActions) {
   EXPECT_FALSE(pdf_action_target->SetSelected(false));
   EXPECT_FALSE(pdf_action_target->SetSequentialFocusNavigationStartingPoint());
   EXPECT_FALSE(pdf_action_target->SetValue("test"));
-  EXPECT_FALSE(pdf_action_target->ShowContextMenu());
   EXPECT_FALSE(pdf_action_target->ScrollToMakeVisible());
 }
 
@@ -1420,6 +1433,38 @@ TEST_F(PdfAccessibilityTreeTest, TestSelectionActionDataConversion) {
   ASSERT_EQ(ui::AXActionTarget::Type::kPdf, pdf_focus_action_target->GetType());
   EXPECT_FALSE(pdf_anchor_action_target->SetSelection(
       pdf_anchor_action_target.get(), 1, pdf_focus_action_target.get(), 5));
+}
+
+TEST_F(PdfAccessibilityTreeTest, TestShowContextMenuAction) {
+  text_runs_.emplace_back(kFirstTextRun);
+  text_runs_.emplace_back(kSecondTextRun);
+  chars_.insert(chars_.end(), std::begin(kDummyCharsData),
+                std::end(kDummyCharsData));
+
+  page_info_.text_run_count = text_runs_.size();
+  page_info_.char_count = chars_.size();
+
+  content::RenderFrame* render_frame = view_->GetMainRenderFrame();
+  ASSERT_TRUE(render_frame);
+  render_frame->SetAccessibilityModeForTest(ui::AXMode::kWebContents);
+  ASSERT_TRUE(render_frame->GetRenderAccessibility());
+
+  ActionHandlingFakePepperPluginInstance fake_pepper_instance;
+  FakeRendererPpapiHost host(view_->GetMainRenderFrame(),
+                             &fake_pepper_instance);
+  PP_Instance instance = 0;
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
+  pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
+  pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
+                                                  chars_, page_objects_);
+  ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
+  ASSERT_TRUE(root_node);
+
+  std::unique_ptr<ui::AXActionTarget> pdf_action_target =
+      pdf_accessibility_tree.CreateActionTarget(*root_node);
+  ASSERT_EQ(ui::AXActionTarget::Type::kPdf, pdf_action_target->GetType());
+  EXPECT_TRUE(pdf_action_target->ShowContextMenu());
 }
 
 }  // namespace pdf

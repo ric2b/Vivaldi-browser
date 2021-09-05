@@ -4,10 +4,12 @@
 
 #import "ios/chrome/app/spotlight/base_spotlight_manager.h"
 
-#import <CommonCrypto/CommonCrypto.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 
+#import <MaterialComponents/MaterialTypography.h>
+
 #include "base/bind.h"
+#include "base/hash/md5.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/favicon/core/fallback_url_util.h"
@@ -17,7 +19,6 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/spotlight/spotlight_provider.h"
-#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "net/base/mac/url_conversions.h"
 #include "skia/ext/skia_utils_ios.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -94,11 +95,12 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
 - (int64_t)getHashForURL:(const GURL&)URL title:(NSString*)title {
   NSString* key = [NSString
       stringWithFormat:@"%@ %@", base::SysUTF8ToNSString(URL.spec()), title];
-  unsigned char hash[CC_MD5_DIGEST_LENGTH];
   const std::string clipboard = base::SysNSStringToUTF8(key);
   const char* c_string = clipboard.c_str();
-  CC_MD5(c_string, strlen(c_string), hash);
-  uint64_t md5 = *(reinterpret_cast<uint64_t*>(hash));
+
+  base::MD5Digest hash;
+  base::MD5Sum(c_string, strlen(c_string), &hash);
+  uint64_t md5 = *(reinterpret_cast<uint64_t*>(hash.a));
   return md5;
 }
 

@@ -21,7 +21,7 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.content_public.browser.WebContents;
 
@@ -30,6 +30,8 @@ import org.chromium.content_public.browser.WebContents;
  */
 public class HistoryNavigationCoordinator implements InsetObserverView.WindowInsetObserver,
                                                      Destroyable, PauseResumeWithNativeObserver {
+    private final Runnable mUpdateNavigationStateRunnable = this::onNavigationStateChanged;
+
     private CompositorViewHolder mCompositorViewHolder;
     private HistoryNavigationLayout mNavigationLayout;
     private InsetObserverView mInsetObserverView;
@@ -224,7 +226,7 @@ public class HistoryNavigationCoordinator implements InsetObserverView.WindowIns
     public void onResumeWithNative() {
         // Check the enabled status again since the system gesture settings might have changed.
         // Post the task to work around wrong gesture insets returned from the framework.
-        mNavigationLayout.post(this::onNavigationStateChanged);
+        mNavigationLayout.post(mUpdateNavigationStateRunnable);
     }
 
     @Override
@@ -245,6 +247,7 @@ public class HistoryNavigationCoordinator implements InsetObserverView.WindowIns
             mCompositorViewHolder = null;
         }
         if (mNavigationLayout != null) {
+            mNavigationLayout.removeCallbacks(mUpdateNavigationStateRunnable);
             mNavigationLayout.destroy();
             mNavigationLayout = null;
         }

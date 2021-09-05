@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// #import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js'
+// #import '../constants/routes.mojom-lite.js';
+
+// #import {OsSettingsRoutes} from './os_settings_routes.m.js'
+// #import {Route, Router} from '../router.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+
 cr.define('settings', function() {
   /**
    * @param {!settings.Route} parent
@@ -74,6 +81,11 @@ cr.define('settings', function() {
       r.SMART_LOCK = createSubpage(
           r.MULTIDEVICE_FEATURES, mojom.SMART_LOCK_SUBPAGE_PATH,
           Subpage.kSmartLock);
+      if (loadTimeData.getBoolean('nearbySharingFeatureFlag')) {
+        r.NEARBY_SHARE = createSubpage(
+            r.MULTIDEVICE, mojom.NEARBY_SHARE_SUBPAGE_PATH,
+            Subpage.kNearbyShare);
+      }
     }
 
     // People section.
@@ -98,7 +110,7 @@ cr.define('settings', function() {
           r.OS_PEOPLE, mojom.SECURITY_AND_SIGN_IN_SUBPAGE_PATH,
           Subpage.kSecurityAndSignIn);
       r.FINGERPRINT = createSubpage(
-          r.LOCK_SCREEN, mojom.FINGERPRINT_SUBPATH_PATH, Subpage.kFingerprint);
+          r.LOCK_SCREEN, mojom.FINGERPRINT_SUBPAGE_PATH, Subpage.kFingerprint);
       r.ACCOUNTS = createSubpage(
           r.OS_PEOPLE, mojom.MANAGE_OTHER_PEOPLE_SUBPAGE_PATH,
           Subpage.kManageOtherPeople);
@@ -137,6 +149,9 @@ cr.define('settings', function() {
       r.AMBIENT_MODE = createSubpage(
           r.PERSONALIZATION, mojom.AMBIENT_MODE_SUBPAGE_PATH,
           Subpage.kAmbientMode);
+      r.AMBIENT_MODE_PHOTOS = createSubpage(
+          r.AMBIENT_MODE, mojom.AMBIENT_MODE_PHOTOS_SUBPAGE_PATH,
+          Subpage.kAmbientModePhotos);
     }
 
     // Search and Assistant section.
@@ -191,12 +206,6 @@ cr.define('settings', function() {
       r.CROSTINI_PORT_FORWARDING = createSubpage(
           r.CROSTINI_DETAILS, mojom.CROSTINI_PORT_FORWARDING_SUBPAGE_PATH,
           Subpage.kCrostiniPortForwarding);
-      if (loadTimeData.valueExists('showCrostiniDiskResize') &&
-          loadTimeData.getBoolean('showCrostiniDiskResize')) {
-        r.CROSTINI_DISK_RESIZE = createSubpage(
-            r.CROSTINI_DETAILS, mojom.CROSTINI_DISK_RESIZE_SUBPAGE_PATH,
-            Subpage.kCrostiniDiskResize);
-      }
     }
 
     // Date and Time section.
@@ -221,7 +230,10 @@ cr.define('settings', function() {
         r.OS_LANGUAGES_DETAILS, mojom.MANAGE_INPUT_METHODS_SUBPAGE_PATH,
         Subpage.kManageInputMethods);
     r.OS_LANGUAGES_SMART_INPUTS = createSubpage(
-        r.OS_LANGUAGES, mojom.SMART_INPUTS_SUBAGE_PATH, Subpage.kSmartInputs);
+        r.OS_LANGUAGES, mojom.SMART_INPUTS_SUBPAGE_PATH, Subpage.kSmartInputs);
+    r.OS_LANGUAGES_INPUT_METHOD_OPTIONS = createSubpage(
+        r.OS_LANGUAGES_DETAILS, mojom.INPUT_METHOD_OPTIONS_SUBPAGE_PATH,
+        Subpage.kInputMethodOptions);
 
     // Files section.
     if (!loadTimeData.getBoolean('isGuest')) {
@@ -301,7 +313,7 @@ cr.define('settings', function() {
 
   // TODO(dpapad): Change to 'get routes() {}' in export when we fix a bug in
   // ChromePass that limits the syntax of what can be returned from cr.define().
-  const routes = /** @type {!OsSettingsRoutes} */ (
+  /* #export */ const routes = /** @type {!OsSettingsRoutes} */ (
       settings.Router.getInstance().getRoutes());
 
   // #cr_define_end

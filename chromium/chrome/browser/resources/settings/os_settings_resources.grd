@@ -25,16 +25,8 @@
                compress="false" type="BINDATA" />
 
       <!-- App Management -->
-      <include name="IDR_OS_SETTINGS_APP_MANAGEMENT_BITMAP_MOJO_LITE_JS"
-               file="${root_gen_dir}\skia\public\mojom\bitmap.mojom-lite.js"
-               use_base_dir="false"
-               compress="false" type="BINDATA" />
       <include name="IDR_OS_SETTINGS_APP_MANAGEMENT_FILE_PATH_MOJO_LITE_JS"
                file="${root_gen_dir}\mojo\public\mojom\base\file_path.mojom-lite.js"
-               use_base_dir="false"
-               compress="false" type="BINDATA" />
-      <include name="IDR_OS_SETTINGS_APP_MANAGEMENT_IMAGE_INFO_MOJO_LITE_JS"
-               file="${root_gen_dir}\skia\public\mojom\image_info.mojom-lite.js"
                use_base_dir="false"
                compress="false" type="BINDATA" />
       <include name="IDR_OS_SETTINGS_APP_MANAGEMENT_IMAGE_MOJO_LITE_JS"
@@ -46,7 +38,7 @@
                use_base_dir="false"
                compress="false" type="BINDATA" />
       <include name="IDR_OS_SETTINGS_APP_MANAGEMENT_TYPES_MOJO_LITE_JS"
-               file="${root_gen_dir}\chrome\services\app_service\public\mojom\types.mojom-lite.js"
+               file="${root_gen_dir}\components\services\app_service\public\mojom\types.mojom-lite.js"
                use_base_dir="false"
                compress="false" type="BINDATA" />
 
@@ -77,17 +69,29 @@
       <structure name="IDR_OS_SETTINGS_A11Y_PAGE_HTML"
                  file="chromeos/os_a11y_page/os_a11y_page.html"
                  compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_AMBIENT_MODE_PAGE_JS"
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_JS"
                  file="chromeos/ambient_mode_page/ambient_mode_page.js"
                  compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_AMBIENT_MODE_PAGE_HTML"
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_HTML"
                  file="chromeos/ambient_mode_page/ambient_mode_page.html"
                  compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_AMBIENT_MODE_BROWSER_PROXY_JS"
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PHOTOS_PAGE_JS"
+                 file="chromeos/ambient_mode_page/ambient_mode_photos_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PHOTOS_PAGE_HTML"
+                 file="chromeos/ambient_mode_page/ambient_mode_photos_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_BROWSER_PROXY_JS"
                  file="chromeos/ambient_mode_page/ambient_mode_browser_proxy.js"
                  compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_AMBIENT_MODE_BROWSER_PROXY_HTML"
+      <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_BROWSER_PROXY_HTML"
                  file="chromeos/ambient_mode_page/ambient_mode_browser_proxy.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_CONSTANTS_JS"
+                 file="chromeos/ambient_mode_page/constants.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_CONSTANTS_HTML"
+                 file="chromeos/ambient_mode_page/constants.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_APPS_PAGE_JS"
                  file="chromeos/os_apps_page/os_apps_page.js"
@@ -248,6 +252,12 @@
       <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_BROWSER_PROXY_HTML"
                 file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_browser_proxy.html"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_PERMISSION_DIALOG_JS"
+                file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_permission_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_PERMISSION_DIALOG_HTML"
+                file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_permission_dialog.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_CAPTIONS_SUBPAGE_JS"
                  file="a11y_page/captions_subpage.js"
                  compress="false" type="chrome_html" />
@@ -349,6 +359,9 @@
                  file="lifetime_browser_proxy.js"
                  compress="false" type="chrome_html"
                  preprocess="true" />
+      <structure name="IDR_OS_SETTINGS_SEARCH_SETTINGS_HTML"
+                 file="search_settings.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_SEARCH_SETTINGS_JS"
                  file="search_settings.js"
                  compress="false" type="chrome_html" />
@@ -375,7 +388,8 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_CR_SETTINGS_SUBPAGE_JS"
                  file="settings_page/settings_subpage.js"
-                 compress="false" type="chrome_html" />
+                 compress="false" type="chrome_html"
+                 preprocess="true" />
       <structure name="IDR_OS_SETTINGS_CR_SETTINGS_PAGE_CSS_HTML"
                  file="settings_page_css.html"
                  compress="false" type="chrome_html" />
@@ -656,6 +670,18 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_PAGE_JS"
                  file="chromeos/os_languages_page/manage_input_methods_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_INPUT_METHOD_OPTIONS_PAGE_HTML"
+                 file="chromeos/os_languages_page/input_method_options_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_INPUT_METHOD_OPTIONS_PAGE_JS"
+                 file="chromeos/os_languages_page/input_method_options_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_INPUT_METHOD_UTIL_HTML"
+                 file="chromeos/os_languages_page/input_method_util.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_INPUT_METHOD_UTIL_JS"
+                 file="chromeos/os_languages_page/input_method_util.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_SMART_INPUTS_PAGE_HTML"
                  file="chromeos/os_languages_page/smart_inputs_page.html"
@@ -1095,6 +1121,12 @@
       <structure name="IDR_OS_SETTINGS_DATE_TIME_TYPES_JS"
                  file="chromeos/date_time_page/date_time_types.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_TIMEZONE_BROWSER_PROXY_JS"
+                 file="chromeos/date_time_page/timezone_browser_proxy.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_TIMEZONE_BROWSER_PROXY_HTML"
+                 file="chromeos/date_time_page/timezone_browser_proxy.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_TIMEZONE_SELECTOR_HTML"
                  file="chromeos/date_time_page/timezone_selector.html"
                  compress="false" type="chrome_html" />
@@ -1205,6 +1237,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_MULTIDEVICE_TETHER_ITEM_JS"
                  file="chromeos/multidevice_page/multidevice_tether_item.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_SUBPAGE_HTML"
+                 file="nearby_share_page/nearby_share_subpage.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_SUBPAGE_JS"
+                 file="nearby_share_page/nearby_share_subpage.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NETWORK_PROXY_SECTION_HTML"
                  file="chromeos/internet_page/network_proxy_section.html"

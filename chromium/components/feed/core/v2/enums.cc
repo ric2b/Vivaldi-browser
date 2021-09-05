@@ -47,6 +47,12 @@ std::ostream& operator<<(std::ostream& out, LoadStreamStatus value) {
       return out << "kCannotParseNetworkResponseBody";
     case LoadStreamStatus::kLoadMoreModelIsNotLoaded:
       return out << "kLoadMoreModelIsNotLoaded";
+    case LoadStreamStatus::kLoadNotAllowedDisabledByEnterprisePolicy:
+      return out << "kLoadNotAllowedDisabledByEnterprisePolicy";
+    case LoadStreamStatus::kNetworkFetchFailed:
+      return out << "kNetworkFetchFailed";
+    case LoadStreamStatus::kCannotLoadMoreNoNextPageToken:
+      return out << "kCannotLoadMoreNoNextPageToken";
   }
 #else
   return out << (static_cast<int>(value));

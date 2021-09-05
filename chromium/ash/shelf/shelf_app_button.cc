@@ -293,6 +293,22 @@ class ShelfAppButton::AppStatusIndicatorView
 // static
 const char ShelfAppButton::kViewClassName[] = "ash/ShelfAppButton";
 
+// static
+bool ShelfAppButton::ShouldHandleEventFromContextMenu(
+    const ui::GestureEvent* event) {
+  switch (event->type()) {
+    case ui::ET_GESTURE_END:
+    case ui::ET_GESTURE_TAP_CANCEL:
+    case ui::ET_GESTURE_SCROLL_BEGIN:
+    case ui::ET_GESTURE_SCROLL_UPDATE:
+    case ui::ET_GESTURE_SCROLL_END:
+    case ui::ET_SCROLL_FLING_START:
+      return true;
+    default:
+      return false;
+  }
+}
+
 ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
                                ShelfButtonDelegate* shelf_button_delegate)
     : ShelfButton(shelf_view->shelf(), shelf_button_delegate),
@@ -429,6 +445,12 @@ void ShelfAppButton::ClearState(State state) {
   }
 }
 
+void ShelfAppButton::ClearDragStateOnGestureEnd() {
+  drag_timer_.Stop();
+  ClearState(STATE_HOVERED);
+  ClearState(STATE_DRAGGING);
+}
+
 gfx::Rect ShelfAppButton::GetIconBounds() const {
   return icon_view_->bounds();
 }
@@ -557,9 +579,12 @@ gfx::Rect ShelfAppButton::CalculateSmallRippleArea() const {
   if (TabletModeController::Get()->InTabletMode() && padding > 0) {
     const int current_index = shelf_view_->view_model()->GetIndexOfView(this);
     int left_padding =
-        (shelf_view_->first_visible_index() == current_index) ? padding : 0;
+        (shelf_view_->visible_views_indices().front() == current_index)
+            ? padding
+            : 0;
     int right_padding =
-        (shelf_view_->last_visible_index() == current_index) ? padding : 0;
+        (shelf_view_->visible_views_indices().back() == current_index) ? padding
+                                                                       : 0;
 
     if (base::i18n::IsRTL())
       std::swap(left_padding, right_padding);
@@ -735,7 +760,6 @@ void ShelfAppButton::OnGestureEvent(ui::GestureEvent* event) {
     case ui::ET_GESTURE_TAP:
       FALLTHROUGH;  // Ensure tapped items are not enlarged for drag.
     case ui::ET_GESTURE_END:
-      drag_timer_.Stop();
       // If the button is being dragged, or there is an active context menu,
       // for this ShelfAppButton, don't deactivate the ink drop.
       if (!(state_ & STATE_DRAGGING) &&
@@ -744,8 +768,7 @@ void ShelfAppButton::OnGestureEvent(ui::GestureEvent* event) {
            views::InkDropState::ACTIVATED)) {
         GetInkDrop()->AnimateToState(views::InkDropState::DEACTIVATED);
       }
-      ClearState(STATE_HOVERED);
-      ClearState(STATE_DRAGGING);
+      ClearDragStateOnGestureEnd();
       break;
     case ui::ET_GESTURE_SCROLL_BEGIN:
       if (state_ & STATE_DRAGGING) {
@@ -887,7 +910,12 @@ void ShelfAppButton::SetInkDropAnimationStarted(bool started) {
     return;
 
   ink_drop_animation_started_ = started;
-  shelf_button_delegate()->NotifyInkDropActivity(started, /*sender=*/this);
+  if (started) {
+    ink_drop_count_ = shelf_button_delegate()->CreateScopedActiveInkDropCount(
+        /*sender=*/this);
+  } else {
+    ink_drop_count_.reset(nullptr);
+  }
 }
 
 }  // namespace ash

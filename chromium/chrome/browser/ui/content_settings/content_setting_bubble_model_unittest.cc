@@ -17,9 +17,10 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
+#include "chrome/browser/ui/blocked_content/blocked_window_params.h"
+#include "chrome/browser/ui/blocked_content/chrome_popup_navigation_delegate.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/fake_owner.h"
 #include "chrome/common/chrome_features.h"
@@ -28,10 +29,14 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/blocked_content/popup_blocker.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/infobars/core/infobar_delegate.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
+#include "components/permissions/permission_result.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
@@ -123,7 +128,10 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
   EXPECT_TRUE(bubble_content.custom_link_enabled);
   EXPECT_FALSE(bubble_content.manage_text.empty());
 
-  content_settings->ClearNavigationRelatedContentSettings();
+  WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL("https://www.example.com"));
+  content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentAllowed(ContentSettingsType::COOKIES);
   content_setting_bubble_model =
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
@@ -769,8 +777,10 @@ TEST_F(ContentSettingBubbleModelTest, PepperBroker) {
   EXPECT_FALSE(bubble_content.custom_link_enabled);
   EXPECT_FALSE(bubble_content.manage_text.empty());
 
-  content_settings
-      ->ClearContentSettingsExceptForNavigationRelatedSettings();
+  WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL("https://www.example.com"));
+  content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentAllowed(ContentSettingsType::PPAPI_BROKER);
   content_setting_bubble_model =
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
@@ -821,6 +831,68 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
   setting_map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                         CONTENT_SETTING_BLOCK);
   CheckGeolocationBubble(2, true, false);
+}
+
+TEST_F(ContentSettingBubbleModelTest, GeolocationEmbargo) {
+  GURL origin_to_embargo("http://example.com/");
+
+  // Verify that |origin_to_embargo| is not blocked.
+  {
+    auto* content_settings_map =
+        HostContentSettingsMapFactory::GetForProfile(profile());
+    const ContentSetting saved_setting =
+        content_settings_map->GetContentSetting(
+            origin_to_embargo, origin_to_embargo,
+            ContentSettingsType::GEOLOCATION, std::string());
+
+    ASSERT_EQ(CONTENT_SETTING_ASK, saved_setting);
+  }
+
+  NavigateAndCommit(origin_to_embargo);
+  TabSpecificContentSettings* content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
+  content_settings->OnGeolocationPermissionSet(origin_to_embargo, false);
+
+  // |origin_to_embargo| is not blocked or embargoed. Verify no clear link
+  // shown.
+  CheckGeolocationBubble(1, /*expect_clear_link*/ false,
+                         /*expect_reload_hint*/ true);
+
+  {
+    auto* auto_blocker =
+        PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+    for (int i = 0; i < 3; ++i)
+      auto_blocker->RecordDismissAndEmbargo(
+          origin_to_embargo, ContentSettingsType::GEOLOCATION, false);
+  }
+
+  // |origin_to_embargo| is not blocked but under embargo. Verify clear link is
+  // shown.
+  CheckGeolocationBubble(1, /*expect_clear_link*/ true,
+                         /*expect_reload_hint*/ false);
+
+  // Reset ContentSettings and embargo state by pressing on Custom Link.
+  {
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        ContentSettingBubbleModel::CreateContentSettingBubbleModel(
+            nullptr, web_contents(), ContentSettingsType::GEOLOCATION));
+
+    content_setting_bubble_model->OnCustomLinkClicked();
+  }
+
+  // Verify |origin_to_embargo| is no longer under embargo.
+  {
+    auto* auto_blocker =
+        PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+    permissions::PermissionResult result = auto_blocker->GetEmbargoResult(
+        origin_to_embargo, ContentSettingsType::GEOLOCATION);
+    ASSERT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  }
+
+  // |origin_to_embargo| returned to default state, not blocked or embargoed.
+  // Verify no clear link shown.
+  CheckGeolocationBubble(1, /*expect_clear_link*/ false,
+                         /*expect_reload_hint*/ true);
 }
 
 TEST_F(ContentSettingBubbleModelTest, FileURL) {
@@ -1062,7 +1134,10 @@ TEST_F(ContentSettingBubbleModelTest, SensorAccessPermissionsChanged) {
     EXPECT_EQ(bubble_content_3.radio_group.default_item, 0);
   }
 
-  content_settings->ClearContentSettingsExceptForNavigationRelatedSettings();
+  WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL("https://www.example.com"));
+  content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
 
   // Go from block by default to allow by default to block by default.
   {
@@ -1135,7 +1210,10 @@ TEST_F(ContentSettingBubbleModelTest, SensorAccessPermissionsChanged) {
     EXPECT_EQ(bubble_content_3.radio_group.default_item, 1);
   }
 
-  content_settings->ClearContentSettingsExceptForNavigationRelatedSettings();
+  WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL("https://www.example.com"));
+  content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
 
   // Block by default but allow a specific site.
   {
@@ -1165,7 +1243,10 @@ TEST_F(ContentSettingBubbleModelTest, SensorAccessPermissionsChanged) {
     EXPECT_EQ(bubble_content.radio_group.default_item, 0);
   }
 
-  content_settings->ClearContentSettingsExceptForNavigationRelatedSettings();
+  WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL("https://www.example.com"));
+  content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
   // Clear site-specific exceptions.
   settings_map->ClearSettingsForOneType(ContentSettingsType::SENSORS);
 
@@ -1205,7 +1286,7 @@ TEST_F(ContentSettingBubbleModelTest, PopupBubbleModelListItems) {
       TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentBlocked(ContentSettingsType::POPUPS);
 
-  PopupBlockerTabHelper::CreateForWebContents(web_contents());
+  blocked_content::PopupBlockerTabHelper::CreateForWebContents(web_contents());
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
           nullptr, web_contents(), ContentSettingsType::POPUPS));
@@ -1221,9 +1302,12 @@ TEST_F(ContentSettingBubbleModelTest, PopupBubbleModelListItems) {
   for (size_t i = 1; i <= kItemCount; i++) {
     NavigateParams navigate_params =
         params.CreateNavigateParams(web_contents());
-    EXPECT_TRUE(MaybeBlockPopup(web_contents(), &url, &navigate_params,
-                                nullptr /*=open_url_params*/,
-                                params.features()));
+    EXPECT_FALSE(blocked_content::MaybeBlockPopup(
+        web_contents(), &url,
+        std::make_unique<ChromePopupNavigationDelegate>(
+            std::move(navigate_params)),
+        nullptr /*=open_url_params*/, params.features(),
+        HostContentSettingsMapFactory::GetForProfile(profile())));
     EXPECT_EQ(i, list_items.size());
   }
 }

@@ -37,12 +37,7 @@
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_devtools_frontend.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
-#include "content/shell/browser/web_test/fake_bluetooth_scanning_prompt.h"
-#include "content/shell/browser/web_test/secondary_test_window_observer.h"
-#include "content/shell/browser/web_test/web_test_bluetooth_chooser_factory.h"
 #include "content/shell/browser/web_test/web_test_control_host.h"
-#include "content/shell/browser/web_test/web_test_devtools_bindings.h"
-#include "content/shell/browser/web_test/web_test_javascript_dialog_manager.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/common/web_test/web_test_switches.h"
 #include "media/media_buildflags.h"
@@ -118,12 +113,8 @@ Shell::~Shell() {
   web_contents_.reset();
 
   if (windows_.empty()) {
-    // TODO(danakj): Do we need both this one and the call in CloseAllWindows()?
-    // Can we just always destroy ShellPlatformDelegate in one place?
-    if (headless_) {
-      delete g_platform;
-      g_platform = nullptr;
-    }
+    delete g_platform;
+    g_platform = nullptr;
 
     for (auto it = RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
          it.Advance()) {
@@ -157,31 +148,23 @@ Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
             switches::kForceWebRtcIPHandlingPolicy);
   }
 
+  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
+  if (web_test_control_host)
+    web_test_control_host->DidOpenNewWindowOrTab(shell->web_contents());
+
   return shell;
 }
 
 void Shell::CloseAllWindows() {
   DevToolsAgentHost::DetachAllClients();
 
-  if (windows_.empty()) {
-    if (*g_quit_main_message_loop)
-      std::move(*g_quit_main_message_loop).Run();
-  } else {
-    std::vector<Shell*> open_windows(windows_);
-    for (Shell* open_window : open_windows)
-      open_window->Close();
-    DCHECK(windows_.empty());
+  std::vector<Shell*> open_windows(windows_);
+  for (Shell* open_window : open_windows)
+    open_window->Close();
+  DCHECK(windows_.empty());
 
-    // Pump the message loop to allow window teardown tasks to run.
-    base::RunLoop().RunUntilIdle();
-  }
-
-  // The |g_platform| is destroyed when the last window is closed, but only
-  // in headless mode.
-  if (g_platform) {
-    delete g_platform;
-    g_platform = nullptr;
-  }
+  // Pump the message loop to allow window teardown tasks to run.
+  base::RunLoop().RunUntilIdle();
 }
 
 void Shell::SetMainMessageLoopQuitClosure(base::OnceClosure quit_closure) {
@@ -240,31 +223,7 @@ Shell* Shell::CreateNewWindow(BrowserContext* browser_context,
   Shell* shell =
       CreateShell(std::move(web_contents), AdjustWindowSize(initial_size),
                   true /* should_set_delegate */);
-  if (!url.is_empty())
-    shell->LoadURL(url);
-  return shell;
-}
 
-Shell* Shell::CreateNewWindowWithSessionStorageNamespace(
-    BrowserContext* browser_context,
-    const GURL& url,
-    const scoped_refptr<SiteInstance>& site_instance,
-    const gfx::Size& initial_size,
-    scoped_refptr<SessionStorageNamespace> session_storage_namespace) {
-  WebContents::CreateParams create_params(browser_context, site_instance);
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kForcePresentationReceiverForTesting)) {
-    create_params.starting_sandbox_flags =
-        content::kPresentationReceiverSandboxFlags;
-  }
-  std::map<std::string, scoped_refptr<SessionStorageNamespace>>
-      session_storages;
-  session_storages[""] = session_storage_namespace;
-  std::unique_ptr<WebContents> web_contents =
-      WebContents::CreateWithSessionStorage(create_params, session_storages);
-  Shell* shell =
-      CreateShell(std::move(web_contents), AdjustWindowSize(initial_size),
-                  true /* should_set_delegate */);
   if (!url.is_empty())
     shell->LoadURL(url);
   return shell;
@@ -340,12 +299,9 @@ void Shell::AddNewContents(WebContents* source,
                            const gfx::Rect& initial_rect,
                            bool user_gesture,
                            bool* was_blocked) {
-  WebContents* raw_new_contents = new_contents.get();
   CreateShell(
       std::move(new_contents), AdjustWindowSize(initial_rect.size()),
       !delay_popup_contents_delegate_for_testing_ /* should_set_delegate */);
-  if (switches::IsRunWebTestsSwitchPresent())
-    SecondaryTestWindowObserver::CreateForWebContents(raw_new_contents);
 }
 
 void Shell::GoBackOrForward(int offset) {
@@ -465,8 +421,6 @@ WebContents* Shell::OpenURLFromTab(WebContents* source,
                                  params.source_site_instance,
                                  gfx::Size());  // Use default size.
       target = new_window->web_contents();
-      if (switches::IsRunWebTestsSwitchPresent())
-        SecondaryTestWindowObserver::CreateForWebContents(target);
       break;
     }
 
@@ -503,10 +457,10 @@ void Shell::SetOverlayMode(bool use_overlay_mode) {
 #endif
 
 void Shell::EnterFullscreenModeForTab(
-    WebContents* web_contents,
-    const GURL& origin,
+    RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
-  ToggleFullscreenModeForTab(web_contents, true);
+  ToggleFullscreenModeForTab(WebContents::FromRenderFrameHost(requesting_frame),
+                             true);
 }
 
 void Shell::ExitFullscreenModeForTab(WebContents* web_contents) {
@@ -579,8 +533,9 @@ void Shell::NavigationStateChanged(WebContents* source,
 JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
     WebContents* source) {
   if (!dialog_manager_) {
-    if (switches::IsRunWebTestsSwitchPresent())
-      dialog_manager_ = std::make_unique<WebTestJavaScriptDialogManager>();
+    WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
+    if (web_test_control_host)
+      dialog_manager_ = web_test_control_host->CreateJavaScriptDialogManager();
     else
       dialog_manager_ = std::make_unique<ShellJavaScriptDialogManager>();
   }
@@ -591,15 +546,22 @@ std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
     RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
   WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host && switches::IsRunWebTestsSwitchPresent())
+  if (web_test_control_host)
     return web_test_control_host->RunBluetoothChooser(frame, event_handler);
   return nullptr;
 }
 
+class AlwaysAllowBluetoothScanning : public BluetoothScanningPrompt {
+ public:
+  explicit AlwaysAllowBluetoothScanning(const EventHandler& event_handler) {
+    event_handler.Run(content::BluetoothScanningPrompt::Event::kAllow);
+  }
+};
+
 std::unique_ptr<BluetoothScanningPrompt> Shell::ShowBluetoothScanningPrompt(
     RenderFrameHost* frame,
     const BluetoothScanningPrompt::EventHandler& event_handler) {
-  return std::make_unique<FakeBluetoothScanningPrompt>(event_handler);
+  return std::make_unique<AlwaysAllowBluetoothScanning>(event_handler);
 }
 
 #if defined(OS_MACOSX)
@@ -618,8 +580,9 @@ bool Shell::DidAddMessageToConsole(WebContents* source,
 }
 
 void Shell::PortalWebContentsCreated(WebContents* portal_web_contents) {
-  if (switches::IsRunWebTestsSwitchPresent())
-    SecondaryTestWindowObserver::CreateForWebContents(portal_web_contents);
+  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
+  if (web_test_control_host)
+    web_test_control_host->DidOpenNewWindowOrTab(portal_web_contents);
 }
 
 void Shell::RendererUnresponsive(
@@ -627,7 +590,7 @@ void Shell::RendererUnresponsive(
     RenderWidgetHost* render_widget_host,
     base::RepeatingClosure hang_monitor_restarter) {
   WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host && switches::IsRunWebTestsSwitchPresent())
+  if (web_test_control_host)
     web_test_control_host->RendererUnresponsive();
 }
 
@@ -667,7 +630,7 @@ bool Shell::ShouldAllowRunningInsecureContent(WebContents* web_contents,
                                               const GURL& resource_url) {
   bool allowed_by_test = false;
   WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host && switches::IsRunWebTestsSwitchPresent()) {
+  if (web_test_control_host) {
     const base::DictionaryValue& test_flags =
         web_test_control_host->accumulated_web_test_runtime_flags_changes();
     test_flags.GetBoolean("running_insecure_content_allowed", &allowed_by_test);
@@ -689,6 +652,18 @@ PictureInPictureResult Shell::EnterPictureInPicture(
 
 bool Shell::ShouldResumeRequestsForCreatedWindow() {
   return !delay_popup_contents_delegate_for_testing_;
+}
+
+void Shell::SetContentsBounds(WebContents* source, const gfx::Rect& bounds) {
+  DCHECK(source == web_contents());  // There's only one WebContents per Shell.
+
+  if (switches::IsRunWebTestsSwitchPresent()) {
+    // Note that chrome drops these requests on normal windows.
+    // TODO(danakj): The position is dropped here but we use the size. Web tests
+    // can't move the window in headless mode anyways, but maybe we should be
+    // letting them pretend?
+    g_platform->ResizeWebContent(this, bounds.size());
+  }
 }
 
 gfx::Size Shell::GetShellDefaultSize() {

@@ -48,7 +48,7 @@ const std::vector<SearchConcept>& GetDeviceSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_KEYBOARD,
        mojom::kKeyboardSubpagePath,
        mojom::SearchResultIcon::kKeyboard,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kKeyboard}},
       {IDS_OS_SETTINGS_TAG_KEYBOARD_AUTO_REPEAT,
@@ -81,7 +81,7 @@ const std::vector<SearchConcept>& GetDeviceSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_STORAGE,
        mojom::kStorageSubpagePath,
        mojom::SearchResultIcon::kHardDrive,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kStorage},
        {IDS_OS_SETTINGS_TAG_STORAGE_ALT1, IDS_OS_SETTINGS_TAG_STORAGE_ALT2,
@@ -89,7 +89,7 @@ const std::vector<SearchConcept>& GetDeviceSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_DISPLAY_NIGHT_LIGHT,
        mojom::kDisplaySubpagePath,
        mojom::SearchResultIcon::kDisplay,
-       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultDefaultRank::kLow,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kNightLight},
        {IDS_OS_SETTINGS_TAG_DISPLAY_NIGHT_LIGHT_ALT1,
@@ -98,7 +98,7 @@ const std::vector<SearchConcept>& GetDeviceSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_DISPLAY,
        mojom::kDisplaySubpagePath,
        mojom::SearchResultIcon::kDisplay,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kDisplay},
        {IDS_OS_SETTINGS_TAG_DISPLAY_ALT1, IDS_OS_SETTINGS_TAG_DISPLAY_ALT2,
@@ -121,13 +121,22 @@ const std::vector<SearchConcept>& GetDeviceSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kKeyboardFunctionKeys}},
-      {IDS_OS_SETTINGS_TAG_POWER_IDLE,
+      {IDS_OS_SETTINGS_TAG_POWER_IDLE_WHILE_CHARGING,
        mojom::kPowerSubpagePath,
        mojom::SearchResultIcon::kPower,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kPowerIdleBehavior},
-       {IDS_OS_SETTINGS_TAG_POWER_IDLE_ALT1, SearchConcept::kAltTagEnd}},
+       {.setting = mojom::Setting::kPowerIdleBehaviorWhileCharging},
+       {IDS_OS_SETTINGS_TAG_POWER_IDLE_WHILE_CHARGING_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_POWER_IDLE_WHILE_ON_BATTERY,
+       mojom::kPowerSubpagePath,
+       mojom::SearchResultIcon::kPower,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kPowerIdleBehaviorWhileOnBattery},
+       {IDS_OS_SETTINGS_TAG_POWER_IDLE_WHILE_ON_BATTERY_ALT1,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -155,7 +164,7 @@ const std::vector<SearchConcept>& GetTouchpadSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_TOUCHPAD,
        mojom::kPointersSubpagePath,
        mojom::SearchResultIcon::kLaptop,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kPointers},
        {IDS_OS_SETTINGS_TAG_TOUCHPAD_ALT1, SearchConcept::kAltTagEnd}},
@@ -210,7 +219,7 @@ const std::vector<SearchConcept>& GetMouseSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_MOUSE,
        mojom::kPointersSubpagePath,
        mojom::SearchResultIcon::kMouse,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kPointers}},
       {IDS_OS_SETTINGS_TAG_MOUSE_SCROLL_ACCELERATION,
@@ -281,36 +290,30 @@ const std::vector<SearchConcept>& GetDisplayArrangementSearchConcepts() {
 
 const std::vector<SearchConcept>& GetDisplayMirrorSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display mirror" search concepts.
+      {IDS_OS_SETTINGS_TAG_MIRRORING,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDisplayMirroring}},
   });
   return *tags;
 }
 
 const std::vector<SearchConcept>& GetDisplayUnifiedDesktopSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display with Unified Desktop" search concepts.
-  });
-  return *tags;
-}
-
-const std::vector<SearchConcept>& GetDisplayMultipleSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display multiple" search concepts.
+      {IDS_OS_SETTINGS_TAG_UNIFIED_DESKTOP,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kAllowWindowsToSpanDisplays}},
   });
   return *tags;
 }
 
 const std::vector<SearchConcept>& GetDisplayExternalSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_DISPLAY_ORIENTATION,
-       mojom::kDisplaySubpagePath,
-       mojom::SearchResultIcon::kDisplay,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kDisplayOrientation},
-       {IDS_OS_SETTINGS_TAG_DISPLAY_ORIENTATION_ALT1,
-        IDS_OS_SETTINGS_TAG_DISPLAY_ORIENTATION_ALT2,
-        SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_DISPLAY_RESOLUTION,
        mojom::kDisplaySubpagePath,
        mojom::SearchResultIcon::kDisplay,
@@ -320,6 +323,12 @@ const std::vector<SearchConcept>& GetDisplayExternalSearchConcepts() {
        {IDS_OS_SETTINGS_TAG_DISPLAY_RESOLUTION_ALT1,
         IDS_OS_SETTINGS_TAG_DISPLAY_RESOLUTION_ALT2,
         SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_DISPLAY_OVERSCAN,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDisplayOverscan}},
   });
   return *tags;
 }
@@ -342,28 +351,74 @@ GetDisplayExternalWithRefreshSearchConcepts() {
 
 const std::vector<SearchConcept>& GetDisplayOrientationSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display orientation" search concepts.
+      {IDS_OS_SETTINGS_TAG_DISPLAY_ORIENTATION,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDisplayOrientation},
+       {IDS_OS_SETTINGS_TAG_DISPLAY_ORIENTATION_ALT1,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
 
 const std::vector<SearchConcept>& GetDisplayAmbientSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display ambient" search concepts.
+      {IDS_OS_SETTINGS_TAG_DISPLAY_AMBIENT_COLORS,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kAmbientColors}},
   });
   return *tags;
 }
 
 const std::vector<SearchConcept>& GetDisplayTouchCalibrationSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display touch calibration" search concepts.
+      {IDS_OS_SETTINGS_TAG_DISPLAY_TOUCHSCREEN_CALIBRATION,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kTouchscreenCalibration}},
   });
   return *tags;
 }
 
 const std::vector<SearchConcept>& GetDisplayNightLightOnSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      // TODO(khorimoto): Add "Display Night Light on" search concepts.
+      {IDS_OS_SETTINGS_TAG_NIGHT_LIGHT_COLOR_TEMPERATURE,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kLow,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kNightLightColorTemperature}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetDlcSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_DOWNLOADED_CONTENT,
+       mojom::kDlcSubpagePath,
+       mojom::SearchResultIcon::kHardDrive,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kDlc},
+       {IDS_OS_SETTINGS_TAG_DOWNLOADED_CONTENT_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT,
+       mojom::kDlcSubpagePath,
+       mojom::SearchResultIcon::kHardDrive,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kRemoveDlc},
+       {IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT1,
+        IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT2,
+        IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT3,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -694,10 +749,11 @@ DeviceSection::DeviceSection(Profile* profile,
                              PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
       pref_service_(pref_service) {
-  registry()->AddSearchTags(GetDeviceSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetDeviceSearchConcepts());
 
   if (features::ShouldShowExternalStorageSettings(profile))
-    registry()->AddSearchTags(GetExternalStorageSearchConcepts());
+    updater.AddSearchTags(GetExternalStorageSearchConcepts());
 
   PowerManagerClient* power_manager_client = PowerManagerClient::Get();
   if (power_manager_client) {
@@ -739,6 +795,14 @@ DeviceSection::DeviceSection(Profile* profile,
     OnNightLightEnabledChanged(
         ash::NightLightController::GetInstance()->GetEnabled());
   }
+
+  // DLC settings search tags are added/removed dynamically.
+  DlcserviceClient* dlcservice_client = DlcserviceClient::Get();
+  if (features::ShouldShowDlcSettings() && dlcservice_client) {
+    dlcservice_client->AddObserver(this);
+    dlcservice_client->GetExistingDlcs(base::BindOnce(
+        &DeviceSection::OnGetExistingDlcs, weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 DeviceSection::~DeviceSection() {
@@ -753,6 +817,10 @@ DeviceSection::~DeviceSection() {
       ash::NightLightController::GetInstance();
   if (night_light_controller)
     night_light_controller->RemoveObserver(this);
+
+  DlcserviceClient* dlcservice_client = DlcserviceClient::Get();
+  if (features::ShouldShowDlcSettings() && dlcservice_client)
+    dlcservice_client->RemoveObserver(this);
 }
 
 void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
@@ -797,18 +865,140 @@ void DeviceSection::AddHandlers(content::WebUI* web_ui) {
       std::make_unique<chromeos::settings::StylusHandler>());
 }
 
+int DeviceSection::GetSectionNameMessageId() const {
+  return IDS_SETTINGS_DEVICE_TITLE;
+}
+
+mojom::Section DeviceSection::GetSection() const {
+  return mojom::Section::kDevice;
+}
+
+mojom::SearchResultIcon DeviceSection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kLaptop;
+}
+
+std::string DeviceSection::GetSectionPath() const {
+  return mojom::kDeviceSectionPath;
+}
+
+void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  // Pointers.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE, mojom::Subpage::kPointers,
+      mojom::SearchResultIcon::kMouse, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kPointersSubpagePath);
+  static constexpr mojom::Setting kPointersSettings[] = {
+      mojom::Setting::kTouchpadTapToClick,
+      mojom::Setting::kTouchpadTapDragging,
+      mojom::Setting::kTouchpadReverseScrolling,
+      mojom::Setting::kTouchpadAcceleration,
+      mojom::Setting::kTouchpadScrollAcceleration,
+      mojom::Setting::kTouchpadSpeed,
+      mojom::Setting::kMouseSwapPrimaryButtons,
+      mojom::Setting::kMouseReverseScrolling,
+      mojom::Setting::kMouseAcceleration,
+      mojom::Setting::kMouseScrollAcceleration,
+      mojom::Setting::kMouseSpeed,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kPointers, kPointersSettings,
+                            generator);
+
+  // Keyboard.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_KEYBOARD_TITLE, mojom::Subpage::kKeyboard,
+      mojom::SearchResultIcon::kKeyboard,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kKeyboardSubpagePath);
+  static constexpr mojom::Setting kKeyboardSettings[] = {
+      mojom::Setting::kKeyboardFunctionKeys,
+      mojom::Setting::kKeyboardAutoRepeat,
+      mojom::Setting::kKeyboardShortcuts,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kKeyboard, kKeyboardSettings,
+                            generator);
+
+  // Stylus.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_STYLUS_TITLE, mojom::Subpage::kStylus,
+      mojom::SearchResultIcon::kStylus, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kStylusSubpagePath);
+  static constexpr mojom::Setting kStylusSettings[] = {
+      mojom::Setting::kStylusToolsInShelf,
+      mojom::Setting::kStylusNoteTakingApp,
+      mojom::Setting::kStylusNoteTakingFromLockScreen,
+      mojom::Setting::kStylusLatestNoteOnLockScreen,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kStylus, kStylusSettings,
+                            generator);
+
+  // Display.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_DISPLAY_TITLE, mojom::Subpage::kDisplay,
+      mojom::SearchResultIcon::kDisplay,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kDisplaySubpagePath);
+  static constexpr mojom::Setting kDisplaySettings[] = {
+      mojom::Setting::kDisplaySize,
+      mojom::Setting::kNightLight,
+      mojom::Setting::kDisplayOrientation,
+      mojom::Setting::kDisplayArrangement,
+      mojom::Setting::kDisplayResolution,
+      mojom::Setting::kDisplayRefreshRate,
+      mojom::Setting::kDisplayMirroring,
+      mojom::Setting::kAllowWindowsToSpanDisplays,
+      mojom::Setting::kAmbientColors,
+      mojom::Setting::kTouchscreenCalibration,
+      mojom::Setting::kNightLightColorTemperature,
+      mojom::Setting::kDisplayOverscan,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kDisplay, kDisplaySettings,
+                            generator);
+
+  // Storage.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_STORAGE_TITLE, mojom::Subpage::kStorage,
+      mojom::SearchResultIcon::kHardDrive,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kStorageSubpagePath);
+  generator->RegisterNestedSubpage(
+      IDS_SETTINGS_STORAGE_EXTERNAL, mojom::Subpage::kExternalStorage,
+      mojom::Subpage::kStorage, mojom::SearchResultIcon::kHardDrive,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kExternalStorageSubpagePath);
+  generator->RegisterNestedSubpage(
+      IDS_SETTINGS_DLC_SUBPAGE_TITLE, mojom::Subpage::kDlc,
+      mojom::Subpage::kStorage, mojom::SearchResultIcon::kHardDrive,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kDlcSubpagePath);
+  generator->RegisterNestedSetting(mojom::Setting::kRemoveDlc,
+                                   mojom::Subpage::kDlc);
+
+  // Power.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_POWER_TITLE, mojom::Subpage::kPower,
+      mojom::SearchResultIcon::kPower, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kPowerSubpagePath);
+  static constexpr mojom::Setting kPowerSettings[] = {
+      mojom::Setting::kPowerIdleBehaviorWhileCharging,
+      mojom::Setting::kPowerIdleBehaviorWhileOnBattery,
+      mojom::Setting::kPowerSource,
+      mojom::Setting::kSleepWhenLaptopLidClosed,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kPower, kPowerSettings, generator);
+}
+
 void DeviceSection::TouchpadExists(bool exists) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (exists)
-    registry()->AddSearchTags(GetTouchpadSearchConcepts());
+    updater.AddSearchTags(GetTouchpadSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetTouchpadSearchConcepts());
+    updater.RemoveSearchTags(GetTouchpadSearchConcepts());
 }
 
 void DeviceSection::MouseExists(bool exists) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (exists)
-    registry()->AddSearchTags(GetMouseSearchConcepts());
+    updater.AddSearchTags(GetMouseSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetMouseSearchConcepts());
+    updater.RemoveSearchTags(GetMouseSearchConcepts());
 }
 
 void DeviceSection::OnDeviceListsComplete() {
@@ -828,10 +1018,30 @@ void DeviceSection::OnDisplayConfigChanged() {
 
 void DeviceSection::PowerChanged(
     const power_manager::PowerSupplyProperties& properties) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (properties.battery_state() !=
       power_manager::PowerSupplyProperties_BatteryState_NOT_PRESENT) {
-    registry()->AddSearchTags(GetPowerWithBatterySearchConcepts());
+    updater.AddSearchTags(GetPowerWithBatterySearchConcepts());
   }
+}
+
+void DeviceSection::OnGetExistingDlcs(
+    const std::string& err,
+    const dlcservice::DlcsWithContent& dlcs_with_content) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
+  if (err != dlcservice::kErrorNone ||
+      dlcs_with_content.dlc_infos_size() == 0) {
+    updater.RemoveSearchTags(GetDlcSearchConcepts());
+    return;
+  }
+  updater.AddSearchTags(GetDlcSearchConcepts());
+}
+
+void DeviceSection::OnDlcStateChanged(const dlcservice::DlcState& dlc_state) {
+  DlcserviceClient::Get()->GetExistingDlcs(base::BindOnce(
+      &DeviceSection::OnGetExistingDlcs, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DeviceSection::OnGetDisplayUnitInfoList(
@@ -863,73 +1073,71 @@ void DeviceSection::OnGetDisplayLayoutInfo(
                                 ash::mojom::DisplayLayoutMode::kUnified;
   }
 
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // Arrangement UI.
   if (has_multiple_displays || is_mirrored)
-    registry()->AddSearchTags(GetDisplayArrangementSearchConcepts());
+    updater.AddSearchTags(GetDisplayArrangementSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayArrangementSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayArrangementSearchConcepts());
 
   // Mirror toggle.
   if (is_mirrored || (!unified_desktop_mode && has_multiple_displays))
-    registry()->AddSearchTags(GetDisplayMirrorSearchConcepts());
+    updater.AddSearchTags(GetDisplayMirrorSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayMirrorSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayMirrorSearchConcepts());
 
   // Unified Desktop toggle.
   if (unified_desktop_mode ||
       (IsUnifiedDesktopAvailable() && has_multiple_displays && !is_mirrored)) {
-    registry()->AddSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
+    updater.AddSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
   }
-
-  // Multiple displays UI.
-  if (has_multiple_displays)
-    registry()->AddSearchTags(GetDisplayMultipleSearchConcepts());
-  else
-    registry()->RemoveSearchTags(GetDisplayMultipleSearchConcepts());
 
   // External display settings.
   if (has_external_display)
-    registry()->AddSearchTags(GetDisplayExternalSearchConcepts());
+    updater.AddSearchTags(GetDisplayExternalSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayExternalSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayExternalSearchConcepts());
 
   // Refresh Rate dropdown.
   if (has_external_display && IsListAllDisplayModesEnabled())
-    registry()->AddSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
+    updater.AddSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
 
   // Orientation settings.
   if (!unified_desktop_mode)
-    registry()->AddSearchTags(GetDisplayOrientationSearchConcepts());
+    updater.AddSearchTags(GetDisplayOrientationSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayOrientationSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayOrientationSearchConcepts());
 
   // Ambient color settings.
   if (DoesDeviceSupportAmbientColor() && has_internal_display)
-    registry()->AddSearchTags(GetDisplayAmbientSearchConcepts());
+    updater.AddSearchTags(GetDisplayAmbientSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayAmbientSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayAmbientSearchConcepts());
 
   // Touch calibration settings.
   if (IsTouchCalibrationAvailable())
-    registry()->AddSearchTags(GetDisplayTouchCalibrationSearchConcepts());
+    updater.AddSearchTags(GetDisplayTouchCalibrationSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayTouchCalibrationSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayTouchCalibrationSearchConcepts());
 
   // Night Light on settings.
   if (ash::NightLightController::GetInstance()->GetEnabled())
-    registry()->AddSearchTags(GetDisplayNightLightOnSearchConcepts());
+    updater.AddSearchTags(GetDisplayNightLightOnSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayNightLightOnSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayNightLightOnSearchConcepts());
 }
 
 void DeviceSection::OnGotSwitchStates(
     base::Optional<PowerManagerClient::SwitchStates> result) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (result && result->lid_state != PowerManagerClient::LidState::NOT_PRESENT)
-    registry()->AddSearchTags(GetPowerWithLaptopLidSearchConcepts());
+    updater.AddSearchTags(GetPowerWithLaptopLidSearchConcepts());
 }
 
 void DeviceSection::UpdateStylusSearchTags() {
@@ -937,13 +1145,15 @@ void DeviceSection::UpdateStylusSearchTags() {
   if (!ui::DeviceDataManager::GetInstance()->AreDeviceListsComplete())
     return;
 
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // TODO(https://crbug.com/1071905): Only show stylus settings if a stylus has
   // been set up. HasStylusInput() will return true for any stylus-compatible
   // device, even if it doesn't have a stylus.
   if (ash::stylus_utils::HasStylusInput())
-    registry()->AddSearchTags(GetStylusSearchConcepts());
+    updater.AddSearchTags(GetStylusSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetStylusSearchConcepts());
+    updater.RemoveSearchTags(GetStylusSearchConcepts());
 }
 
 void DeviceSection::AddDevicePointersStrings(

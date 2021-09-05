@@ -4,9 +4,13 @@
 
 #include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 
+#include <string>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/time/time.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -22,6 +26,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
+#include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -32,6 +37,8 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_launch/web_launch_files_helper.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -41,6 +48,7 @@
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/display/scoped_display_for_new_windows.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -123,6 +131,9 @@ content::WebContents* WebAppLaunchManager::OpenApplication(
                 .GetMatchingFileHandlerURL(params.app_id, params.launch_files)
                 .value_or(provider_->registrar().GetAppLaunchURL(params.app_id))
           : params.override_url;
+
+  // Place new windows on the specified display.
+  display::ScopedDisplayForNewWindows scoped_display(params.display_id);
 
   // System Web Apps go through their own launch path.
   base::Optional<SystemAppType> system_app_type =
@@ -213,7 +224,8 @@ content::WebContents* WebAppLaunchManager::OpenApplication(
   // app launch will provide an engagement boost to the origin.
   SiteEngagementService::Get(profile_)->SetLastShortcutLaunchTime(web_contents,
                                                                   url);
-
+  provider_->registry_controller().SetAppLastLaunchTime(params.app_id,
+                                                        base::Time::Now());
   // Refresh the app banner added to homescreen event. The user may have
   // cleared their browsing data since installing the app, which removes the
   // event and will potentially permit a banner to be shown for the site.
@@ -238,6 +250,11 @@ void WebAppLaunchManager::LaunchApplication(
   params.command_line = command_line;
   params.current_directory = current_directory;
   params.launch_files = apps::GetLaunchFilesFromCommandLine(command_line);
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu)) {
+    params.override_url = GURL(command_line.GetSwitchValueASCII(
+        switches::kAppLaunchUrlForShortcutsMenuItem));
+  }
 
   // Wait for the web applications database to load.
   // If the profile and WebAppLaunchManager are destroyed,

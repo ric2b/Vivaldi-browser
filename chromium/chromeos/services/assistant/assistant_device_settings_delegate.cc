@@ -8,14 +8,15 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/mojom/assistant_controller.mojom.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/assistant/internal/internal_util.h"
 #include "chromeos/assistant/internal/proto/google3/assistant/api/client_op/device_args.pb.h"
 #include "chromeos/services/assistant/cros_platform_api.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/device_actions.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "chromeos/services/assistant/service_context.h"
 #include "libassistant/shared/public/platform_audio_output.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -248,6 +249,7 @@ class BrightnessSetting : public SettingWithDeviceAction {
            client_op::ModifySettingArgs request, bool success,
            double current_value) {
           if (!success || !this_) {
+            LOG(WARNING) << "Failed to get brightness level";
             return;
           }
           HandleSliderChange(
@@ -293,6 +295,8 @@ bool AssistantDeviceSettingsDelegate::IsSettingSupported(
 
 void AssistantDeviceSettingsDelegate::HandleModifyDeviceSetting(
     const client_op::ModifySettingArgs& modify_setting_args) {
+  VLOG(1) << "Assistant: Modifying Device Setting '"
+          << modify_setting_args.setting_id() << "'";
   DCHECK(IsSettingSupported(modify_setting_args.setting_id()));
 
   for (const auto& setting : settings_) {

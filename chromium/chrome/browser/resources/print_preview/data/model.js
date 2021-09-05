@@ -10,7 +10,7 @@ import {Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.m
 
 import {BackgroundGraphicsModeRestriction, Policies} from '../native_layer.js';
 
-import {Cdd, CddCapabilities, Destination, DestinationOrigin, DestinationType, RecentDestination} from './destination.js';
+import {Cdd, CddCapabilities, Destination, DestinationOrigin, DestinationType, RecentDestination, VendorCapability} from './destination.js';
 import {getPrinterTypeForDestination} from './destination_match.js';
 // <if expr="chromeos">
 import {ColorModeRestriction, DuplexModeRestriction, PinModeRestriction} from './destination_policies.js';
@@ -44,6 +44,7 @@ export let Setting;
  *   collate: !Setting,
  *   layout: !Setting,
  *   color: !Setting,
+ *   customMargins: !Setting,
  *   mediaSize: !Setting,
  *   margins: !Setting,
  *   dpi: !Setting,
@@ -950,7 +951,8 @@ Polymer({
 
     if (this.settings.vendorItems.available) {
       const vendorSettings = {};
-      for (const item of caps.vendor_capability) {
+      for (const item of /** @type {!Array<!VendorCapability>} */ (
+               caps.vendor_capability)) {
         let defaultValue = null;
         if (item.type === 'SELECT' && item.select_cap &&
             item.select_cap.option) {

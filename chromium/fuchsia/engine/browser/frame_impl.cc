@@ -6,16 +6,16 @@
 
 #include <fuchsia/ui/gfx/cpp/fidl.h>
 #include <lib/sys/cpp/component_context.h>
+#include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <limits>
 
 #include "base/bind_helpers.h"
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -34,13 +34,16 @@
 #include "content/public/common/was_activated_option.mojom.h"
 #include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/base/message_port.h"
+#include "fuchsia/cast_streaming/public/cast_streaming.h"
 #include "fuchsia/engine/browser/accessibility_bridge.h"
+#include "fuchsia/engine/browser/cast_streaming_session_client.h"
 #include "fuchsia/engine/browser/context_impl.h"
 #include "fuchsia/engine/browser/event_filter.h"
 #include "fuchsia/engine/browser/frame_layout_manager.h"
 #include "fuchsia/engine/browser/frame_window_tree_host.h"
 #include "fuchsia/engine/browser/media_player_impl.h"
 #include "fuchsia/engine/browser/web_engine_devtools_controller.h"
+#include "fuchsia/engine/common/cast_streaming.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/net_errors.h"
@@ -475,8 +478,8 @@ void FrameImpl::DestroyWindowTreeHost() {
 
   // Allows posted focus events to process before the FocusController is torn
   // down.
-  base::DeleteSoon(FROM_HERE, {content::BrowserThread::UI},
-                   std::move(focus_controller_));
+  content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE,
+                                                 std::move(focus_controller_));
 }
 
 void FrameImpl::CloseAndDestroyFrame(zx_status_t error) {
@@ -495,7 +498,81 @@ void FrameImpl::OnMediaPlayerDisconnect() {
   media_player_ = nullptr;
 }
 
+bool FrameImpl::MaybeHandleCastStreamingMessage(
+    std::string* origin,
+    fuchsia::web::WebMessage* message,
+    PostMessageCallback* callback) {
+  if (!IsCastStreamingEnabled())
+    return false;
+
+  if (!cast_streaming::IsCastStreamingAppOrigin(*origin))
+    return false;
+
+  fuchsia::web::Frame_PostMessage_Result result;
+  if (cast_streaming_session_client_ ||
+      !cast_streaming::IsValidCastStreamingMessage(*message)) {
+    // The Cast Streaming MessagePort should only be set once and |message|
+    // should be a valid Cast Streaming Message.
+    result.set_err(fuchsia::web::FrameError::INVALID_ORIGIN);
+    (*callback)(std::move(result));
+    return true;
+  }
+
+  cast_streaming_session_client_ = std::make_unique<CastStreamingSessionClient>(
+      std::move((*message->mutable_outgoing_transfer())[0].message_port()));
+  result.set_response(fuchsia::web::Frame_PostMessage_Response());
+  (*callback)(std::move(result));
+  return true;
+}
+
+void FrameImpl::MaybeInjectBeforeLoadScripts(
+    content::NavigationHandle* navigation_handle) {
+  if (before_load_scripts_.empty())
+    return;
+
+  mojo::AssociatedRemote<mojom::OnLoadScriptInjector>
+      before_load_script_injector;
+  navigation_handle->GetRenderFrameHost()
+      ->GetRemoteAssociatedInterfaces()
+      ->GetInterface(&before_load_script_injector);
+
+  // Provision the renderer's ScriptInjector with the scripts scoped to this
+  // page's origin.
+  before_load_script_injector->ClearOnLoadScripts();
+  for (uint64_t script_id : before_load_scripts_order_) {
+    const OriginScopedScript& script = before_load_scripts_[script_id];
+    if (IsOriginWhitelisted(navigation_handle->GetURL(), script.origins())) {
+      // TODO(crbug.com/1060846): Stop using handle<shared_buffer>.
+      before_load_script_injector->AddOnLoadScript(
+          mojo::WrapReadOnlySharedMemoryRegion(script.script().Duplicate()));
+    }
+  }
+}
+
+void FrameImpl::MaybeStartCastStreaming(
+    content::NavigationHandle* navigation_handle) {
+  if (!IsCastStreamingEnabled() || !cast_streaming_session_client_)
+    return;
+
+  mojo::AssociatedRemote<mojom::CastStreamingReceiver> cast_streaming_receiver;
+  navigation_handle->GetRenderFrameHost()
+      ->GetRemoteAssociatedInterfaces()
+      ->GetInterface(&cast_streaming_receiver);
+  cast_streaming_session_client_->StartMojoConnection(
+      std::move(cast_streaming_receiver));
+}
+
 void FrameImpl::CreateView(fuchsia::ui::views::ViewToken view_token) {
+  scenic::ViewRefPair view_ref_pair = scenic::ViewRefPair::New();
+  CreateViewWithViewRef(std::move(view_token),
+                        std::move(view_ref_pair.control_ref),
+                        std::move(view_ref_pair.view_ref));
+}
+
+void FrameImpl::CreateViewWithViewRef(
+    fuchsia::ui::views::ViewToken view_token,
+    fuchsia::ui::views::ViewRefControl control_ref,
+    fuchsia::ui::views::ViewRef view_ref) {
   if (IsHeadless()) {
     LOG(WARNING) << "CreateView() called on a HEADLESS Context.";
     CloseAndDestroyFrame(ZX_ERR_INVALID_ARGS);
@@ -505,10 +582,13 @@ void FrameImpl::CreateView(fuchsia::ui::views::ViewToken view_token) {
   // If a View to this Frame is already active then disconnect it.
   DestroyWindowTreeHost();
 
-  InitWindowTreeHost(std::move(view_token));
+  scenic::ViewRefPair view_ref_pair;
+  view_ref_pair.control_ref = std::move(control_ref);
+  view_ref_pair.view_ref = std::move(view_ref);
+  InitWindowTreeHost(std::move(view_token), std::move(view_ref_pair));
 
   fuchsia::accessibility::semantics::SemanticsManagerPtr semantics_manager =
-      base::fuchsia::ComponentContextForCurrentProcess()
+      base::ComponentContextForProcess()
           ->svc()
           ->Connect<fuchsia::accessibility::semantics::SemanticsManager>();
   accessibility_bridge_ = std::make_unique<AccessibilityBridge>(
@@ -619,6 +699,9 @@ void FrameImpl::RemoveBeforeLoadJavaScript(uint64_t id) {
 void FrameImpl::PostMessage(std::string origin,
                             fuchsia::web::WebMessage message,
                             PostMessageCallback callback) {
+  if (MaybeHandleCastStreamingMessage(&origin, &message, &callback))
+    return;
+
   constexpr char kWildcardOrigin[] = "*";
 
   fuchsia::web::Frame_PostMessage_Result result;
@@ -718,7 +801,8 @@ void FrameImpl::EnableHeadlessRendering() {
     return;
   }
 
-  InitWindowTreeHost(fuchsia::ui::views::ViewToken());
+  scenic::ViewRefPair view_ref_pair = scenic::ViewRefPair::New();
+  InitWindowTreeHost(fuchsia::ui::views::ViewToken(), std::move(view_ref_pair));
 
   gfx::Rect bounds(kHeadlessWindowSize);
   if (semantics_manager_for_test_) {
@@ -744,11 +828,12 @@ void FrameImpl::DisableHeadlessRendering() {
   DestroyWindowTreeHost();
 }
 
-void FrameImpl::InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token) {
+void FrameImpl::InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token,
+                                   scenic::ViewRefPair view_ref_pair) {
   DCHECK(!window_tree_host_);
 
   window_tree_host_ = std::make_unique<FrameWindowTreeHost>(
-      std::move(view_token), web_contents_.get());
+      std::move(view_token), std::move(view_ref_pair), web_contents_.get());
   window_tree_host_->InitHost();
   root_window()->AddPreTargetHandler(&event_filter_);
 
@@ -863,7 +948,7 @@ void FrameImpl::SetPermissionState(
 
 void FrameImpl::CloseContents(content::WebContents* source) {
   DCHECK_EQ(source, web_contents_.get());
-  context_->DestroyFrame(this);
+  CloseAndDestroyFrame(ZX_OK);
 }
 
 void FrameImpl::SetBlockMediaLoading(bool blocked) {
@@ -980,30 +1065,13 @@ bool FrameImpl::CheckMediaAccessPermission(
 
 void FrameImpl::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (before_load_scripts_.empty())
-    return;
-
   if (!navigation_handle->IsInMainFrame() ||
       navigation_handle->IsSameDocument() || navigation_handle->IsErrorPage()) {
     return;
   }
 
-  mojo::AssociatedRemote<mojom::OnLoadScriptInjector>
-      before_load_script_injector;
-  navigation_handle->GetRenderFrameHost()
-      ->GetRemoteAssociatedInterfaces()
-      ->GetInterface(&before_load_script_injector);
-
-  // Provision the renderer's ScriptInjector with the scripts scoped to this
-  // page's origin.
-  before_load_script_injector->ClearOnLoadScripts();
-  for (uint64_t script_id : before_load_scripts_order_) {
-    const OriginScopedScript& script = before_load_scripts_[script_id];
-    if (IsOriginWhitelisted(navigation_handle->GetURL(), script.origins())) {
-      before_load_script_injector->AddOnLoadScript(
-          mojo::WrapReadOnlySharedMemoryRegion(script.script().Duplicate()));
-    }
-  }
+  MaybeInjectBeforeLoadScripts(navigation_handle);
+  MaybeStartCastStreaming(navigation_handle);
 }
 
 void FrameImpl::DidFinishLoad(content::RenderFrameHost* render_frame_host,

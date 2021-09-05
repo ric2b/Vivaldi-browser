@@ -9,7 +9,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/cors_exempt_headers.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/resource_context.h"
 #include "headless/app/headless_shell_switches.h"
@@ -179,10 +178,9 @@ HeadlessRequestContextManager::CreateSystemContext(
       cert_verifier_creation_params =
           ::network::mojom::CertVerifierCreationParams::New();
   manager->ConfigureNetworkContextParamsInternal(
-      /* is_system = */ true, network_context_params.get(),
-      cert_verifier_creation_params.get());
-  network_context_params->cert_verifier_creation_params =
-      std::move(cert_verifier_creation_params);
+      network_context_params.get(), cert_verifier_creation_params.get());
+  network_context_params->cert_verifier_params =
+      content::GetCertVerifierParams(std::move(cert_verifier_creation_params));
   network_service->CreateNetworkContext(
       manager->system_context_.InitWithNewPipeAndPassReceiver(),
       std::move(network_context_params));
@@ -234,19 +232,16 @@ void HeadlessRequestContextManager::ConfigureNetworkContextParams(
     ::network::mojom::NetworkContextParams* network_context_params,
     ::network::mojom::CertVerifierCreationParams*
         cert_verifier_creation_params) {
-  ConfigureNetworkContextParamsInternal(
-      /*is_system=*/false, network_context_params,
-      cert_verifier_creation_params);
+  ConfigureNetworkContextParamsInternal(network_context_params,
+                                        cert_verifier_creation_params);
 }
 
 void HeadlessRequestContextManager::ConfigureNetworkContextParamsInternal(
-    bool is_system,
     ::network::mojom::NetworkContextParams* context_params,
     ::network::mojom::CertVerifierCreationParams*
         cert_verifier_creation_params) {
   context_params->user_agent = user_agent_;
   context_params->accept_language = accept_language_;
-  context_params->primary_network_context = is_system;
 
   // TODO(https://crbug.com/458508): Allow
   // context_params->http_auth_static_network_context_params->allow_default_credentials
@@ -273,7 +268,6 @@ void HeadlessRequestContextManager::ConfigureNetworkContextParamsInternal(
   } else {
     proxy_config_monitor_->AddToNetworkContextParams(context_params);
   }
-  content::UpdateCorsExemptHeader(context_params);
 }
 
 }  // namespace headless

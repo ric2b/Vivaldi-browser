@@ -105,7 +105,6 @@ class CORE_EXPORT WebRemoteFrameImpl final
   bool IsIgnoredForHitTest() const override;
   void UpdateUserActivationState(
       mojom::blink::UserActivationUpdateType) override;
-  void TransferUserActivationFrom(blink::WebRemoteFrame* source_frame) override;
   void SetHadStickyUserActivationBeforeNavigation(bool value) override;
   v8::Local<v8::Object> GlobalProxy() const override;
   WebRect GetCompositingRect() override;
@@ -120,7 +119,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
 
   static WebRemoteFrameImpl* FromFrame(RemoteFrame&);
 
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
  private:
   friend class RemoteFrameClientImpl;

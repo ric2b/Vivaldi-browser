@@ -8,9 +8,10 @@ import android.app.Activity;
 import android.app.Instrumentation.ActivityResult;
 import android.content.Context;
 import android.os.Build;
-import android.support.test.espresso.intent.Intents;
-import android.support.test.espresso.intent.matcher.IntentMatchers;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.espresso.intent.Intents;
+import androidx.test.espresso.intent.matcher.IntentMatchers;
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
@@ -24,7 +25,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
@@ -179,7 +179,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @RetryOnFailure
     // TODO(https://crbug.com/965106): Fix tests when InlineUpdateFlow is enabled.
     @DisableFeatures("InlineUpdateFlow")
     public void testCurrentVersionIsOlder() throws Exception {
@@ -189,7 +188,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @RetryOnFailure
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testCurrentVersionIsSame() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "1.2.3.4");
@@ -206,7 +204,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @RetryOnFailure
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testNoVersionKnown() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "0");
@@ -216,7 +213,6 @@ public class UpdateMenuItemHelperTest {
     @MediumTest
     @Feature({"Omaha"})
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @RetryOnFailure
     // TODO(https://crbug.com/965106): Fix tests when InlineUpdateFlow is enabled.
     @DisableFeatures("InlineUpdateFlow")
     public void testMenuItemNotShownInOverview() throws Exception {

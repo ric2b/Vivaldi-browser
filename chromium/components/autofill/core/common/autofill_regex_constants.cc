@@ -259,6 +259,7 @@ const char kGiftCardRe[] = "gift.?(card|cert)";
 const char kDebitGiftCardRe[] =
     "(?:visa|mastercard|discover|amex|american express).*gift.?card";
 const char kDebitCardRe[] = "debit.*card";
+const char kDayRe[] = "day";
 
 /////////////////////////////////////////////////////////////////////////////
 // email_field.cc
@@ -350,6 +351,8 @@ const char kPhoneRe[] =
     "|电话"                                         // zh-CN
     "|മൊബൈല്‍"                        // ml for mobile
     "|(?:전화|핸드폰|휴대폰|휴대전화)(?:.?번호)?";  // ko-KR
+const char kAugmentedPhoneCountryCodeRe[] =
+    "^[^0-9+]*(?:\\+|00)\\s*([1-9]\\d{0,3})\\D*$";
 const char kCountryCodeRe[] =
     "country.*code|ccode|_cc|phone.*code|user.*phone.*code";
 const char kAreaCodeNotextRe[] = "^\\($";

@@ -27,18 +27,20 @@ class Widget;
 
 namespace ash {
 
+class AppListView;
 class AssistantTestApi;
 class SuggestionChipView;
 class TestAssistantClient;
 class TestAssistantService;
 class TestAssistantSetup;
 class TestAssistantWebViewFactory;
+class TestImageDownloader;
 
 // Helper class to make testing the Assistant Ash UI easier.
 class AssistantAshTestBase : public AshTestBase {
  public:
-  using AssistantEntryPoint = chromeos::assistant::mojom::AssistantEntryPoint;
-  using AssistantExitPoint = chromeos::assistant::mojom::AssistantExitPoint;
+  using AssistantEntryPoint = chromeos::assistant::AssistantEntryPoint;
+  using AssistantExitPoint = chromeos::assistant::AssistantExitPoint;
   using ConsentStatus = chromeos::assistant::prefs::ConsentStatus;
 
   AssistantAshTestBase();
@@ -87,7 +89,7 @@ class AssistantAshTestBase : public AshTestBase {
 
   // Return the app list view hosting the Assistant page view.
   // Can only be used after |ShowAssistantUi| has been called.
-  views::View* app_list_view();
+  AppListView* app_list_view();
 
   // Return the root view hosting the Assistant page view.
   // Can only be used after |ShowAssistantUi| has been called.
@@ -123,7 +125,7 @@ class AssistantAshTestBase : public AshTestBase {
 
   // Return the current interaction. Returns |base::nullopt| if no interaction
   // is in progress.
-  base::Optional<chromeos::assistant::mojom::AssistantInteractionMetadata>
+  base::Optional<chromeos::assistant::AssistantInteractionMetadata>
   current_interaction();
 
   // Create a new App window, and activate it.
@@ -155,7 +157,10 @@ class AssistantAshTestBase : public AshTestBase {
   // Return the button to enable text mode.
   views::View* keyboard_input_toggle();
 
-  // Return the button to launch Assistant onboarding.
+  // Return the Assistant onboarding view.
+  views::View* onboarding_view();
+
+  // Return the button to launch Assistant setup.
   views::View* opt_in_view();
 
   // Return the container with all the suggestion chips.
@@ -181,6 +186,7 @@ class AssistantAshTestBase : public AshTestBase {
   std::unique_ptr<AssistantTestApi> test_api_;
   std::unique_ptr<TestAssistantSetup> test_setup_;
   std::unique_ptr<TestAssistantWebViewFactory> test_web_view_factory_;
+  std::unique_ptr<TestImageDownloader> test_image_downloader_;
 
   std::vector<std::unique_ptr<aura::Window>> windows_;
   std::vector<std::unique_ptr<views::Widget>> widgets_;

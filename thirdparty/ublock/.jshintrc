@@ -1,0 +1,24 @@
+{
+	"browser": true,
+	"devel": true,
+	"eqeqeq": true,
+	"esversion": 8,
+	"globals": {
+		"browser": false,    // global variable in Firefox, Edge
+		"chrome": false,     // global variable in Chromium, Chrome, Opera
+		"log": false,
+		"safari": false,
+		"self": false,
+		"vAPI": false,
+		"webext": false,
+		"µBlock": false
+	},
+	"laxbreak": true,
+	"newcap": false,
+	"nonew": false,
+	"strict": "global",
+	"sub": true,
+	"undef": true,
+	"unused": true,
+	"validthis": true
+}

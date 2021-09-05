@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "ash/public/cpp/ambient/ambient_mode_state.h"
+#include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/mojom/assistant_controller.mojom.h"
@@ -24,12 +24,7 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 class GoogleServiceAuthError;
@@ -55,8 +50,9 @@ class IdentityManager;
 namespace chromeos {
 namespace assistant {
 
-class ServiceContext;
+class AssistantInteractionLogger;
 class ScopedAshSessionObserver;
+class ServiceContext;
 
 // |AssistantManagerService|'s state won't update if it's currently in the
 // process of starting up. This is the delay before we will try to update
@@ -70,7 +66,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
       public ash::AssistantStateObserver,
       public AssistantManagerService::CommunicationErrorObserver,
       public AssistantManagerService::StateObserver,
-      public ash::AmbientModeStateObserver {
+      public ash::AmbientUiModelObserver {
  public:
   Service(std::unique_ptr<network::PendingSharedURLLoaderFactory>
               pending_url_loader_factory,
@@ -92,8 +88,8 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
 
   // AssistantService overrides:
   void Init() override;
-  void BindAssistant(mojo::PendingReceiver<mojom::Assistant> receiver) override;
   void Shutdown() override;
+  Assistant* GetAssistant() override;
 
  private:
   friend class AssistantServiceTest;
@@ -125,8 +121,9 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // AssistantManagerService::StateObserver overrides:
   void OnStateChanged(AssistantManagerService::State new_state) override;
 
-  // ash::AmbientModeStateObserver overrides:
-  void OnAmbientModeEnabled(bool enabled) override;
+  // ash::AmbientUiModelObserver overrides:
+  void OnAmbientUiVisibilityChanged(
+      ash::AmbientUiVisibility visibility) override;
 
   void UpdateAssistantManagerState();
 
@@ -157,10 +154,10 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // for the device.
   bool ShouldEnableHotword();
 
-  mojo::ReceiverSet<mojom::Assistant> assistant_receivers_;
-
   signin::IdentityManager* const identity_manager_;
   std::unique_ptr<ScopedAshSessionObserver> scoped_ash_session_observer_;
+  ScopedObserver<ash::AmbientUiModel, ash::AmbientUiModelObserver>
+      ambient_ui_model_observer_{this};
   std::unique_ptr<AssistantManagerService> assistant_manager_service_;
   std::unique_ptr<base::OneShotTimer> token_refresh_timer_;
   int token_refresh_error_backoff_factor = 1;
@@ -186,12 +183,8 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
 
   base::Optional<std::string> access_token_;
 
-  mojo::Remote<ash::mojom::AssistantAlarmTimerController>
-      assistant_alarm_timer_controller_;
   mojo::Remote<ash::mojom::AssistantNotificationController>
       assistant_notification_controller_;
-  mojo::Remote<ash::mojom::AssistantScreenContextController>
-      assistant_screen_context_controller_;
 
   // |ServiceContext| object passed to child classes so they can access some of
   // our functionality without depending on us.
@@ -204,6 +197,8 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   base::CancelableOnceClosure update_assistant_manager_callback_;
 
   std::unique_ptr<signin::AccessTokenFetcher> access_token_fetcher_;
+
+  std::unique_ptr<AssistantInteractionLogger> interaction_logger_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

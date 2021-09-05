@@ -7,6 +7,8 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.TaskAction
 
 import java.util.regex.Pattern
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Task to download dependencies specified in {@link ChromiumPlugin} and configure the
@@ -98,6 +100,7 @@ class BuildConfigGenerator extends DefaultTask {
 
         // 2. Import artifacts into the local repository
         def dependencyDirectories = []
+        def downloadExecutor = Executors.newCachedThreadPool()
         graph.dependencies.values().each { dependency ->
             if (excludeDependency(dependency, onlyPlayServices)) {
                 return
@@ -129,14 +132,21 @@ class BuildConfigGenerator extends DefaultTask {
                             new File("${normalisedRepoPath}/${dependency.licensePath}").text)
                 } else if (!dependency.licenseUrl?.trim()?.isEmpty()) {
                     File destFile = new File("${absoluteDepDir}/LICENSE")
-                    downloadFile(dependency.id, dependency.licenseUrl, destFile)
-                    if (destFile.text.contains("<html")) {
-                        throw new RuntimeException("Found HTML in LICENSE file. Please add an "
-                                + "override to ChromiumDepGraph.groovy for ${dependency.id}.")
+                    downloadExecutor.submit {
+                        downloadFile(dependency.id, dependency.licenseUrl, destFile)
+                        if (destFile.text.contains("<html")) {
+                            throw new RuntimeException("Found HTML in LICENSE file. Please add an "
+                                    + "override to ChromiumDepGraph.groovy for ${dependency.id}.")
+                        }
                     }
+                } else {
+                    getLogger().warn("Missing license for ${dependency.id}.")
+                    getLogger().warn("License Name was: ${dependency.licenseName}")
                 }
             }
         }
+        downloadExecutor.shutdown()
+        downloadExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
         // 3. Generate the root level build files
         updateBuildTargetDeclaration(graph, "${normalisedRepoPath}/BUILD.gn", onlyPlayServices)
@@ -198,9 +208,10 @@ class BuildConfigGenerator extends DefaultTask {
                 if (dependency.supportsAndroid) {
                     sb.append("  supports_android = true\n")
                 } else {
-                    // No point in enabling asserts third-party prebuilts.
-                    // Also required to break a dependency cycle for errorprone.
-                    sb.append("  enable_bytecode_rewriter = false\n")
+                    // Save some time by not validating classpaths of desktop
+                    // .jars. Also required to break a dependency cycle for
+                    // errorprone.
+                    sb.append("  enable_bytecode_checks = false\n")
                 }
             } else if (dependency.extension == 'aar') {
                 sb.append("""\
@@ -262,18 +273,10 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  strip_drawables = true\n')
             }
         }
-        if (dependencyId.startsWith('androidx_') ||
-                dependencyId.startsWith('com_android_support_') ||
-                dependencyId.startsWith('android_arch_') ||
-                dependencyId.startsWith('com_android_tools_build_jetifier')) {
-            sb.append('  skip_jetify  = true\n')
-        }
         if (dependencyId.startsWith('org_robolectric')) {
             // Skip platform checks since it depends on
             // accessibility_test_framework_java which requires_android.
             sb.append('  bypass_platform_checks = true\n')
-            // This saves build time as robolectric 4.3.1 already uses androidx.
-            sb.append('  skip_jetify  = true\n')
         }
         switch(dependencyId) {
             case 'androidx_annotation_annotation':
@@ -292,6 +295,10 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  ignore_manifest = true\n')
                 sb.append('  ignore_proguard_configs = true\n')
                 sb.append('  custom_package = "androidx.core"\n')
+                break
+            case 'androidx_fragment_fragment':
+                sb.append('\n')
+                sb.append('  ignore_proguard_configs = true\n')
                 break
             case 'androidx_media_media':
             case 'androidx_versionedparcelable_versionedparcelable':
@@ -398,11 +405,13 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  jar_excluded_patterns = ["*/ListenableFuture.class"]\n')
                 break
             case 'com_google_code_findbugs_jsr305':
+            case 'com_google_guava_failureaccess':
+            case 'com_google_j2objc_j2objc_annotations':
             case 'com_google_guava_listenablefuture':
             case 'com_googlecode_java_diff_utils_diffutils':
                 sb.append('\n')
                 sb.append('  # Needed to break dependency cycle for errorprone_plugin_java.\n')
-                sb.append('  no_build_hooks = true\n')
+                sb.append('  enable_bytecode_checks = false\n')
                 break
             case 'androidx_test_rules':
                 // Target needs Android SDK deps which exist in third_party/android_sdk.
@@ -414,6 +423,9 @@ class BuildConfigGenerator extends DefaultTask {
                 |  ]
                 |
                 |""".stripMargin())
+                break
+            case 'androidx_test_espresso_espresso_web':
+                sb.append('  enable_bytecode_checks = false\n')
                 break
             case 'net_sf_kxml_kxml2':
                 sb.append('  # Target needs to exclude *xmlpull* files as already included in Android SDK.\n')
@@ -588,7 +600,7 @@ class BuildConfigGenerator extends DefaultTask {
             if (sourceUrl.contains("://opensource.org/licenses")) {
                 throw new RuntimeException("Found templated license URL for dependency "
                     + id + ": " + sourceUrl
-                    + ". You will need to edit FALLBACK_PROPERTIES for this dep.")
+                    + ". You will need to edit PROPERTY_OVERRIDES for this dep.")
             }
             connection = urlObj.openConnection()
             switch (connection.getResponseCode()) {

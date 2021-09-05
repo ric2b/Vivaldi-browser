@@ -4,7 +4,9 @@
 
 package org.chromium.chrome.browser.previews;
 
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.URI;
 
@@ -74,6 +76,19 @@ public final class PreviewsAndroidBridge {
                 mNativePreviewsAndroidBridge, PreviewsAndroidBridge.this, webContents);
     }
 
+    /**
+     * Returns whether LiteMode https image compression is applied.
+     */
+    public boolean isHttpsImageCompressionApplied(WebContents webContents) {
+        return PreviewsAndroidBridgeJni.get().isHttpsImageCompressionApplied(
+                mNativePreviewsAndroidBridge, PreviewsAndroidBridge.this, webContents);
+    }
+
+    @CalledByNative
+    private static boolean createHttpsImageCompressionInfoBar(final Tab tab) {
+        return HttpsImageCompressionUtils.createInfoBar(tab);
+    }
+
     @NativeMethods
     interface Natives {
         long init(PreviewsAndroidBridge caller);
@@ -85,5 +100,7 @@ public final class PreviewsAndroidBridge {
                 WebContents webContents);
         String getPreviewsType(long nativePreviewsAndroidBridge, PreviewsAndroidBridge caller,
                 WebContents webContents);
+        boolean isHttpsImageCompressionApplied(long nativePreviewsAndroidBridge,
+                PreviewsAndroidBridge caller, WebContents webContents);
     }
 }

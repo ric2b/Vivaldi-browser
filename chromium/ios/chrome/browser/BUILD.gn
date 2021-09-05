@@ -100,7 +100,6 @@ source_set("browser") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/complex_tasks",
     "//ios/chrome/browser/download",
-    "//ios/chrome/browser/drag_and_drop",
     "//ios/chrome/browser/itunes_urls",
     "//ios/chrome/browser/signin:feature_flags",
     "//ios/chrome/browser/ssl:feature_flags",
@@ -185,8 +184,8 @@ source_set("pref_names") {
 source_set("browser_impl") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "application_context_impl.cc",
     "application_context_impl.h",
+    "application_context_impl.mm",
     "ios_chrome_main_parts.h",
     "ios_chrome_main_parts.mm",
   ]

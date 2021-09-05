@@ -60,8 +60,6 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
     PaintLayer& layer,
     GraphicsLayerVector& child_layers,
     PendingOverflowControlReparents& pending_reparents) {
-  const ComputedStyle& style = layer.GetLayoutObject().StyleRef();
-
   // Make the layer compositing if necessary, and set up clipping and content
   // layers.  Note that we can only do work here that is independent of whether
   // the descendant layers have been processed. computeCompositingRequirements()
@@ -90,6 +88,15 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
   bool recursion_blocked_by_display_lock =
       layer.GetLayoutObject().PrePaintBlockedByDisplayLock(
           DisplayLockLifecycleTarget::kChildren);
+  // If the recursion is blocked meaningfully (i.e. we would have recursed,
+  // since the layer has children), then we should inform the display-lock
+  // context that we blocked a graphics layer recursion, so that we can ensure
+  // to rebuild the tree once we're unlocked.
+  if (recursion_blocked_by_display_lock && layer.FirstChild()) {
+    auto* context = layer.GetLayoutObject().GetDisplayLockContext();
+    DCHECK(context);
+    context->NotifyGraphicsLayerRebuildBlocked();
+  }
 
   if (layer.IsStackingContextWithNegativeZOrderChildren()) {
     if (!recursion_blocked_by_display_lock) {
@@ -118,12 +125,30 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
     }
   }
 
-  if (has_composited_layer_mapping) {
-    bool parented = false;
-    if (layer.GetLayoutObject().IsLayoutEmbeddedContent()) {
-      parented = PaintLayerCompositor::AttachFrameContentLayersToIframeLayer(
-          ToLayoutEmbeddedContent(layer.GetLayoutObject()));
+  if (layer.GetLayoutObject().IsLayoutEmbeddedContent()) {
+    DCHECK(this_layer_children.IsEmpty());
+    PaintLayerCompositor* inner_compositor =
+        PaintLayerCompositor::FrameContentsCompositor(
+            ToLayoutEmbeddedContent(layer.GetLayoutObject()));
+    if (inner_compositor) {
+      // If the embedded frame is render-throttled, it might not be compositing
+      // clean at this point. In that case, we still need to connect its
+      // existing root graphics layer, so we need to query the stale compositing
+      // state.
+      DisableCompositingQueryAsserts disabler;
+      if (inner_compositor->InCompositingMode()) {
+        if (GraphicsLayer* inner_root_layer =
+                inner_compositor->RootGraphicsLayer()) {
+          layer_vector_for_children->push_back(inner_root_layer);
+        }
+      }
+      inner_compositor->ClearRootLayerAttachmentDirty();
     }
+  }
+
+  if (has_composited_layer_mapping) {
+    // TODO(szager): Remove after diagnosing crash crbug.com/1092673
+    CHECK(current_composited_layer_mapping);
 
     // Apply all pending reparents by inserting the overflow controls
     // root layers into |this_layer_children|. To do this, first sort
@@ -148,25 +173,19 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
       }
     }
 
-    if (!parented && !this_layer_children.IsEmpty()) {
-      // Ensure we don't clobber the decoration outline layer.
-      if (auto* layer = current_composited_layer_mapping
-                            ->DetachLayerForDecorationOutline()) {
-        this_layer_children.push_back(layer);
-      }
+    if (!this_layer_children.IsEmpty())
       current_composited_layer_mapping->SetSublayers(this_layer_children);
-    }
 
     if (ShouldAppendLayer(layer)) {
       child_layers.push_back(
-          current_composited_layer_mapping->ChildForSuperlayers());
+          current_composited_layer_mapping->MainGraphicsLayer());
     }
   }
 
   // Also insert for self, to handle the case of scrollers with negative
   // z-index children (the scrolbars should still paint on top of the
   // scroller itself).
-  if (style.IsStacked() && has_composited_layer_mapping &&
+  if (layer.GetLayoutObject().IsStacked() && has_composited_layer_mapping &&
       layer.GetCompositedLayerMapping()->NeedsToReparentOverflowControls())
     pending_reparents.Set(&layer, child_layers.size());
 
@@ -174,7 +193,7 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
   // Overlay scrollbars need to paint on top of all content under the scroller,
   // so keep overwriting if we find a PaintLayer that is later in paint order.
   const PaintLayer* scroll_parent = layer.ScrollParent();
-  if (style.IsStacked() && scroll_parent &&
+  if (layer.GetLayoutObject().IsStacked() && scroll_parent &&
       scroll_parent->HasCompositedLayerMapping() &&
       scroll_parent->GetCompositedLayerMapping()
           ->NeedsToReparentOverflowControls())

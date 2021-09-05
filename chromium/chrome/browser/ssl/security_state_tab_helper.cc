@@ -23,14 +23,13 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/secure_origin_whitelist.h"
+#include "chrome/common/secure_origin_allowlist.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/security_state/content/content_utils.h"
-#include "components/security_state/core/security_state_pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -173,15 +172,6 @@ SecurityStateTabHelper::GetVisibleSecurityState() {
                 ->GetSafetyTipInfoForVisibleNavigation()
           : security_state::SafetyTipInfo(
                 {security_state::SafetyTipStatus::kUnknown, GURL()});
-
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-
-  if (profile &&
-      !profile->GetPrefs()->GetBoolean(
-          security_state::prefs::kStricterMixedContentTreatmentEnabled)) {
-    state->should_suppress_mixed_content_warning = true;
-  }
 
   return state;
 }

@@ -86,7 +86,7 @@ AXObject* AXMenuListOption::ComputeParent() const {
     return select_ax_object;
 
   if (menu_list->HasChildren()) {
-    const auto& child_objects = menu_list->Children();
+    const auto& child_objects = menu_list->ChildrenIncludingIgnored();
     if (child_objects.IsEmpty())
       return nullptr;
     DCHECK_EQ(child_objects.size(), 1UL);
@@ -234,7 +234,7 @@ HTMLSelectElement* AXMenuListOption::ParentSelectNode() const {
   return nullptr;
 }
 
-void AXMenuListOption::Trace(Visitor* visitor) {
+void AXMenuListOption::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
   AXNodeObject::Trace(visitor);
 }

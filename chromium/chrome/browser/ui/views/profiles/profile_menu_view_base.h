@@ -28,7 +28,6 @@ class Browser;
 
 namespace views {
 class Button;
-class Label;
 }  // namespace views
 
 // This class provides the UI for different menus that are created by user
@@ -136,14 +135,6 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
   // Should be called inside each button/link action.
   void RecordClick(ActionableItem item);
 
-  views::Label* CreateAndAddLabel(
-      const base::string16& text,
-      int text_context = views::style::CONTEXT_LABEL);
-  views::StyledLabel* CreateAndAddLabelWithLink(const base::string16& text,
-                                                gfx::Range link_range,
-                                                base::RepeatingClosure action);
-  void AddViewItem(std::unique_ptr<views::View> view);
-
   Browser* browser() const { return browser_; }
 
   // Return maximal height for the view after which it becomes scrollable.
@@ -151,6 +142,11 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
   int GetMaxHeight() const;
 
   views::Button* anchor_button() const { return anchor_button_; }
+
+  bool perform_menu_actions() const { return perform_menu_actions_; }
+  void set_perform_menu_actions_for_testing(bool perform_menu_actions) {
+    perform_menu_actions_ = perform_menu_actions;
+  }
 
  private:
   friend class ProfileMenuViewExtensionsTest;
@@ -207,6 +203,10 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
   // The first profile button that should be focused when the menu is opened
   // using a key accelerator.
   views::Button* first_profile_button_ = nullptr;
+
+  // May be disabled by tests that only watch to histogram records and don't
+  // care about actual actions.
+  bool perform_menu_actions_ = true;
 
   CloseBubbleOnTabActivationHelper close_bubble_helper_;
 

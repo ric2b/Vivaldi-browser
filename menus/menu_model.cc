@@ -17,7 +17,8 @@ Menu_Node* AsMutable(const Menu_Node* node) {
 }
 
 Menu_Model::Menu_Model(content::BrowserContext* context)
-    : context_(context) {}
+    : context_(context),
+      root_(Menu_Node::root_node_guid(), Menu_Node::root_node_id()) {}
 
 Menu_Model::~Menu_Model() {
   for (auto& observer : observers_)
@@ -29,17 +30,20 @@ Menu_Model::~Menu_Model() {
 
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
     const std::string& menu) {
-  Menu_Node* root = new Menu_Node();
+  Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
+    Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
-  return base::WrapUnique(new MenuLoadDetails(root, control, menu, loaded_));
+  return base::WrapUnique(new MenuLoadDetails(mainmenu, control, menu,
+      loaded_));
 }
 
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
-  Menu_Node* root = new Menu_Node();
+  Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
+    Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
-  return base::WrapUnique(new MenuLoadDetails(root, control, id, loaded_));
+  return base::WrapUnique(new MenuLoadDetails(mainmenu, control, id, loaded_));
 }
 
 void Menu_Model::Load(
@@ -64,21 +68,27 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
     if (!details->menu().empty()) {
       // Replace all
       // Remove old content
-      while (root_.children().size() > 0) {
-        root_.Remove(0);
+      int index = 0;
+      for (const auto& top_node : root_.children()) {
+        if (top_node->id() == details->mainmenu_node()->id()) {
+          root_.Remove(index);
+          break;
+        }
+        index ++;
       }
+
       // Add new content
-      Menu_Node* root_node = details->root_node();
-      while (root_node->children().size() > 0) {
-        std::unique_ptr<Menu_Node> node = root_node->Remove(0);
-        root_.Add(std::move(node));
-      }
+      std::unique_ptr<Menu_Node> mainmenu_node(
+          details->release_mainmenu_node());
+      mainmenu_node_ = mainmenu_node.get();
+      root_.Add(std::move(mainmenu_node), index);
+
       control_ = details->release_control();
 
       Save();
 
       int id = -1;
-      Menu_Node* menu = GetMenu(details->menu());
+      Menu_Node* menu = GetNamedMenu(details->menu());
       if (menu && menu->children().size() > 0) {
         id = menu->children()[0]->id();
       }
@@ -95,7 +105,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
         // menu and folder in it. This works as long the target is a folder. We
         // can have multiple nodes with the same action, but folders will always
         // have a unique action in a menu.
-        Menu_Node* loaded_menu = details->root_node()->GetByAction(
+        Menu_Node* loaded_menu = details->mainmenu_node()->GetByAction(
             target_menu->action());
         Menu_Node* loaded = loaded_menu ?
             loaded_menu->GetByAction(target->action()) : nullptr;
@@ -130,12 +140,12 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
     }
   } else {
     // Install content for the first time.
-    // Move all menus to make them children of root_
-    Menu_Node* root_node = details->root_node();
-    while (root_node->children().size() > 0) {
-      std::unique_ptr<Menu_Node> node = root_node->Remove(0);
-      root_.Add(std::move(node));
-    }
+
+    // Add new content
+    std::unique_ptr<Menu_Node> mainmenu_node(details->release_mainmenu_node());
+    mainmenu_node_ = mainmenu_node.get();
+    root_.Add(std::move(mainmenu_node));
+
     control_ = details->release_control();
     loaded_ = true;
     if (details->has_upgraded()) {
@@ -144,29 +154,6 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
     for (auto& observer : observers_)
       observer.MenuModelLoaded(this);
   }
-}
-
-bool Menu_Model::SetMenu(std::unique_ptr<Menu_Node> node) {
-  if (!node->is_menu()) {
-    NOTREACHED();
-    return false;
-  }
-  Menu_Node* parent = node->parent();
-  if (!parent) {
-    NOTREACHED();
-    return false;
-  }
-  std::string named_menu = node->action();
-  int index = parent->GetIndexOf(node.get());
-  parent->Remove(index);
-  parent->Add(std::move(node), index);
-
-  Save();
-
-  for (auto& observer : observers_)
-    observer.MenuModelChanged(this, -1, named_menu);
-
-  return true;
 }
 
 bool Menu_Model::Move(const Menu_Node* node, const Menu_Node* new_parent,
@@ -244,7 +231,7 @@ bool Menu_Model::SetTitle(Menu_Node* node, const base::string16& title) {
     return false;
   }
 
-  SetDeleted(node, false);
+  RemoveBundleTag(node, false);
 
   node->SetTitle(title);
   node->SetHasCustomTitle(true);
@@ -273,7 +260,7 @@ bool Menu_Model::SetContainerMode(Menu_Node* node, const std::string& mode) {
     return false;
   }
 
-  SetDeleted(node, false);
+  RemoveBundleTag(node, false);
 
   node->SetContainerMode(mode);
 
@@ -301,7 +288,7 @@ bool Menu_Model::SetContainerEdge(Menu_Node* node, const std::string& edge) {
     return false;
   }
 
-  SetDeleted(node, false);
+  RemoveBundleTag(node, false);
 
   node->SetContainerEdge(edge);
 
@@ -320,7 +307,7 @@ bool Menu_Model::Remove(Menu_Node* node) {
     return false;
   }
 
-  SetDeleted(node, true);
+  RemoveBundleTag(node, true);
 
   Menu_Node* parent = node->parent();
   int index = parent->GetIndexOf(node);
@@ -350,19 +337,16 @@ bool Menu_Model::Reset(const std::string& menu) {
   return false;
 }
 
-void Menu_Model::SetDeleted(Menu_Node* node, bool include_children) {
+void Menu_Model::RemoveBundleTag(Menu_Node* node, bool include_children) {
   if (node->origin() == Menu_Node::BUNDLE) {
+    // Add guid to list of items that can not be touched by an update.
     control_->deleted.push_back(node->guid());
-    // SetDeleted() is called for all nodes that are modified or deleted.
-    // We can restore a modified bundled folder (and content) to its default
-    // state but that action is not possible when the origin is Menu_Node::USER.
-    // We use Menu_Node::DELETED_BUNDLE when we change the guid to allow this.
-    node->SetOrigin(Menu_Node::DELETED_BUNDLE);
-    node->SetGuid(base::GenerateGUID());
+    // Tag the node as modified.
+    node->SetOrigin(Menu_Node::MODIFIED_BUNDLE);
   }
   if (node->is_folder() && include_children) {
     for (auto& child : node->children()) {
-      SetDeleted(child.get(), include_children);
+      RemoveBundleTag(child.get(), include_children);
     }
   }
 }
@@ -407,11 +391,13 @@ void Menu_Model::RemoveObserver(MenuModelObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-Menu_Node* Menu_Model::GetMenu(const std::string& named_menu) {
-  // All menus are located as children of root (only that level).
-  for (const auto& child : root_.children()) {
-    if (child->action() == named_menu) {
-      return child.get();
+Menu_Node* Menu_Model::GetNamedMenu(const std::string& named_menu) {
+  // We have <root> -> <top nodes> -> <named menus>
+  for (const auto& top_node : root_.children()) {
+    for (const auto& menu_node : top_node->children()) {
+      if (menu_node->action() == named_menu) {
+        return menu_node.get();
+      }
     }
   }
   return nullptr;

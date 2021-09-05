@@ -32,12 +32,21 @@ namespace {
 constexpr size_t kResponseCodeLength = 1;
 
 ProtocolVersion ConvertStringToProtocolVersion(base::StringPiece version) {
-  if (version == kCtap2Version)
+  if (version == kCtap2Version || version == kCtap2_1Version)
     return ProtocolVersion::kCtap2;
   if (version == kU2fVersion)
     return ProtocolVersion::kU2f;
 
   return ProtocolVersion::kUnknown;
+}
+
+Ctap2Version ConvertStringToCtap2Version(base::StringPiece version) {
+  if (version == kCtap2Version)
+    return Ctap2Version::kCtap2_0;
+  if (version == kCtap2_1Version)
+    return Ctap2Version::kCtap2_1;
+
+  return Ctap2Version::kUnknown;
 }
 
 // Converts a CBOR unsigned integer value to a uint32_t. The conversion is
@@ -195,6 +204,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
   }
 
   base::flat_set<ProtocolVersion> protocol_versions;
+  base::flat_set<Ctap2Version> ctap2_versions;
   base::flat_set<base::StringPiece> advertised_protocols;
   for (const auto& version : it->second.GetArray()) {
     if (!version.is_string())
@@ -212,12 +222,11 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       continue;
     }
 
-    if (!protocol_versions.insert(protocol).second) {
-      // A duplicate value will have already caused an error therefore hitting
-      // this suggests that |ConvertStringToProtocolVersion| is non-injective.
-      NOTREACHED();
-      return base::nullopt;
+    if (protocol == ProtocolVersion::kCtap2) {
+      ctap2_versions.insert(ConvertStringToCtap2Version(version_string));
     }
+
+    protocol_versions.insert(protocol);
   }
 
   if (protocol_versions.empty())
@@ -230,7 +239,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
   }
 
   AuthenticatorGetInfoResponse response(
-      std::move(protocol_versions),
+      std::move(protocol_versions), ctap2_versions,
       base::make_span<kAaguidLength>(it->second.GetBytestring()));
 
   AuthenticatorSupportedOptions options;
@@ -363,7 +372,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       if (!option_map_it->second.is_bool()) {
         return base::nullopt;
       }
-      options.supports_uv_token = option_map_it->second.GetBool();
+      options.supports_pin_uv_auth_token = option_map_it->second.GetBool();
     }
 
     option_map_it = option_map.find(CBOR(kDefaultCredProtectKey));
@@ -420,6 +429,47 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       return base::nullopt;
 
     response.max_credential_id_length = CBORUnsignedToUint32Safe(it->second);
+  }
+
+  it = response_map.find(CBOR(10));
+  if (it != response_map.end()) {
+    if (!it->second.is_array()) {
+      return base::nullopt;
+    }
+
+    response.algorithms.clear();
+
+    const std::vector<cbor::Value>& algorithms = it->second.GetArray();
+    for (const auto& algorithm : algorithms) {
+      // Entries are PublicKeyCredentialParameters
+      // https://w3c.github.io/webauthn/#dictdef-publickeycredentialparameters
+      if (!algorithm.is_map()) {
+        return base::nullopt;
+      }
+
+      const auto& map = algorithm.GetMap();
+      const auto type_it = map.find(CBOR("type"));
+      if (type_it == map.end() || !type_it->second.is_string()) {
+        return base::nullopt;
+      }
+
+      if (type_it->second.GetString() != "public-key") {
+        continue;
+      }
+
+      const auto alg_it = map.find(CBOR("alg"));
+      if (alg_it == map.end() || !alg_it->second.is_integer()) {
+        return base::nullopt;
+      }
+
+      const int64_t alg = alg_it->second.GetInteger();
+      if (alg < std::numeric_limits<int32_t>::min() ||
+          alg > std::numeric_limits<int32_t>::max()) {
+        continue;
+      }
+
+      response.algorithms.push_back(alg);
+    }
   }
 
   return base::Optional<AuthenticatorGetInfoResponse>(std::move(response));

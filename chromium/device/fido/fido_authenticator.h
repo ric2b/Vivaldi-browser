@@ -9,6 +9,7 @@
 
 #include "base/callback_forward.h"
 #include "base/component_export.h"
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -96,11 +97,23 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   // GetPINToken uses the given PIN to request a PinUvAuthToken from an
   // authenticator. It is only valid to call this method if |Options| indicates
   // that the authenticator supports PINs.
-  virtual void GetPINToken(std::string pin, GetTokenCallback callback);
+  // |permissions| are flags indicating which commands the token may be used
+  // for.
+  // |rp_id| binds the token to operations related to a given RP ID. |rp_id|
+  // must be set if |permissions| includes MakeCredential or GetAssertion.
+  virtual void GetPINToken(std::string pin,
+                           const std::vector<pin::Permissions>& permissions,
+                           base::Optional<std::string> rp_id,
+                           GetTokenCallback callback);
+  // Returns |true| if the authenticator supports GetUvToken.
+  virtual bool CanGetUvToken();
   // GetUvToken uses internal user verification to request a PinUvAuthToken from
-  // an authenticator. It is only valid to call this method if |Options|
-  // indicates that the authenticator supports UV tokens.
-  virtual void GetUvToken(GetTokenCallback callback);
+  // an authenticator. It is only valid to call this method if CanGetUvToken()
+  // returns true.
+  // |rp_id| must be set if the PinUvAuthToken will be used for MakeCredential
+  // or GetAssertion.
+  virtual void GetUvToken(base::Optional<std::string> rp_id,
+                          GetTokenCallback callback);
   // SetPIN sets a new PIN on a device that does not currently have one. The
   // length of |pin| must respect |pin::kMinLength| and |pin::kMaxLength|. It is
   // only valid to call this method if |Options| indicates that the
@@ -187,6 +200,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
                                std::vector<uint8_t> template_id,
                                BioEnrollmentCallback);
 
+  // GetAlgorithms returns the list of supported COSEAlgorithmIdentifiers, or
+  // |nullopt| if this is unknown and thus all requests should be tried in case
+  // they work.
+  virtual base::Optional<base::span<const int32_t>> GetAlgorithms();
+
   // Reset triggers a reset operation on the authenticator. This erases all
   // stored resident keys and any configured PIN.
   virtual void Reset(ResetCallback callback);
@@ -195,6 +213,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   virtual base::string16 GetDisplayName() const = 0;
   virtual ProtocolVersion SupportedProtocol() const;
   virtual bool SupportsCredProtectExtension() const;
+  virtual bool SupportsHMACSecretExtension() const;
   virtual const base::Optional<AuthenticatorSupportedOptions>& Options()
       const = 0;
   virtual base::Optional<FidoTransportProtocol> AuthenticatorTransport()

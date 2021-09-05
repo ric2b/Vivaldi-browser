@@ -19,6 +19,7 @@
 #include "third_party/blink/public/common/frame/user_activation_update_source.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-shared.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-shared.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-shared.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-shared.h"
@@ -37,13 +38,16 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
-#include "third_party/blink/public/web/web_ime_text_span.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "v8/include/v8.h"
 
 namespace gfx {
 class Point;
 }  // namespace gfx
+
+namespace ui {
+struct ImeTextSpan;
+}  // namespace ui
 
 namespace blink {
 
@@ -58,6 +62,7 @@ class WebLocalFrameClient;
 class WebFrameWidget;
 class WebInputMethodController;
 class WebPerformance;
+class WebPlugin;
 class WebRange;
 class WebSecurityOrigin;
 class WebScriptExecutionCallback;
@@ -204,9 +209,9 @@ class WebLocalFrame : public WebFrame {
   virtual void SetEmbeddingToken(
       const base::UnguessableToken& embedding_token) = 0;
 
-  // Returns the embedding token for this frame or nullopt if it isn't embedded.
-  // This is the token that the remote parent of this frame uses to uniquely
-  // identify it.
+  // Returns the embedding token for this frame or nullopt if the frame hasn't
+  // committed a navigation. This token changes when a new document is committed
+  // in this WebLocalFrame.
   virtual const base::Optional<base::UnguessableToken>& GetEmbeddingToken() = 0;
 
   // Navigation Ping --------------------------------------------------------
@@ -243,7 +248,8 @@ class WebLocalFrame : public WebFrame {
   virtual void DownloadURL(
       const WebURLRequest& request,
       network::mojom::RedirectMode cross_origin_redirect_behavior,
-      mojo::ScopedMessagePipeHandle blob_url_token) = 0;
+      CrossVariantMojoRemote<mojom::BlobURLTokenInterfaceBase>
+          blob_url_token) = 0;
 
   // Navigation State -------------------------------------------------------
 
@@ -268,6 +274,7 @@ class WebLocalFrame : public WebFrame {
                                  const WebURL& mixed_content_url,
                                  mojom::RequestContextType,
                                  bool was_allowed,
+                                 const WebURL& url_before_redirects,
                                  bool had_redirect,
                                  const WebSourceLocation&) = 0;
 
@@ -316,8 +323,17 @@ class WebLocalFrame : public WebFrame {
   // Sets up an isolated world by associating a |world_id| with |info|.
   // worldID must be > 0 (as 0 represents the main world).
   // worldID must be < kEmbedderWorldIdLimit, high number used internally.
+  // TODO(karandeepb): This modifies the global isolated world info and hence
+  // should ideally be moved out of WebLocalFrame.
   virtual void SetIsolatedWorldInfo(int32_t world_id,
                                     const WebIsolatedWorldInfo& info) = 0;
+
+  // Returns the stable ID that was set with SetIsolatedWorldInfo.
+  virtual WebString GetIsolatedWorldStableId(v8::Local<v8::Context>) const = 0;
+
+  // Returns the human readable name that was set with SetIsolatedWorldInfo.
+  virtual WebString GetIsolatedWorldHumanReadableName(
+      v8::Local<v8::Context>) const = 0;
 
   // Executes script in the context of the current page and returns the value
   // that the script evaluated to.
@@ -339,6 +355,10 @@ class WebLocalFrame : public WebFrame {
   // the "main world" or an "isolated world" is, then you probably shouldn't
   // be calling this API.
   virtual v8::Local<v8::Context> MainWorldScriptContext() const = 0;
+
+  // Returns the world ID associated with |script_context|.
+  virtual int32_t GetScriptContextWorldId(
+      v8::Local<v8::Context> script_context) const = 0;
 
   // Executes script in the context of the current page and returns the value
   // that the script evaluated to with callback. Script execution can be
@@ -429,7 +449,8 @@ class WebLocalFrame : public WebFrame {
   // (i.e its anchor is its start).
   virtual bool IsSelectionAnchorFirst() const = 0;
   // Changes the text direction of the selected input node.
-  virtual void SetTextDirection(base::i18n::TextDirection) = 0;
+  virtual void SetTextDirectionForTesting(
+      base::i18n::TextDirection direction) = 0;
 
   // Selection -----------------------------------------------------------
 
@@ -479,7 +500,7 @@ class WebLocalFrame : public WebFrame {
   virtual bool SetCompositionFromExistingText(
       int composition_start,
       int composition_end,
-      const WebVector<WebImeTextSpan>& ime_text_spans) = 0;
+      const WebVector<ui::ImeTextSpan>& ime_text_spans) = 0;
   virtual void ExtendSelectionAndDelete(int before, int after) = 0;
 
   // Moves the selection extent point. This function does not allow the
@@ -553,7 +574,7 @@ class WebLocalFrame : public WebFrame {
                               const WebString& search_text,
                               bool match_case,
                               bool forward,
-                              bool find_next,
+                              bool new_session,
                               bool force,
                               bool wrap_within_frame) = 0;
 
@@ -654,13 +675,16 @@ class WebLocalFrame : public WebFrame {
   // This function should be called before pairs of PrintBegin() and PrintEnd().
   virtual void DispatchBeforePrintEvent() = 0;
 
+  // Get the plugin to print, if any. The |constrain_to_node| parameter is the
+  // same as the one for PrintBegin() below.
+  virtual WebPlugin* GetPluginToPrint(const WebNode& constrain_to_node) = 0;
+
   // Reformats the WebFrame for printing. WebPrintParams specifies the printable
   // content size, paper size, printable area size, printer DPI and print
-  // scaling option. If constrainToNode node is specified, then only the given
+  // scaling option. If |constrain_to_node| is specified, then only the given
   // node is printed (for now only plugins are supported), instead of the entire
   // frame.
-  // Returns the number of pages that can be printed at the given
-  // page size.
+  // Returns the number of pages that can be printed at the given page size.
   virtual int PrintBegin(const WebPrintParams&,
                          const WebNode& constrain_to_node = WebNode()) = 0;
 
@@ -689,14 +713,12 @@ class WebLocalFrame : public WebFrame {
 
   // Paint Preview ------------------------------------------------------------
 
-  // Captures a full frame paint preview of the WebFrame including subframes.
+  // Captures a full frame paint preview of the WebFrame including subframes. If
+  // |include_linked_destinations| is true, the capture will include annotations
+  // about linked destinations within the document.
   virtual bool CapturePaintPreview(const WebRect& bounds,
-                                   cc::PaintCanvas* canvas) = 0;
-
-  // FrameOverlay ----------------------------------------------------------
-
-  // Overlay this frame with a solid color. Only valid for the main frame.
-  virtual void SetMainFrameOverlayColor(SkColor) = 0;
+                                   cc::PaintCanvas* canvas,
+                                   bool include_linked_destinations) = 0;
 
   // Focus --------------------------------------------------------------
 
@@ -734,21 +756,21 @@ class WebLocalFrame : public WebFrame {
       UserActivationUpdateSource update_source =
           UserActivationUpdateSource::kRenderer) = 0;
 
-  // Cosmetic filtering--------------------------------------------------------
-  virtual void SetCosmeticFilterClient(WebCosmeticFilterClient* client) = 0;
-  virtual WebCosmeticFilterClient* GetCosmeticFilterClient() = 0;
-
-  // DevTools -----------------------------------------------------------------
-
-  // Instructs devtools to pause loading of the frame as soon as it's shown
-  // until explicit command from the devtools client.
-  virtual void WaitForDebuggerWhenShown() = 0;
-
   // Testing ------------------------------------------------------------------
+
+  // Get the total spool size (the bounding box of all the pages placed after
+  // oneanother vertically), when printing for testing. Even if we still only
+  // support a uniform page size, some pages may be rotated using
+  // page-orientation.
+  virtual WebSize SpoolSizeInPixelsForTesting(
+      const WebSize& page_size_in_pixels,
+      int page_count) = 0;
 
   // Prints the frame into the canvas, with page boundaries drawn as one pixel
   // wide blue lines. This method exists to support web tests.
-  virtual void PrintPagesForTesting(cc::PaintCanvas*, const WebSize&) = 0;
+  virtual void PrintPagesForTesting(cc::PaintCanvas*,
+                                    const WebSize& page_size_in_pixels,
+                                    const WebSize& spool_size_in_pixels) = 0;
 
   // Returns the bounds rect for current selection. If selection is performed
   // on transformed text, the rect will still bound the selection but will
@@ -760,8 +782,6 @@ class WebLocalFrame : public WebFrame {
   // local root).
   virtual gfx::Point GetPositionInViewportForTesting() const = 0;
 
-  virtual void SetLifecycleState(mojom::FrameLifecycleState state) = 0;
-
   virtual void WasHidden() = 0;
   virtual void WasShown() = 0;
 
@@ -770,6 +790,10 @@ class WebLocalFrame : public WebFrame {
   // agent cluster will be enabled for windows that do not have this permission.
   // This should only be used for extensions and the webview tag.
   virtual void SetAllowsCrossBrowsingInstanceFrameLookup() = 0;
+
+  // Cosmetic filtering--------------------------------------------------------
+  virtual void SetCosmeticFilterClient(WebCosmeticFilterClient* client) = 0;
+  virtual WebCosmeticFilterClient* GetCosmeticFilterClient() = 0;
 
  protected:
   explicit WebLocalFrame(mojom::TreeScopeType scope,

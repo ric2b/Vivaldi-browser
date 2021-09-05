@@ -68,7 +68,8 @@ ScriptPromise RejectWithTypeError(ScriptState* script_state,
 bool ShouldBlockDueToCSP(ExecutionContext* execution_context,
                          const KURL& request_url) {
   return !execution_context->GetContentSecurityPolicyForWorld()
-              ->AllowConnectToSource(request_url);
+              ->AllowConnectToSource(request_url, request_url,
+                                     RedirectStatus::kNoRedirect);
 }
 
 bool ShouldBlockPort(const KURL& request_url) {
@@ -132,15 +133,10 @@ scoped_refptr<BlobDataHandle> ExtractBlobHandle(
     ExceptionState& exception_state) {
   DCHECK(request);
 
-  if (request->IsBodyLocked(exception_state) == Body::BodyLocked::kLocked ||
-      request->IsBodyUsed(exception_state) == Body::BodyUsed::kUsed) {
-    DCHECK(!exception_state.HadException());
+  if (request->IsBodyLocked() || request->IsBodyUsed()) {
     exception_state.ThrowTypeError("Request body is already used");
     return nullptr;
   }
-
-  if (exception_state.HadException())
-    return nullptr;
 
   BodyStreamBuffer* buffer = request->BodyBuffer();
   if (!buffer)
@@ -559,7 +555,7 @@ void BackgroundFetchManager::DidGetDeveloperIds(
   NOTREACHED();
 }
 
-void BackgroundFetchManager::Trace(Visitor* visitor) {
+void BackgroundFetchManager::Trace(Visitor* visitor) const {
   visitor->Trace(registration_);
   visitor->Trace(bridge_);
   visitor->Trace(loaders_);

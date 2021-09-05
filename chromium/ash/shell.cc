@@ -28,6 +28,7 @@
 #include "ash/detachable_base/detachable_base_notification_controller.h"
 #include "ash/display/cros_display_config.h"
 #include "ash/display/cursor_window_controller.h"
+#include "ash/display/display_alignment_controller.h"
 #include "ash/display/display_color_manager.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_configuration_observer.h"
@@ -88,7 +89,6 @@
 #include "ash/shell_delegate.h"
 #include "ash/shell_init_params.h"
 #include "ash/shell_observer.h"
-#include "ash/shell_state.h"
 #include "ash/shutdown_controller_impl.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/style/ash_color_provider.h"
@@ -128,7 +128,6 @@
 #include "ash/tray_action/tray_action.h"
 #include "ash/utility/screenshot_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
-#include "ash/wayland/wayland_server_controller.h"
 #include "ash/wm/ash_focus_rules.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/cursor_manager_chromeos.h"
@@ -173,7 +172,6 @@
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/dbus/usb/usbguard_client.h"
 #include "chromeos/system/devicemode.h"
-#include "components/exo/file_helper.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -310,8 +308,15 @@ aura::Window* Shell::GetPrimaryRootWindow() {
 }
 
 // static
+void Shell::SetRootWindowForNewWindows(aura::Window* root) {
+  display::Screen::GetScreen()->SetDisplayForNewWindows(
+      display::Screen::GetScreen()->GetDisplayNearestWindow(root).id());
+}
+
+// static
 aura::Window* Shell::GetRootWindowForNewWindows() {
-  return Shell::Get()->shell_state_->GetRootWindowForNewWindows();
+  return GetRootWindowForDisplayId(
+      display::Screen::GetScreen()->GetDisplayForNewWindows().id());
 }
 
 // static
@@ -365,25 +370,16 @@ display::DisplayConfigurator* Shell::display_configurator() {
   return display_manager_->configurator();
 }
 
-void Shell::InitWaylandServer(std::unique_ptr<exo::FileHelper> file_helper) {
-  wayland_server_controller_ =
-      WaylandServerController::CreateIfNecessary(std::move(file_helper));
-  if (wayland_server_controller_) {
-    system_tray_model()
-        ->virtual_keyboard()
-        ->SetInputMethodSurfaceManagerObserver(
-            wayland_server_controller_->arc_input_method_surface_manager());
-  }
+void Shell::TrackInputMethodBounds(ArcInputMethodBoundsTracker* tracker) {
+  system_tray_model()->virtual_keyboard()->SetInputMethodBoundsTrackerObserver(
+      tracker);
 }
 
-void Shell::DestroyWaylandServer() {
-  if (wayland_server_controller_) {
-    system_tray_model()
-        ->virtual_keyboard()
-        ->RemoveInputMethodSurfaceManagerObserver(
-            wayland_server_controller_->arc_input_method_surface_manager());
-  }
-  wayland_server_controller_.reset();
+void Shell::UntrackTrackInputMethodBounds(
+    ArcInputMethodBoundsTracker* tracker) {
+  system_tray_model()
+      ->virtual_keyboard()
+      ->RemoveInputMethodBoundsTrackerObserver(tracker);
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -425,7 +421,6 @@ bool Shell::IsInTabletMode() const {
 bool Shell::ShouldSaveDisplaySettings() {
   return !(
       screen_orientation_controller_->ignore_display_configuration_updates() ||
-      resolution_notification_controller_->DoesNotificationTimeout() ||
       !display_configuration_observer_->save_preference());
 }
 
@@ -449,6 +444,11 @@ bool Shell::HasPrimaryStatusArea() {
 void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
   window_tree_host_manager_->cursor_window_controller()
       ->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
+}
+
+void Shell::SetCursorColor(SkColor cursor_color) {
+  window_tree_host_manager_->cursor_window_controller()->SetCursorColor(
+      cursor_color);
 }
 
 void Shell::UpdateCursorCompositingEnabled() {
@@ -544,7 +544,6 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       ash_color_provider_(std::make_unique<AshColorProvider>()),
       session_controller_(std::make_unique<SessionControllerImpl>()),
       shell_delegate_(std::move(shell_delegate)),
-      shell_state_(std::make_unique<ShellState>()),
       shutdown_controller_(std::make_unique<ShutdownControllerImpl>()),
       system_tray_notifier_(std::make_unique<SystemTrayNotifier>()),
       window_cycle_controller_(std::make_unique<WindowCycleController>()),
@@ -595,14 +594,12 @@ Shell::~Shell() {
 
   desks_controller_->Shutdown();
 
-  // Wayland depends upon some ash specific objects. Destroy it early on.
-  wayland_server_controller_.reset();
-
   user_metrics_recorder_->OnShellShuttingDown();
 
   cros_display_config_.reset();
   display_configuration_observer_.reset();
   display_prefs_.reset();
+  display_alignment_controller_.reset();
 
   // Remove the focus from any window. This will prevent overhead and side
   // effects (e.g. crashes) from changing focus during shutdown.
@@ -981,7 +978,7 @@ void Shell::Init(
   // controller.
   desks_controller_ = std::make_unique<DesksController>();
 
-  shell_state_->SetRootWindowForNewWindows(GetPrimaryRootWindow());
+  Shell::SetRootWindowForNewWindows(GetPrimaryRootWindow());
 
   resolution_notification_controller_ =
       std::make_unique<ResolutionNotificationController>();
@@ -1071,7 +1068,10 @@ void Shell::Init(
   magnification_controller_ = std::make_unique<MagnificationController>();
   mru_window_tracker_ = std::make_unique<MruWindowTracker>();
   assistant_controller_ = std::make_unique<AssistantControllerImpl>();
-  quick_answers_controller_ = std::make_unique<QuickAnswersControllerImpl>();
+  if (chromeos::features::IsQuickAnswersEnabled() &&
+      chromeos::features::IsQuickAnswersRichUiEnabled()) {
+    quick_answers_controller_ = std::make_unique<QuickAnswersControllerImpl>();
+  }
 
   // |assistant_controller_| is put before |ambient_controller_| as it will be
   // used by the latter.
@@ -1187,9 +1187,16 @@ void Shell::Init(
         std::make_unique<MediaNotificationControllerImpl>();
   }
 
+  // TODO(1091497): Consider combining DisplayHighlightController and
+  // DisplayAlignmentController.
   if (features::IsDisplayIdentificationEnabled()) {
     display_highlight_controller_ =
         std::make_unique<DisplayHighlightController>();
+  }
+
+  if (features::IsDisplayAlignmentAssistanceEnabled()) {
+    display_alignment_controller_ =
+        std::make_unique<DisplayAlignmentController>();
   }
 
   for (auto& observer : shell_observers_)
@@ -1318,7 +1325,7 @@ void Shell::OnWindowActivated(
   if (!gained_active)
     return;
 
-  shell_state_->SetRootWindowForNewWindows(gained_active->GetRootWindow());
+  Shell::SetRootWindowForNewWindows(gained_active->GetRootWindow());
 }
 
 void Shell::OnFirstSessionStarted() {

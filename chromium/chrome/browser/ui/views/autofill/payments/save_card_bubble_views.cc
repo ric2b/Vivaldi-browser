@@ -70,14 +70,16 @@ void SaveCardBubbleViews::Show(DisplayReason reason) {
 }
 
 void SaveCardBubbleViews::Hide() {
+  CloseBubble();
+
   // If |controller_| is null, WindowClosing() won't invoke OnBubbleClosed(), so
   // do that here. This will clear out |controller_|'s reference to |this|. Note
   // that WindowClosing() happens only after the _asynchronous_ Close() task
   // posted in CloseBubble() completes, but we need to fix references sooner.
   if (controller_)
-    controller_->OnBubbleClosed();
+    controller_->OnBubbleClosed(closed_reason_);
+
   controller_ = nullptr;
-  CloseBubble();
 }
 
 void SaveCardBubbleViews::OnDialogAccepted() {
@@ -120,16 +122,26 @@ base::string16 SaveCardBubbleViews::GetWindowTitle() const {
 
 void SaveCardBubbleViews::WindowClosing() {
   if (controller_) {
-    controller_->OnBubbleClosed();
+    controller_->OnBubbleClosed(closed_reason_);
     controller_ = nullptr;
   }
+}
+
+void SaveCardBubbleViews::OnWidgetClosing(views::Widget* widget) {
+  LocationBarBubbleDelegateView::OnWidgetDestroying(widget);
+  closed_reason_ = GetPaymentsBubbleClosedReasonFromWidgetClosedReason(
+      widget->closed_reason());
 }
 
 views::View* SaveCardBubbleViews::GetFootnoteViewForTesting() {
   return footnote_view_;
 }
 
-SaveCardBubbleViews::~SaveCardBubbleViews() {}
+const base::string16 SaveCardBubbleViews::GetCardIdentifierString() const {
+  return controller_->GetCard().CardIdentifierStringForAutofillDisplay();
+}
+
+SaveCardBubbleViews::~SaveCardBubbleViews() = default;
 
 // Overridden
 std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
@@ -169,9 +181,15 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
   card_network_icon->set_tooltip_text(card.NetworkForDisplay());
   description_view->AddChildView(card_network_icon);
 
-  description_view->AddChildView(
-      new views::Label(card.NetworkAndLastFourDigits(), CONTEXT_BODY_TEXT_LARGE,
+  views::Label* label = description_view->AddChildView(
+      new views::Label(GetCardIdentifierString(), CONTEXT_BODY_TEXT_LARGE,
                        views::style::STYLE_PRIMARY));
+  label->SetMultiLine(true);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  int label_width =
+      GetPreferredSize().width() -
+      card_network_icon->GetPreferredSize().width() -
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
 
   if (!card.IsExpired(base::Time::Now())) {
     // The spacer will stretch to use the available horizontal space in the
@@ -185,8 +203,12 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
         CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
     expiration_date_label->SetID(DialogViewId::EXPIRATION_DATE_LABEL);
     description_view->AddChildView(expiration_date_label);
+    constexpr int kExpirationDateLabelWidth = 60;
+    label_width -=
+        kExpirationDateLabelWidth +
+        provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
   }
-
+  label->SetMaximumWidth(label_width);
   return view;
 }
 

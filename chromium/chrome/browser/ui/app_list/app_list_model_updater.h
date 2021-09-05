@@ -61,14 +61,11 @@ class AppListModelUpdater {
   virtual void SetStatus(ash::AppListModelStatus status) {}
   // For SearchModel:
   virtual void SetSearchEngineIsGoogle(bool is_google) {}
-  virtual void SetSearchTabletAndClamshellAccessibleName(
-      const base::string16& tablet_accessible_name,
-      const base::string16& clamshell_accessible_name) {}
-  virtual void SetSearchHintText(const base::string16& hint_text) {}
   virtual void UpdateSearchBox(const base::string16& text,
                                bool initiated_by_user) {}
   virtual void PublishSearchResults(
       const std::vector<ChromeSearchResult*>& results) {}
+  virtual std::vector<ChromeSearchResult*> GetPublishedSearchResultsForTest();
 
   // Item field setters only used by ChromeAppListItem and its derived classes.
   virtual void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) {}

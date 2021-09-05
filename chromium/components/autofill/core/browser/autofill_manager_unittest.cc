@@ -96,7 +96,6 @@ using features::kAutofillEnforceMinRequiredFieldsForHeuristics;
 using features::kAutofillEnforceMinRequiredFieldsForQuery;
 using features::kAutofillEnforceMinRequiredFieldsForUpload;
 using features::kAutofillRestrictUnownedFieldsToFormlessCheckout;
-using mojom::ButtonTitleType;
 using mojom::SubmissionIndicatorEvent;
 using mojom::SubmissionSource;
 
@@ -832,6 +831,7 @@ TEST_F(AutofillManagerTest, OnFormsSeen_DifferentFormStructures) {
 
   // Different form structure.
   FormData form2;
+  form2.unique_renderer_id.value() = 2;
   form2.name = ASCIIToUTF16("MyForm");
   form2.url = GURL("https://myform.com/form.html");
   form2.action = GURL("https://myform.com/submit.html");
@@ -862,6 +862,7 @@ TEST_F(AutofillManagerTest, OnFormsSeen_SendAutofillTypePredictionsToRenderer) {
   FormData form2;
   FormFieldData field;
   test::CreateTestFormField("Querty", "qwerty", "", "text", &field);
+  form2.unique_renderer_id.value() = 2;
   form2.name = ASCIIToUTF16("NonQueryable");
   form2.url = form1.url;
   form2.action = GURL("https://myform.com/submit.html");
@@ -4716,6 +4717,9 @@ TEST_F(AutofillManagerTest, AutocompleteSuggestions_SomeWhenAutofillDisabled) {
                               autocomplete_history_manager_.get()));
   autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->SetAutofillCreditCardEnabled(false);
+  external_delegate_ = std::make_unique<TestAutofillExternalDelegate>(
+      autofill_manager_.get(), autofill_driver_.get(),
+      /*call_parent_methods=*/false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
   // Set up our form data.
@@ -4742,6 +4746,9 @@ TEST_F(AutofillManagerTest,
                               autocomplete_history_manager_.get()));
   autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->SetAutofillCreditCardEnabled(false);
+  external_delegate_ = std::make_unique<TestAutofillExternalDelegate>(
+      autofill_manager_.get(), autofill_driver_.get(),
+      /*call_parent_methods=*/false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
   // Set up our form data.
@@ -4812,6 +4819,9 @@ TEST_F(AutofillManagerTest,
                               autocomplete_history_manager_.get()));
   autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->SetAutofillCreditCardEnabled(false);
+  external_delegate_ = std::make_unique<TestAutofillExternalDelegate>(
+      autofill_manager_.get(), autofill_driver_.get(),
+      /*call_parent_methods=*/false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
   // Set up our form data.
@@ -4840,6 +4850,9 @@ TEST_F(AutofillManagerTest,
                               autocomplete_history_manager_.get()));
   autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->SetAutofillCreditCardEnabled(false);
+  external_delegate_ = std::make_unique<TestAutofillExternalDelegate>(
+      autofill_manager_.get(), autofill_driver_.get(),
+      /*call_parent_methods=*/false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
   // Set up our form data.
@@ -4890,6 +4903,9 @@ TEST_F(AutofillManagerTest, AutocompleteOffRespectedForAutocomplete) {
                               autocomplete_history_manager_.get()));
   autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->SetAutofillCreditCardEnabled(false);
+  external_delegate_ = std::make_unique<TestAutofillExternalDelegate>(
+      autofill_manager_.get(), autofill_driver_.get(),
+      /*call_parent_methods=*/false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
   EXPECT_CALL(*(autocomplete_history_manager_.get()),
@@ -4947,6 +4963,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictionsFromLegacyServer) {
 
   // Similarly, a second form.
   FormData form2;
+  form2.unique_renderer_id.value() = 2;
   form2.name = ASCIIToUTF16("MyForm");
   form2.url = GURL("http://myform.com/form.html");
   form2.action = GURL("http://myform.com/submit.html");
@@ -4981,9 +4998,8 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictionsFromLegacyServer) {
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
 
-  std::vector<std::string> signatures;
-  signatures.push_back(form_structure->FormSignatureAsStr());
-  signatures.push_back(form_structure2->FormSignatureAsStr());
+  FormAndFieldSignatures signatures =
+      test::GetEncodedSignatures({form_structure, form_structure2});
 
   base::HistogramTester histogram_tester;
   autofill_manager_->OnLoadedServerPredictionsForTest(response_string,
@@ -5022,6 +5038,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictionsFromApi) {
 
   // First form on the page.
   FormData form;
+  form.unique_renderer_id.value() = 1;
   form.name = ASCIIToUTF16("MyForm");
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
@@ -5045,6 +5062,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictionsFromApi) {
 
   // Second form on the page.
   FormData form2;
+  form2.unique_renderer_id.value() = 2;
   form2.name = ASCIIToUTF16("MyForm2");
   form2.url = GURL("http://myform.com/form.html");
   form2.action = GURL("http://myform.com/submit.html");
@@ -5084,8 +5102,8 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictionsFromApi) {
   std::string encoded_response_string;
   base::Base64Encode(response_string, &encoded_response_string);
 
-  std::vector<std::string> signatures = {form_structure->FormSignatureAsStr(),
-                                         form_structure2->FormSignatureAsStr()};
+  FormAndFieldSignatures signatures =
+      test::GetEncodedSignatures({form_structure, form_structure2});
 
   // Run method under test.
   base::HistogramTester histogram_tester;
@@ -5127,6 +5145,8 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
   form_structure->DetermineHeuristicTypes();
+  FormAndFieldSignatures signatures =
+      test::GetEncodedSignatures(*form_structure);
   autofill_manager_->AddSeenFormStructure(
       std::unique_ptr<TestFormStructure>(form_structure));
 
@@ -5145,9 +5165,6 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
 
   std::string response_string_base64;
   base::Base64Encode(response_string, &response_string_base64);
-
-  std::vector<std::string> signatures;
-  signatures.push_back(form_structure->FormSignatureAsStr());
 
   // Reset the manager (such as during a navigation).
   autofill_manager_->Reset();
@@ -5209,12 +5226,9 @@ TEST_F(AutofillManagerTest, DetermineHeuristicsWithOverallPrediction) {
   std::string response_string_base64;
   base::Base64Encode(response_string, &response_string_base64);
 
-  std::vector<std::string> signatures;
-  signatures.push_back(form_structure->FormSignatureAsStr());
-
   base::HistogramTester histogram_tester;
-  autofill_manager_->OnLoadedServerPredictionsForTest(response_string_base64,
-                                                      signatures);
+  autofill_manager_->OnLoadedServerPredictionsForTest(
+      response_string_base64, test::GetEncodedSignatures(*form_structure));
   // Verify that FormStructure::ParseQueryResponse was called (here and below).
   histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
                                      AutofillMetrics::QUERY_RESPONSE_RECEIVED,
@@ -7641,8 +7655,9 @@ TEST_F(AutofillManagerTest, DidShowSuggestions_LogByType_AddressOnly) {
   // Create a form with name and address fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7684,8 +7699,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with address fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7726,8 +7742,9 @@ TEST_F(AutofillManagerTest, DidShowSuggestions_LogByType_ContactOnly) {
   // Create a form with name and contact fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7768,8 +7785,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with contact fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7809,8 +7827,9 @@ TEST_F(AutofillManagerTest, DidShowSuggestions_LogByType_Other) {
   // Create a form with name fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7850,8 +7869,9 @@ TEST_F(AutofillManagerTest, DidShowSuggestions_LogByType_AddressPlusEmail) {
   // Create a form with name, address, and email fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7901,8 +7921,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with address and email fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -7949,8 +7970,9 @@ TEST_F(AutofillManagerTest, DidShowSuggestions_LogByType_AddressPlusPhone) {
   // Create a form with name fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -8000,8 +8022,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with name, address, and phone fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -8049,8 +8072,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with name, address, phone, and email fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =
@@ -8101,8 +8125,9 @@ TEST_F(AutofillManagerTest,
   // Create a form with address, phone, and email fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
-  form.button_titles = {std::make_pair(
-      ASCIIToUTF16("Submit"), ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
+  form.button_titles = {
+      std::make_pair(ASCIIToUTF16("Submit"),
+                     mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
   form.url = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
   form.main_frame_origin =

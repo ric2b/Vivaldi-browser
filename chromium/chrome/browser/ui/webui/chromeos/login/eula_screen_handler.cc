@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
@@ -143,7 +144,7 @@ void EulaScreenHandler::Initialize() {
   if (!page_is_ready() || !screen_)
     return;
 
-  core_oobe_view_->SetUsageStats(screen_->IsUsageStatsEnabled());
+  CallJS("login.EulaScreen.setUsageStats", screen_->IsUsageStatsEnabled());
 
   if (show_on_init_) {
     Show();
@@ -152,7 +153,7 @@ void EulaScreenHandler::Initialize() {
 }
 
 void EulaScreenHandler::OnPasswordFetched(const std::string& tpm_password) {
-  core_oobe_view_->SetTpmPassword(tpm_password);
+  CallJS("login.EulaScreen.setTpmPassword", tpm_password);
 }
 
 void EulaScreenHandler::HandleOnLearnMore() {

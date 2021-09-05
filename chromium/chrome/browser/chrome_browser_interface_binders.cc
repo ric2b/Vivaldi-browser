@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals.mojom.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"
 #include "chrome/browser/ui/webui/engagement/site_engagement_ui.h"
+#include "chrome/browser/ui/webui/internals/internals_ui.h"
 #include "chrome/browser/ui/webui/interventions_internals/interventions_internals.mojom.h"
 #include "chrome/browser/ui/webui/interventions_internals/interventions_internals_ui.h"
 #include "chrome/browser/ui/webui/media/media_engagement_ui.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/ui/webui/usb_internals/usb_internals.mojom.h"
 #include "chrome/browser/ui/webui/usb_internals/usb_internals_ui.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/contextual_search/buildflags.h"
 #include "components/dom_distiller/content/browser/distillability_driver.h"
 #include "components/dom_distiller/content/browser/distiller_javascript_service_impl.h"
@@ -101,6 +103,8 @@
 #include "chrome/browser/accessibility/caption_host_impl.h"
 #include "chrome/browser/badging/badge_manager.h"
 #include "chrome/browser/media/feeds/media_feeds_store.mojom.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_ui.h"
+#include "chrome/browser/media/kaleidoscope/mojom/kaleidoscope.mojom.h"
 #include "chrome/browser/payments/payment_request_factory.h"
 #include "chrome/browser/speech/speech_recognition_service.h"
 #include "chrome/browser/speech/speech_recognition_service_factory.h"
@@ -109,6 +113,8 @@
 #include "chrome/browser/ui/webui/media/media_feeds_ui.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
+#include "chrome/browser/ui/webui/tab_search/tab_search.mojom.h"
+#include "chrome/browser/ui/webui/tab_search/tab_search_ui.h"
 #include "chrome/common/caption.mojom.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #endif
@@ -136,6 +142,7 @@
 #include "chrome/browser/ui/webui/chromeos/machine_learning/machine_learning_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/network_ui.h"
+#include "chrome/browser/ui/webui/internals/web_app/web_app_internals.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_ui.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/user_action_recorder.mojom.h"
@@ -150,6 +157,12 @@
 #include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"  // nogncheck
+#include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
+#endif
+
+#if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
+#include "chromeos/components/telemetry_extension_ui/mojom/probe_service.mojom.h"
+#include "chromeos/components/telemetry_extension_ui/telemetry_extension_ui.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -157,11 +170,6 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/common/api/mime_handler.mojom.h"  // nogncheck
 #endif
-
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
-#include "chrome/browser/media/kaleidoscope/internal/kaleidoscope_ui.h"
-#include "chrome/browser/media/kaleidoscope/internal/mojom/kaleidoscope.mojom.h"
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
 
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "vivaldi_mojom/components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
@@ -267,7 +275,7 @@ void BindDistillerJavaScriptService(
 
 void BindPrerenderCanceler(
     content::RenderFrameHost* frame_host,
-    mojo::PendingReceiver<mojom::PrerenderCanceler> receiver) {
+    mojo::PendingReceiver<prerender::mojom::PrerenderCanceler> receiver) {
   auto* web_contents = content::WebContents::FromRenderFrameHost(frame_host);
   if (!web_contents)
     return;
@@ -377,7 +385,7 @@ void PopulateChromeFrameBinders(
   map->Add<dom_distiller::mojom::DistillerJavaScriptService>(
       base::BindRepeating(&BindDistillerJavaScriptService));
 
-  map->Add<mojom::PrerenderCanceler>(
+  map->Add<prerender::mojom::PrerenderCanceler>(
       base::BindRepeating(&BindPrerenderCanceler));
 
   map->Add<blink::mojom::PrerenderProcessor>(
@@ -496,6 +504,12 @@ void PopulateChromeWebUIFrameBinders(
 
   RegisterWebUIControllerInterfaceBinder<media_feeds::mojom::MediaFeedsStore,
                                          MediaFeedsUI>(map);
+
+  RegisterWebUIControllerInterfaceBinder<tab_search::mojom::PageHandlerFactory,
+                                         TabSearchUI>(map);
+
+  RegisterWebUIControllerInterfaceBinder<
+      ::mojom::web_app_internals::WebAppInternalsPageHandler, InternalsUI>(map);
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -555,6 +569,18 @@ void PopulateChromeWebUIFrameBinders(
 
   RegisterWebUIControllerInterfaceBinder<
       media_app_ui::mojom::PageHandlerFactory, chromeos::MediaAppUI>(map);
+
+  RegisterWebUIControllerInterfaceBinder<
+      chromeos::network_health::mojom::NetworkHealthService,
+      chromeos::NetworkUI>(map);
+#endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
+  if (base::FeatureList::IsEnabled(chromeos::features::kTelemetryExtension)) {
+    RegisterWebUIControllerInterfaceBinder<
+        chromeos::health::mojom::ProbeService, chromeos::TelemetryExtensionUI>(
+        map);
+  }
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
@@ -579,10 +605,10 @@ void PopulateChromeWebUIFrameBinders(
                                          ResetPasswordUI>(map);
 #endif
 
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+#if !defined(OS_ANDROID)
   RegisterWebUIControllerInterfaceBinder<media::mojom::KaleidoscopeDataProvider,
                                          KaleidoscopeUI>(map);
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+#endif  // !defined(OS_ANDROID)
 }
 
 }  // namespace internal

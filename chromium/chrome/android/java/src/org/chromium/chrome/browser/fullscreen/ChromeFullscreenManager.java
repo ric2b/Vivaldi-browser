@@ -22,74 +22,73 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.ApplicationStatus.WindowFocusChangedListener;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.fullscreen.FullscreenHtmlApiHandler.FullscreenHtmlApiDelegate;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
+import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabAttributeKeys;
-import org.chromium.chrome.browser.tab.TabAttributes;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabBrowserControlsOffsetHelper;
-import org.chromium.chrome.browser.tab.TabHidingType;
-import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.view.ContentView;
-import org.chromium.content_public.browser.NavigationHandle;
-import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.ui.util.TokenHolder;
 import org.chromium.ui.vr.VrModeObserver;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
 
 /**
  * A class that manages control and content views to create the fullscreen mode.
  */
-public class ChromeFullscreenManager extends FullscreenManager
-        implements ActivityStateListener, WindowFocusChangedListener,
-                   ViewGroup.OnHierarchyChangeListener, View.OnSystemUiVisibilityChangeListener,
-                   VrModeObserver, BrowserControlsStateProvider {
+public class ChromeFullscreenManager implements ActivityStateListener,
+                                                ViewGroup.OnHierarchyChangeListener, VrModeObserver,
+                                                BrowserControlsSizer, FullscreenManager {
     // The amount of time to delay the control show request after returning to a once visible
     // activity.  This delay is meant to allow Android to run its Activity focusing animation and
     // have the controls scroll back in smoothly once that has finished.
     private static final long ACTIVITY_RETURN_SHOW_REQUEST_DELAY_MS = 100;
 
     /**
-     * Maximum duration for the control container slide-in animation. Note that this value matches
-     * the one in browser_controls_offset_manager.cc.
+     * Maximum duration for the control container slide-in animation and the duration for the
+     * browser controls height change animation. Note that this value matches the one in
+     * browser_controls_offset_manager.cc.
      */
-    private static final int MAX_CONTROLS_ANIMATION_DURATION_MS = 200;
+    private static final int CONTROLS_ANIMATION_DURATION_MS = 200;
 
     private final Activity mActivity;
     private final BrowserStateBrowserControlsVisibilityDelegate mBrowserVisibilityDelegate;
     @ControlsPosition private final int mControlsPosition;
-    private final boolean mExitFullscreenOnStop;
     private final TokenHolder mHidingTokenHolder = new TokenHolder(this::scheduleVisibilityUpdate);
 
-    private TabModelSelectorTabObserver mTabFullscreenObserver;
+    /**
+     * An observable for browser controls being at its minimum height or not.
+     * This is as good as the controls being hidden when both min heights are 0.
+     */
+    private final ObservableSupplierImpl<Boolean> mControlsAtMinHeight =
+            new ObservableSupplierImpl<>();
+
+    private TabModelSelectorTabObserver mTabControlsObserver;
     @Nullable private ControlContainer mControlContainer;
     private int mTopControlContainerHeight;
     private int mTopControlsMinHeight;
     private int mBottomControlContainerHeight;
     private int mBottomControlsMinHeight;
     private boolean mAnimateBrowserControlsHeightChanges;
-    private boolean mControlsResizeView;
-    private TabModelSelectorTabModelObserver mTabModelObserver;
 
     private int mRendererTopControlOffset;
     private int mRendererBottomControlOffset;
@@ -98,9 +97,8 @@ public class ChromeFullscreenManager extends FullscreenManager
     private int mRendererBottomControlsMinHeightOffset;
     private int mPreviousContentOffset;
     private float mControlOffsetRatio;
-    private boolean mIsEnteringPersistentModeState;
-    private FullscreenOptions mPendingFullscreenOptions;
     private boolean mOffsetsChanged;
+    private ActivityTabTabObserver mActiveTabObserver;
 
     private boolean mInGesture;
     private boolean mContentViewScrolling;
@@ -109,12 +107,14 @@ public class ChromeFullscreenManager extends FullscreenManager
     // in the current Tab.
     private ContentView mContentView;
 
-    private final ArrayList<FullscreenListener> mListeners = new ArrayList<>();
     private final ObserverList<BrowserControlsStateProvider.Observer> mControlsObservers =
             new ObserverList<>();
     private Runnable mViewportSizeDelegate;
+    private FullscreenHtmlApiHandler mHtmlApiHandler;
+    @Nullable
+    private Tab mTab;
 
-    /** The animator for slide-in animation on the Android controls. */
+    /** The animator for the Android browser controls. */
     private ValueAnimator mControlsAnimator;
 
     /**
@@ -130,24 +130,6 @@ public class ChromeFullscreenManager extends FullscreenManager
         int TOP = 0;
         /** Controls are not present, eg NoTouchActivity. */
         int NONE = 1;
-    }
-
-    /**
-     * A listener that gets notified of changes to the fullscreen state.
-     */
-    public interface FullscreenListener {
-        /**
-         * Called when entering fullscreen mode.
-         * @param tab The tab whose content is entering fullscreen mode.
-         * @param options Options to adjust fullscreen mode.
-         */
-        default void onEnterFullscreen(Tab tab, FullscreenOptions options) {}
-
-        /**
-         * Called when exiting fullscreen mode.
-         * @param tab The tab whose content is exiting fullscreen mode.
-         */
-        default void onExitFullscreen(Tab tab) {}
     }
 
     private final Runnable mUpdateVisibilityRunnable = new Runnable() {
@@ -185,13 +167,13 @@ public class ChromeFullscreenManager extends FullscreenManager
      */
     public ChromeFullscreenManager(Activity activity,
             @ControlsPosition int controlsPosition, boolean exitFullscreenOnStop) {
-        super(activity.getWindow());
-
         mActivity = activity;
         mControlsPosition = controlsPosition;
-        mExitFullscreenOnStop = exitFullscreenOnStop;
+        mControlsAtMinHeight.set(false);
+        mHtmlApiHandler = new FullscreenHtmlApiHandler(activity, mControlsAtMinHeight,
+                () -> !(isInVr() || bootsToVr()), exitFullscreenOnStop);
         mBrowserVisibilityDelegate = new BrowserStateBrowserControlsVisibilityDelegate(
-                getHtmlApiHandler().getPersistentFullscreenModeSupplier());
+                mHtmlApiHandler.getPersistentFullscreenModeSupplier());
         mBrowserVisibilityDelegate.addObserver((constraints) -> {
             if (constraints == BrowserControlsState.SHOWN) setPositionsForTabToNonFullscreen();
         });
@@ -203,76 +185,43 @@ public class ChromeFullscreenManager extends FullscreenManager
      * Initializes the fullscreen manager with the required dependencies.
      *
      * @param controlContainer Container holding the controls (Toolbar).
+     * @param activityTabProvider Provider of the current activity tab.
      * @param modelSelector The tab model selector that will be monitored for tab changes.
      * @param resControlContainerHeight The dimension resource ID for the control container height.
      */
-    public void initialize(ControlContainer controlContainer, final TabModelSelector modelSelector,
+    public void initialize(ControlContainer controlContainer,
+            ActivityTabProvider activityTabProvider, final TabModelSelector modelSelector,
             int resControlContainerHeight) {
+        mHtmlApiHandler.initialize(activityTabProvider, modelSelector);
         ApplicationStatus.registerStateListenerForActivity(this, mActivity);
-        ApplicationStatus.registerWindowFocusChangedListener(this);
-
-        // TODO(crbug.com/978941): Consider switching to ActivityTabTabProvider.
-        mTabModelObserver = new TabModelSelectorTabModelObserver(modelSelector) {
+        mActiveTabObserver = new ActivityTabTabObserver(activityTabProvider) {
             @Override
-            public void tabClosureCommitted(Tab tab) {
-                setTab(modelSelector.getCurrentTab());
+            protected void onObservingDifferentTab(Tab tab) {
+                setTab(tab);
             }
 
             @Override
-            public void allTabsClosureCommitted() {
-                setTab(modelSelector.getCurrentTab());
-            }
-
-            @Override
-            public void tabRemoved(Tab tab) {
-                setTab(modelSelector.getCurrentTab());
-            }
-
-            @Override
-            public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
-                setTab(modelSelector.getCurrentTab());
-            }
-
-            @Override
-            public void didCloseTab(int tabId, boolean incognito) {
-                setTab(modelSelector.getCurrentTab());
+            public void onContentViewScrollingStateChanged(boolean scrolling) {
+                mContentViewScrolling = scrolling;
+                if (!scrolling) updateContentOffsetAndNotify();
             }
         };
 
-        mTabFullscreenObserver = new TabModelSelectorTabObserver(modelSelector) {
-            @Override
-            public void onHidden(Tab tab, @TabHidingType int reason) {
-                // Clean up any fullscreen state that might impact other tabs.
-                exitPersistentFullscreenMode();
-            }
-
+        mTabControlsObserver = new TabModelSelectorTabObserver(modelSelector) {
             @Override
             public void onContentChanged(Tab tab) {
                 if (tab == getTab()) updateViewStateListener();
             }
 
             @Override
-            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
-                if (navigation.isInMainFrame() && !navigation.isSameDocument()) {
-                    if (tab == getTab()) exitPersistentFullscreenMode();
-                }
-            }
-
-            @Override
             public void onInteractabilityChanged(Tab tab, boolean interactable) {
-                Tab currentTab = getTab();
-                if (!interactable || tab != currentTab) return;
-                Runnable enterFullscreen = getEnterFullscreenRunnable(currentTab);
-                if (enterFullscreen != null) enterFullscreen.run();
+                if (!interactable || tab != getTab()) return;
+                TabBrowserControlsOffsetHelper helper = TabBrowserControlsOffsetHelper.get(tab);
+                if (!helper.offsetInitialized()) return;
 
-                TabBrowserControlsOffsetHelper offsetHelper =
-                        TabBrowserControlsOffsetHelper.get(currentTab);
-                if (!offsetHelper.offsetInitialized()) return;
-
-                onOffsetsChanged(offsetHelper.topControlsOffset(),
-                        offsetHelper.bottomControlsOffset(), offsetHelper.contentOffset(),
-                        offsetHelper.topControlsMinHeightOffset(),
-                        offsetHelper.bottomControlsMinHeightOffset());
+                onOffsetsChanged(helper.topControlsOffset(), helper.bottomControlsOffset(),
+                        helper.contentOffset(), helper.topControlsMinHeightOffset(),
+                        helper.bottomControlsMinHeightOffset());
             }
 
             @Override
@@ -289,7 +238,7 @@ public class ChromeFullscreenManager extends FullscreenManager
             public void onBrowserControlsOffsetChanged(Tab tab, int topControlsOffset,
                     int bottomControlsOffset, int contentOffset, int topControlsMinHeightOffset,
                     int bottomControlsMinHeightOffset) {
-                if (tab == getTab() && tab.isUserInteractable()) {
+                if (tab == getTab() && tab.isUserInteractable() && !tab.isNativePage()) {
                     onOffsetsChanged(topControlsOffset, bottomControlsOffset, contentOffset,
                             topControlsMinHeightOffset, bottomControlsMinHeightOffset);
                 }
@@ -315,27 +264,27 @@ public class ChromeFullscreenManager extends FullscreenManager
         scheduleVisibilityUpdate();
     }
 
-    /**
-     * @return The visibility delegate that allows browser UI to control the browser control
-     *         visibility.
-     */
+    @Override
     public BrowserStateBrowserControlsVisibilityDelegate getBrowserVisibilityDelegate() {
         return mBrowserVisibilityDelegate;
     }
 
-    @Override
-    public void setTab(@Nullable Tab tab) {
+    /**
+     * @return The currently selected tab for fullscreen.
+     */
+    @Nullable
+    @VisibleForTesting
+    Tab getTab() {
+        return mTab;
+    }
+
+    private void setTab(@Nullable Tab tab) {
         Tab previousTab = getTab();
-        super.setTab(tab);
+        mTab = tab;
         if (previousTab != tab) {
-            if (previousTab != null) {
-                TabGestureStateListener.from(previousTab).setFullscreenManager(null);
-            }
             updateViewStateListener();
             if (tab != null) {
                 mBrowserVisibilityDelegate.showControlsTransient();
-                updateMultiTouchZoomSupport(!getPersistentFullscreenMode());
-                TabGestureStateListener.from(tab).setFullscreenManager(this);
                 if (tab.isUserInteractable()) restoreControlsPositions();
             }
         }
@@ -345,128 +294,49 @@ public class ChromeFullscreenManager extends FullscreenManager
         }
     }
 
+    // FullscreenManager
+
+    @Override
     public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
-        // If enabling fullscreen while the tab is not interactable, fullscreen
-        // will be delayed until the tab is interactable.
-        if (tab.isUserInteractable()) {
-            enterPersistentFullscreenMode(options);
-            destroySelectActionMode(tab);
-        } else {
-            setEnterFullscreenRunnable(tab, () -> {
-                enterPersistentFullscreenMode(options);
-                destroySelectActionMode(tab);
-                setEnterFullscreenRunnable(tab, null);
-            });
-        }
-
-        for (FullscreenListener listener : mListeners) listener.onEnterFullscreen(tab, options);
+        mHtmlApiHandler.onEnterFullscreen(tab, options);
     }
 
+    @Override
     public void onExitFullscreen(Tab tab) {
-        setEnterFullscreenRunnable(tab, null);
-        if (tab == getTab()) exitPersistentFullscreenMode();
-        for (FullscreenListener listener : mListeners) listener.onExitFullscreen(tab);
+        mHtmlApiHandler.onExitFullscreen(tab);
     }
 
-    private void destroySelectActionMode(Tab tab) {
-        WebContents webContents = tab.getWebContents();
-        if (webContents != null) {
-            SelectionPopupController.fromWebContents(webContents).destroySelectActionMode();
-        }
+    @Override
+    public void exitPersistentFullscreenMode() {
+        mHtmlApiHandler.exitPersistentFullscreenMode();
     }
 
-    private void setEnterFullscreenRunnable(Tab tab, Runnable runnable) {
-        TabAttributes attrs = TabAttributes.from(tab);
-        if (runnable == null) {
-            attrs.clear(TabAttributeKeys.ENTER_FULLSCREEN);
-        } else {
-            attrs.set(TabAttributeKeys.ENTER_FULLSCREEN, runnable);
-        }
-    }
-
-    private Runnable getEnterFullscreenRunnable(Tab tab) {
-        return tab != null ? TabAttributes.from(tab).get(TabAttributeKeys.ENTER_FULLSCREEN) : null;
+    @Override
+    public boolean getPersistentFullscreenMode() {
+        return mHtmlApiHandler.getPersistentFullscreenMode();
     }
 
     private void updateViewStateListener() {
         if (mContentView != null) {
             mContentView.removeOnHierarchyChangeListener(this);
-            mContentView.removeOnSystemUiVisibilityChangeListener(this);
         }
         mContentView = getContentView();
         if (mContentView != null) {
             mContentView.addOnHierarchyChangeListener(this);
-            mContentView.addOnSystemUiVisibilityChangeListener(this);
         }
     }
+
+    // ActivityStateListener
 
     @Override
     public void onActivityStateChange(Activity activity, int newState) {
-        if (newState == ActivityState.STOPPED && mExitFullscreenOnStop) {
-            // Exit fullscreen in onStop to ensure the system UI flags are set correctly when
-            // showing again (on JB MR2+ builds, the omnibox would be covered by the
-            // notification bar when this was done in onStart()).
-            exitPersistentFullscreenMode();
-        } else if (newState == ActivityState.STARTED) {
+        if (newState == ActivityState.STARTED) {
             PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT,
-                    ()
-                            -> mBrowserVisibilityDelegate.showControlsTransient(),
+                    mBrowserVisibilityDelegate::showControlsTransient,
                     ACTIVITY_RETURN_SHOW_REQUEST_DELAY_MS);
         } else if (newState == ActivityState.DESTROYED) {
             ApplicationStatus.unregisterActivityStateListener(this);
-            ApplicationStatus.unregisterWindowFocusChangedListener(this);
-
-            mTabModelObserver.destroy();
         }
-    }
-
-    @Override
-    public void onWindowFocusChanged(Activity activity, boolean hasFocus) {
-        if (mActivity != activity) return;
-        onWindowFocusChanged(hasFocus);
-        // {@link ContentVideoView#getContentVideoView} requires native to have been initialized.
-        if (!LibraryLoader.getInstance().isInitialized()) return;
-    }
-
-    @Override
-    protected FullscreenHtmlApiDelegate createApiDelegate() {
-        return new FullscreenHtmlApiDelegate() {
-            @Override
-            public void onEnterFullscreen(FullscreenOptions options) {
-                Tab tab = getTab();
-                if (areBrowserControlsAtMinHeight()) {
-                    // The browser controls are currently hidden.
-                    getHtmlApiHandler().enterFullscreen(tab, options);
-                } else {
-                    // We should hide browser controls first.
-                    mPendingFullscreenOptions = options;
-                    mIsEnteringPersistentModeState = true;
-                }
-            }
-
-            @Override
-            public boolean cancelPendingEnterFullscreen() {
-                boolean wasPending = mIsEnteringPersistentModeState;
-                mIsEnteringPersistentModeState = false;
-                mPendingFullscreenOptions = null;
-                return wasPending;
-            }
-
-            @Override
-            public void onFullscreenExited(Tab tab) {
-                // At this point, browser controls are hidden. Show browser controls only if it's
-                // permitted.
-                TabBrowserControlsConstraintsHelper.update(tab, BrowserControlsState.SHOWN, true);
-            }
-
-            @Override
-            public boolean shouldShowNotificationToast() {
-                // The toast tells user how to leave fullscreen by touching the screen. Since,
-                // there is no touchscreen when browsing in VR, the toast doesn't have any useful
-                // information.
-                return !isInVr() && !bootsToVr();
-            }
-        };
     }
 
     @Override
@@ -475,38 +345,17 @@ public class ChromeFullscreenManager extends FullscreenManager
     }
 
     /**
-     * @return True if the browser controls are completely off screen.
-     */
-    public boolean areBrowserControlsOffScreen() {
-        return getBrowserControlHiddenRatio() == 1.0f;
-    }
-
-    /**
      * @return True if the browser controls are showing as much as the min height. Note that this is
-     * the same as {@link #areBrowserControlsOffScreen()} when both min-heights are 0.
+     * the same as
+     * {@link BrowserControlsUtils#areBrowserControlsOffScreen(BrowserControlsStateProvider)} when
+     * both min-heights are 0.
      */
-    public boolean areBrowserControlsAtMinHeight() {
-        return getContentOffset() == getTopControlsMinHeight()
-                && getBottomContentOffset() == getBottomControlsMinHeight();
+    @VisibleForTesting
+    boolean areBrowserControlsAtMinHeight() {
+        return mControlsAtMinHeight.get();
     }
 
-    /**
-     * @return True if the browser controls are currently completely visible.
-     */
-    public boolean areBrowserControlsFullyVisible() {
-        return getBrowserControlHiddenRatio() == 0.f;
-    }
-
-    /**
-     * @return Whether the browser controls should be drawn as a texture.
-     */
-    public boolean drawControlsAsTexture() {
-        return getBrowserControlHiddenRatio() > 0;
-    }
-
-    /**
-     * Sets the height of the bottom controls.
-     */
+    @Override
     public void setBottomControlsHeight(int bottomControlsHeight, int bottomControlsMinHeight) {
         if (mBottomControlContainerHeight == bottomControlsHeight
                 && mBottomControlsMinHeight == bottomControlsMinHeight) {
@@ -520,25 +369,32 @@ public class ChromeFullscreenManager extends FullscreenManager
         }
     }
 
-    /**
-     * Sets the height of the top controls.
-     */
+    @Override
     public void setTopControlsHeight(int topControlsHeight, int topControlsMinHeight) {
         if (mTopControlContainerHeight == topControlsHeight
                 && mTopControlsMinHeight == topControlsMinHeight) {
             return;
         }
+
+        final int oldTopHeight = mTopControlContainerHeight;
+        final int oldTopMinHeight = mTopControlsMinHeight;
         mTopControlContainerHeight = topControlsHeight;
         mTopControlsMinHeight = topControlsMinHeight;
+
+        if (!canAnimateNativeBrowserControls()) {
+            if (shouldAnimateBrowserControlsHeightChanges()) {
+                runBrowserDrivenTopControlsHeightChangeAnimation(oldTopHeight, oldTopMinHeight);
+            } else {
+                showAndroidControls(false);
+            }
+        }
+
         for (BrowserControlsStateProvider.Observer obs : mControlsObservers) {
             obs.onTopControlsHeightChanged(mTopControlContainerHeight, mTopControlsMinHeight);
         }
     }
 
-    /**
-     * Sets whether the changes to the browser controls heights should be animated.
-     * @param animateBrowserControlsHeightChanges True if the height changes should be animated.
-     */
+    @Override
     public void setAnimateBrowserControlsHeightChanges(
             boolean animateBrowserControlsHeightChanges) {
         mAnimateBrowserControlsHeightChanges = animateBrowserControlsHeightChanges;
@@ -569,10 +425,6 @@ public class ChromeFullscreenManager extends FullscreenManager
         return mAnimateBrowserControlsHeightChanges;
     }
 
-    public boolean controlsResizeView() {
-        return mControlsResizeView;
-    }
-
     @Override
     public int getContentOffset() {
         return mRendererTopContentOffset;
@@ -588,12 +440,8 @@ public class ChromeFullscreenManager extends FullscreenManager
         return mRendererTopControlsMinHeightOffset;
     }
 
-    /**
-     * @return The content offset from the bottom of the screen, or the visible height of the bottom
-     *         controls, in px.
-     */
-    public int getBottomContentOffset() {
-        return getBottomControlsHeight() - getBottomControlOffset();
+    private int getBottomContentOffset() {
+        return BrowserControlsUtils.getBottomContentOffset(this);
     }
 
     @Override
@@ -607,14 +455,6 @@ public class ChromeFullscreenManager extends FullscreenManager
     @Override
     public int getBottomControlsMinHeightOffset() {
         return mRendererBottomControlsMinHeightOffset;
-    }
-
-    /**
-     * @return The toolbar control container, may be null.
-     */
-    @Nullable
-    public ControlContainer getControlContainer() {
-        return mControlContainer;
     }
 
     private void updateControlOffset() {
@@ -635,28 +475,23 @@ public class ChromeFullscreenManager extends FullscreenManager
     }
 
     @Override
-    public void addObserver(Observer obs) {
+    public void addObserver(BrowserControlsStateProvider.Observer obs) {
         mControlsObservers.addObserver(obs);
     }
 
     @Override
-    public void removeObserver(Observer obs) {
+    public void removeObserver(BrowserControlsStateProvider.Observer obs) {
         mControlsObservers.removeObserver(obs);
     }
 
-    /**
-     * @param listener The {@link FullscreenListener} to be notified of fullscreen changes.
-     */
-    public void addListener(FullscreenListener listener) {
-        if (!mListeners.contains(listener)) mListeners.add(listener);
+    @Override
+    public void addObserver(FullscreenManager.Observer observer) {
+        mHtmlApiHandler.addObserver(observer);
     }
 
-    /**
-     * @param listener The {@link FullscreenListener} to no longer be notified of fullscreen
-     *                 changes.
-     */
-    public void removeListener(FullscreenListener listener) {
-        mListeners.remove(listener);
+    @Override
+    public void removeObserver(FullscreenManager.Observer observer) {
+        mHtmlApiHandler.removeObserver(observer);
     }
 
     /**
@@ -676,8 +511,6 @@ public class ChromeFullscreenManager extends FullscreenManager
         // scrolling or animating.
         if (!areBrowserControlsIdle()) return;
 
-        mControlsResizeView = getContentOffset() > getTopControlsMinHeight()
-                || getBottomContentOffset() > getBottomControlsMinHeight();
         if (mViewportSizeDelegate != null) mViewportSizeDelegate.run();
     }
 
@@ -703,8 +536,11 @@ public class ChromeFullscreenManager extends FullscreenManager
         updateContentViewChildrenState();
     }
 
-    @Override
-    public void updateContentViewChildrenState() {
+    /**
+     * Updates the current ContentView's children and any popups with the correct offsets based on
+     * the current fullscreen state.
+     */
+    private void updateContentViewChildrenState() {
         ViewGroup view = getContentView();
         if (view == null) return;
 
@@ -713,11 +549,6 @@ public class ChromeFullscreenManager extends FullscreenManager
         applyTranslationToTopChildViews(view, topViewsTranslation);
         applyMarginToFullChildViews(view, topViewsTranslation, bottomMargin);
         updateViewportSize();
-    }
-
-    @Override
-    public void onSystemUiVisibilityChange(int visibility) {
-        onContentViewSystemUiVisibilityChange(visibility);
     }
 
     /**
@@ -734,33 +565,8 @@ public class ChromeFullscreenManager extends FullscreenManager
         mControlContainer.getView().postOnAnimation(mUpdateVisibilityRunnable);
     }
 
-    private void updateVisuals() {
-        TraceEvent.begin("FullscreenManager:updateVisuals");
-
-        if (mOffsetsChanged) {
-            mOffsetsChanged = false;
-
-            scheduleVisibilityUpdate();
-            if (shouldShowAndroidControls()) {
-                mControlContainer.getView().setTranslationY(getTopControlOffset());
-            }
-
-            // Whether we need the compositor to draw again to update our animation.
-            // Should be |false| when the browser controls are only moved through the page
-            // scrolling.
-            boolean needsAnimate = shouldShowAndroidControls();
-            for (BrowserControlsStateProvider.Observer obs : mControlsObservers) {
-                obs.onControlsOffsetChanged(getTopControlOffset(), getTopControlsMinHeightOffset(),
-                        getBottomControlOffset(), getBottomControlsMinHeightOffset(), needsAnimate);
-            }
-        }
-
-        final Tab tab = getTab();
-        if (tab != null && areBrowserControlsAtMinHeight() && mIsEnteringPersistentModeState) {
-            getHtmlApiHandler().enterFullscreen(tab, mPendingFullscreenOptions);
-            mIsEnteringPersistentModeState = false;
-            mPendingFullscreenOptions = null;
-        }
+    private void updateContentOffsetAndNotify() {
+        TraceEvent.begin("FullscreenManager:updateContentOffsetAndNotify");
 
         updateContentViewChildrenState();
 
@@ -772,7 +578,7 @@ public class ChromeFullscreenManager extends FullscreenManager
             mPreviousContentOffset = contentOffset;
         }
 
-        TraceEvent.end("FullscreenManager:updateVisuals");
+        TraceEvent.end("FullscreenManager:updateContentOffsetAndNotify");
     }
 
     /**
@@ -782,18 +588,18 @@ public class ChromeFullscreenManager extends FullscreenManager
      * NB: this only affects the Android controls. For controlling composited toolbar visibility,
      * implement {@link BrowserControlsVisibilityDelegate#canShowBrowserControls()}.
      */
-    public int hideAndroidControls() {
+    private int hideAndroidControls() {
         return mHidingTokenHolder.acquireToken();
     }
 
-    /** Similar to {@link #hideAndroidControls}, but also replaces an old token */
+    @Override
     public int hideAndroidControlsAndClearOldToken(int oldToken) {
         int newToken = hideAndroidControls();
         mHidingTokenHolder.releaseToken(oldToken);
         return newToken;
     }
 
-    /** Release a hiding token. */
+    @Override
     public void releaseAndroidControlsHidingToken(int token) {
         mHidingTokenHolder.releaseToken(token);
     }
@@ -803,17 +609,9 @@ public class ChromeFullscreenManager extends FullscreenManager
         if (mHidingTokenHolder.hasTokens()) {
             return false;
         }
+        if (offsetOverridden()) return true;
 
-        Tab tab = getTab();
-        if (tab != null) {
-            if (tab.isInitialized()) {
-                if (offsetOverridden()) return true;
-            } else {
-                assert false : "Accessing a destroyed tab, setTab should have been called";
-            }
-        }
-
-        boolean showControls = !drawControlsAsTexture();
+        boolean showControls = !BrowserControlsUtils.drawControlsAsTexture(this);
         ViewGroup contentView = getContentView();
         if (contentView == null) return showControls;
 
@@ -870,8 +668,11 @@ public class ChromeFullscreenManager extends FullscreenManager
         return tab != null ? (ContentView) tab.getContentView() : null;
     }
 
-    @Override
-    public void setPositionsForTabToNonFullscreen() {
+    /**
+     * Updates the positions of the browser controls and content to the default non fullscreen
+     * values.
+     */
+    private void setPositionsForTabToNonFullscreen() {
         Tab tab = getTab();
         if (tab == null
                 || TabBrowserControlsConstraintsHelper.getConstraints(tab)
@@ -888,8 +689,16 @@ public class ChromeFullscreenManager extends FullscreenManager
         }
     }
 
-    @Override
-    public void setPositionsForTab(int topControlsOffset, int bottomControlsOffset,
+    /**
+     * Updates the positions of the browser controls and content based on the desired position of
+     * the current tab.
+     * @param topControlsOffset The Y offset of the top controls in px.
+     * @param bottomControlsOffset The Y offset of the bottom controls in px.
+     * @param topContentOffset The Y offset for the content in px.
+     * @param topControlsMinHeightOffset The Y offset for the top controls min-height in px.
+     * @param bottomControlsMinHeightOffset The Y offset for the bottom controls min-height in px.
+     */
+    private void setPositionsForTab(int topControlsOffset, int bottomControlsOffset,
             int topContentOffset, int topControlsMinHeightOffset,
             int bottomControlsMinHeightOffset) {
         // This min/max logic is here to handle changes in the browser controls height. For example,
@@ -914,10 +723,28 @@ public class ChromeFullscreenManager extends FullscreenManager
         mRendererTopControlsMinHeightOffset = topControlsMinHeightOffset;
         mRendererBottomControlsMinHeightOffset = bottomControlsMinHeightOffset;
         mRendererTopContentOffset = rendererTopContentOffset;
-        mOffsetsChanged = true;
-        updateControlOffset();
 
-        updateVisuals();
+        mControlsAtMinHeight.set(getContentOffset() == getTopControlsMinHeight()
+                && getBottomContentOffset() == getBottomControlsMinHeight());
+        updateControlOffset();
+        notifyControlOffsetChanged();
+        updateContentOffsetAndNotify();
+    }
+
+    private void notifyControlOffsetChanged() {
+        scheduleVisibilityUpdate();
+        if (shouldShowAndroidControls()) {
+            mControlContainer.getView().setTranslationY(getTopControlOffset());
+        }
+
+        // Whether we need the compositor to draw again to update our animation.
+        // Should be |false| when the browser controls are only moved through the page
+        // scrolling.
+        boolean needsAnimate = shouldShowAndroidControls();
+        for (BrowserControlsStateProvider.Observer obs : mControlsObservers) {
+            obs.onControlsOffsetChanged(getTopControlOffset(), getTopControlsMinHeightOffset(),
+                    getBottomControlOffset(), getBottomControlsMinHeightOffset(), needsAnimate);
+        }
     }
 
     /**
@@ -931,18 +758,12 @@ public class ChromeFullscreenManager extends FullscreenManager
             mInGesture = true;
             // TODO(qinmin): Probably there is no need to hide the toast as it will go away
             // by itself.
-            getHtmlApiHandler().hideNotificationToast();
+            mHtmlApiHandler.hideNotificationToast();
         } else if (eventAction == MotionEvent.ACTION_CANCEL
                 || eventAction == MotionEvent.ACTION_UP) {
             mInGesture = false;
-            updateVisuals();
+            updateContentOffsetAndNotify();
         }
-    }
-
-    @Override
-    public void onContentViewScrollingStateChanged(boolean scrolling) {
-        mContentViewScrolling = scrolling;
-        if (!scrolling) updateVisuals();
     }
 
     /**
@@ -970,10 +791,7 @@ public class ChromeFullscreenManager extends FullscreenManager
         TabModelImpl.setActualTabSwitchLatencyMetricRequired();
     }
 
-    /**
-     * Shows the Android browser controls view.
-     * @param animate Whether a slide-in animation should be run.
-     */
+    @Override
     public void showAndroidControls(boolean animate) {
         if (animate) {
             runBrowserDrivenShowAnimation();
@@ -994,7 +812,10 @@ public class ChromeFullscreenManager extends FullscreenManager
         TabBrowserControlsOffsetHelper offsetHelper = null;
         if (tab != null) offsetHelper = TabBrowserControlsOffsetHelper.get(tab);
 
-        if (offsetHelper != null && offsetHelper.offsetInitialized()) {
+        // Browser controls should always be shown on native pages and restoring offsets might cause
+        // the controls to get stuck in an invalid position.
+        if (offsetHelper != null && offsetHelper.offsetInitialized() && tab != null
+                && !tab.isNativePage()) {
             updateFullscreenManagerOffsets(false, offsetHelper.topControlsOffset(),
                     offsetHelper.bottomControlsOffset(), offsetHelper.contentOffset(),
                     offsetHelper.topControlsMinHeightOffset(),
@@ -1006,8 +827,7 @@ public class ChromeFullscreenManager extends FullscreenManager
     }
 
     /**
-     * Helper method to update offsets in {@link FullscreenManager} and notify offset changes to
-     * observers if necessary.
+     * Helper method to update offsets and notify offset changes to observers if necessary.
      */
     private void updateFullscreenManagerOffsets(boolean toNonFullscreen, int topControlsOffset,
             int bottomControlsOffset, int topContentOffset, int topControlsMinHeightOffset,
@@ -1035,7 +855,7 @@ public class ChromeFullscreenManager extends FullscreenManager
         }
     }
 
-    /** @return {@code true} if browser control offset is overridden by animation. */
+    @Override
     public boolean offsetOverridden() {
         return mOffsetOverridden;
     }
@@ -1072,7 +892,7 @@ public class ChromeFullscreenManager extends FullscreenManager
         // Set animation start value to current renderer controls offset.
         mControlsAnimator = ValueAnimator.ofInt(topControlOffset, 0);
         mControlsAnimator.setDuration(
-                (long) Math.abs(hiddenRatio * MAX_CONTROLS_ANIMATION_DURATION_MS));
+                (long) Math.abs(hiddenRatio * CONTROLS_ANIMATION_DURATION_MS));
         mControlsAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
@@ -1090,6 +910,49 @@ public class ChromeFullscreenManager extends FullscreenManager
                     topControlHeight, getTopControlsMinHeight(), getBottomControlsMinHeight());
         });
         mControlsAnimator.start();
+    }
+
+    private void runBrowserDrivenTopControlsHeightChangeAnimation(
+            int oldTopControlsHeight, int oldTopControlsMinHeight) {
+        if (mControlsAnimator != null) return;
+        assert getContentOffset()
+                == oldTopControlsHeight
+            : "Height change animations are implemented for fully shown controls only!";
+
+        setOffsetOverridden(true);
+
+        final int newTopControlsHeight = getTopControlsHeight();
+        final int newTopControlsMinHeight = getTopControlsMinHeight();
+
+        mControlsAnimator = ValueAnimator.ofFloat(0.f, 1.f);
+        mControlsAnimator.addUpdateListener((animator) -> {
+            final float topControlsMinHeightOffset = oldTopControlsMinHeight
+                    + (float) animator.getAnimatedValue()
+                            * (newTopControlsMinHeight - oldTopControlsMinHeight);
+            final float topContentOffset = oldTopControlsHeight
+                    + (float) animator.getAnimatedValue()
+                            * (newTopControlsHeight - oldTopControlsHeight);
+            final float topControlsOffset = topContentOffset - newTopControlsHeight;
+
+            updateFullscreenManagerOffsets(false, (int) topControlsOffset, getBottomControlOffset(),
+                    (int) topContentOffset, (int) topControlsMinHeightOffset,
+                    getBottomControlsMinHeightOffset());
+        });
+        mControlsAnimator.setDuration(CONTROLS_ANIMATION_DURATION_MS);
+        mControlsAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                updateFullscreenManagerOffsets(false, 0, 0, getTopControlsHeight(),
+                        getTopControlsMinHeight(), getBottomControlsMinHeight());
+                mControlsAnimator = null;
+            }
+        });
+        mControlsAnimator.start();
+    }
+
+    private boolean canAnimateNativeBrowserControls() {
+        final Tab tab = getTab();
+        return tab != null && tab.isUserInteractable() && !tab.isNativePage();
     }
 
     // VR-related methods to make this class test-friendly. These are overridden in unit tests.
@@ -1126,20 +989,33 @@ public class ChromeFullscreenManager extends FullscreenManager
         showAndroidControls(false);
     }
 
-    @Override
+    /**
+     * Destroys the FullscreenManager
+     */
     public void destroy() {
-        super.destroy();
+        mTab = null;
+        mHtmlApiHandler.destroy();
+        if (mActiveTabObserver != null) mActiveTabObserver.destroy();
         mBrowserVisibilityDelegate.destroy();
-        if (mTabFullscreenObserver != null) mTabFullscreenObserver.destroy();
+        if (mTabControlsObserver != null) mTabControlsObserver.destroy();
         if (mContentView != null) {
             mContentView.removeOnHierarchyChangeListener(this);
-            mContentView.removeOnSystemUiVisibilityChangeListener(this);
         }
         VrModuleProvider.unregisterVrModeObserver(this);
     }
 
     @VisibleForTesting
-    TabModelSelectorTabObserver getTabFullscreenObserverForTesting() {
-        return mTabFullscreenObserver;
+    TabModelSelectorTabObserver getTabControlsObserverForTesting() {
+        return mTabControlsObserver;
+    }
+
+    @VisibleForTesting
+    ValueAnimator getControlsAnimatorForTesting() {
+        return mControlsAnimator;
+    }
+
+    @VisibleForTesting
+    int getControlsAnimationDurationMsForTesting() {
+        return CONTROLS_ANIMATION_DURATION_MS;
     }
 }

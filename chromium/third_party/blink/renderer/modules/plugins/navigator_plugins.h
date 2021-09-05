@@ -31,7 +31,7 @@ class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
 
   explicit NavigatorPlugins(Navigator&);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   DOMPluginArray* plugins(LocalFrame*) const;
@@ -39,6 +39,8 @@ class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
 
   mutable Member<DOMPluginArray> plugins_;
   mutable Member<DOMMimeTypeArray> mime_types_;
+
+  base::span<const uint8_t> StringToBytesSafe(String str) const;
 };
 
 }  // namespace blink

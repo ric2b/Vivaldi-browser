@@ -62,7 +62,7 @@ TEST_F(AccessibilitySelectionTest, FromCurrentSelection) {
   UpdateAllLifecyclePhasesForTest();
 
   const AXObject* ax_static_text_1 =
-      GetAXObjectByElementId("paragraph1")->FirstChild();
+      GetAXObjectByElementId("paragraph1")->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text_1);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text_1->RoleValue());
   const AXObject* ax_paragraph_2 = GetAXObjectByElementId("paragraph2");
@@ -109,7 +109,7 @@ TEST_F(AccessibilitySelectionTest, FromCurrentSelectionSelectAll) {
 
   ASSERT_FALSE(ax_selection.Extent().IsTextPosition());
   EXPECT_EQ(GetAXRootObject(), ax_selection.Extent().ContainerObject());
-  EXPECT_EQ(GetAXRootObject()->ChildCount(),
+  EXPECT_EQ(GetAXRootObject()->ChildCountIncludingIgnored(),
             ax_selection.Extent().ChildIndex());
 
   EXPECT_EQ(
@@ -175,7 +175,7 @@ TEST_F(AccessibilitySelectionTest, CancelSelect) {
   UpdateAllLifecyclePhasesForTest();
 
   const AXObject* ax_static_text_1 =
-      GetAXObjectByElementId("paragraph1")->FirstChild();
+      GetAXObjectByElementId("paragraph1")->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text_1);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text_1->RoleValue());
   const AXObject* ax_paragraph_2 = GetAXObjectByElementId("paragraph2");
@@ -213,7 +213,7 @@ TEST_F(AccessibilitySelectionTest, DocumentRangeMatchesSelection) {
       )HTML");
 
   const AXObject* ax_static_text_1 =
-      GetAXObjectByElementId("paragraph1")->FirstChild();
+      GetAXObjectByElementId("paragraph1")->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text_1);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text_1->RoleValue());
   const AXObject* ax_paragraph_2 = GetAXObjectByElementId("paragraph2");
@@ -241,7 +241,7 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInText) {
   ASSERT_TRUE(text->IsTextNode());
 
   const AXObject* ax_static_text =
-      GetAXObjectByElementId("paragraph")->FirstChild();
+      GetAXObjectByElementId("paragraph")->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text->RoleValue());
 
@@ -272,7 +272,7 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInTextWithWhiteSpace) {
   ASSERT_TRUE(text->IsTextNode());
 
   const AXObject* ax_static_text =
-      GetAXObjectByElementId("paragraph")->FirstChild();
+      GetAXObjectByElementId("paragraph")->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text->RoleValue());
 
@@ -313,7 +313,8 @@ TEST_F(AccessibilitySelectionTest, SetSelectionAcrossLineBreak) {
   const AXObject* ax_br = GetAXObjectByElementId("br");
   ASSERT_NE(nullptr, ax_br);
   ASSERT_EQ(ax::mojom::Role::kLineBreak, ax_br->RoleValue());
-  const AXObject* ax_line2 = GetAXObjectByElementId("paragraph")->LastChild();
+  const AXObject* ax_line2 =
+      GetAXObjectByElementId("paragraph")->LastChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_line2);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_line2->RoleValue());
 
@@ -358,7 +359,8 @@ TEST_F(AccessibilitySelectionTest, SetSelectionAcrossLineBreakInEditableText) {
   const AXObject* ax_br = GetAXObjectByElementId("br");
   ASSERT_NE(nullptr, ax_br);
   ASSERT_EQ(ax::mojom::Role::kLineBreak, ax_br->RoleValue());
-  const AXObject* ax_line2 = GetAXObjectByElementId("paragraph")->LastChild();
+  const AXObject* ax_line2 =
+      GetAXObjectByElementId("paragraph")->LastChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_line2);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_line2->RoleValue());
 
@@ -440,9 +442,9 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInDisplayNone) {
                              .Build();
 
   const auto ax_selection_shrink = AXSelection::FromSelection(
-      selection, AXSelectionBehavior::kShrinkToValidDOMRange);
+      selection, AXSelectionBehavior::kShrinkToValidRange);
   const auto ax_selection_extend = AXSelection::FromSelection(
-      selection, AXSelectionBehavior::kExtendToValidDOMRange);
+      selection, AXSelectionBehavior::kExtendToValidRange);
 
   // The "display: none" content is included in the AXTree as an ignored node,
   // so shrunk selection should include those AXObjects. Note that the browser
@@ -519,13 +521,13 @@ TEST_P(ParameterizedAccessibilitySelectionTest, SetSelectionAroundListBullet) {
   const AXObject* ax_item_1 = GetAXObjectByElementId("item1");
   ASSERT_NE(nullptr, ax_item_1);
   ASSERT_EQ(ax::mojom::Role::kListItem, ax_item_1->RoleValue());
-  const AXObject* ax_bullet_1 = ax_item_1->FirstChild();
+  const AXObject* ax_bullet_1 = ax_item_1->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_bullet_1);
   ASSERT_EQ(ax::mojom::Role::kListMarker, ax_bullet_1->RoleValue());
   const AXObject* ax_item_2 = GetAXObjectByElementId("item2");
   ASSERT_NE(nullptr, ax_item_2);
   ASSERT_EQ(ax::mojom::Role::kListItem, ax_item_2->RoleValue());
-  const AXObject* ax_text_2 = ax_item_2->LastChild();
+  const AXObject* ax_text_2 = ax_item_2->LastChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_text_2);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text_2->RoleValue());
 
@@ -540,7 +542,7 @@ TEST_P(ParameterizedAccessibilitySelectionTest, SetSelectionAroundListBullet) {
   // child of the first <li>, i.e. the text node containing the text "Item 1.".
   // This should be further optimized to a text position at the start of the
   // text object inside the first <li>.
-  ax_selection.Select(AXSelectionBehavior::kShrinkToValidDOMRange);
+  ax_selection.Select(AXSelectionBehavior::kShrinkToValidRange);
   const SelectionInDOMTree shrunk_selection =
       Selection().GetSelectionInDOMTree();
 
@@ -553,7 +555,7 @@ TEST_P(ParameterizedAccessibilitySelectionTest, SetSelectionAroundListBullet) {
 
   // The list bullet is not included in the DOM tree. Extending the
   // |AXSelection| should move the anchor to before the first <li>.
-  ax_selection.Select(AXSelectionBehavior::kExtendToValidDOMRange);
+  ax_selection.Select(AXSelectionBehavior::kExtendToValidRange);
   const SelectionInDOMTree extended_selection =
       Selection().GetSelectionInDOMTree();
 
@@ -828,7 +830,8 @@ TEST_F(AccessibilitySelectionTest,
       GetAXObjectByElementId("contenteditable");
   ASSERT_NE(nullptr, ax_contenteditable);
   ASSERT_EQ(ax::mojom::Role::kTextField, ax_contenteditable->RoleValue());
-  const AXObject* ax_static_text = ax_contenteditable->FirstChild();
+  const AXObject* ax_static_text =
+      ax_contenteditable->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text);
   // Guard against the structure of the accessibility tree unexpectedly
   // changing, causing a hard to debug test failure.
@@ -887,7 +890,8 @@ TEST_F(AccessibilitySelectionTest,
       GetAXObjectByElementId("contenteditable");
   ASSERT_NE(nullptr, ax_contenteditable);
   ASSERT_EQ(ax::mojom::Role::kTextField, ax_contenteditable->RoleValue());
-  const AXObject* ax_static_text = ax_contenteditable->FirstChild();
+  const AXObject* ax_static_text =
+      ax_contenteditable->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text);
   // Guard against the structure of the accessibility tree unexpectedly
   // changing, causing a hard to debug test failure.
@@ -942,10 +946,10 @@ TEST_F(AccessibilitySelectionTest,
       GetAXObjectByElementId("contenteditable");
   ASSERT_NE(nullptr, ax_contenteditable);
   ASSERT_EQ(ax::mojom::Role::kTextField, ax_contenteditable->RoleValue());
-  ASSERT_EQ(3, ax_contenteditable->ChildCount())
+  ASSERT_EQ(3, ax_contenteditable->UnignoredChildCount())
       << "The content editable should have two lines with a line break between "
          "them.";
-  const AXObject* ax_static_text_2 = ax_contenteditable->Children()[2];
+  const AXObject* ax_static_text_2 = ax_contenteditable->UnignoredChildAt(2);
   ASSERT_NE(nullptr, ax_static_text_2);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text_2->RoleValue());
 
@@ -1599,7 +1603,7 @@ TEST_F(AccessibilitySelectionTest,
       GetAXObjectByElementId("contenteditable");
   ASSERT_NE(nullptr, ax_contenteditable);
   ASSERT_EQ(ax::mojom::Role::kTextField, ax_contenteditable->RoleValue());
-  const AXObject* ax_text = ax_contenteditable->FirstChild();
+  const AXObject* ax_text = ax_contenteditable->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_text);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text->RoleValue());
 
@@ -1640,8 +1644,9 @@ TEST_F(AccessibilitySelectionTest,
   const AXObject* ax_contenteditable =
       GetAXObjectByElementId("contenteditable");
   ASSERT_NE(nullptr, ax_contenteditable);
-  ASSERT_EQ(1, ax_contenteditable->ChildCount());
-  const AXObject* ax_static_text = ax_contenteditable->FirstChild();
+  ASSERT_EQ(1, ax_contenteditable->ChildCountIncludingIgnored());
+  const AXObject* ax_static_text =
+      ax_contenteditable->FirstChildIncludingIgnored();
   ASSERT_NE(nullptr, ax_static_text);
   ASSERT_EQ(ax::mojom::Role::kStaticText, ax_static_text->RoleValue());
   String computed_name = ax_static_text->ComputedName();
@@ -1704,7 +1709,8 @@ TEST_F(AccessibilitySelectionTest, SelectionWithEqualBaseAndExtent) {
   SetBodyInnerHTML(R"HTML(
       <select id="sel"><option>1</option></select>
       )HTML");
-  AXObject* ax_sel = GetAXObjectByElementId("sel")->FirstChild();
+  AXObject* ax_sel =
+      GetAXObjectByElementId("sel")->FirstChildIncludingIgnored();
   AXPosition ax_position = AXPosition::CreatePositionBeforeObject(*ax_sel);
   AXSelection::Builder builder;
   AXSelection ax_selection =
@@ -1748,6 +1754,17 @@ TEST_F(AccessibilitySelectionTest, ARIAHidden) {
 
 TEST_P(ParameterizedAccessibilitySelectionTest, List) {
   ParameterizedAccessibilitySelectionTest::RunSelectionTest("list");
+}
+
+TEST_F(AccessibilitySelectionTest, ParagraphPresentational) {
+  // The focus of the selection is an "after children" position on a paragraph
+  // with role="presentation" and in which the last child is an empty div. In
+  // other words, both the paragraph and its last child are ignored in the
+  // accessibility tree. In order to become valid, the focus should move to
+  // before the next unignored child of the presentational paragraph's unignored
+  // parent, which in this case is another paragraph that comes after the
+  // presentational one.
+  RunSelectionTest("paragraph-presentational");
 }
 
 TEST_F(AccessibilitySelectionTest, SVG) {

@@ -15,9 +15,9 @@
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/shell.h"                                  // mash-ok
-#include "ash/wm/overview/overview_controller.h"        // mash-ok
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"  // mash-ok
+#include "ash/shell.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
@@ -42,8 +42,8 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -116,9 +116,8 @@ void ToggleFullscreenModeAndWait(Browser* browser) {
 void EnterFullscreenModeForTabAndWait(Browser* browser,
                                       content::WebContents* web_contents) {
   FullscreenNotificationObserver waiter(browser);
-  browser->exclusive_access_manager()
-      ->fullscreen_controller()
-      ->EnterFullscreenModeForTab(web_contents, GURL());
+  static_cast<content::WebContentsDelegate*>(browser)
+      ->EnterFullscreenModeForTab(web_contents->GetMainFrame(), {});
   waiter.Wait();
 }
 
@@ -1028,9 +1027,10 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest,
 
   autofill::PasswordForm password_form;
   password_form.username_value = base::ASCIIToUTF16("test");
-  password_form.origin = GetAppURL().GetOrigin();
+  password_form.url = GetAppURL().GetOrigin();
   PasswordsClientUIDelegateFromWebContents(web_contents)
-      ->OnPasswordAutofilled({&password_form}, password_form.origin, nullptr);
+      ->OnPasswordAutofilled({&password_form},
+                             url::Origin::Create(password_form.url), nullptr);
   chrome::ManagePasswordsForPage(app_browser_);
   base::RunLoop().RunUntilIdle();
 

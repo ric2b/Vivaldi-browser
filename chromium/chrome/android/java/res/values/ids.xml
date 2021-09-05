@@ -24,7 +24,6 @@
 
     <!-- InfoBar constants -->
     <item type="id" name="infobar_extra_check" />
-    <item type="id" name="infobar_message" />
     <item type="id" name="permission_infobar_persist_toggle" />
     <item type="id" name="translate_infobar_always_toggle" />
     <item type="id" name="translate_infobar_source_spinner" />
@@ -100,6 +99,9 @@
     <item type="id" name="contextmenu_search_by_image" />
     <item type="id" name="contextmenu_search_with_google_lens" />
     <item type="id" name="contextmenu_share_image" />
+    <item type="id" name="contextmenu_shop_similar_products" />
+    <item type="id" name="contextmenu_shop_image_with_google_lens" />
+    <item type="id" name="contextmenu_search_similar_products" />
 
     <!-- Message Group -->
     <item type="id" name="contextmenu_call" />

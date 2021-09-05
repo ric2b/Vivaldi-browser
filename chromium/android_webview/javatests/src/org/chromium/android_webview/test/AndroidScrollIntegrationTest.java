@@ -9,7 +9,8 @@ import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -451,7 +452,6 @@ public class AndroidScrollIntegrationTest {
     /**
      * @SmallTest
      * @Feature({"AndroidWebView"})
-     * @RetryOnFailure
      * BUG=813837
      */
     // Originally flaked only in multi-process mode (http://crbug.com/616505)

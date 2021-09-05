@@ -49,6 +49,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/aura/window.h"
 #include "ui/base/cursor/cursor_size.h"
@@ -87,6 +88,8 @@ const FeatureData kFeatures[] = {
     {FeatureType::kCaretHighlight, prefs::kAccessibilityCaretHighlightEnabled,
      nullptr},
     {FeatureType::KCursorHighlight, prefs::kAccessibilityCursorHighlightEnabled,
+     nullptr},
+    {FeatureType::kCursorColor, prefs::kAccessibilityCursorColorEnabled,
      nullptr},
     {FeatureType::kDictation, prefs::kAccessibilityDictationEnabled,
      &kDictationMenuIcon},
@@ -151,6 +154,8 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kAccessibilityAutoclickEnabled,
     prefs::kAccessibilityCaretHighlightEnabled,
     prefs::kAccessibilityCursorHighlightEnabled,
+    prefs::kAccessibilityCursorColorEnabled,
+    prefs::kAccessibilityCursorColor,
     prefs::kAccessibilityDictationEnabled,
     prefs::kAccessibilityFocusHighlightEnabled,
     prefs::kAccessibilityHighContrastEnabled,
@@ -330,7 +335,7 @@ void ShowAccessibilityNotification(A11yNotificationType type) {
               kNotifierAccessibility),
           options, nullptr, GetNotificationIcon(type),
           message_center::SystemNotificationWarningLevel::NORMAL);
-  notification->set_priority(message_center::SYSTEM_PRIORITY);
+  notification->set_pinned(true);
   message_center->AddNotification(std::move(notification));
 }
 
@@ -588,6 +593,16 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
       prefs::kAccessibilityCursorHighlightEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
+      prefs::kAccessibilityCursorColorEnabled, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  // TODO(crbug.com/1085442): Work with UX to pick default color, and consider
+  // storing this as an index into a color array or as a hex color string.
+  // For now this should match a color in cursorColorOptions_ from
+  // manage_a11y_page.js.
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityCursorColor, 0xaa00ff,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterBooleanPref(
       prefs::kAccessibilityDictationEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
@@ -803,6 +818,11 @@ AccessibilityControllerImpl::caret_highlight() const {
 AccessibilityControllerImpl::Feature&
 AccessibilityControllerImpl::cursor_highlight() const {
   return GetFeature(FeatureType::KCursorHighlight);
+}
+
+AccessibilityControllerImpl::Feature&
+AccessibilityControllerImpl::cursor_color() const {
+  return GetFeature(FeatureType::kCursorColor);
 }
 
 AccessibilityControllerImpl::FeatureWithDialog&
@@ -1099,6 +1119,10 @@ void AccessibilityControllerImpl::SetSwitchAccessEnabled(bool enabled) {
   switch_access().SetEnabled(enabled);
 }
 
+bool AccessibilityControllerImpl::IsSwitchAccessRunning() const {
+  return switch_access().enabled() || switch_access_disable_dialog_showing_;
+}
+
 bool AccessibilityControllerImpl::IsSwitchAccessSettingVisibleInTray() {
   return switch_access().IsVisibleInTray();
   return IsEnterpriseIconVisibleInTrayMenu(
@@ -1115,11 +1139,13 @@ void AccessibilityControllerImpl::
 }
 
 void AccessibilityControllerImpl::HideSwitchAccessBackButton() {
-  switch_access_bubble_controller_->HideBackButton();
+  if (IsSwitchAccessRunning())
+    switch_access_bubble_controller_->HideBackButton();
 }
 
 void AccessibilityControllerImpl::HideSwitchAccessMenu() {
-  switch_access_bubble_controller_->HideMenuBubble();
+  if (IsSwitchAccessRunning())
+    switch_access_bubble_controller_->HideMenuBubble();
 }
 
 void AccessibilityControllerImpl::ShowSwitchAccessBackButton(
@@ -1131,6 +1157,10 @@ void AccessibilityControllerImpl::ShowSwitchAccessMenu(
     const gfx::Rect& anchor,
     std::vector<std::string> actions_to_show) {
   switch_access_bubble_controller_->ShowMenu(anchor, actions_to_show);
+}
+
+void AccessibilityControllerImpl::SetCursorColorEnabled(bool enabled) {
+  cursor_color().SetEnabled(enabled);
 }
 
 void AccessibilityControllerImpl::
@@ -1366,6 +1396,11 @@ AccessibilityControllerImpl::GetSwitchAccessEventHandlerForTest() {
   return nullptr;
 }
 
+void AccessibilityControllerImpl::
+    DisableSwitchAccessDisableConfirmationDialogTesting() {
+  no_switch_access_disable_confirmation_dialog_for_testing_ = true;
+}
+
 void AccessibilityControllerImpl::OnTabletModeStarted() {
   if (spoken_feedback_enabled())
     ShowAccessibilityNotification(A11yNotificationType::kSpokenFeedbackEnabled);
@@ -1478,6 +1513,11 @@ void AccessibilityControllerImpl::ObservePrefs(PrefService* prefs) {
       base::BindRepeating(&AccessibilityControllerImpl::
                               UpdateTabletModeShelfNavigationButtonsFromPref,
                           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilityCursorColor,
+      base::BindRepeating(
+          &AccessibilityControllerImpl::UpdateCursorColorFromPrefs,
+          base::Unretained(this)));
 
   // Load current state.
   for (int feature_id = 0; feature_id < FeatureType::kFeatureCount;
@@ -1493,6 +1533,7 @@ void AccessibilityControllerImpl::ObservePrefs(PrefService* prefs) {
   UpdateAutoclickMenuPositionFromPref();
   UpdateFloatingMenuPositionFromPref();
   UpdateLargeCursorFromPref();
+  UpdateCursorColorFromPrefs();
   UpdateShortcutsEnabledFromPref();
   UpdateTabletModeShelfNavigationButtonsFromPref();
 }
@@ -1631,11 +1672,29 @@ void AccessibilityControllerImpl::UpdateLargeCursorFromPref() {
 
   NotifyAccessibilityStatusChanged();
 
-  Shell::Get()->cursor_manager()->SetCursorSize(large_cursor().enabled()
-                                                    ? ui::CursorSize::kLarge
-                                                    : ui::CursorSize::kNormal);
-  Shell::Get()->SetLargeCursorSizeInDip(large_cursor_size_in_dip_);
-  Shell::Get()->UpdateCursorCompositingEnabled();
+  Shell* shell = Shell::Get();
+  shell->cursor_manager()->SetCursorSize(large_cursor().enabled()
+                                             ? ui::CursorSize::kLarge
+                                             : ui::CursorSize::kNormal);
+  shell->SetLargeCursorSizeInDip(large_cursor_size_in_dip_);
+  shell->UpdateCursorCompositingEnabled();
+}
+
+void AccessibilityControllerImpl::UpdateCursorColorFromPrefs() {
+  DCHECK(active_user_prefs_);
+
+  // Not yet released: cursor color is behind a flag.
+  if (!features::IsAccessibilityCursorColorEnabled())
+    return;
+
+  const bool enabled =
+      active_user_prefs_->GetBoolean(prefs::kAccessibilityCursorColorEnabled);
+  Shell* shell = Shell::Get();
+  shell->SetCursorColor(
+      enabled ? active_user_prefs_->GetInteger(prefs::kAccessibilityCursorColor)
+              : kDefaultCursorColor);
+  NotifyAccessibilityStatusChanged();
+  shell->UpdateCursorCompositingEnabled();
 }
 
 void AccessibilityControllerImpl::UpdateAccessibilityHighlightingFromPrefs() {
@@ -1734,9 +1793,12 @@ void AccessibilityControllerImpl::
 
 void AccessibilityControllerImpl::SwitchAccessDisableDialogClosed(
     bool disable_dialog_accepted) {
+  switch_access_disable_dialog_showing_ = false;
   if (disable_dialog_accepted) {
     // The pref was already disabled, but we left switch access on until they
     // accepted the dialog.
+    if (client_)
+      client_->OnSwitchAccessDisabled();
     switch_access_bubble_controller_.reset();
     switch_access_event_handler_.reset();
     NotifyAccessibilityStatusChanged();
@@ -1892,13 +1954,12 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
       Shell::Get()->sticky_keys_controller()->Enable(enabled);
       break;
     case FeatureType::kSwitchAccess:
-      // Show a dialog before disabling Switch Access.
       if (!enabled) {
         ShowAccessibilityNotification(A11yNotificationType::kNone);
-
         if (no_switch_access_disable_confirmation_dialog_for_testing_) {
           SwitchAccessDisableDialogClosed(true);
         } else {
+          // Show a dialog before disabling Switch Access.
           new AccessibilityFeatureDisableDialog(
               IDS_ASH_SWITCH_ACCESS_DISABLE_CONFIRMATION_TITLE,
               IDS_ASH_SWITCH_ACCESS_DISABLE_CONFIRMATION_BODY,
@@ -1908,7 +1969,10 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
               base::BindOnce(
                   &AccessibilityControllerImpl::SwitchAccessDisableDialogClosed,
                   weak_ptr_factory_.GetWeakPtr(), false));
+          switch_access_disable_dialog_showing_ = true;
         }
+        // Return early. We will call NotifyAccessibilityStatusChanged() if the
+        // user accepts the dialog.
         return;
       } else {
         switch_access_bubble_controller_ =
@@ -1920,6 +1984,9 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
       break;
     case FeatureType::kVirtualKeyboard:
       keyboard::SetAccessibilityKeyboardEnabled(enabled);
+      break;
+    case FeatureType::kCursorColor:
+      UpdateCursorColorFromPrefs();
       break;
     case FeatureType::kFeatureCount:
     case FeatureType::kNoConflictingFeature:

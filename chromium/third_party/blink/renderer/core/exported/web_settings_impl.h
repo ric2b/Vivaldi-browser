@@ -146,7 +146,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
                           UScriptCode = USCRIPT_COMMON) override;
   void SetShouldPrintBackgrounds(bool) override;
   void SetShouldClearDocumentBackground(bool) override;
-  void SetShouldRespectImageOrientation(bool) override;
   void SetShowContextMenuOnMouseUp(bool) override;
   void SetShrinksViewportContentToFit(bool) override;
   void SetSmartInsertDeleteEnabled(bool) override;
@@ -223,6 +222,8 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetForceDarkModeEnabled(bool) override;
   void SetPreferredColorScheme(PreferredColorScheme) override;
   void SetNavigationControls(NavigationControls) override;
+
+  void SetAriaModalPrunesAXTree(bool) override;
 
   bool RenderVSyncNotificationEnabled() const {
     return render_v_sync_notification_enabled_;

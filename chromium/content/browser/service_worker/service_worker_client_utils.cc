@@ -293,7 +293,7 @@ void NavigateClientOnUI(const GURL& url,
   // navigation. Not rejecting it would allow websites to prevent the user from
   // navigating away. See https://crbug.com/930154.
   NavigationRequest* ongoing_navigation_request =
-      rfhi->frame_tree_node()->frame_tree()->root()->navigation_request();
+      rfhi->frame_tree()->root()->navigation_request();
   if (ongoing_navigation_request &&
       ongoing_navigation_request->browser_initiated()) {
     RunOrPostTaskOnThread(
@@ -304,8 +304,8 @@ void NavigateClientOnUI(const GURL& url,
   }
 
   int frame_tree_node_id = rfhi->frame_tree_node()->frame_tree_node_id();
-  Navigator* navigator = rfhi->frame_tree_node()->navigator();
-  navigator->RequestOpenURL(
+  Navigator& navigator = rfhi->frame_tree_node()->navigator();
+  navigator.RequestOpenURL(
       rfhi, url, GlobalFrameRoutingId() /* initiator_routing_id */,
       url::Origin::Create(script_url), nullptr /* post_body */,
       std::string() /* extra_headers */,
@@ -535,8 +535,8 @@ void DidGetExecutionReadyClient(
                             std::move(info));
 
   } else {
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&GetWindowClientInfoOnUI, container_host->process_id(),
                        container_host->frame_id(),
                        container_host->create_time(),
@@ -559,8 +559,8 @@ void FocusWindowClient(ServiceWorkerContainerHost* container_host,
                   container_host->create_time(), container_host->client_uuid());
     std::move(callback).Run(std::move(info));
   } else {
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&FocusOnUI, container_host->process_id(),
                        container_host->frame_id(),
                        container_host->create_time(),

@@ -17,25 +17,41 @@
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/layout/box_layout.h"
-#include "ui/views/widget/widget.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 
 namespace {
 
-class PhotoViewMetricsReporter : public ui::AnimationMetricsReporter {
- public:
-  PhotoViewMetricsReporter() = default;
-  PhotoViewMetricsReporter(const PhotoViewMetricsReporter&) = delete;
-  PhotoViewMetricsReporter& operator=(const PhotoViewMetricsReporter&) = delete;
-  ~PhotoViewMetricsReporter() override = default;
+constexpr char kPhotoTransitionSmoothness[] =
+    "Ash.AmbientMode.AnimationSmoothness.PhotoTransition";
 
-  void Report(int value) override {
-    UMA_HISTOGRAM_PERCENTAGE(
-        "Ash.AmbientMode.AnimationSmoothness.PhotoTransition", value);
-  }
-};
+gfx::ImageSkia ResizeImage(const gfx::ImageSkia& image,
+                           const gfx::Size& view_size) {
+  if (image.isNull())
+    return gfx::ImageSkia();
+
+  const double image_width = image.width();
+  const double image_height = image.height();
+  const double view_width = view_size.width();
+  const double view_height = view_size.height();
+  const double horizontal_ratio = view_width / image_width;
+  const double vertical_ratio = view_height / image_height;
+  const double image_ratio = image_height / image_width;
+  const double view_ratio = view_height / view_width;
+
+  // If the image and the container view has the same orientation, e.g. both
+  // portrait, the |scale| will make the image filled the whole view with
+  // possible cropping on one direction. If they are in different orientation,
+  // the |scale| will display the image in the view without any cropping, but
+  // with empty background.
+  const double scale = (image_ratio - 1) * (view_ratio - 1) > 0
+                           ? std::max(horizontal_ratio, vertical_ratio)
+                           : std::min(horizontal_ratio, vertical_ratio);
+  const gfx::Size& resized = gfx::ScaleToCeiledSize(image.size(), scale);
+  return gfx::ImageSkiaOperations::CreateResizedImage(
+      image, skia::ImageOperations::RESIZE_BEST, resized);
+}
 
 }  // namespace
 
@@ -62,10 +78,6 @@ class AmbientBackgroundImageView : public views::ImageView {
     return true;
   }
 
-  void OnMouseMoved(const ui::MouseEvent& event) override {
-    delegate_->OnBackgroundPhotoEvents();
-  }
-
   void OnGestureEvent(ui::GestureEvent* event) override {
     if (event->type() == ui::ET_GESTURE_TAP) {
       delegate_->OnBackgroundPhotoEvents();
@@ -81,7 +93,8 @@ class AmbientBackgroundImageView : public views::ImageView {
 // PhotoView ------------------------------------------------------------------
 PhotoView::PhotoView(AmbientViewDelegate* delegate)
     : delegate_(delegate),
-      metrics_reporter_(std::make_unique<PhotoViewMetricsReporter>()) {
+      metrics_reporter_(std::make_unique<ui::HistogramPercentageMetricsReporter<
+                            kPhotoTransitionSmoothness>>()) {
   DCHECK(delegate_);
   Init();
 }
@@ -94,18 +107,12 @@ const char* PhotoView::GetClassName() const {
   return "PhotoView";
 }
 
-void PhotoView::AddedToWidget() {
-  // Set the bounds to show |image_view_curr_| for the first time.
-  // TODO(b/140066694): Handle display configuration changes, e.g. resolution,
-  // rotation, etc.
-  const gfx::Size widget_size = GetWidget()->GetRootView()->size();
-  image_view_prev_->SetImageSize(widget_size);
-  image_view_curr_->SetImageSize(widget_size);
-  image_view_next_->SetImageSize(widget_size);
-  gfx::Rect view_bounds = gfx::Rect(GetPreferredSize());
-  const int width = widget_size.width();
-  view_bounds.set_x(-width);
-  SetBoundsRect(view_bounds);
+void PhotoView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  for (const int index : {0, 1}) {
+    auto image = images_unscaled_[index];
+    auto image_resized = ResizeImage(image, size());
+    image_views_[index]->SetImage(image_resized);
+  }
 }
 
 void PhotoView::OnImagesChanged() {
@@ -123,57 +130,73 @@ void PhotoView::OnImagesChanged() {
 void PhotoView::Init() {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal));
-  layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStart);
-
-  image_view_prev_ =
+  image_views_[0] =
       AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
-  image_view_curr_ =
+  image_views_[1] =
       AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
-  image_view_next_ =
-      AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
+  image_views_[0]->SetPaintToLayer();
+  image_views_[0]->layer()->SetFillsBoundsOpaquely(false);
+  image_views_[1]->SetPaintToLayer();
+  image_views_[1]->layer()->SetFillsBoundsOpaquely(false);
+  image_views_[1]->layer()->SetOpacity(0.0f);
 
   delegate_->GetAmbientBackendModel()->AddObserver(this);
 }
 
 void PhotoView::UpdateImages() {
-  // TODO(b/140193766): Investigate a more efficient way to update images and do
-  // layer animation.
   auto* model = delegate_->GetAmbientBackendModel();
-  image_view_prev_->SetImage(model->GetPrevImage());
-  image_view_curr_->SetImage(model->GetCurrImage());
-  image_view_next_->SetImage(model->GetNextImage());
+  images_unscaled_[image_index_] = model->GetNextImage();
+  if (images_unscaled_[image_index_].isNull())
+    return;
+
+  auto next_resized = ResizeImage(images_unscaled_[image_index_], size());
+  image_views_[image_index_]->SetImage(next_resized);
+  image_index_ = 1 - image_index_;
 }
 
 void PhotoView::StartTransitionAnimation() {
-  ui::Layer* layer = this->layer();
-  ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
-  animation.SetTransitionDuration(kAnimationDuration);
-  animation.SetTweenType(gfx::Tween::FAST_OUT_LINEAR_IN);
-  animation.SetPreemptionStrategy(
-      ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET);
-  animation.SetAnimationMetricsReporter(metrics_reporter_.get());
-  animation.AddObserver(this);
+  ui::Layer* visible_layer = image_views_[image_index_]->layer();
+  {
+    ui::ScopedLayerAnimationSettings animation(visible_layer->GetAnimator());
+    animation.SetTransitionDuration(kAnimationDuration);
+    animation.SetTweenType(gfx::Tween::LINEAR);
+    animation.SetPreemptionStrategy(
+        ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET);
+    animation.SetAnimationMetricsReporter(metrics_reporter_.get());
+    animation.CacheRenderSurface();
+    visible_layer->SetOpacity(0.0f);
+  }
 
-  const int x_offset = image_view_curr_->GetPreferredSize().width();
-  gfx::Transform transform;
-  transform.Translate(-x_offset, 0);
-  layer->SetTransform(transform);
+  ui::Layer* invisible_layer = image_views_[1 - image_index_]->layer();
+  {
+    ui::ScopedLayerAnimationSettings animation(invisible_layer->GetAnimator());
+    animation.SetTransitionDuration(kAnimationDuration);
+    animation.SetTweenType(gfx::Tween::LINEAR);
+    animation.SetPreemptionStrategy(
+        ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET);
+    animation.SetAnimationMetricsReporter(metrics_reporter_.get());
+    animation.CacheRenderSurface();
+    // For simplicity, only observe one animation.
+    animation.AddObserver(this);
+    invisible_layer->SetOpacity(1.0f);
+  }
 }
 
 void PhotoView::OnImplicitAnimationsCompleted() {
-  // Layer transform and images update will be applied on the next frame at the
-  // same time.
-  this->layer()->SetTransform(gfx::Transform());
   UpdateImages();
+  delegate_->OnPhotoTransitionAnimationCompleted();
 }
 
 bool PhotoView::NeedToAnimateTransition() const {
-  // Can do transition animation from current to next image.
-  return !image_view_next_->GetImage().isNull();
+  // Can do transition animation if both two images in |images_unscaled_| are
+  // not nullptr. Check the image index 1 is enough.
+  return !images_unscaled_[1].isNull();
+}
+
+const gfx::ImageSkia& PhotoView::GetCurrentImagesForTesting() {
+  return image_views_[image_index_]->GetImage();
 }
 
 }  // namespace ash

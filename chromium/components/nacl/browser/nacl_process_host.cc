@@ -54,6 +54,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "content/public/common/zygote/zygote_buildflags.h"
 #include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "net/socket/socket_descriptor.h"
@@ -63,10 +64,9 @@
 #include "ppapi/shared_impl/ppapi_constants.h"
 #include "ppapi/shared_impl/ppapi_nacl_plugin_args.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "services/service_manager/zygote/common/zygote_buildflags.h"
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-#include "services/service_manager/zygote/common/zygote_handle.h"  // nogncheck
+#include "content/public/common/zygote/zygote_handle.h"  // nogncheck
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 #if defined(OS_POSIX)
@@ -102,7 +102,7 @@ namespace {
 // space and returns it via |*out_addr| and |*out_size|.
 void FindAddressSpace(base::ProcessHandle process,
                       char** out_addr, size_t* out_size) {
-  *out_addr = NULL;
+  *out_addr = nullptr;
   *out_size = 0;
   char* addr = 0;
   while (true) {
@@ -141,7 +141,7 @@ void* AllocateAddressSpaceASLR(base::ProcessHandle process, size_t size) {
   size_t avail_size;
   FindAddressSpace(process, &addr, &avail_size);
   if (avail_size < size)
-    return NULL;
+    return nullptr;
   size_t offset = base::RandGenerator(avail_size - size);
   const int kPageSize = 0x10000;
   void* request_addr = reinterpret_cast<void*>(
@@ -185,8 +185,8 @@ class NaClSandboxedProcessLauncherDelegate
 #endif  // OS_WIN
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-  service_manager::ZygoteHandle GetZygote() override {
-    return service_manager::GetGenericZygote();
+  content::ZygoteHandle GetZygote() override {
+    return content::GetGenericZygote();
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -222,7 +222,7 @@ NaClProcessHost::NaClProcessHost(
 #if defined(OS_WIN)
       process_launched_by_broker_(false),
 #endif
-      reply_msg_(NULL),
+      reply_msg_(nullptr),
 #if defined(OS_WIN)
       debug_exception_handler_requested_(false),
 #endif
@@ -643,7 +643,7 @@ void NaClProcessHost::SendMessageToRenderer(
     const std::string& error_message) {
   DCHECK(nacl_host_message_filter_.get());
   DCHECK(reply_msg_);
-  if (nacl_host_message_filter_.get() == NULL || reply_msg_ == NULL) {
+  if (!nacl_host_message_filter_.get() || !reply_msg_) {
     // As DCHECKed above, this case should not happen in general.
     // Though, in this case, unfortunately there is no proper way to release
     // resources which are already created in |result|. We just give up on
@@ -654,7 +654,7 @@ void NaClProcessHost::SendMessageToRenderer(
   NaClHostMsg_LaunchNaCl::WriteReplyParams(reply_msg_, result, error_message);
   nacl_host_message_filter_->Send(reply_msg_);
   nacl_host_message_filter_.reset();
-  reply_msg_ = NULL;
+  reply_msg_ = nullptr;
 }
 
 void NaClProcessHost::SetDebugStubPort(int port) {
@@ -893,7 +893,7 @@ bool NaClProcessHost::StartPPAPIProxy(
   DCHECK_EQ(PROCESS_TYPE_NACL_LOADER, process_->GetData().process_type);
 
   ipc_proxy_channel_ = IPC::ChannelProxy::Create(
-      channel_handle.release(), IPC::Channel::MODE_CLIENT, NULL,
+      channel_handle.release(), IPC::Channel::MODE_CLIENT, nullptr,
       base::ThreadTaskRunnerHandle::Get().get(),
       base::ThreadTaskRunnerHandle::Get().get());
   // Create the browser ppapi host and enable PPAPI message dispatching to the

@@ -45,7 +45,7 @@
 <translation id="3542768452570884558">گشودن پیوند در پنجره جدید</translation>
 <translation id="3588820906588687999">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3601066750251199488">هیولا ۳</translation>
-<translation id="3732157130969736834">پیوند نشانک</translation>
+<translation id="3732157130969736834">لینک نشانک</translation>
 <translation id="3732388226447288666">حیوان ۲</translation>
 <translation id="3732439195215136813">حیوان ۵</translation>
 <translation id="3832132597516774400">چشم‌انداز ۵</translation>
@@ -66,12 +66,14 @@
 <translation id="4582480609585453144">گشودن پیوند در زبانه‌ی پس‌زمینه</translation>
 <translation id="4636708767492582204">ارسال با ایمیل</translation>
 <translation id="4677434526832593569">حیوان ۸</translation>
+<translation id="474217410105706308">قطع صدای زبانه</translation>
 <translation id="4881695831933465202">باز کردن</translation>
 <translation id="5014281392052865061">تماس‌های سریع واردشده</translation>
 <translation id="5092656712000637858">افزودن صفحه به پنل وب</translation>
 <translation id="5177818338935286353">هیولا ۷</translation>
 <translation id="5213743983876949565">حیوان ۱</translation>
 <translation id="5238244642230426581">نشانک‌های واردشده</translation>
+<translation id="527605719918376753">قطع صدای زبانه</translation>
 <translation id="5305569355661722298">تأیید بستن پنجره</translation>
 <translation id="5388358297987318779">گشودن تصویر</translation>
 <translation id="5416008465899576639">نسخه‌ی جدید ویوالدی آماده است.</translation>
@@ -121,7 +123,7 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">چشم‌انداز ۱۴</translation>
 <translation id="8773635261052182196">این اعلانات را دیگر مشاهده نخواهید کرد. مجدداً می‌توانید از طریق تنظیمات ویوالدی آن‌ها را فعال کنید.</translation>
-<translation id="8894900864683381599">افزودن پیوند به پنل وب</translation>
+<translation id="8894900864683381599">افزودن لینک به پنل وب</translation>
 <translation id="8912720443398351457">آیا واقعاً می خواهید از ویوالدی خارج شوید؟</translation>
 <translation id="8947109330183116400">انتخاب پرونده‌ی HTML نشانک‌ها</translation>
 <translation id="9017566390391482291">انتخاب پوشه‌ی پروفایل ویوالدی برای وارد کردن</translation>

@@ -18,84 +18,40 @@ class ExportNotifierTest(LoggingTestCase):
         self.gerrit = MockGerritAPI()
         self.notifier = ExportNotifier(self.host, self.git, self.gerrit)
 
-    def test_from_gerrit_comment_success(self):
-        gerrit_comment = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: num')
+    def test_get_gerrit_sha_from_comment_success(self):
+        gerrit_comment = self.generate_notifier_comment(
+            123, 'bar', 'num', None)
 
-        actual = PRStatusInfo.from_gerrit_comment(gerrit_comment)
+        actual = PRStatusInfo.get_gerrit_sha_from_comment(gerrit_comment)
 
-        self.assertEqual(actual.node_id, 'foo')
-        self.assertEqual(actual.link, 'bar')
-        self.assertEqual(actual.gerrit_sha, 'num')
+        self.assertEqual(actual, 'num')
 
-    def test_from_gerrit_comment_missing_info(self):
-        gerrit_comment = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: \n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: num')
-
-        actual = PRStatusInfo.from_gerrit_comment(gerrit_comment)
-
-        self.assertIsNone(actual)
-
-    def test_from_gerrit_comment_fail(self):
+    def test_get_gerrit_sha_from_comment_fail(self):
         gerrit_comment = 'ABC'
 
-        actual = PRStatusInfo.from_gerrit_comment(gerrit_comment)
+        actual = PRStatusInfo.get_gerrit_sha_from_comment(gerrit_comment)
 
         self.assertIsNone(actual)
 
     def test_to_gerrit_comment(self):
-        pr_status_info = PRStatusInfo('foo', 'bar', 'num')
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: num')
+        pr_status_info = PRStatusInfo('bar', 123, 'num')
+        expected = self.generate_notifier_comment(123, 'bar', 'num', None)
 
         actual = pr_status_info.to_gerrit_comment()
 
         self.assertEqual(expected, actual)
 
     def test_to_gerrit_comment_latest(self):
-        pr_status_info = PRStatusInfo('foo', 'bar', None)
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: Latest')
+        pr_status_info = PRStatusInfo('bar', 123, None)
+        expected = self.generate_notifier_comment(123, 'bar', 'Latest', None)
 
         actual = pr_status_info.to_gerrit_comment()
 
         self.assertEqual(expected, actual)
 
     def test_to_gerrit_comment_with_patchset(self):
-        pr_status_info = PRStatusInfo('foo', 'bar', 'num')
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: num\n'
-            'Patchset Number: 3')
+        pr_status_info = PRStatusInfo('bar', 123, 'num')
+        expected = self.generate_notifier_comment(123, 'bar', 'num', 3)
 
         actual = pr_status_info.to_gerrit_comment(3)
 
@@ -115,7 +71,7 @@ class ExportNotifierTest(LoggingTestCase):
                 taskcluster_status, 123), {
                     "state": "failure",
                     "context": "Community-TC (pull_request)",
-                })
+            })
 
     def test_get_failure_taskcluster_status_fail(self):
         taskcluster_status = [
@@ -130,7 +86,7 @@ class ExportNotifierTest(LoggingTestCase):
                 taskcluster_status, 123), None)
 
     def test_has_latest_taskcluster_status_commented_false(self):
-        pr_status_info = PRStatusInfo('foo', 'bar', 'num')
+        pr_status_info = PRStatusInfo('bar', 123, 'num')
         messages = [{
             "date": "2019-08-20 17:42:05.000000000",
             "message": "Uploaded patch set 1.\nInitial upload",
@@ -143,7 +99,7 @@ class ExportNotifierTest(LoggingTestCase):
         self.assertFalse(actual)
 
     def test_has_latest_taskcluster_status_commented_true(self):
-        pr_status_info = PRStatusInfo('foo', 'bar', 'num')
+        pr_status_info = PRStatusInfo('bar', 123, 'num')
         messages = [
             {
                 "date": "2019-08-20 17:42:05.000000000",
@@ -153,15 +109,7 @@ class ExportNotifierTest(LoggingTestCase):
             {
                 "date":
                 "2019-08-21 17:41:05.000000000",
-                "message":
-                ('The exported PR for the current patch failed Taskcluster check(s) '
-                 'on GitHub, which could indict cross-broswer failures on the '
-                 'exportable changes. Please contact ecosystem-infra@ team for '
-                 'more information.\n\n'
-                 'Taskcluster Node ID: foo\n'
-                 'Taskcluster Link: bar\n'
-                 'Gerrit CL SHA: num\n'
-                 'Patchset Number: 3'),
+                "message": self.generate_notifier_comment(123, 'bar', 'num', 3),
                 "_revision_number":
                 2
             },
@@ -209,15 +157,7 @@ class ExportNotifierTest(LoggingTestCase):
                     {
                         "date":
                         "2019-08-21 17:41:05.000000000",
-                        "message":
-                        ('The exported PR for the current patch failed Taskcluster check(s) '
-                         'on GitHub, which could indict cross-broswer failures on the '
-                         'exportable changes. Please contact ecosystem-infra@ team for '
-                         'more information.\n\n'
-                         'Taskcluster Node ID: notfoo\n'
-                         'Taskcluster Link: bar\n'
-                         'Gerrit CL SHA: notnum\n'
-                         'Patchset Number: 3'),
+                        "message": self.generate_notifier_comment(123, 'notbar', 'notnum', 3),
                         "_revision_number":
                         2
                     },
@@ -229,16 +169,8 @@ class ExportNotifierTest(LoggingTestCase):
                 }
             },
             api=self.notifier.gerrit)
-        gerrit_dict = {'abc': PRStatusInfo('foo', 'bar', 'num')}
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: num\n'
-            'Patchset Number: 1')
+        gerrit_dict = {'abc': PRStatusInfo('bar', 123, 'num')}
+        expected = self.generate_notifier_comment(123, 'bar', 'num', 1)
 
         self.notifier.process_failing_prs(gerrit_dict)
 
@@ -264,15 +196,7 @@ class ExportNotifierTest(LoggingTestCase):
                     {
                         "date":
                         "2019-08-21 17:41:05.000000000",
-                        "message":
-                        ('The exported PR for the current patch failed Taskcluster check(s) '
-                         'on GitHub, which could indict cross-broswer failures on the '
-                         'exportable changes. Please contact ecosystem-infra@ team for '
-                         'more information.\n\n'
-                         'Taskcluster Node ID: foo\n'
-                         'Taskcluster Link: bar\n'
-                         'Gerrit CL SHA: notnum\n'
-                         'Patchset Number: 3'),
+                        "message": self.generate_notifier_comment(123, 'bar', 'num', 3),
                         "_revision_number":
                         2
                     },
@@ -284,7 +208,7 @@ class ExportNotifierTest(LoggingTestCase):
                 }
             },
             api=self.notifier.gerrit)
-        gerrit_dict = {'abc': PRStatusInfo('foo', 'bar', 'num')}
+        gerrit_dict = {'abc': PRStatusInfo('bar', 123, 'num')}
 
         self.notifier.process_failing_prs(gerrit_dict)
 
@@ -307,15 +231,7 @@ class ExportNotifierTest(LoggingTestCase):
                     {
                         "date":
                         "2019-08-21 17:41:05.000000000",
-                        "message":
-                        ('The exported PR for the current patch failed Taskcluster check(s) '
-                         'on GitHub, which could indict cross-broswer failures on the '
-                         'exportable changes. Please contact ecosystem-infra@ team for '
-                         'more information.\n\n'
-                         'Taskcluster Node ID: not foo\n'
-                         'Taskcluster Link: bar\n'
-                         'Gerrit CL SHA: notnum\n'
-                         'Patchset Number: 3'),
+                        "message": self.generate_notifier_comment(123, 'notbar', 'notnum', 3),
                         "_revision_number":
                         2
                     },
@@ -327,15 +243,8 @@ class ExportNotifierTest(LoggingTestCase):
                 }
             },
             api=self.notifier.gerrit)
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: Latest')
-        gerrit_dict = {'abc': PRStatusInfo('foo', 'bar', None)}
+        expected = self.generate_notifier_comment(123, 'bar', 'Latest')
+        gerrit_dict = {'abc': PRStatusInfo('bar', 123, None)}
 
         self.notifier.process_failing_prs(gerrit_dict)
 
@@ -348,7 +257,7 @@ class ExportNotifierTest(LoggingTestCase):
     def test_process_failing_prs_raise_gerrit_error(self):
         self.notifier.dry_run = False
         self.notifier.gerrit = MockGerritAPI(raise_error=True)
-        gerrit_dict = {'abc': PRStatusInfo('foo', 'bar', 'num')}
+        gerrit_dict = {'abc': PRStatusInfo('bar', 'num')}
 
         self.notifier.process_failing_prs(gerrit_dict)
 
@@ -365,8 +274,7 @@ class ExportNotifierTest(LoggingTestCase):
             PullRequest(
                 title='title1',
                 number=1234,
-                body=
-                'description\nWPT-Export-Revision: hash\nChange-Id: decafbad',
+                body='description\nWPT-Export-Revision: hash\nChange-Id: decafbad',
                 state='open',
                 labels=[''])
         ]
@@ -393,15 +301,7 @@ class ExportNotifierTest(LoggingTestCase):
                     {
                         "date":
                         "2019-08-21 17:41:05.000000000",
-                        "message":
-                        ('The exported PR for the current patch failed Taskcluster check(s) '
-                         'on GitHub, which could indict cross-broswer failures on the '
-                         'exportable changes. Please contact ecosystem-infra@ team for '
-                         'more information.\n\n'
-                         'Taskcluster Node ID: notfoo\n'
-                         'Taskcluster Link: bar\n'
-                         'Gerrit CL SHA: notnum\n'
-                         'Patchset Number: 3'),
+                        "message": self.generate_notifier_comment(1234, 'notbar', 'notnum', 3),
                         "_revision_number":
                         2
                     },
@@ -413,15 +313,7 @@ class ExportNotifierTest(LoggingTestCase):
                 }
             },
             api=self.notifier.gerrit)
-        expected = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.\n\n'
-            'Taskcluster Node ID: foo\n'
-            'Taskcluster Link: bar\n'
-            'Gerrit CL SHA: hash\n'
-            'Patchset Number: 2')
+        expected = self.generate_notifier_comment(1234, 'bar', 'hash', 2)
 
         exit_code = self.notifier.main()
 
@@ -436,3 +328,31 @@ class ExportNotifierTest(LoggingTestCase):
                          [('/a/changes/decafbad/revisions/current/review', {
                              'message': expected
                          })])
+
+    def generate_notifier_comment(self, pr_number, link, sha, patchset=None):
+        if patchset:
+            comment = (
+                'The exported PR, https://github.com/web-platform-tests/wpt/pull/{}, '
+                'has failed Taskcluster check(s) on GitHub, which could indicate '
+                'cross-browser failures on the exported changes. Please contact '
+                'ecosystem-infra@chromium.org for more information.\n\n'
+                'Taskcluster Link: {}\n'
+                'Gerrit CL SHA: {}\n'
+                'Patchset Number: {}'
+                '\n\nAny suggestions to improve this service are welcome; '
+                'crbug.com/1027618.').format(
+                pr_number, link, sha, patchset
+            )
+        else:
+            comment = (
+                'The exported PR, https://github.com/web-platform-tests/wpt/pull/{}, '
+                'has failed Taskcluster check(s) on GitHub, which could indicate '
+                'cross-browser failures on the exported changes. Please contact '
+                'ecosystem-infra@chromium.org for more information.\n\n'
+                'Taskcluster Link: {}\n'
+                'Gerrit CL SHA: {}'
+                '\n\nAny suggestions to improve this service are welcome; '
+                'crbug.com/1027618.').format(
+                pr_number, link, sha
+            )
+        return comment

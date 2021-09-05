@@ -7,19 +7,36 @@
 #include "ash/app_list/test/app_list_test_model.h"
 #include "ash/app_list/test/test_search_result.h"
 #include "ash/app_list/views/app_list_view.h"
+#include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/tablet_mode.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shell.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/accessibility/spoken_feedback_browsertest.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 
 namespace chromeos {
+
+namespace {
+
+void SendKeyPressWithShiftAndControl(ui::KeyboardCode key) {
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, key, true, true, false, false)));
+}
+
+}  // namespace
 
 enum SpokenFeedbackAppListTestVariant { kTestAsNormalUser, kTestAsGuestUser };
 
@@ -57,9 +74,6 @@ class SpokenFeedbackAppListTest
   void SetUpOnMainThread() override {
     LoggedInSpokenFeedbackTest::SetUpOnMainThread();
     auto* controller = ash::Shell::Get()->app_list_controller();
-    controller->SetSearchTabletAndClamshellAccessibleName(
-        l10n_util::GetStringUTF16(IDS_SEARCH_BOX_ACCESSIBILITY_NAME_TABLET),
-        l10n_util::GetStringUTF16(IDS_SEARCH_BOX_ACCESSIBILITY_NAME));
     controller->SetAppListModelForTest(
         std::make_unique<ash::test::AppListTestModel>());
     app_list_test_model_ =
@@ -99,6 +113,104 @@ INSTANTIATE_TEST_SUITE_P(TestAsNormalAndGuestUser,
                          ::testing::Values(kTestAsNormalUser,
                                            kTestAsGuestUser));
 
+class TabletModeSpokenFeedbackAppListTest : public SpokenFeedbackAppListTest {
+ protected:
+  TabletModeSpokenFeedbackAppListTest() = default;
+  ~TabletModeSpokenFeedbackAppListTest() = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SpokenFeedbackAppListTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(ash::switches::kAshEnableTabletMode);
+  }
+
+  void SetTabletMode(bool enabled) {
+    ash::ShellTestApi().SetTabletModeEnabledForTest(enabled);
+  }
+
+  bool IsTabletModeEnabled() const {
+    return ash::TabletMode::Get()->InTabletMode();
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(TestAsNormalAndGuestUser,
+                         TabletModeSpokenFeedbackAppListTest,
+                         ::testing::Values(kTestAsNormalUser,
+                                           kTestAsGuestUser));
+
+// Checks that entering and exiting tablet mode with a browser window open does
+// not generate an accessibility event.
+IN_PROC_BROWSER_TEST_P(
+    TabletModeSpokenFeedbackAppListTest,
+    HiddenAppListDoesNotCreateAccessibilityEventWhenTransitioningToTabletMode) {
+  EnableChromeVox();
+
+  sm_.Call([this]() { EXPECT_FALSE(IsTabletModeEnabled()); });
+  sm_.Call([this]() { SetTabletMode(true); });
+  sm_.Call([this]() { EXPECT_TRUE(IsTabletModeEnabled()); });
+  sm_.ExpectNextSpeechIsNot("Launcher, all apps");
+  sm_.Call([this]() { SetTabletMode(false); });
+  sm_.Call([this]() { EXPECT_FALSE(IsTabletModeEnabled()); });
+  sm_.ExpectNextSpeechIsNot("Launcher, all apps");
+  sm_.Replay();
+}
+
+// Checks that rotating the display in tablet mode does not generate an
+// accessibility event.
+IN_PROC_BROWSER_TEST_P(
+    TabletModeSpokenFeedbackAppListTest,
+    LauncherAppListScreenRotationDoesNotCreateAccessibilityEvent) {
+  display::DisplayManager* display_manager =
+      ash::Shell::Get()->display_manager();
+  const int display_id = display_manager->GetDisplayAt(0).id();
+  EnableChromeVox();
+
+  sm_.Call(
+      [this]() { EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF)); });
+
+  sm_.Call(
+      [this]() { EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF)); });
+  sm_.ExpectSpeech("Shelf");
+
+  // Press space on the launcher button in shelf, this opens peeking launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, partial view");
+
+  // Send a key press to enable keyboard traversal
+  sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_TAB); });
+
+  // Move focus to expand all apps button.
+  sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_TAB); });
+  sm_.ExpectSpeech("Expand to all apps");
+
+  // Press space on expand arrow to go to fullscreen launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, all apps");
+
+  sm_.Call([this]() { EXPECT_FALSE(IsTabletModeEnabled()); });
+  sm_.Call([this]() { SetTabletMode(true); });
+  sm_.Call([this]() { EXPECT_TRUE(IsTabletModeEnabled()); });
+
+  sm_.Call([this]() { browser()->window()->Minimize(); });
+  // Set screen rotation to 90 degrees. No ChromeVox event should be created.
+  sm_.Call([&, display_manager, display_id]() {
+    display_manager->SetDisplayRotation(display_id, display::Display::ROTATE_90,
+                                        display::Display::RotationSource::USER);
+  });
+  sm_.ExpectNextSpeechIsNot("Launcher, all apps");
+
+  // Set screen rotation to 0 degrees. No ChromeVox event should be created.
+  sm_.Call([&, display_manager, display_id]() {
+    display_manager->SetDisplayRotation(display_id, display::Display::ROTATE_0,
+                                        display::Display::RotationSource::USER);
+  });
+  sm_.ExpectNextSpeechIsNot("Launcher, all apps");
+
+  sm_.Call([this]() { EXPECT_TRUE(IsTabletModeEnabled()); });
+  sm_.Call([this]() { SetTabletMode(false); });
+  sm_.Call([this]() { EXPECT_FALSE(IsTabletModeEnabled()); });
+  sm_.Replay();
+}
+
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, LauncherStateTransition) {
   EnableChromeVox();
 
@@ -124,7 +236,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, LauncherStateTransition) {
   // Press space on expand arrow to go to fullscreen launcher.
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
   sm_.ExpectSpeech(
-      "Search your device, apps, and web."
+      "Search your device, apps, settings, and web."
       " Use the arrow keys to navigate your apps.");
   sm_.ExpectSpeech("Edit text");
   // Check that Launcher, all apps state is announced.
@@ -244,57 +356,128 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest,
   // Move focus to app list window;
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
   sm_.ExpectSpeech(
-      "Search your device, apps, and web. Use the arrow keys to navigate "
-      "your "
-      "apps.");
+      "Search your device, apps, settings, and web. Use the arrow keys to "
+      "navigate your apps.");
   // Move focus to search box;
   sm_.ExpectSpeech("Edit text");
   sm_.Replay();
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, NavigateAppLauncher) {
+// Checks that app list keyboard foldering is announced.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, AppListFoldering) {
+  // Add 3 apps.
+  PopulateApps(3);
+
   EnableChromeVox();
-
-  sm_.Call([this]() {
-    // Add one app to the applist.
-    PopulateApps(1);
-
-    EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF));
-  });
-
-  // Wait for it to say "Launcher", "Button", "Shelf", "Tool bar".
-  sm_.ExpectSpeechPattern("Launcher");
-  sm_.ExpectSpeech("Button");
-  sm_.ExpectSpeech("Shelf");
-  sm_.ExpectSpeech("Tool bar");
-
-  // Click on the launcher, it brings up the app list UI.
-  sm_.Call([this]() { SendKeyPress(ui::VKEY_SPACE); });
-  sm_.ExpectSpeech(
-      "Search your device, apps, and web. Use the arrow keys to navigate your "
-      "apps.");
-  sm_.ExpectSpeech("Edit text");
-
-  // Close it and open it again.
-  sm_.Call([this]() { SendKeyPress(ui::VKEY_ESCAPE); });
-  sm_.ExpectSpeechPattern("*window*");
 
   sm_.Call(
       [this]() { EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF)); });
-  sm_.ExpectSpeechPattern("Launcher");
+  sm_.ExpectSpeech("Shelf");
+  // Press space on the launcher button in shelf, this opens peeking
+  // launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, partial view");
+  // Move focus to expand all apps button.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_UP); });
+  sm_.ExpectSpeech("Expand to all apps");
+  // Press space on expand arrow to go to fullscreen launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, all apps");
+
+  // Move focus to 1st app;
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Item 0");
   sm_.ExpectSpeech("Button");
 
-  sm_.Call([this]() { SendKeyPress(ui::VKEY_SPACE); });
-  sm_.ExpectSpeech(
-      "Search your device, apps, and web. Use the arrow keys to navigate your "
-      "apps.");
+  // Combine items and create a new folder.
+  sm_.Call([]() { SendKeyPressWithShiftAndControl(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Folder Unnamed");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Item 0 combined with Item 1 to create new folder.");
 
-  // Now press the right arrow and we should be focused on an app button
-  // in a dialog.
-  // THis doesn't work though (to be done below).
+  // Open the folder and move focus to the first item of the folder.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Item 1");
+  sm_.ExpectSpeech("Button");
 
-  // TODO(newcomer): reimplement this test once the AppListFocus changes are
-  // complete (http://crbug.com/784942).
+  // Remove the first item from the folder back to the top level app list.
+  sm_.Call([]() { SendKeyPressWithShiftAndControl(ui::VKEY_LEFT); });
+  sm_.ExpectSpeech("Item 1");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 1, column 1.");
+
+  sm_.Replay();
+}
+
+// Checks that app list keyboard reordering is announced.
+// TODO(mmourgos): The current method of accessibility announcements for item
+// reordering uses alerts, this works for spoken feedback but does not work as
+// well for braille users. The preferred way to handle this is to actually
+// change focus as the user navigates, and to have each object's
+// accessible name describe its position. (See crbug.com/1098495)
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, AppListReordering) {
+  // Add 7 apps.
+  PopulateApps(22);
+
+  EnableChromeVox();
+
+  sm_.Call(
+      [this]() { EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF)); });
+  sm_.ExpectSpeech("Shelf");
+  // Press space on the launcher button in shelf, this opens peeking
+  // launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, partial view");
+  // Send a key press to enable keyboard traversal
+  sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_TAB); });
+  // Move focus to expand all apps button.
+  sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_TAB); });
+  sm_.ExpectSpeech("Expand to all apps");
+  // Press space on expand arrow to go to fullscreen launcher.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Launcher, all apps");
+
+  // Move focus to first app;
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Item 0");
+  sm_.ExpectSpeech("Button");
+
+  // Move the first item to the right.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 1, column 2.");
+
+  // Move the focused item down.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 2, column 2.");
+
+  // Move the focused item down.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 3, column 2.");
+
+  // Move the focused item down.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 4, column 2.");
+
+  // Move the focused item down to page 2.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 2, row 1, column 2.");
+
+  // Move the focused item to the left.
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_LEFT); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 2, row 1, column 1.");
+
+  // Move the focused item back up to page 1..
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_UP); });
+  sm_.ExpectSpeech("Alert");
+  sm_.ExpectSpeech("Moved to Page 1, row 4, column 1.");
 
   sm_.Replay();
 }

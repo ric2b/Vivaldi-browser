@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
 
+#include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -11,6 +12,7 @@
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,6 +33,8 @@ base::Value MakeListValue(const std::vector<std::string>& elements) {
 base::Value DefaultConnectorSettings() {
   base::Value settings(base::Value::Type::DICTIONARY);
 
+  settings.SetKey(enterprise_connectors::kKeyServiceProvider,
+                  base::Value("google"));
   settings.SetKey(enterprise_connectors::kKeyEnable,
                   base::Value(base::Value::Type::LIST));
   settings.SetKey(enterprise_connectors::kKeyDisable,
@@ -56,14 +60,12 @@ void AddConnectorUrlPattern(enterprise_connectors::AnalysisConnector connector,
 
   ListPrefUpdate settings_list(g_browser_process->local_state(),
                                ConnectorPref(connector));
-  base::Value* settings = nullptr;
-  DCHECK(settings_list->Get(0, &settings));
-  DCHECK(settings);
-  DCHECK(settings->is_dict());
+  base::Value& settings = settings_list->GetList()[0];
+  DCHECK(settings.is_dict());
 
   base::Value* list =
-      settings->FindListPath(enable ? enterprise_connectors::kKeyEnable
-                                    : enterprise_connectors::kKeyDisable);
+      settings.FindListKey(enable ? enterprise_connectors::kKeyEnable
+                                  : enterprise_connectors::kKeyDisable);
   DCHECK(list);
 
   base::Value list_element(base::Value::Type::DICTIONARY);
@@ -73,17 +75,51 @@ void AddConnectorUrlPattern(enterprise_connectors::AnalysisConnector connector,
   list->Append(std::move(list_element));
 }
 
+void ClearConnectorUrlPattern(
+    enterprise_connectors::AnalysisConnector connector,
+    bool enable,
+    base::Value tags) {
+  ListPrefUpdate settings_list(g_browser_process->local_state(),
+                               ConnectorPref(connector));
+  DCHECK(settings_list.Get());
+  if (settings_list->empty())
+    return;
+
+  base::Value& settings = settings_list->GetList()[0];
+  DCHECK(settings.is_dict());
+
+  base::Value* list =
+      settings.FindListKey(enable ? enterprise_connectors::kKeyEnable
+                                  : enterprise_connectors::kKeyDisable);
+  if (!list)
+    return;
+
+  DCHECK(list->is_list());
+  if (list->GetList().empty())
+    return;
+
+  list->EraseListValueIf([&tags](const base::Value& pattern) {
+    DCHECK(pattern.is_dict());
+    const base::Value* pattern_tags =
+        pattern.FindKey(enterprise_connectors::kKeyTags);
+    if (!pattern_tags)
+      return false;
+
+    DCHECK(pattern_tags->is_list());
+    return (*pattern_tags == tags);
+  });
+}
+
+template <typename T>
 void SetConnectorField(enterprise_connectors::AnalysisConnector connector,
                        const char* key,
-                       bool value) {
+                       T value) {
   InitConnectorPrefIfEmpty(connector);
   ListPrefUpdate settings_list(g_browser_process->local_state(),
                                ConnectorPref(connector));
-  base::Value* settings = nullptr;
-  DCHECK(settings_list->Get(0, &settings));
-  DCHECK(settings);
-  DCHECK(settings->is_dict());
-  settings->SetKey(key, base::Value(std::move(value)));
+  base::Value& settings = settings_list->GetList()[0];
+  DCHECK(settings.is_dict());
+  settings.SetKey(key, base::Value(std::move(value)));
 }
 
 }  // namespace
@@ -110,7 +146,7 @@ void EventReportValidator::ExpectUnscannedFileEvent(
   sha256_ = expected_sha256;
   mimetypes_ = expected_mimetypes;
   trigger_ = expected_trigger;
-  reason_ = expected_reason;
+  unscanned_reason_ = expected_reason;
   content_size_ = expected_content_size;
   EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
       .WillOnce([this](base::Value& report,
@@ -151,7 +187,7 @@ void EventReportValidator::ExpectSensitiveDataEvent(
     const std::string& expected_filename,
     const std::string& expected_sha256,
     const std::string& expected_trigger,
-    const DlpDeepScanningVerdict& expected_dlp_verdict,
+    const ContentAnalysisScanResult& expected_dlp_verdict,
     const std::set<std::string>* expected_mimetypes,
     int expected_content_size) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeySensitiveDataEvent;
@@ -179,7 +215,7 @@ void EventReportValidator::
         const std::string& expected_sha256,
         const std::string& expected_threat_type,
         const std::string& expected_trigger,
-        const DlpDeepScanningVerdict& expected_dlp_verdict,
+        const ContentAnalysisScanResult& expected_dlp_verdict,
         const std::set<std::string>* expected_mimetypes,
         int expected_content_size) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent;
@@ -236,7 +272,8 @@ void EventReportValidator::ValidateReport(base::Value* report) {
                 content_size_);
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyThreatType,
                 threat_type_);
-  ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyReason, reason_);
+  ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyUnscannedReason,
+                unscanned_reason_);
   ValidateMimeType(event);
   ValidateDlpVerdict(event);
 }
@@ -261,54 +298,26 @@ void EventReportValidator::ValidateDlpVerdict(base::Value* value) {
   ASSERT_NE(nullptr, triggered_rules);
   ASSERT_EQ(base::Value::Type::LIST, triggered_rules->type());
   base::Value::ListView rules_list = triggered_rules->GetList();
-  int rules_size = rules_list.size();
-  ASSERT_EQ(rules_size, dlp_verdict_.value().triggered_rules_size());
-  for (int i = 0; i < rules_size; ++i) {
+  size_t rules_size = rules_list.size();
+  ASSERT_EQ(rules_size, dlp_verdict_.value().triggers.size());
+  for (size_t i = 0; i < rules_size; ++i) {
     base::Value* rule = &rules_list[i];
     ASSERT_EQ(base::Value::Type::DICTIONARY, rule->type());
-    ValidateDlpRule(rule, dlp_verdict_.value().triggered_rules(i));
+    ValidateDlpRule(rule, dlp_verdict_.value().triggers[i]);
   }
 }
 
 void EventReportValidator::ValidateDlpRule(
     base::Value* value,
-    const DlpDeepScanningVerdict::TriggeredRule& expected_rule) {
+    const ContentAnalysisTrigger& expected_rule) {
   ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleAction,
-                base::Optional<int>(expected_rule.action()));
+                base::Optional<int>(expected_rule.action));
   ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName,
-                expected_rule.rule_name());
+                expected_rule.name);
+  int64_t rule_id;
+  ASSERT_TRUE(base::StringToInt64(expected_rule.id, &rule_id));
   ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId,
-                base::Optional<int>(expected_rule.rule_id()));
-  ValidateField(value,
-                SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleSeverity,
-                expected_rule.rule_severity());
-  ValidateField(value,
-                SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleResourceName,
-                expected_rule.rule_resource_name());
-
-  base::Value* matched_detectors =
-      value->FindListKey(SafeBrowsingPrivateEventRouter::kKeyMatchedDetectors);
-  ASSERT_NE(nullptr, matched_detectors);
-  ASSERT_EQ(base::Value::Type::LIST, matched_detectors->type());
-  base::Value::ListView detectors_list = matched_detectors->GetList();
-  int detectors_size = detectors_list.size();
-  ASSERT_EQ(detectors_size, expected_rule.matched_detectors_size());
-
-  for (int j = 0; j < detectors_size; ++j) {
-    base::Value* detector = &detectors_list[j];
-    ASSERT_EQ(base::Value::Type::DICTIONARY, detector->type());
-    const DlpDeepScanningVerdict::MatchedDetector& expected_detector =
-        expected_rule.matched_detectors(j);
-    ValidateField(detector,
-                  SafeBrowsingPrivateEventRouter::kKeyMatchedDetectorId,
-                  expected_detector.detector_id());
-    ValidateField(detector,
-                  SafeBrowsingPrivateEventRouter::kKeyMatchedDetectorName,
-                  expected_detector.display_name());
-    ValidateField(detector,
-                  SafeBrowsingPrivateEventRouter::kKeyMatchedDetectorType,
-                  expected_detector.detector_type());
-  }
+                base::Optional<int>(rule_id));
 }
 
 void EventReportValidator::ValidateField(
@@ -349,26 +358,22 @@ void SetDlpPolicyForConnectors(CheckContentComplianceValues state) {
   //   nothing for DLP.
 
   // This is replicated in the connector policies by adding the wildcard pattern
-  // on upload connectors with the "dlp" tag in "enable" or "disable". The
-  // wildcard pattern should also be included in the disable list if the policy
-  // is disabled for downloads since no scan can occur with the legacy policy
-  // when it is disabled.
+  // on upload connectors with the "dlp" tag in "enable", and by removing any
+  // "enable" patterns with the "dlp" tag when the policy is disabled.
 
-  bool enable_uploads =
-      state == CHECK_UPLOADS || state == CHECK_UPLOADS_AND_DOWNLOADS;
-
-  AddConnectorUrlPattern(
-      enterprise_connectors::AnalysisConnector::FILE_ATTACHED, enable_uploads,
-      MakeListValue({"*"}), MakeListValue({"dlp"}));
-  AddConnectorUrlPattern(
-      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY, enable_uploads,
-      MakeListValue({"*"}), MakeListValue({"dlp"}));
-
-  if (state != CHECK_DOWNLOADS && state != CHECK_UPLOADS_AND_DOWNLOADS) {
+  if (state == CHECK_UPLOADS || state == CHECK_UPLOADS_AND_DOWNLOADS) {
     AddConnectorUrlPattern(
-        enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED, false,
+        enterprise_connectors::AnalysisConnector::FILE_ATTACHED, true,
         MakeListValue({"*"}), MakeListValue({"dlp"}));
+    AddConnectorUrlPattern(
+        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY, true,
+        MakeListValue({"*"}), MakeListValue({"dlp"}));
+  } else {
+    ClearUrlsToCheckComplianceOfUploadsForConnectors();
   }
+
+  if (state != CHECK_DOWNLOADS && state != CHECK_UPLOADS_AND_DOWNLOADS)
+    ClearUrlsToCheckComplianceOfDownloadsForConnectors();
 }
 
 void SetMalwarePolicyForConnectors(SendFilesForMalwareCheckValues state) {
@@ -381,34 +386,29 @@ void SetMalwarePolicyForConnectors(SendFilesForMalwareCheckValues state) {
   //   it's disabled.
 
   // This is replicated in the connector policies by adding the wildcard pattern
-  // on the download connector with the "malware" tag in "enable" or "disable".
-  // The wildcard pattern should also be included in the disable list if the
-  // policy is disabled for uploads since no scan can occur with the legacy
-  // policy when it is disabled.
+  // on the download connector with the "malware" tag in "enable", and by
+  // removing any "enable" patterns with the "malware" tag when the policy is
+  // disabled.
 
-  bool enable_downloads =
-      state == SEND_DOWNLOADS || state == SEND_UPLOADS_AND_DOWNLOADS;
-
-  AddConnectorUrlPattern(
-      enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
-      enable_downloads, MakeListValue({"*"}), MakeListValue({"malware"}));
-
-  if (state != SEND_UPLOADS && state != SEND_UPLOADS_AND_DOWNLOADS) {
+  if (state == SEND_DOWNLOADS || state == SEND_UPLOADS_AND_DOWNLOADS) {
     AddConnectorUrlPattern(
-        enterprise_connectors::AnalysisConnector::FILE_ATTACHED, false,
+        enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED, true,
         MakeListValue({"*"}), MakeListValue({"malware"}));
-    AddConnectorUrlPattern(
-        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY, false,
-        MakeListValue({"*"}), MakeListValue({"malware"}));
+  } else {
+    ClearUrlsToCheckForMalwareOfDownloadsForConnectors();
   }
+
+  if (state != SEND_UPLOADS && state != SEND_UPLOADS_AND_DOWNLOADS)
+    ClearUrlsToCheckForMalwareOfUploadsForConnectors();
 }
 
 void SetDelayDeliveryUntilVerdictPolicyForConnectors(
     DelayDeliveryUntilVerdictValues state) {
-  bool delay_uploads =
-      state == DELAY_UPLOADS || state == DELAY_UPLOADS_AND_DOWNLOADS;
-  bool delay_downloads =
-      state == DELAY_DOWNLOADS || state == DELAY_UPLOADS_AND_DOWNLOADS;
+  int delay_uploads =
+      (state == DELAY_UPLOADS || state == DELAY_UPLOADS_AND_DOWNLOADS) ? 1 : 0;
+  int delay_downloads =
+      (state == DELAY_DOWNLOADS || state == DELAY_UPLOADS_AND_DOWNLOADS) ? 1
+                                                                         : 0;
   SetConnectorField(enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY,
                     enterprise_connectors::kKeyBlockUntilVerdict,
                     delay_uploads);
@@ -422,16 +422,16 @@ void SetDelayDeliveryUntilVerdictPolicyForConnectors(
 
 void SetAllowPasswordProtectedFilesPolicyForConnectors(
     AllowPasswordProtectedFilesValues state) {
-  bool allow_uploads =
-      state == ALLOW_UPLOADS || state == ALLOW_UPLOADS_AND_DOWNLOADS;
-  bool allow_downloads =
-      state == ALLOW_DOWNLOADS || state == ALLOW_UPLOADS_AND_DOWNLOADS;
+  bool block_uploads =
+      state != ALLOW_UPLOADS && state != ALLOW_UPLOADS_AND_DOWNLOADS;
+  bool block_downloads =
+      state != ALLOW_DOWNLOADS && state != ALLOW_UPLOADS_AND_DOWNLOADS;
   SetConnectorField(enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
                     enterprise_connectors::kKeyBlockPasswordProtected,
-                    allow_uploads);
+                    block_uploads);
   SetConnectorField(enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
                     enterprise_connectors::kKeyBlockPasswordProtected,
-                    allow_downloads);
+                    block_downloads);
 }
 
 void SetBlockUnsupportedFileTypesPolicyForConnectors(
@@ -495,6 +495,47 @@ void AddUrlsToNotCheckForMalwareOfDownloadsForConnectors(
   AddConnectorUrlPattern(
       enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED, false,
       MakeListValue(urls), MakeListValue({"malware"}));
+}
+
+void AddUrlToListForConnectors(const char* pref_name, const std::string& url) {
+  if (pref_name == prefs::kURLsToCheckComplianceOfDownloadedContent)
+    AddUrlsToCheckComplianceOfDownloadsForConnectors({url});
+  else if (pref_name == prefs::kURLsToNotCheckComplianceOfUploadedContent)
+    AddUrlsToNotCheckComplianceOfUploadsForConnectors({url});
+  else if (pref_name == prefs::kURLsToCheckForMalwareOfUploadedContent)
+    AddUrlsToCheckForMalwareOfUploadsForConnectors({url});
+  else if (pref_name == prefs::kURLsToNotCheckForMalwareOfDownloadedContent)
+    AddUrlsToNotCheckForMalwareOfDownloadsForConnectors({url});
+  else
+    NOTREACHED();
+}
+
+void ClearUrlsToCheckComplianceOfUploadsForConnectors() {
+  for (auto connector :
+       {enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
+        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY}) {
+    ClearConnectorUrlPattern(connector, true, MakeListValue({"dlp"}));
+  }
+}
+
+void ClearUrlsToCheckForMalwareOfUploadsForConnectors() {
+  for (auto connector :
+       {enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
+        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY}) {
+    ClearConnectorUrlPattern(connector, true, MakeListValue({"malware"}));
+  }
+}
+
+void ClearUrlsToCheckComplianceOfDownloadsForConnectors() {
+  ClearConnectorUrlPattern(
+      enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED, true,
+      MakeListValue({"dlp"}));
+}
+
+void ClearUrlsToCheckForMalwareOfDownloadsForConnectors() {
+  ClearConnectorUrlPattern(
+      enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED, true,
+      MakeListValue({"malware"}));
 }
 
 }  // namespace safe_browsing

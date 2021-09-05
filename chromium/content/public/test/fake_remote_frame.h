@@ -81,6 +81,10 @@ class FakeRemoteFrame : public blink::mojom::RemoteFrame {
       const std::vector<blink::ParsedFeaturePolicyDeclaration>&
           parsed_feature_policy) override {}
   void DidUpdateFramePolicy(const blink::FramePolicy& frame_policy) override {}
+  void UpdateOpener(const base::Optional<base::UnguessableToken>&
+                        opener_frame_token) override;
+  void TransferUserActivationToRenderer(
+      const base::UnguessableToken& source_frame_token) override {}
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

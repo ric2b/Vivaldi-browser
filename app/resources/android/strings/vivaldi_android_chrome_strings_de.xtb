@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
-<translation id="1169602411434249000">Tracker blockieren</translation>
 <translation id="1397811292916898096">Mit <ph name="PRODUCT_NAME" /> suchen</translation>
 <translation id="1598449788754183301">Tabs normal/privat umschalten</translation>
 <translation id="1644574205037202324">Verlauf</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Private Tabs</translation>
 <translation id="4883379392681899581">Privatmodus verlassen</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
+<translation id="49576331685473090">Inhalte blockieren</translation>
+<translation id="4960569554487356883">Schalten Sie diese Berechtigung für Vivaldi in den <ph name="BEGIN_LINK" />Android Einstellungen<ph name="END_LINK" /> ein.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-Speicher</translation>
 <translation id="5233638681132016545">Neuer Tab</translation>
 <translation id="5495228542153126976">Sie befinden sich im Privatmodus</translation>
+<translation id="5553467336321715093">Schalten Sie diese Berechtigungen für Vivaldi in den <ph name="BEGIN_LINK" />Android Einstellungen<ph name="END_LINK" /> ein.</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
 <translation id="5840488417521835756">Erfahren Sie mehr über die Inhalte von Websites, ohne die Seite zu verlassen. “Zum Suchen tippen” ist eine Funktion, die nur verfügbar ist, wenn Google als Standard-Suchmaschine in Vivaldi eingestellt ist. Das Wort und sein Kontext wird an die Google Suche gesendet und Sie erhalten Definitionen, Bilder, Suchergebnisse und andere Details zurück.
 

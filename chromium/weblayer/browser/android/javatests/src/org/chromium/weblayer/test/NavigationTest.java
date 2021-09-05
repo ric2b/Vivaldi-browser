@@ -13,7 +13,8 @@ import static org.junit.Assert.assertTrue;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.net.Uri;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
@@ -22,6 +23,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
@@ -111,6 +113,19 @@ public class NavigationTest {
             }
         }
 
+        public static class UriCallbackHelper extends CallbackHelper {
+            private Uri mUri;
+
+            public void notifyCalled(Uri uri) {
+                mUri = uri;
+                notifyCalled();
+            }
+
+            public Uri getUri() {
+                return mUri;
+            }
+        }
+
         public static class NavigationCallbackValueRecorder {
             private List<String> mObservedValues =
                     Collections.synchronizedList(new ArrayList<String>());
@@ -125,7 +140,7 @@ public class NavigationTest {
 
             public void waitUntilValueObserved(String expectation) {
                 CriteriaHelper.pollInstrumentationThread(
-                        () -> Assert.assertThat(expectation, Matchers.isIn(mObservedValues)));
+                        () -> Criteria.checkThat(expectation, Matchers.isIn(mObservedValues)));
             }
         }
 
@@ -139,6 +154,7 @@ public class NavigationTest {
         public NavigationCallbackValueRecorder loadProgressChangedCallback =
                 new NavigationCallbackValueRecorder();
         public CallbackHelper onFirstContentfulPaintCallback = new CallbackHelper();
+        public UriCallbackHelper onOldPageNoLongerRenderedCallback = new UriCallbackHelper();
 
         @Override
         public void onNavigationStarted(Navigation navigation) {
@@ -168,6 +184,11 @@ public class NavigationTest {
         @Override
         public void onFirstContentfulPaint() {
             onFirstContentfulPaintCallback.notifyCalled();
+        }
+
+        @Override
+        public void onOldPageNoLongerRendered(Uri newNavigationUri) {
+            onOldPageNoLongerRenderedCallback.notifyCalled(newNavigationUri);
         }
 
         @Override
@@ -204,6 +225,19 @@ public class NavigationTest {
         mCallback.onCompletedCallback.assertCalledWith(curCompletedCount, URL2);
         mCallback.onFirstContentfulPaintCallback.waitForCallback(curOnFirstContentfulPaintCount);
         assertEquals(mCallback.onCompletedCallback.getHttpStatusCode(), 200);
+    }
+
+    @MinWebLayerVersion(85)
+    @Test
+    @SmallTest
+    public void testOldPageNoLongerRendered() throws Exception {
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
+        setNavigationCallback(activity);
+
+        int renderedCount = mCallback.onOldPageNoLongerRenderedCallback.getCallCount();
+        mActivityTestRule.navigateAndWait(URL2);
+        mCallback.onOldPageNoLongerRenderedCallback.waitForCallback(renderedCount);
+        assertEquals(Uri.parse(URL2), mCallback.onOldPageNoLongerRenderedCallback.getUri());
     }
 
     @Test
@@ -687,5 +721,58 @@ public class NavigationTest {
         mActivityTestRule.navigateAndWait(url);
         String actualUserAgent = testServer.getLastRequest("/ok.html").headerValue("User-Agent");
         assertEquals(customUserAgent, actualUserAgent);
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(85)
+    public void testSkippedNavigationEntry() throws Exception {
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
+        setNavigationCallback(activity);
+
+        int curCompletedCount = mCallback.onCompletedCallback.getCallCount();
+        mActivityTestRule.executeScriptSync(
+                "history.pushState(null, '', '#foo');", true /* useSeparateIsolate */);
+        mCallback.onCompletedCallback.assertCalledWith(curCompletedCount, URL1 + "#foo", true);
+
+        curCompletedCount = mCallback.onCompletedCallback.getCallCount();
+        mActivityTestRule.executeScriptSync(
+                "history.pushState(null, '', '#bar');", true /* useSeparateIsolate */);
+        mCallback.onCompletedCallback.assertCalledWith(curCompletedCount, URL1 + "#bar", true);
+
+        runOnUiThreadBlocking(() -> {
+            NavigationController navigationController = activity.getTab().getNavigationController();
+            int currentIndex = navigationController.getNavigationListCurrentIndex();
+            // Should skip the two previous same document entries, but not the most recent.
+            assertFalse(navigationController.isNavigationEntrySkippable(currentIndex));
+            assertTrue(navigationController.isNavigationEntrySkippable(currentIndex - 1));
+            assertTrue(navigationController.isNavigationEntrySkippable(currentIndex - 2));
+        });
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(85)
+    public void testIndexOutOfBounds() throws Exception {
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
+        runOnUiThreadBlocking(() -> {
+            NavigationController controller = activity.getTab().getNavigationController();
+            assertIndexOutOfBoundsException(() -> controller.goBack());
+            assertIndexOutOfBoundsException(() -> controller.goForward());
+            assertIndexOutOfBoundsException(() -> controller.goToIndex(10));
+            assertIndexOutOfBoundsException(() -> controller.getNavigationEntryDisplayUri(10));
+            assertIndexOutOfBoundsException(() -> controller.getNavigationEntryTitle(10));
+            assertIndexOutOfBoundsException(() -> controller.isNavigationEntrySkippable(10));
+        });
+    }
+
+    private static void assertIndexOutOfBoundsException(Runnable runnable) {
+        try {
+            runnable.run();
+        } catch (IndexOutOfBoundsException e) {
+            // Expected exception.
+            return;
+        }
+        Assert.fail("Expected IndexOutOfBoundsException.");
     }
 }

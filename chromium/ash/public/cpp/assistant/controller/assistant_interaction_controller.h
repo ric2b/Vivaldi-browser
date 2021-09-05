@@ -8,12 +8,15 @@
 #include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom-forward.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+
+namespace base {
+class TimeDelta;
+}  // namespace base
 
 namespace ash {
 
 class AssistantInteractionModel;
-class AssistantInteractionModelObserver;
 
 // The interface for the Assistant controller in charge of interactions.
 class ASH_PUBLIC_EXPORT AssistantInteractionController {
@@ -24,15 +27,15 @@ class ASH_PUBLIC_EXPORT AssistantInteractionController {
   // Returns a pointer to the underlying model.
   virtual const AssistantInteractionModel* GetModel() const = 0;
 
-  // Adds/removes the specified model observer.
-  virtual void AddModelObserver(AssistantInteractionModelObserver*) = 0;
-  virtual void RemoveModelObserver(AssistantInteractionModelObserver*) = 0;
+  // Returns the TimeDelta since the last Assistant interaction. Note that the
+  // last interaction may have been performed in a different user session.
+  virtual base::TimeDelta GetTimeDeltaSinceLastInteraction() const = 0;
 
   // Start Assistant text interaction.
   virtual void StartTextInteraction(
       const std::string& query,
       bool allow_tts,
-      chromeos::assistant::mojom::AssistantQuerySource source) = 0;
+      chromeos::assistant::AssistantQuerySource source) = 0;
 
  protected:
   AssistantInteractionController();

@@ -14,7 +14,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/fullscreen_control/fullscreen_control_host.h"
@@ -116,11 +116,9 @@ class FullscreenControlViewTest : public InProcessBrowserTest {
 
   void EnterActiveTabFullscreen() {
     FullscreenNotificationObserver fullscreen_observer(browser());
-    content::WebContentsDelegate* delegate =
-        static_cast<content::WebContentsDelegate*>(browser());
-    delegate->EnterFullscreenModeForTab(GetActiveWebContents(),
-                                        GURL("about:blank"),
-                                        blink::mojom::FullscreenOptions());
+    auto* delegate = static_cast<content::WebContentsDelegate*>(browser());
+    delegate->EnterFullscreenModeForTab(GetActiveWebContents()->GetMainFrame(),
+                                        {});
     fullscreen_observer.Wait();
     ASSERT_TRUE(delegate->IsFullscreenForTabOrPending(GetActiveWebContents()));
   }

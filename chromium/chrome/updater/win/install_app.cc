@@ -45,6 +45,7 @@
 #include "chrome/updater/win/ui/resources/resources.grh"
 #include "chrome/updater/win/ui/splash_screen.h"
 #include "chrome/updater/win/ui/util.h"
+#include "chrome/updater/win/util.h"
 #include "components/prefs/pref_service.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
@@ -431,7 +432,7 @@ class InstallAppController
   void DoInstallApp();
   void InstallComplete();
   void HandleInstallResult(const update_client::CrxUpdateItem& update_item);
-  void FlushPrefs();
+  void PrefsCommit();
 
   // Returns the thread id of the thread which owns the progress window.
   DWORD GetUIThreadID() const;
@@ -545,8 +546,7 @@ void InstallAppController::DoInstallApp() {
 // by calling UpdateClient::GetCrxUpdateState.
 void InstallAppController::InstallComplete() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  FlushPrefs();
-  install_progress_observer_ipc_ = nullptr;
+  PrefsCommit();
   update_client_ = nullptr;
 }
 
@@ -569,11 +569,13 @@ void InstallAppController::StateChange(
           base::ASCIIToUTF16(crx_update_item.next_version.GetString()));
       break;
 
-    case update_client::ComponentState::kDownloading:
-      // TODO(sorin): handle progress and time remaining.
-      // https://crbug.com/1014590
-      install_progress_observer_ipc_->OnDownloading(app_id, app_name_, -1, 0);
-      break;
+    case update_client::ComponentState::kDownloading: {
+      // TODO(sorin): handle time remaining https://crbug.com/1014590.
+      const auto pos = GetDownloadProgress(crx_update_item.downloaded_bytes,
+                                           crx_update_item.total_bytes);
+      install_progress_observer_ipc_->OnDownloading(app_id, app_name_, -1,
+                                                    pos != -1 ? pos : 0);
+    } break;
 
     case update_client::ComponentState::kUpdating: {
       // TODO(sorin): handle the install cancellation.
@@ -581,10 +583,9 @@ void InstallAppController::StateChange(
       bool can_start_install = false;
       install_progress_observer_ipc_->OnWaitingToInstall(app_id, app_name_,
                                                          &can_start_install);
-
-      // TODO(sorin): handle progress and time remaining.
-      // https://crbug.com/1014594
-      install_progress_observer_ipc_->OnInstalling(app_id, app_name_, 0, 0);
+      const int pos = crx_update_item.install_progress;
+      install_progress_observer_ipc_->OnInstalling(app_id, app_name_, 0,
+                                                   pos != -1 ? pos : 0);
       break;
     }
 
@@ -680,9 +681,9 @@ BOOL InstallAppController::PreTranslateMessage(MSG* msg) {
   return false;
 }
 
-void InstallAppController::FlushPrefs() {
+void InstallAppController::PrefsCommit() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  config_->GetPrefService()->SchedulePendingLossyWrites();
+  config_->GetPrefService()->CommitPendingWrite();
 }
 
 DWORD InstallAppController::GetUIThreadID() const {
@@ -716,7 +717,7 @@ class AppInstall : public App {
 
 void AppInstall::Initialize() {
   base::i18n::InitializeICU();
-  config_ = base::MakeRefCounted<Configurator>();
+  config_ = base::MakeRefCounted<Configurator>(CreateGlobalPrefs());
 }
 
 void AppInstall::Uninitialize() {
@@ -765,12 +766,12 @@ void AppInstall::SetupDone(int result) {
       app_id, base::BindOnce(&AppInstall::Shutdown, this));
 }
 
-scoped_refptr<App> AppInstallInstance() {
+scoped_refptr<App> MakeAppInstall() {
   // TODO(sorin) "--install" must be run with "--single-process" until
   // crbug.com/1053729 is resolved.
   DCHECK(
       base::CommandLine::ForCurrentProcess()->HasSwitch(kSingleProcessSwitch));
-  return AppInstance<AppInstall>();
+  return base::MakeRefCounted<AppInstall>();
 }
 
 }  // namespace updater

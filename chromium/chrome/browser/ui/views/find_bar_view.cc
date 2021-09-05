@@ -123,6 +123,8 @@ FindBarView::FindBarView(FindBarHost* host) : find_bar_host_(host) {
   find_text->set_controller(this);
   find_text->SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_FIND));
   find_text->SetTextInputFlags(ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
+  find_text->SetShouldDoLearning(
+      !host->browser_view()->GetProfile()->IsOffTheRecord());
   find_text_ = AddChildView(std::move(find_text));
 
   auto match_count_text = std::make_unique<MatchCountLabel>();
@@ -336,8 +338,10 @@ void FindBarView::ButtonPressed(
                 find_bar_host_->GetFindBarController()->web_contents());
         find_tab_helper->StartFinding(
             find_text_->GetText(),
-            sender->GetID() == VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON,
-            false);  // Not case sensitive.
+            sender->GetID() ==
+                VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON, /* forward_direction */
+            false /* case_sensitive */,
+            true /* find_next_if_selection_matches */);
       }
       break;
     case VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON:
@@ -373,9 +377,10 @@ bool FindBarView::HandleKeyEvent(views::Textfield* sender,
           find_in_page::FindTabHelper::FromWebContents(
               controller->web_contents());
       // Search forwards for enter, backwards for shift-enter.
-      find_tab_helper->StartFinding(find_string,
-                                    !key_event.IsShiftDown(),
-                                    false);  // Not case sensitive.
+      find_tab_helper->StartFinding(
+          find_string, !key_event.IsShiftDown() /* forward_direction */,
+          false /* case_sensitive */,
+          true /* find_next_if_selection_matches */);
     }
     return true;
   }
@@ -417,8 +422,9 @@ void FindBarView::Find(const base::string16& search_text) {
   // if the textbox contains something we set it as the new search string and
   // initiate search (even though old searches might be in progress).
   if (!search_text.empty()) {
-    // The last two params here are forward (true) and case sensitive (false).
-    find_tab_helper->StartFinding(search_text, true, false);
+    find_tab_helper->StartFinding(search_text, true /* forward_direction */,
+                                  false /* case_sensitive */,
+                                  true /* find_next_if_selection_matches */);
   } else {
     find_tab_helper->StopFinding(find_in_page::SelectionAction::kClear);
     UpdateForResult(find_tab_helper->find_result(), base::string16());

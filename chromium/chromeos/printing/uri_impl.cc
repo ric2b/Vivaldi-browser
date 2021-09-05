@@ -73,26 +73,6 @@ bool ParseCharacter(const Iter& end, Iter* current, char* out) {
   return true;
 }
 
-// Tries to parse the input string |begin|-|end| as a Port number.
-// For a number from range [0,65535] it returns this number.
-// For an empty string it returns -1 (not specified).
-// For all other inputs it returns -2 (invalid Port number).
-// The input requirement: |begin| <= |end|.
-int ParsePort(const Iter& begin, const Iter& end) {
-  if (begin == end)
-    return kPortUnspecified;
-  int number = 0;
-  for (Iter it = begin; it < end; ++it) {
-    if (!base::IsAsciiDigit(*it))
-      return kPortInvalid;
-    number *= 10;
-    number += *it - '0';
-    if (number > kPortMaxNumber)
-      return kPortInvalid;
-  }
-  return number;
-}
-
 // Helper struct for the function below.
 class Comparator {
  public:
@@ -201,7 +181,7 @@ bool Uri::Pim::SavePort(int value) {
   parser_error_.status = ParserStatus::kNoErrors;
   parser_error_.parsed_strings = 0;
   parser_error_.parsed_chars = 0;
-  if (value == kPortInvalid) {
+  if (value < -1 || value > 65535) {
     parser_error_.status = ParserStatus::kInvalidPortNumber;
     return false;
   }
@@ -343,7 +323,7 @@ bool Uri::Pim::ParseAuthority(const Iter& begin, const Iter& end) {
   // Parse and save Port.
   if (it2 != end) {
     ++it2;  // omit the ':' character
-    if (it2 < end && !SavePort(ParsePort(it2, end))) {
+    if (!ParsePort(it2, end)) {
       parser_error_.parsed_chars += it2 - begin;
       return false;
     }
@@ -351,14 +331,35 @@ bool Uri::Pim::ParseAuthority(const Iter& begin, const Iter& end) {
   return true;
 }
 
+bool Uri::Pim::ParsePort(const Iter& begin, const Iter& end) {
+  if (begin == end)
+    return SavePort(kPortUnspecified);
+  int number = 0;
+  for (Iter it = begin; it < end; ++it) {
+    if (!base::IsAsciiDigit(*it))
+      return SavePort(kPortInvalid);
+    number *= 10;
+    number += *it - '0';
+    if (number > kPortMaxNumber)
+      return SavePort(kPortInvalid);
+  }
+  return SavePort(number);
+}
+
 bool Uri::Pim::ParsePath(const Iter& begin, const Iter& end) {
+  // Path must be empty or start with '/'.
+  if (begin < end && *begin != '/') {
+    parser_error_.status = ParserStatus::kRelativePathsNotAllowed;
+    parser_error_.parsed_chars = 0;
+    parser_error_.parsed_strings = 0;
+    return false;
+  }
   // This holds Path's segments.
   std::vector<std::string> path;
   // This stores offset from begin of every segment.
   std::vector<size_t> strings_positions;
   // Parsing...
   for (Iter it1 = begin; it1 < end;) {
-    DCHECK_EQ(*it1, '/');
     if (++it1 == end)  // omit '/' character
       break;
     Iter it2 = std::find(it1, end, '/');
@@ -454,7 +455,7 @@ bool Uri::Pim::ParseUri(const Iter& begin, const Iter end) {
   }
   // The Path is terminated by the first question mark ("?") or number
   // sign ("#") character, or by the end of the URI.
-  if (it1 < end && *it1 == '/') {
+  if (it1 < end) {
     auto it2 = FindFirstOf(it1, end, "?#");
     if (!ParsePath(it1, it2)) {
       parser_error_.parsed_chars += it1 - begin;

@@ -28,6 +28,7 @@ source_set("content_suggestions") {
     "ntp_home_metrics.mm",
   ]
   deps = [
+    ":feature_flags",
     "//base",
     "//components/favicon/core",
     "//components/feed/core/shared_prefs:feed_shared_prefs",
@@ -41,6 +42,7 @@ source_set("content_suggestions") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/drag_and_drop",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/metrics:metrics_internal",
@@ -77,6 +79,7 @@ source_set("content_suggestions") {
     "//ios/chrome/common/ui/favicon",
     "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/discover_feed",
     "//ios/public/provider/chrome/browser/images",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/ui",
@@ -125,6 +128,7 @@ source_set("content_suggestions_ui") {
     ":constants",
     ":content_suggestions_constant",
     ":content_suggestions_ui_util",
+    ":feature_flags",
     "resources:content_suggestions_no_image",
     "resources:content_suggestions_offline",
     "resources:ntp_search_icon",
@@ -418,4 +422,13 @@ source_set("test_support") {
     "//testing/gmock",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("feature_flags") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "content_suggestions_feature.h",
+    "content_suggestions_feature.mm",
+  ]
+  public_deps = [ "//base" ]
 }

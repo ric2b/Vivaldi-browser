@@ -47,6 +47,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/base/hit_test.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
@@ -1736,14 +1737,12 @@ TEST_P(TabletModeControllerScreenshotTest, FromOverviewNoScreenshot) {
   ShellTestApi().WaitForOverviewAnimationState(
       OverviewAnimationState::kEnterAnimationComplete);
 
-  // Enter tablet mode. This triggers an overview exit, so |window2| will be
-  // animating from the overview exit animation. Therefore, we do not show the
-  // screenshot.
+  // Enter tablet mode while in overview. There should be no screenshot at any
+  // time.
   TabletMode::Waiter waiter(/*enable=*/true);
   SetTabletMode(true);
   EXPECT_FALSE(IsScreenshotShown());
   EXPECT_TRUE(IsShelfOpaque());
-  EXPECT_TRUE(window2->layer()->GetAnimator()->is_animating());
 
   waiter.Wait();
   EXPECT_FALSE(IsScreenshotShown());
@@ -1774,12 +1773,39 @@ TEST_P(TabletModeControllerScreenshotTest, EnterTabletModeWhileAnimating) {
   EXPECT_TRUE(IsShelfOpaque());
 }
 
+namespace {
+
+class LayerStartAnimationWaiter : public ui::LayerAnimationObserver {
+ public:
+  explicit LayerStartAnimationWaiter(ui::LayerAnimator* animator)
+      : animator_(animator) {
+    animator_->AddObserver(this);
+    run_loop_.Run();
+  }
+  LayerStartAnimationWaiter(const LayerStartAnimationWaiter&) = delete;
+  LayerStartAnimationWaiter& operator=(const LayerStartAnimationWaiter&) =
+      delete;
+  ~LayerStartAnimationWaiter() override { animator_->RemoveObserver(this); }
+
+  // ui::LayerAnimationObserver:
+  void OnLayerAnimationStarted(ui::LayerAnimationSequence* sequence) override {
+    run_loop_.Quit();
+  }
+  void OnLayerAnimationEnded(ui::LayerAnimationSequence* sequence) override {}
+  void OnLayerAnimationAborted(ui::LayerAnimationSequence* sequence) override {}
+  void OnLayerAnimationScheduled(
+      ui::LayerAnimationSequence* sequence) override {}
+
+ private:
+  ui::LayerAnimator* animator_;
+  base::RunLoop run_loop_;
+};
+
+}  // namespace
+
 // Tests that the screenshot is visible when a window animation happens when
 // entering tablet mode.
-// TODO(http://crbug.com/1035356): This test fails on bots but not locally so
-// suspected to be a timing issue. Possible that the screenshot is deleted
-// before the waiter is done waiting.
-TEST_P(TabletModeControllerScreenshotTest, DISABLED_ScreenshotVisibility) {
+TEST_P(TabletModeControllerScreenshotTest, ScreenshotVisibility) {
   auto window = CreateTestWindow(gfx::Rect(200, 200));
   auto window2 = CreateTestWindow(gfx::Rect(300, 200));
 
@@ -1788,19 +1814,23 @@ TEST_P(TabletModeControllerScreenshotTest, DISABLED_ScreenshotVisibility) {
   ASSERT_FALSE(IsScreenshotShown());
   EXPECT_TRUE(IsShelfOpaque());
 
-  TabletMode::Waiter waiter(/*enable=*/true);
   SetTabletMode(true);
   EXPECT_FALSE(IsScreenshotShown());
   EXPECT_FALSE(IsShelfOpaque());
 
-  // Tests that after waiting for the async tablet mode entry, the screenshot is
-  // shown.
-  waiter.Wait();
+  // The layer we observe is actually the windows layer before starting the
+  // animation. The animation performed is a cross-fade animation which
+  // copies the window layer to another layer host. So cache them here for
+  // later use. Wait until the animation has started, at this point the
+  // screenshot should be visible.
+  ui::LayerAnimator* old_animator = window2->layer()->GetAnimator();
+  ASSERT_FALSE(old_animator->is_animating());
+  { LayerStartAnimationWaiter waiter(old_animator); }
   EXPECT_TRUE(IsScreenshotShown());
-  EXPECT_TRUE(window2->layer()->GetAnimator()->is_animating());
   EXPECT_TRUE(IsShelfOpaque());
 
   // Tests that the screenshot is destroyed after the window is done animating.
+  old_animator->StopAnimating();
   window2->layer()->GetAnimator()->StopAnimating();
   EXPECT_FALSE(IsScreenshotShown());
   EXPECT_TRUE(IsShelfOpaque());
@@ -1824,6 +1854,27 @@ TEST_P(TabletModeControllerScreenshotTest, NoCrashWhenExitingWithoutWaiting) {
   SetTabletMode(true);
   EXPECT_FALSE(IsScreenshotShown());
   EXPECT_FALSE(IsShelfOpaque());
+}
+
+// Tests that the screenshot gets deleted after transition with a transient
+// child as the top window that is not resizeable but positionable. Note that
+// creating such windows is not desirable, but is possible so we need this
+// regression test. See https://crbug.com/1096128.
+TEST_P(TabletModeControllerScreenshotTest, TransientChildTypeWindow) {
+  // Create a window with a transient child that is of WINDOW_TYPE_POPUP.
+  auto window = CreateTestWindow(gfx::Rect(200, 200));
+  auto child = CreateTestWindow(gfx::Rect(200, 200));
+  child->SetProperty(aura::client::kResizeBehaviorKey,
+                     aura::client::kResizeBehaviorCanResize);
+  ::wm::AddTransientChild(window.get(), child.get());
+
+  window->layer()->GetAnimator()->StopAnimating();
+  child->layer()->GetAnimator()->StopAnimating();
+
+  SetTabletMode(true);
+  ShellTestApi().WaitForWindowFinishAnimating(child.get());
+  EXPECT_FALSE(IsScreenshotShown());
+  EXPECT_TRUE(IsShelfOpaque());
 }
 
 INSTANTIATE_TEST_SUITE_P(All, TabletModeControllerTest, testing::Bool());

@@ -92,6 +92,60 @@
         }
       },
       {
+        "id": "UrlFragment",
+        "type": "object",
+        "description": "To be used in context of UrlFragments below. A fragment should be considered not present if 'begin' and 'end' are both 0.",
+        "properties": {
+          "fragment": {
+            "type": "string",
+            "description": "The URL fragment."
+
+          },
+          "begin": {
+            "type": "integer",
+            "description": "Start offset of the fragment within the URL."
+          },
+          "end": {
+            "type": "integer",
+            "description": "End offset of the fragment within the URL."
+          }
+        }
+      },
+      {
+        "id": "UrlFragments",
+        "type": "object",
+        "description": "Object with url fragments, including top level domain which is eTLD aware.",
+        "properties": {
+          "scheme": {
+            "$ref": "UrlFragment"
+          },
+          "username": {
+            "$ref": "UrlFragment"
+          },
+          "password": {
+            "$ref": "UrlFragment"
+          },
+          "host": {
+            "$ref": "UrlFragment"
+          },
+          "port": {
+            "$ref": "UrlFragment"
+          },
+          "path": {
+            "$ref": "UrlFragment"
+          },
+          "query": {
+            "$ref": "UrlFragment"
+          },
+          "ref": {
+            "$ref": "UrlFragment"
+          },
+          "tld": {
+            "$ref": "UrlFragment"
+          }
+        }
+      },
+      {
         "id": "FileExtension",
         "type": "object",
         "description": "A single extension item used for filtering ",
@@ -253,6 +307,34 @@
               {
                 "name": "results",
                 "$ref": "UrlValidResults"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getUrlFragments",
+        "type": "function",
+        "description": "Splits given URL. Returns UrlFragments including top level domain which is eTLD aware.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The URL to process.",
+            "name": "url"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "valid",
+                "type": "boolean",
+                "description": "If false the supplied URL could not be parsed as such, otherwise true."
+              },
+              {
+                "name": "fragments",
+                "$ref": "UrlFragments",
+                "description": "The URL split up in fragments."
               }
             ]
           }

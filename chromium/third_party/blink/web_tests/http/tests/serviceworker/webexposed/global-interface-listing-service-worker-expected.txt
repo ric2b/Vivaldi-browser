@@ -566,12 +566,6 @@ interface FileSystemWritableFileStream : WritableStream
     method seek
     method truncate
     method write
-interface FileSystemWriter
-    attribute @@toStringTag
-    method close
-    method constructor
-    method truncate
-    method write
 interface FontFace
     attribute @@toStringTag
     getter display
@@ -794,6 +788,7 @@ interface ImageData
     method constructor
     method getColorSettings
 interface ImageDecoder
+    static method canDecodeType
     attribute @@toStringTag
     getter complete
     getter frameCount
@@ -801,6 +796,7 @@ interface ImageDecoder
     getter type
     method constructor
     method decode
+    method decodeMetadata
 interface InstallEvent : ExtendableEvent
     attribute @@toStringTag
     method constructor
@@ -909,6 +905,7 @@ interface NativeIOManager
     method delete
     method getAll
     method open
+    method rename
 interface NavigationPreloadManager
     attribute @@toStringTag
     method constructor
@@ -3746,6 +3743,7 @@ interface WorkerGlobalScope : EventTarget
     attribute @@toStringTag
     getter addressSpace
     getter caches
+    getter crossOriginIsolated
     getter crypto
     getter fonts
     getter indexedDB
@@ -3769,6 +3767,7 @@ interface WorkerGlobalScope : EventTarget
     method constructor
     method createImageBitmap
     method fetch
+    method getOriginPrivateDirectory
     method importScripts
     method queueMicrotask
     method setInterval

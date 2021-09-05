@@ -37,12 +37,19 @@
     </div>
     <iron-collapse id="safetyCheckCollapse"
         opened="[[shouldShowChildren_(parentStatus_)]]">
-      <settings-safety-check-updates-element>
-      </settings-safety-check-updates-element>
-      <settings-safety-check-passwords-element>
-      </settings-safety-check-passwords-element>
-      <settings-safety-check-safe-browsing-element>
-      </settings-safety-check-safe-browsing-element>
-      <settings-safety-check-extensions-element>
-      </settings-safety-check-extensions-element>
+      <settings-safety-check-updates-child>
+      </settings-safety-check-updates-child>
+      <settings-safety-check-passwords-child>
+      </settings-safety-check-passwords-child>
+      <settings-safety-check-safe-browsing-child>
+      </settings-safety-check-safe-browsing-child>
+      <settings-safety-check-extensions-child>
+      </settings-safety-check-extensions-child>
+<if expr="_google_chrome and is_win">
+      <template is="dom-if" if="[[showChromeCleanerChild_(parentStatus_)]]"
+          restamp>
+        <settings-safety-check-chrome-cleaner-child id="chromeCleanerChild">
+        </settings-safety-check-chrome-cleaner-child>
+      </template>
+</if>
     </iron-collapse>

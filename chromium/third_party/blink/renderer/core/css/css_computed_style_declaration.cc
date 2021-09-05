@@ -61,12 +61,12 @@ const CSSPropertyID kComputedPropertyArray[] = {
     CSSPropertyID::kAnimationDelay, CSSPropertyID::kAnimationDirection,
     CSSPropertyID::kAnimationDuration, CSSPropertyID::kAnimationFillMode,
     CSSPropertyID::kAnimationIterationCount, CSSPropertyID::kAnimationName,
-    CSSPropertyID::kAnimationPlayState, CSSPropertyID::kAnimationTimingFunction,
-    CSSPropertyID::kAppearance, CSSPropertyID::kBackdropFilter,
-    CSSPropertyID::kBackfaceVisibility, CSSPropertyID::kBackgroundAttachment,
-    CSSPropertyID::kBackgroundBlendMode, CSSPropertyID::kBackgroundClip,
-    CSSPropertyID::kBackgroundColor, CSSPropertyID::kBackgroundImage,
-    CSSPropertyID::kBackgroundOrigin,
+    CSSPropertyID::kAnimationPlayState, CSSPropertyID::kAnimationTimeline,
+    CSSPropertyID::kAnimationTimingFunction, CSSPropertyID::kAppearance,
+    CSSPropertyID::kBackdropFilter, CSSPropertyID::kBackfaceVisibility,
+    CSSPropertyID::kBackgroundAttachment, CSSPropertyID::kBackgroundBlendMode,
+    CSSPropertyID::kBackgroundClip, CSSPropertyID::kBackgroundColor,
+    CSSPropertyID::kBackgroundImage, CSSPropertyID::kBackgroundOrigin,
     // more-specific background-position-x/y are non-standard
     CSSPropertyID::kBackgroundPosition, CSSPropertyID::kBackgroundRepeat,
     CSSPropertyID::kBackgroundSize, CSSPropertyID::kBaselineShift,
@@ -138,7 +138,6 @@ const CSSPropertyID kComputedPropertyArray[] = {
     CSSPropertyID::kMarginLeft, CSSPropertyID::kMarginRight,
     CSSPropertyID::kMarginTop, CSSPropertyID::kMarkerEnd,
     CSSPropertyID::kMarkerMid, CSSPropertyID::kMarkerStart,
-    CSSPropertyID::kMask, CSSPropertyID::kMaskSourceType,
     CSSPropertyID::kMaskType, CSSPropertyID::kMathStyle,
     CSSPropertyID::kMathSuperscriptShiftStyle, CSSPropertyID::kMaxBlockSize,
     CSSPropertyID::kMaxHeight, CSSPropertyID::kMaxInlineSize,
@@ -173,7 +172,7 @@ const CSSPropertyID kComputedPropertyArray[] = {
     CSSPropertyID::kScrollPaddingBlockEnd,
     CSSPropertyID::kScrollPaddingBlockStart,
     CSSPropertyID::kScrollPaddingInlineEnd,
-    CSSPropertyID::kScrollPaddingInlineStart,
+    CSSPropertyID::kScrollPaddingInlineStart, CSSPropertyID::kScrollbarGutter,
     CSSPropertyID::kShapeImageThreshold, CSSPropertyID::kShapeMargin,
     CSSPropertyID::kShapeOutside, CSSPropertyID::kShapeRendering,
     CSSPropertyID::kSpeak, CSSPropertyID::kStopColor,
@@ -273,7 +272,7 @@ CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(
     : CSSStyleDeclaration(n ? n->GetExecutionContext() : nullptr),
       node_(n),
       pseudo_element_specifier_(
-          CSSSelector::ParsePseudoId(pseudo_element_name)),
+          CSSSelector::ParsePseudoId(pseudo_element_name, n)),
       allow_visited_style_(allow_visited_style) {}
 
 CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration() = default;
@@ -620,7 +619,7 @@ void CSSComputedStyleDeclaration::SetPropertyInternal(
           "' property is read-only.");
 }
 
-void CSSComputedStyleDeclaration::Trace(Visitor* visitor) {
+void CSSComputedStyleDeclaration::Trace(Visitor* visitor) const {
   visitor->Trace(node_);
   CSSStyleDeclaration::Trace(visitor);
 }

@@ -8,11 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/base_export.h"
+#include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/thread_annotations.h"
 
 namespace base {
@@ -36,10 +37,10 @@ struct PartitionBucket {
   // requesting (a) new page(s) from the operating system, or false otherwise.
   // This enables an optimization for when callers use |PartitionAllocZeroFill|:
   // there is no need to call memset on fresh pages; the OS has already zeroed
-  // them. (See |PartitionRootBase::AllocFromBucket|.)
+  // them. (See |PartitionRoot::AllocFromBucket|.)
   //
   // Note the matching Free() functions are in PartitionPage.
-  BASE_EXPORT NOINLINE void* SlowPathAlloc(PartitionRootBase<thread_safe>* root,
+  BASE_EXPORT NOINLINE void* SlowPathAlloc(PartitionRoot<thread_safe>* root,
                                            int flags,
                                            size_t size,
                                            bool* is_already_zeroed)
@@ -63,7 +64,7 @@ struct PartitionBucket {
     // Caller must check that the size is not above the kGenericMaxDirectMapped
     // limit before calling. This also guards against integer overflow in the
     // calculation here.
-    DCHECK(size <= kGenericMaxDirectMapped);
+    PA_DCHECK(size <= kGenericMaxDirectMapped);
     return (size + kSystemPageOffsetMask) & kSystemPageBaseMask;
   }
 
@@ -101,7 +102,7 @@ struct PartitionBucket {
   // Allocates a new slot span with size |num_partition_pages| from the
   // current extent. Metadata within this slot span will be uninitialized.
   // Returns nullptr on error.
-  ALWAYS_INLINE void* AllocNewSlotSpan(PartitionRootBase<thread_safe>* root,
+  ALWAYS_INLINE void* AllocNewSlotSpan(PartitionRoot<thread_safe>* root,
                                        int flags,
                                        uint16_t num_partition_pages)
       EXCLUSIVE_LOCKS_REQUIRED(root->lock_);

@@ -4,6 +4,8 @@
 
 #include "components/password_manager/core/common/password_manager_features.h"
 
+#include "build/build_config.h"
+
 namespace password_manager {
 
 // NOTE: It is strongly recommended to use UpperCamelCase style for feature
@@ -14,6 +16,11 @@ namespace features {
 // and requires autofill::features::kAutofillTouchToFill to be enabled as well.
 const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+// After saving/updating a password show a bubble reminder about the status of
+// other compromised credentials.
+const base::Feature kCompromisedPasswordsReengagement = {
+    "CompromisedPasswordsReengagement", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the editing of passwords in chrome://settings/passwords, i.e. the
 // Desktop passwords settings page.
@@ -54,7 +61,12 @@ const base::Feature kPasswordChange = {"PasswordChange",
 
 // Enables the bulk Password Check feature for signed in users.
 const base::Feature kPasswordCheck = {"PasswordCheck",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#if defined(OS_ANDROID) || defined(OS_IOS)
+                                      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+                                      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables editing saved passwords for Android.
 const base::Feature kPasswordEditingAndroid = {
@@ -78,6 +90,10 @@ const base::Feature kRecoverFromNeverSaveAndroid = {
 const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enable support for .well-known/change-password URLs.
+const base::Feature kWellKnownChangePassword = {
+    "WellKnownChangePassword", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Field trial identifier for password generation requirements.
 const char kGenerationRequirementsFieldTrial[] =
     "PasswordGenerationRequirements";
@@ -97,6 +113,10 @@ const char kGenerationRequirementsPrefixLength[] = "prefix_length";
 // high values is not strong.
 // Default to 5000 ms.
 const char kGenerationRequirementsTimeout[] = "timeout";
+
+// Enables showing leaked dialog after every successful form submission.
+const char kPasswordChangeWithForcedDialogAfterEverySuccessfulSubmission[] =
+    "should_force_dialog_after_every_sucessful_form_submission";
 
 }  // namespace features
 

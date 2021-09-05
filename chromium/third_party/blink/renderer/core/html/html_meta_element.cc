@@ -574,9 +574,19 @@ void HTMLMetaElement::ProcessContent() {
   if (EqualIgnoringASCIICase(name_value, "viewport")) {
     ProcessViewportContentAttribute(content_value,
                                     ViewportDescription::kViewportMeta);
-  } else if (EqualIgnoringASCIICase(name_value, "referrer")) {
+  } else if (EqualIgnoringASCIICase(name_value, "referrer") &&
+             GetExecutionContext()) {
     UseCounter::Count(&GetDocument(),
                       WebFeature::kHTMLMetaElementReferrerPolicy);
+    if (!IsDescendantOf(GetDocument().head())) {
+      UseCounter::Count(&GetDocument(),
+                        WebFeature::kHTMLMetaElementReferrerPolicyOutsideHead);
+    }
+    if (content_value.Contains(',')) {
+      UseCounter::Count(
+          &GetDocument(),
+          WebFeature::kHTMLMetaElementReferrerPolicyMultipleTokens);
+    }
     GetExecutionContext()->ParseAndSetReferrerPolicy(
         content_value, true /* support legacy keywords */);
   } else if (EqualIgnoringASCIICase(name_value, "handheldfriendly") &&

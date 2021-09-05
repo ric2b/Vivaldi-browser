@@ -4,21 +4,21 @@
 
 package org.chromium.chrome.browser.ntp;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.scrollTo;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isChecked;
-import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
-import static android.support.test.espresso.matcher.ViewMatchers.isNotChecked;
-import static android.support.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isChecked;
+import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.isNotChecked;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.not;
 
-import android.support.test.espresso.matcher.ViewMatchers;
-import android.support.test.filters.SmallTest;
+import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -30,7 +30,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -38,6 +37,7 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.CookieControlsMode;
+import org.chromium.components.content_settings.PrefNames;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -56,22 +56,19 @@ public class IncognitoNewTabPageTest {
         mActivityTestRule.startMainActivityOnBlankPage();
     }
 
-    private void setThirdPartyCookieBlocking(boolean enabled) {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES, enabled);
-        });
-    }
-
     private void setCookieControlsMode(@CookieControlsMode int mode) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setInteger(Pref.COOKIE_CONTROLS_MODE, mode);
+            PrefServiceBridge.getInstance().setInteger(PrefNames.COOKIE_CONTROLS_MODE, mode);
+            PrefServiceBridge.getInstance().setBoolean(PrefNames.BLOCK_THIRD_PARTY_COOKIES,
+                    mode == CookieControlsMode.BLOCK_THIRD_PARTY);
         });
     }
 
     private void assertCookieControlsMode(@CookieControlsMode int mode) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(
-                    PrefServiceBridge.getInstance().getInteger(Pref.COOKIE_CONTROLS_MODE), mode);
+                    PrefServiceBridge.getInstance().getInteger(PrefNames.COOKIE_CONTROLS_MODE),
+                    mode);
         });
     }
 
@@ -93,7 +90,6 @@ public class IncognitoNewTabPageTest {
     @Test
     @SmallTest
     public void testCookieControlsToggleStartsOn() throws Exception {
-        setThirdPartyCookieBlocking(false);
         setCookieControlsMode(CookieControlsMode.INCOGNITO_ONLY);
         mActivityTestRule.newIncognitoTabFromMenu();
 
@@ -110,7 +106,6 @@ public class IncognitoNewTabPageTest {
     @Test
     @SmallTest
     public void testCookieControlsToggleChanges() throws Exception {
-        setThirdPartyCookieBlocking(false);
         setCookieControlsMode(CookieControlsMode.OFF);
         mActivityTestRule.newIncognitoTabFromMenu();
         onView(withId(R.id.cookie_controls_card))
@@ -135,7 +130,6 @@ public class IncognitoNewTabPageTest {
     @Test
     @SmallTest
     public void testCookieControlsToggleManaged() throws Exception {
-        setThirdPartyCookieBlocking(false);
         setCookieControlsMode(CookieControlsMode.INCOGNITO_ONLY);
         mActivityTestRule.newIncognitoTabFromMenu();
         onView(withId(R.id.cookie_controls_card))
@@ -145,18 +139,18 @@ public class IncognitoNewTabPageTest {
         // Toggle should start checked and enabled
         onView(withId(toggle_id)).check(matches(allOf(isChecked(), isEnabled())));
         // Toggle should be disabled if managed by setting
-        setThirdPartyCookieBlocking(true);
+        setCookieControlsMode(CookieControlsMode.BLOCK_THIRD_PARTY);
         onView(withId(toggle_id)).check(matches(not(isEnabled())));
         // Toggle should be enabled and remain checked
-        setThirdPartyCookieBlocking(false);
+        setCookieControlsMode(CookieControlsMode.INCOGNITO_ONLY);
         onView(withId(toggle_id)).check(matches(allOf(isChecked(), isEnabled())));
 
         // Repeat of above but toggle should remain unchecked
         onView(withId(toggle_id)).perform(scrollTo(), click());
         onView(withId(toggle_id)).check(matches(allOf(isNotChecked(), isEnabled())));
-        setThirdPartyCookieBlocking(true);
+        setCookieControlsMode(CookieControlsMode.BLOCK_THIRD_PARTY);
         onView(withId(toggle_id)).check(matches(not(isEnabled())));
-        setThirdPartyCookieBlocking(false);
+        setCookieControlsMode(CookieControlsMode.OFF);
         onView(withId(toggle_id)).check(matches(allOf(isNotChecked(), isEnabled())));
     }
 }

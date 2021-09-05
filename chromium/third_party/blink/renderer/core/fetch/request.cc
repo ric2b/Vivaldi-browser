@@ -175,6 +175,14 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
                                      execution_context, std::move(form_data)),
                                  nullptr /* AbortSignal */);
     content_type = "application/x-www-form-urlencoded;charset=UTF-8";
+  } else if (RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
+             RuntimeEnabledFeatures::FetchUploadStreamingEnabled(
+                 execution_context) &&
+             V8ReadableStream::HasInstance(body, isolate)) {
+    ReadableStream* readable_stream =
+        V8ReadableStream::ToImpl(body.As<v8::Object>());
+    return_buffer =
+        MakeGarbageCollected<BodyStreamBuffer>(script_state, readable_stream);
   } else {
     String string = NativeValueTraits<IDLUSVString>::NativeValue(
         isolate, body, exception_state);
@@ -199,16 +207,13 @@ Request* Request::CreateRequestWithRequestOrString(
   // Setup RequestInit's body first
   // - "If |input| is a Request object and it is disturbed, throw a
   //   TypeError."
-  if (input_request &&
-      input_request->IsBodyUsed(exception_state) == BodyUsed::kUsed) {
-    DCHECK(!exception_state.HadException());
+  if (input_request && input_request->IsBodyUsed()) {
     exception_state.ThrowTypeError(
         "Cannot construct a Request with a Request object that has already "
         "been used.");
     return nullptr;
   }
-  if (exception_state.HadException())
-    return nullptr;
+
   // - "Let |temporaryBody| be |input|'s request's body if |input| is a
   //   Request object, and null otherwise."
   BodyStreamBuffer* temporary_body =
@@ -543,8 +548,6 @@ Request* Request::CreateRequestWithRequestOrString(
       return nullptr;
     }
 
-    VLOG(1) << "a";
-
     if (params.type == TrustTokenOperationType::kIssuance &&
         !IsTrustTokenIssuanceAvailableInExecutionContext(*execution_context)) {
       exception_state.ThrowTypeError(
@@ -554,6 +557,10 @@ Request* Request::CreateRequestWithRequestOrString(
     }
 
     request->SetTrustTokenParams(std::move(params));
+  }
+  if (init->hasAllowHTTP1ForStreamingUpload()) {
+    request->SetAllowHTTP1ForStreamingUpload(
+        init->allowHTTP1ForStreamingUpload());
   }
 
   // "Let |r| be a new Request object associated with |request| and a new
@@ -645,6 +652,21 @@ Request* Request::CreateRequestWithRequestOrString(
       return nullptr;
   }
 
+  // If body is non-null and body’s source is null, then:
+  if (temporary_body && temporary_body->IsMadeFromReadableStream()) {
+    // If r’s request’s mode is neither "same-origin" nor "cors", then throw a
+    // TypeError.
+    if (request->Mode() != network::mojom::RequestMode::kSameOrigin &&
+        request->Mode() != network::mojom::RequestMode::kCors) {
+      exception_state.ThrowTypeError(
+          "If request is made from ReadableStream, mode should be"
+          "\"same-origin\" or \"cors\"");
+      return nullptr;
+    }
+    // Set r’s request’s use-CORS-preflight flag.
+    request->SetMode(network::mojom::RequestMode::kCorsWithForcedPreflight);
+  }
+
   // "Set |r|'s request's body to |temporaryBody|.
   if (temporary_body)
     r->request_->SetBuffer(temporary_body);
@@ -717,10 +739,11 @@ Request* Request::Create(ScriptState* script_state, FetchRequestData* request) {
 
 Request* Request::Create(
     ScriptState* script_state,
-    const mojom::blink::FetchAPIRequest& fetch_api_request,
+    mojom::blink::FetchAPIRequestPtr fetch_api_request,
     ForServiceWorkerFetchEvent for_service_worker_fetch_event) {
-  FetchRequestData* data = FetchRequestData::Create(
-      script_state, fetch_api_request, for_service_worker_fetch_event);
+  FetchRequestData* data =
+      FetchRequestData::Create(script_state, std::move(fetch_api_request),
+                               for_service_worker_fetch_event);
   return MakeGarbageCollected<Request>(script_state, data);
 }
 
@@ -827,6 +850,7 @@ String Request::credentials() const {
   // mode:"
   switch (request_->Credentials()) {
     case network::mojom::CredentialsMode::kOmit:
+    case network::mojom::CredentialsMode::kOmitBug_775438_Workaround:
       return "omit";
     case network::mojom::CredentialsMode::kSameOrigin:
       return "same-origin";
@@ -889,14 +913,10 @@ bool Request::isHistoryNavigation() const {
 
 Request* Request::clone(ScriptState* script_state,
                         ExceptionState& exception_state) {
-  if (IsBodyLocked(exception_state) == BodyLocked::kLocked ||
-      IsBodyUsed(exception_state) == BodyUsed::kUsed) {
-    DCHECK(!exception_state.HadException());
+  if (IsBodyLocked() || IsBodyUsed()) {
     exception_state.ThrowTypeError("Request body is already used");
     return nullptr;
   }
-  if (exception_state.HadException())
-    return nullptr;
 
   FetchRequestData* request = request_->Clone(script_state, exception_state);
   if (exception_state.HadException())
@@ -911,7 +931,7 @@ Request* Request::clone(ScriptState* script_state,
 
 FetchRequestData* Request::PassRequestData(ScriptState* script_state,
                                            ExceptionState& exception_state) {
-  DCHECK(!IsBodyUsedForDCheck(exception_state));
+  DCHECK(!IsBodyUsed());
   FetchRequestData* data = request_->Pass(script_state, exception_state);
   if (exception_state.HadException())
     return nullptr;
@@ -994,7 +1014,7 @@ network::mojom::RequestDestination Request::GetRequestDestination() const {
   return request_->Destination();
 }
 
-void Request::Trace(Visitor* visitor) {
+void Request::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
   ActiveScriptWrappable<Request>::Trace(visitor);
   Body::Trace(visitor);

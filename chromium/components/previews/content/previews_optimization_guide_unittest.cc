@@ -78,12 +78,12 @@ class TestOptimizationGuideDecider
   }
 
   optimization_guide::OptimizationGuideDecision CanApplyOptimization(
-      content::NavigationHandle* navigation_handle,
+      const GURL& url,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationMetadata* optimization_metadata)
       override {
-    auto response_iter = responses_.find(
-        std::make_tuple(navigation_handle->GetURL(), optimization_type));
+    auto response_iter =
+        responses_.find(std::make_tuple(url, optimization_type));
     if (response_iter == responses_.end())
       return optimization_guide::OptimizationGuideDecision::kFalse;
 
@@ -187,7 +187,7 @@ class PreviewsOptimizationGuideTest : public testing::Test {
     optimization_guide_decider()->SetResponses(responses);
   }
 
-  GURL blacklisted_lpr_url() { return GURL("https://blacklistedlpr.com/123"); }
+  GURL blocklisted_lpr_url() { return GURL("https://blocklistedlpr.com/123"); }
 
   GURL hint_not_loaded_url() { return GURL("https://hintnotloaded.com/123"); }
 

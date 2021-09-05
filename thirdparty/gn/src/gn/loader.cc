@@ -85,11 +85,6 @@ void Loader::Load(const Label& label, const LocationRange& origin) {
   Load(BuildFileForLabel(label), origin, label.GetToolchainLabel());
 }
 
-// static
-SourceFile Loader::BuildFileForLabel(const Label& label) {
-  return SourceFile(label.dir().value() + "BUILD.gn");
-}
-
 // -----------------------------------------------------------------------------
 
 LoaderImpl::LoaderImpl(const BuildSettings* build_settings)
@@ -200,6 +195,11 @@ const Settings* LoaderImpl::GetToolchainSettings(const Label& label) const {
   if (found_toolchain == toolchain_records_.end())
     return nullptr;
   return &found_toolchain->second->settings;
+}
+
+SourceFile LoaderImpl::BuildFileForLabel(const Label& label) const {
+  return SourceFile(
+      label.dir().value() + "BUILD" + build_file_extension_ + ".gn");
 }
 
 void LoaderImpl::ScheduleLoadFile(const Settings* settings,

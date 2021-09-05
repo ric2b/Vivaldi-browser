@@ -161,7 +161,8 @@
       <template is="dom-if" route-path="/content/all" no-search>
         <settings-subpage page-title="$i18n{siteSettingsAllSites}"
             search-label="$i18n{siteSettingsAllSitesSearch}"
-            search-term="{{searchFilter_}}">
+            search-term="{{searchFilter_}}"
+            preserve-search-term>
           <all-sites filter="[[searchFilter_]]"></all-sites>
         </settings-subpage>
       </template>
@@ -263,7 +264,8 @@
       <template is="dom-if" route-path="/siteData" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCookieHeader}"
             search-label="$i18n{siteSettingsCookieSearch}"
-            search-term="{{siteDataFilter_}}">
+            search-term="{{siteDataFilter_}}"
+            preserve-search-term>
           <site-data filter="[[siteDataFilter_]]"
               focus-config="[[focusConfig_]]">
           </site-data>
@@ -447,14 +449,17 @@
         <settings-subpage page-title="$i18n{siteSettingsFlash}"
             search-label="$i18n{siteSettingsAllSitesSearch}"
             search-term="{{searchFilter_}}">
-          <a class="cr-row first no-outline" tabindex="-1"
-              target="_blank">
+          <div class="cr-row first no-outline" tabindex="-1">
             $i18n{siteSettingsFlashPermissionsEphemeral}
-          </a>
+          </div>
           <category-default-setting category="{{ContentSettingsTypes.PLUGINS}}"
               toggle-off-label="$i18n{siteSettingsFlashBlockRecommended}"
               toggle-on-label="$i18n{siteSettingsFlashAskFirst}">
           </category-default-setting>
+            <div class="cr-row-gap cr-secondary-text"
+                 hidden="[[!pluginsHasDiscardedExceptions_]]">
+                $i18nRaw{siteSettingsFlashWildcardsUnsupported}
+            </div>
 <if expr="chromeos">
           <a class="cr-row inherit-color no-outline" tabindex="-1"
               target="_blank"
@@ -467,7 +472,8 @@
           <category-setting-exceptions
               category="{{ContentSettingsTypes.PLUGINS}}"
               block-header="$i18n{siteSettingsBlock}" read-only-list
-              search-filter="[[searchFilter_]]">
+              search-filter="[[searchFilter_]]"
+              site-lists-have-discarded-exceptions="{{pluginsHasDiscardedExceptions_}}">
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -729,43 +735,41 @@
           </settings-subpage>
         </template>
       </template>
-      <template is="dom-if" if="[[enableWebXrContentSetting_]]">
-        <template is="dom-if" route-path="/content/vr" no-search>
-          <settings-subpage page-title="$i18n{siteSettingsVr}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}">
-            <category-default-setting
-                toggle-off-label="$i18n{siteSettingsVrBlock}"
-                toggle-on-label=
-                    "$i18n{siteSettingsVrAskRecommended}"
-                category="{{ContentSettingsTypes.VR}}">
-            </category-default-setting>
-            <category-setting-exceptions
-                category="{{ContentSettingsTypes.VR}}"
-                read-only-list
-                block-header="$i18n{siteSettingsBlock}"
-                search-filter="[[searchFilter_]]">
-            </category-setting-exceptions>
-          </settings-subpage>
-        </template>
-        <template is="dom-if" route-path="/content/ar" no-search>
-          <settings-subpage page-title="$i18n{siteSettingsAr}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}">
-            <category-default-setting
-                toggle-off-label="$i18n{siteSettingsArBlock}"
-                toggle-on-label=
-                    "$i18n{siteSettingsArAskRecommended}"
-                category="{{ContentSettingsTypes.AR}}">
-            </category-default-setting>
-            <category-setting-exceptions
-                category="{{ContentSettingsTypes.AR}}"
-                read-only-list
-                block-header="$i18n{siteSettingsBlock}"
-                search-filter="[[searchFilter_]]">
-            </category-setting-exceptions>
-          </settings-subpage>
-        </template>
+      <template is="dom-if" route-path="/content/vr" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsVr}"
+            search-label="$i18n{siteSettingsAllSitesSearch}"
+            search-term="{{searchFilter_}}">
+          <category-default-setting
+              toggle-off-label="$i18n{siteSettingsVrBlock}"
+              toggle-on-label=
+                  "$i18n{siteSettingsVrAskRecommended}"
+              category="{{ContentSettingsTypes.VR}}">
+          </category-default-setting>
+          <category-setting-exceptions
+              category="{{ContentSettingsTypes.VR}}"
+              read-only-list
+              block-header="$i18n{siteSettingsBlock}"
+              search-filter="[[searchFilter_]]">
+          </category-setting-exceptions>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/content/ar" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsAr}"
+            search-label="$i18n{siteSettingsAllSitesSearch}"
+            search-term="{{searchFilter_}}">
+          <category-default-setting
+              toggle-off-label="$i18n{siteSettingsArBlock}"
+              toggle-on-label=
+                  "$i18n{siteSettingsArAskRecommended}"
+              category="{{ContentSettingsTypes.AR}}">
+          </category-default-setting>
+          <category-setting-exceptions
+              category="{{ContentSettingsTypes.AR}}"
+              read-only-list
+              block-header="$i18n{siteSettingsBlock}"
+              search-filter="[[searchFilter_]]">
+          </category-setting-exceptions>
+        </settings-subpage>
       </template>
       <template is="dom-if" if="[[enableExperimentalWebPlatformFeatures_]]">
         <template is="dom-if" route-path="/content/windowPlacement" no-search>
@@ -774,7 +778,8 @@
               search-term="{{searchFilter_}}">
             <category-default-setting
                 toggle-off-label="$i18n{siteSettingsWindowPlacementBlock}"
-                toggle-on-label="$i18n{siteSettingsWindowPlacementAsk}"
+                toggle-on-label=
+                    "$i18n{siteSettingsWindowPlacementAskRecommended}"
                 category="{{ContentSettingsTypes.WINDOW_PLACEMENT}}">
             </category-default-setting>
             <category-setting-exceptions

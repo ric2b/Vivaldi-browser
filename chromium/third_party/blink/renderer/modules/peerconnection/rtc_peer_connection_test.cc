@@ -380,11 +380,12 @@ class RTCPeerConnectionTest : public testing::Test {
  public:
   RTCPeerConnection* CreatePC(
       V8TestingScope& scope,
-      const String& sdp_semantics = String(),
+      const base::Optional<String>& sdp_semantics = base::nullopt,
       bool force_encoded_audio_insertable_streams = false,
       bool force_encoded_video_insertable_streams = false) {
     RTCConfiguration* config = RTCConfiguration::Create();
-    config->setSdpSemantics(sdp_semantics);
+    if (sdp_semantics)
+      config->setSdpSemantics(sdp_semantics.value());
     config->setForceEncodedAudioInsertableStreams(
         force_encoded_audio_insertable_streams);
     config->setForceEncodedVideoInsertableStreams(
@@ -654,7 +655,7 @@ TEST_F(RTCPeerConnectionTest, CheckInsertableStreamsConfig) {
     for (bool force_encoded_video_insertable_streams : {true, false}) {
       V8TestingScope scope;
       Persistent<RTCPeerConnection> pc =
-          CreatePC(scope, String(), force_encoded_audio_insertable_streams,
+          CreatePC(scope, base::nullopt, force_encoded_audio_insertable_streams,
                    force_encoded_video_insertable_streams);
       EXPECT_EQ(pc->force_encoded_audio_insertable_streams(),
                 force_encoded_audio_insertable_streams);

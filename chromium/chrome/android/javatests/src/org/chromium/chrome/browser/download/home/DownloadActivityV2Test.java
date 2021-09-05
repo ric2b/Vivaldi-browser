@@ -4,32 +4,35 @@
 
 package org.chromium.chrome.browser.download.home;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.Espresso.pressBack;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.RootMatchers.isDialog;
-import static android.support.test.espresso.matcher.ViewMatchers.hasSibling;
-import static android.support.test.espresso.matcher.ViewMatchers.isDescendantOfA;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
-import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.pressBack;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
+import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalToIgnoringCase;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.core.AllOf.allOf;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.test.espresso.action.ViewActions;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.espresso.action.ViewActions;
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matcher;
 import org.junit.Rule;
@@ -46,13 +49,16 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.download.DownloadLaterPromptStatus;
 import org.chromium.chrome.browser.download.R;
 import org.chromium.chrome.browser.download.home.rename.RenameUtils;
 import org.chromium.chrome.browser.download.home.toolbar.DownloadHomeToolbar;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.download.ui.StubbedProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -62,6 +68,7 @@ import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemFilter;
 import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.components.offline_items_collection.RenameResult;
+import org.chromium.components.prefs.PrefService;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.url_formatter.UrlFormatterJni;
@@ -87,6 +94,9 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
     @Mock
     private UrlFormatter.Natives mUrlFormatterJniMock;
 
+    @Mock
+    PrefService mPrefService;
+
     private ModalDialogManager.Presenter mAppModalPresenter;
 
     private ModalDialogManager mModalDialogManager;
@@ -105,6 +115,9 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         when(mUrlFormatterJniMock.formatStringUrlForSecurityDisplay(
                      anyString(), eq(SchemeDisplay.OMIT_HTTP_AND_HTTPS)))
                 .then(inv -> inv.getArgument(0));
+        when(mPrefService.getInteger(eq(Pref.DOWNLOAD_LATER_PROMPT_STATUS)))
+                .thenReturn(DownloadLaterPromptStatus.SHOW_INITIAL);
+        doNothing().when(mPrefService).setInteger(anyString(), anyInt());
 
         Map<String, Boolean> features = new HashMap<>();
         features.put(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE, true);
@@ -162,8 +175,9 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
         mDownloadCoordinator = new DownloadManagerCoordinatorImpl(getActivity(), config,
                 isPrefetchEnabledSupplier, settingsLauncher, mSnackbarManager, mModalDialogManager,
-                mTracker, faviconProvider, OfflineContentAggregatorFactory.get(),
-                /* LegacyDownloadProvider */ null, mDiscardableReferencePool);
+                mPrefService, mTracker, faviconProvider, OfflineContentAggregatorFactory.get(),
+                /* LegacyDownloadProvider */ null, mDiscardableReferencePool,
+                new VrModeProviderImpl());
         getActivity().setContentView(mDownloadCoordinator.getView());
 
         mDownloadCoordinator.updateForUrl(UrlConstants.DOWNLOADS_URL);

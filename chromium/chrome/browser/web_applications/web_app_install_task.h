@@ -19,6 +19,7 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
+#include "chrome/common/web_application_info.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class GURL;
@@ -58,6 +59,9 @@ class WebAppInstallTask : content::WebContentsObserver {
   // kExpectedAppIdCheckFailed if actual app_id doesn't match expected app_id.
   // The actual resulting app_id is reported as a part of OnceInstallCallback.
   void ExpectAppId(const AppId& expected_app_id);
+  const base::Optional<AppId>& app_id_to_expect() const {
+    return expected_app_id_;
+  }
 
   void SetInstallParams(const InstallManager::InstallParams& install_params);
 
@@ -227,6 +231,13 @@ class WebAppInstallTask : content::WebContentsObserver {
   void OnShortcutsCreated(std::unique_ptr<WebApplicationInfo> web_app_info,
                           const AppId& app_id,
                           bool shortcut_created);
+  void OnRegisteredRunOnOsLogin(const AppId& app_id,
+                                bool registered_run_on_os_login);
+  void OnUpdateFinalizedRegisterShortcutsMenu(
+      const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+      const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps,
+      const AppId& app_id,
+      InstallResultCode code);
 
   // Whether we should just obtain WebApplicationInfo instead of the actual
   // installation.

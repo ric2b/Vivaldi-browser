@@ -53,11 +53,6 @@ class InstallFinalizer {
                                const FinalizeOptions& options,
                                InstallFinalizedCallback callback) = 0;
 
-  // For the new USS-based system only. Generate missing sync placeholder data
-  // and icons using |sync_data| fields.
-  virtual void FinalizeFallbackInstallAfterSync(
-      const AppId& app_id,
-      InstallFinalizedCallback callback) = 0;
   // Delete app data from disk (icon .png files). |app_id| must be unregistered.
   virtual void FinalizeUninstallAfterSync(const AppId& app_id,
                                           UninstallWebAppCallback callback) = 0;
@@ -103,6 +98,11 @@ class InstallFinalizer {
                            bool shortcut_created,
                            content::WebContents* web_contents);
 
+  virtual void RemoveLegacyInstallFinalizerForTesting() {}
+
+  virtual void Start() {}
+  virtual void Shutdown() {}
+
   void SetSubsystems(AppRegistrar* registrar,
                      WebAppUiManager* ui_manager,
                      AppRegistryController* registry_controller);
@@ -110,11 +110,15 @@ class InstallFinalizer {
   virtual ~InstallFinalizer() = default;
 
  protected:
-  AppRegistrar& registrar() const { return *registrar_; }
+  bool is_legacy_finalizer() const { return registrar_ == nullptr; }
+  AppRegistrar& registrar() const;
+
   WebAppUiManager& ui_manager() const { return *ui_manager_; }
   AppRegistryController& registry_controller() { return *registry_controller_; }
 
  private:
+  // If these pointers are nullptr then this is legacy install finalizer
+  // operating in standalone mode.
   AppRegistrar* registrar_ = nullptr;
   AppRegistryController* registry_controller_ = nullptr;
   WebAppUiManager* ui_manager_ = nullptr;

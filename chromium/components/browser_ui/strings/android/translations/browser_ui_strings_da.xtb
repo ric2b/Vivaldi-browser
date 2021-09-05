@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Næste</translation>
 <translation id="1242008676835033345">Indlejret på <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Stop</translation>
+<translation id="1289742167380433257">Billederne på denne side er blevet optimeret af Google, så du sparer data.</translation>
 <translation id="129382876167171263">Filer, der gemmes af websites, vises her</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> – <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Websitet <ph name="SITE_NAME" /> blev tilføjet</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Spørg, inden websites kan oprette et 3D-kort over dine omgivelser eller registrere kamerapositionen (anbefales)</translation>
 <translation id="2212565012507486665">Tillad cookies</translation>
 <translation id="2289270750774289114">Spørg, når et website vil søge efter Bluetooth-enheder i nærheden (anbefalet)</translation>
+<translation id="2315043854645842844">Klientens certifikatvalg understøttes ikke af operativsystemet.</translation>
 <translation id="2359808026110333948">Fortsæt</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Downloaden er fuldført <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -56,15 +58,17 @@
 <translation id="257931822824936280">Udvidet – klik for at skjule.</translation>
 <translation id="2586657967955657006">Udklipsholder</translation>
 <translation id="2621115761605608342">Tillad JavaScript for et bestemt website.</translation>
-<translation id="2653659639078652383">Indsend</translation>
+<translation id="2653659639078652383">Send</translation>
 <translation id="2687403674020088961">Bloker alle cookies (anbefales ikke)</translation>
 <translation id="2704606927547763573">Kopieret</translation>
 <translation id="2822354292072154809">Er du sikker på, at du vil nulstille alle websitetilladelser for <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Website</translation>
+<translation id="2874939134665556319">Forrige nummer</translation>
 <translation id="2910701580606108292">Spørg, før websites begynder at afspille beskyttet indhold</translation>
 <translation id="2913331724188855103">Tillad, at websites gemmer og læser cookiedata (anbefales)</translation>
 <translation id="2968755619301702150">Certifikatfremviser</translation>
 <translation id="300526633675317032">Dette rydder alle <ph name="SIZE_IN_KB" /> i websitelagerpladsen.</translation>
+<translation id="301521992641321250">Automatisk blokering</translation>
 <translation id="3115898365077584848">Vis info</translation>
 <translation id="3123473560110926937">Blokeret på visse websites</translation>
 <translation id="3190152372525844641">Aktivér tilladelser for Chrome i <ph name="BEGIN_LINK" />Android-indstillingerne<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Synkronisering i baggrunden</translation>
 <translation id="3822502789641063741">Vil du rydde websitelagerpladsen?</translation>
 <translation id="385051799172605136">Tilbage</translation>
+<translation id="3859306556332390985">Spol fremad</translation>
 <translation id="3955193568934677022">Tillad, at websites afspiller beskyttet indhold (anbefales)</translation>
 <translation id="3987993985790029246">Kopiér linket</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4008040567710660924">Tillad cookies for et bestemt website.</translation>
+<translation id="4046123991198612571">Næste nummer</translation>
 <translation id="4165986682804962316">Indstillinger for websites</translation>
 <translation id="4226663524361240545">Notifikationer kan få enheden til at vibrere</translation>
 <translation id="4242533952199664413">Åbn Indstillinger</translation>
 <translation id="4259722352634471385">Navigationen er blokeret: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Tilladt</translation>
+<translation id="429312253194641664">Et website afspiller medier</translation>
 <translation id="4433925000917964731">Lite-side leveret af Google</translation>
 <translation id="4434045419905280838">Pop op-vinduer og omdirigeringer</translation>
 <translation id="445467742685312942">Tillad, at websites afspiller beskyttet indhold</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Tilbagekald alle tilladelser for enheden</translation>
 <translation id="4964199952259983386">Hvis du vil give Chrome tilladelse til at bruge AR, skal du også aktivere kameraet i <ph name="BEGIN_LINK" />Android-indstillingerne<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Gå fremad</translation>
+<translation id="4996978546172906250">Del via</translation>
 <translation id="5039804452771397117">Tillad</translation>
 <translation id="5048398596102334565">Tillad, at websites kan få adgang til bevægelsessensorer (anbefales)</translation>
 <translation id="5063480226653192405">Databrug</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="6697925417670533197">Aktive downloads</translation>
 <translation id="6746124502594467657">Flyt ned</translation>
+<translation id="6766622839693428701">Stryg ned for at lukke.</translation>
 <translation id="6782111308708962316">Undgå, at tredjepartswebsites gemmer og læser cookiedata</translation>
+<translation id="6790428901817661496">Afspil</translation>
 <translation id="6818926723028410516">Vælg elementer</translation>
 <translation id="6864395892908308021">Denne enhed kan ikke læse NFC</translation>
 <translation id="6910211073230771657">Slettet</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Et website anvender dit kamera</translation>
 <translation id="7817023149356982970">Du bliver logget ud af dette website.</translation>
 <translation id="7828557259026017104">Cookies er filer, som oprettes af de websites, du besøger. Websites anvender dem til at huske dine præferencer. Tredjepartscookies oprettes af andre websites. Disse websites ejer noget af indholdet, f.eks. de annoncer eller billeder, der vises på den webside, du besøger.</translation>
+<translation id="7835852323729233924">Afspilning af medier</translation>
 <translation id="7846076177841592234">Annuller valg</translation>
 <translation id="7846621471902887024">Du bliver logget ud af alle websites.</translation>
 <translation id="7882806643839505685">Tillad, at et bestemt website afspiller lyd.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Er du sikker på, at du vil slette alle lokale data, herunder cookies, og nulstille alle tilladelser for dette website?</translation>
 <translation id="8007176423574883786">Deaktiveret på denne enhed</translation>
 <translation id="802154636333426148">Download mislykkedes</translation>
+<translation id="8068648041423924542">Certifikatet kunne ikke vælges.</translation>
 <translation id="8087000398470557479">Dette indhold er fra <ph name="DOMAIN_NAME" />, som leveres af Google.</translation>
 <translation id="8116925261070264013">Websites, hvor lyden er slået fra</translation>
 <translation id="8131740175452115882">Bekræft</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Et website anvender dit kamera og din mikrofon</translation>
 <translation id="8380167699614421159">Dette website viser påtrængende eller vildledende annoncer</translation>
 <translation id="8394832520002899662">Tryk for at vende tilbage til websitet</translation>
+<translation id="8425213833346101688">Skift</translation>
+<translation id="8441146129660941386">Spol tilbage</translation>
 <translation id="8447861592752582886">Tilbagekald adgangstilladelsen til enheden</translation>
 <translation id="8463851957836045671">Websitet er hurtigt</translation>
 <translation id="851751545965956758">Bloker websites fra at oprette forbindelse til enheder</translation>
@@ -232,10 +246,11 @@
 <translation id="885701979325669005">Lagerplads</translation>
 <translation id="8926666909099850184">NFC er deaktiveret for denne enhed. Aktivér funktionen i <ph name="BEGIN_LINK" />Android-indstillingerne<ph name="END_LINK" />.</translation>
 <translation id="8929372349074745002">Dette website åbner og reagerer hurtigt hos de fleste brugere</translation>
-<translation id="8941729603749328384">www.example.com</translation>
+<translation id="8941729603749328384">www.eksempel.dk</translation>
 <translation id="8958424370300090006">Bloker cookies for et bestemt website.</translation>
 <translation id="8959122750345127698">Navigationen er ikke mulig: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Administreret af dine forældre</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Adgang til din mikrofon</translation>
 <translation id="965817943346481315">Bloker, hvis websitet viser påtrængende eller vildledende annoncer (anbefales)</translation>
 </translationbundle>

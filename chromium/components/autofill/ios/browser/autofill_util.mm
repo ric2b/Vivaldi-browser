@@ -19,13 +19,15 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#import "ios/web/public/deprecated/crw_js_injection_receiver.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #include "ios/web/public/security/ssl_status.h"
 #import "ios/web/public/web_state.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using base::NumberToString;
+using base::StringToUint;
 
 namespace {
 // The timeout for any JavaScript call in this file.
@@ -50,17 +52,11 @@ bool IsContextSecureForWebState(web::WebState* web_state) {
 }
 
 std::unique_ptr<base::Value> ParseJson(NSString* json_string) {
-  // Convert JSON string to JSON object |JSONValue|.
-  int error_code = 0;
-  std::string error_message;
-  std::unique_ptr<base::Value> json_value(
-      base::JSONReader::ReadAndReturnErrorDeprecated(
-          base::SysNSStringToUTF8(json_string), base::JSON_PARSE_RFC,
-          &error_code, &error_message));
-  if (error_code)
+  base::Optional<base::Value> json_value =
+      base::JSONReader::Read(base::SysNSStringToUTF8(json_string));
+  if (!json_value)
     return nullptr;
-
-  return json_value;
+  return base::Value::ToUniquePtrValue(std::move(*json_value));
 }
 
 bool ExtractFormsData(NSString* forms_json,
@@ -123,9 +119,9 @@ bool ExtractFormData(const base::Value& form_value,
 
   std::string unique_renderer_id;
   form_dictionary->GetString("unique_renderer_id", &unique_renderer_id);
-  if (!unique_renderer_id.empty()) {
-    base::StringToUint(unique_renderer_id,
-                       &form_data->unique_renderer_id.value());
+  if (!unique_renderer_id.empty() &&
+      unique_renderer_id != NumberToString(kNotSetRendererID)) {
+    StringToUint(unique_renderer_id, &form_data->unique_renderer_id.value());
   } else {
     form_data->unique_renderer_id = FormRendererId();
   }
@@ -141,6 +137,7 @@ bool ExtractFormData(const base::Value& form_value,
   form_dictionary->GetBoolean("is_form_tag", &form_data->is_form_tag);
   form_dictionary->GetBoolean("is_formless_checkout",
                               &form_data->is_formless_checkout);
+  form_dictionary->GetString("frame_id", &form_data->frame_id);
 
   // Field list (mandatory) is extracted.
   const base::ListValue* fields_list = nullptr;
@@ -169,9 +166,9 @@ bool ExtractFormFieldData(const base::DictionaryValue& field,
 
   std::string unique_renderer_id;
   field.GetString("unique_renderer_id", &unique_renderer_id);
-  if (!unique_renderer_id.empty()) {
-    base::StringToUint(unique_renderer_id,
-                       &field_data->unique_renderer_id.value());
+  if (!unique_renderer_id.empty() &&
+      unique_renderer_id != NumberToString(kNotSetRendererID)) {
+    StringToUint(unique_renderer_id, &field_data->unique_renderer_id.value());
   } else {
     field_data->unique_renderer_id = FieldRendererId();
   }
@@ -233,7 +230,6 @@ bool ExtractFormFieldData(const base::DictionaryValue& field,
 void ExecuteJavaScriptFunction(const std::string& name,
                                const std::vector<base::Value>& parameters,
                                web::WebFrame* frame,
-                               CRWJSInjectionReceiver* js_injection_receiver,
                                base::OnceCallback<void(NSString*)> callback) {
   __block base::OnceCallback<void(NSString*)> cb = std::move(callback);
 

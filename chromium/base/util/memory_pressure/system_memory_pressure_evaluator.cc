@@ -7,6 +7,8 @@
 #include "build/build_config.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/logging.h"
+#include "base/system/sys_info.h"
 #include "base/util/memory_pressure/system_memory_pressure_evaluator_chromeos.h"
 #elif defined(OS_FUCHSIA)
 #include "base/util/memory_pressure/system_memory_pressure_evaluator_fuchsia.h"
@@ -28,8 +30,9 @@ SystemMemoryPressureEvaluator::CreateDefaultSystemEvaluator(
     return std::make_unique<util::chromeos::SystemMemoryPressureEvaluator>(
         monitor->CreateVoter());
   }
-  LOG(ERROR) << "No MemoryPressureMonitor created because the kernel does "
-                "not support notifications.";
+  LOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS())
+      << "No MemoryPressureMonitor created because the kernel does not have "
+         "support.";
 #elif defined(OS_FUCHSIA)
   return std::make_unique<util::SystemMemoryPressureEvaluatorFuchsia>(
       monitor->CreateVoter());

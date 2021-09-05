@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_get_root_node_options.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -132,6 +133,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -161,9 +163,9 @@ ScrollCustomizationCallbacks& GetScrollCustomizationCallbacks() {
 void AppendUnsafe(StringBuilder& builder, const String& off_thread_string) {
   StringImpl* impl = off_thread_string.Impl();
   if (impl) {
-    builder.Append(impl->Is8Bit()
-                       ? StringView(impl->Characters8(), impl->length())
-                       : StringView(impl->Characters16(), impl->length()));
+    WTF::VisitCharacters(*impl, [&](const auto* chars, unsigned length) {
+      builder.Append(chars, length);
+    });
   }
 }
 
@@ -840,8 +842,9 @@ static Node* ConvertNodesIntoNode(
     const HeapVector<NodeOrStringOrTrustedScript>& nodes,
     Document& document,
     ExceptionState& exception_state) {
-  bool needs_check =
-      IsA<HTMLScriptElement>(parent) && document.IsTrustedTypesEnabledForDoc();
+  bool needs_check = IsA<HTMLScriptElement>(parent) &&
+                     document.GetExecutionContext() &&
+                     document.GetExecutionContext()->RequireTrustedTypes();
 
   if (nodes.size() == 1)
     return NodeOrStringToNode(nodes[0], document, needs_check, exception_state);
@@ -977,9 +980,9 @@ Node* Node::cloneNode(bool deep, ExceptionState& exception_state) const {
   // true, and the clone shadows flag set if this is a DocumentFragment whose
   // host is an HTML template element.
   auto* fragment = DynamicTo<DocumentFragment>(this);
-  bool clone_shadows_flag =
-      fragment && fragment->IsTemplateContent() &&
-      RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled();
+  bool clone_shadows_flag = fragment && fragment->IsTemplateContent() &&
+                            RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+                                GetExecutionContext());
   return Clone(GetDocument(),
                deep ? (clone_shadows_flag ? CloneChildrenFlag::kCloneWithShadows
                                           : CloneChildrenFlag::kClone)
@@ -2613,9 +2616,7 @@ const AtomicString& Node::InterfaceName() const {
 }
 
 ExecutionContext* Node::GetExecutionContext() const {
-  if (auto* document = GetDocument().ContextDocument())
-    return document->domWindow();
-  return nullptr;
+  return GetDocument().GetExecutionContext();
 }
 
 void Node::WillMoveToNewDocument(Document& old_document,
@@ -3208,13 +3209,14 @@ void Node::SetCustomElementState(CustomElementState new_state) {
 
   if (element->IsDefined() != was_defined) {
     element->PseudoStateChanged(CSSSelector::kPseudoDefined);
-    if (RuntimeEnabledFeatures::CustomElementsV0Enabled(&GetDocument()))
+    if (RuntimeEnabledFeatures::CustomElementsV0Enabled(GetExecutionContext()))
       element->PseudoStateChanged(CSSSelector::kPseudoUnresolved);
   }
 }
 
 void Node::SetV0CustomElementState(V0CustomElementState new_state) {
-  DCHECK(RuntimeEnabledFeatures::CustomElementsV0Enabled(&GetDocument()));
+  DCHECK(
+      RuntimeEnabledFeatures::CustomElementsV0Enabled(GetExecutionContext()));
   V0CustomElementState old_state = GetV0CustomElementState();
 
   switch (new_state) {
@@ -3362,7 +3364,14 @@ void Node::RemovedFromFlatTree() {
   GetDocument().GetStyleEngine().RemovedFromFlatTree(*this);
 }
 
-void Node::Trace(Visitor* visitor) {
+void Node::RegisterScrollTimeline(ScrollTimeline* timeline) {
+  EnsureRareData().RegisterScrollTimeline(timeline);
+}
+void Node::UnregisterScrollTimeline(ScrollTimeline* timeline) {
+  EnsureRareData().UnregisterScrollTimeline(timeline);
+}
+
+void Node::Trace(Visitor* visitor) const {
   visitor->Trace(parent_or_shadow_host_node_);
   visitor->Trace(previous_);
   visitor->Trace(next_);

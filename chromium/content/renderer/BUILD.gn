@@ -37,6 +37,8 @@ target(link_target_type, "renderer") {
     "accessibility/ax_action_target_factory.h",
     "accessibility/ax_image_annotator.cc",
     "accessibility/ax_image_annotator.h",
+    "accessibility/ax_image_stopwords.cc",
+    "accessibility/ax_image_stopwords.h",
     "accessibility/blink_ax_action_target.cc",
     "accessibility/blink_ax_action_target.h",
     "accessibility/blink_ax_tree_source.cc",
@@ -45,8 +47,8 @@ target(link_target_type, "renderer") {
     "accessibility/render_accessibility_impl.h",
     "accessibility/render_accessibility_manager.cc",
     "accessibility/render_accessibility_manager.h",
-    "android/synchronous_layer_tree_frame_sink.cc",
-    "android/synchronous_layer_tree_frame_sink.h",
+    "android/synchronous_layer_tree_frame_sink_impl.cc",
+    "android/synchronous_layer_tree_frame_sink_impl.h",
     "browser_exposed_renderer_interfaces.cc",
     "browser_exposed_renderer_interfaces.h",
     "categorized_worker_pool.cc",
@@ -98,9 +100,6 @@ target(link_target_type, "renderer") {
     "input/main_thread_event_queue_task.h",
     "input/main_thread_event_queue_task_list.cc",
     "input/main_thread_event_queue_task_list.h",
-    "input/render_widget_input_handler.cc",
-    "input/render_widget_input_handler.h",
-    "input/render_widget_input_handler_delegate.h",
     "input/widget_input_handler_impl.cc",
     "input/widget_input_handler_impl.h",
     "input/widget_input_handler_manager.cc",
@@ -147,8 +146,6 @@ target(link_target_type, "renderer") {
     "loader/web_url_request_util.h",
     "loader/web_worker_fetch_context_impl.cc",
     "loader/web_worker_fetch_context_impl.h",
-    "low_memory_mode_controller.cc",
-    "low_memory_mode_controller.h",
     "media/android/flinging_renderer_client.cc",
     "media/android/flinging_renderer_client.h",
     "media/android/flinging_renderer_client_factory.cc",
@@ -214,6 +211,8 @@ target(link_target_type, "renderer") {
     "navigation_state.h",
     "net_info_helper.cc",
     "net_info_helper.h",
+    "performance_manager/v8_per_frame_memory_reporter_impl.cc",
+    "performance_manager/v8_per_frame_memory_reporter_impl.h",
     "peripheral_content_heuristic.cc",
     "peripheral_content_heuristic.h",
     "queue_message_swap_promise.cc",
@@ -252,8 +251,6 @@ target(link_target_type, "renderer") {
     "renderer_main_platform_delegate_win.cc",
     "sad_plugin.cc",
     "sad_plugin.h",
-    "savable_resources.cc",
-    "savable_resources.h",
     "seccomp_sandbox_status_android.cc",
     "seccomp_sandbox_status_android.h",
     "service_worker/controller_service_worker_connector.cc",
@@ -332,6 +329,7 @@ target(link_target_type, "renderer") {
   deps = [
     "//base",
     "//base:i18n",
+    "//build:chromecast_buildflags",
     "//cc",
     "//cc/animation",
     "//cc/mojo_embedder",
@@ -373,7 +371,6 @@ target(link_target_type, "renderer") {
     "//media/mojo:buildflags",
     "//media/mojo/clients",
     "//media/mojo/mojom",
-    "//media/mojo/mojom:remoting",
     "//media/webrtc",
     "//mojo/public/cpp/bindings",
     "//net",
@@ -387,6 +384,7 @@ target(link_target_type, "renderer") {
     "//services/image_annotation/public/cpp:cpp",
     "//services/image_annotation/public/mojom:mojom",
     "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/cpp:ukm_builders",
     "//services/network:network_service",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
@@ -406,7 +404,7 @@ target(link_target_type, "renderer") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/clipboard",
-    "//ui/base/cursor",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/ime",
     "//ui/display",
     "//ui/events:dom_keycode_converter",
@@ -427,6 +425,7 @@ target(link_target_type, "renderer") {
       "input/synchronous_compositor_proxy.cc",
       "input/synchronous_compositor_proxy.h",
       "input/synchronous_compositor_registry.h",
+      "input/synchronous_layer_tree_frame_sink.h",
 
       # Add back the Linux file which Android shares.
       "render_view_linux.cc",
@@ -454,10 +453,7 @@ target(link_target_type, "renderer") {
   }
 
   if (is_linux) {
-    deps += [
-      "//components/services/font/public/cpp",
-      "//services/service_manager/zygote",
-    ]
+    deps += [ "//components/services/font/public/cpp" ]
   }
 
   if (is_mac) {
@@ -484,8 +480,19 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (enable_media_remoting) {
-    deps += [ "//media/remoting" ]
+  if (enable_media_remoting || is_chromecast) {
+    deps += [ "//media/mojo/mojom:remoting" ]
+
+    if (enable_media_remoting) {
+      deps += [ "//media/remoting:remoting_sender" ]
+    }
+
+    if (is_chromecast) {
+      deps += [
+        "//media/remoting:remoting_constants",
+        "//media/remoting:remoting_renderer",
+      ]
+    }
   }
 
   if (enable_plugins) {
@@ -642,7 +649,7 @@ target(link_target_type, "renderer") {
       "//printing/mojom",
       "//third_party/libvpx",
       "//third_party/opus",
-      "//ui/base/cursor",
+      "//ui/base/cursor:cursor_base",
       "//ui/base/cursor/mojom:cursor_type",
     ]
   }

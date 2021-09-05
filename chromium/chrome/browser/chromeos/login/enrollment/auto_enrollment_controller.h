@@ -45,6 +45,10 @@ class AutoEnrollmentController {
   static const char kInitialEnrollmentNever[];
   static const char kInitialEnrollmentOfficialBuild[];
 
+  // Parameter values for the kEnterpriseEnablePrivateSetMembership flag.
+  static const char kEnablePsmAlways[];
+  static const char kEnablePsmNever[];
+
   // Requirement for forced re-enrollment check.
   enum class FRERequirement {
     // The device was setup (has kActivateDateKey) but doesn't have the
@@ -59,21 +63,21 @@ class AutoEnrollmentController {
     kExplicitlyNotRequired
   };
 
-  // Requirement for initial enrollment check.
-  enum class InitialEnrollmentRequirement {
-    // Initial enrollment check is not required.
+  // Requirement for initial state determination.
+  enum class InitialStateDeterminationRequirement {
+    // Initial state determination is not required.
     kNotRequired,
-    // Initial enrollment check is required.
+    // Initial state determination is required.
     kRequired
   };
 
-  // Type of auto enrollment check.
+  // Type of auto enrollment or state determination check.
   enum class AutoEnrollmentCheckType {
     kNone,
     // Forced Re-Enrollment check.
-    kFRE,
-    // Initial enrollment check.
-    kInitialEnrollment
+    kForcedReEnrollment,
+    // Initial state determination.
+    kInitialStateDetermination
   };
 
   // State of the system clock.
@@ -97,9 +101,12 @@ class AutoEnrollmentController {
   // flags and official build status.
   static bool IsInitialEnrollmentEnabled();
 
-  // Returns true if any auto enrollment check is enabled based on command-line
-  // flags and official build status.
+  // Returns true if any either FRE or initial enrollment are enabled.
   static bool IsEnabled();
+
+  // Returns true if the use of private set membership is enabled based on
+  // command-line flags.
+  static bool IsPrivateSetMembershipEnabled();
 
   // Returns whether the FRE auto-enrollment check is required. When
   // kCheckEnrollmentKey VPD entry is present, it is explicitly stating whether
@@ -152,11 +159,12 @@ class AutoEnrollmentController {
   // clock sync and will be called again when the system clock state is known.
   void StartWithSystemClockSyncState();
 
-  // Returns whether the initial enrollment check is required.
-  // May set |system_clock_sync_wait_requested_| to true if Initial Enrollment
-  // is skipped due to the embargo period and the system clock has not been
-  // synchronized yet.
-  InitialEnrollmentRequirement GetInitialEnrollmentRequirement();
+  // Returns whether the initial state determination is required.
+  // May set |system_clock_sync_wait_requested_| to true if initial state
+  // determination is skipped due to the embargo period and the system clock
+  // has not been synchronized yet.
+  InitialStateDeterminationRequirement
+  GetInitialStateDeterminationRequirement();
 
   // Determines the type of auto-enrollment check that should be done. Sets
   // |auto_enrollment_check_type_| and |fre_requirement_|.

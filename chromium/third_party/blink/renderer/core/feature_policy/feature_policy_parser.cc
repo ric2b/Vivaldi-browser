@@ -9,7 +9,6 @@
 #include <bitset>
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
@@ -25,15 +24,25 @@
 
 namespace blink {
 namespace {
+namespace internal {
+// Following is the intermediate represetnation(IR) of feature policy.
+// Parsing of syntax structures is done in this IR, but semantic checks, e.g.
+// whether feature_name is valid, are not yet performed.
+struct FeaturePolicyDeclarationNode {
+  String feature_name;
+  Vector<String> allowlist;
+};
+using FeaturePolicyNode = Vector<FeaturePolicyDeclarationNode>;
+}  // namespace internal
 
 class ParsingContext {
  public:
-  ParsingContext(Vector<String>* messages,
+  ParsingContext(PolicyParserMessageBuffer& logger,
                  scoped_refptr<const SecurityOrigin> self_origin,
                  scoped_refptr<const SecurityOrigin> src_origin,
                  const FeatureNameMap& feature_names,
                  FeaturePolicyParserDelegate* delegate)
-      : messages_(messages),
+      : logger_(logger),
         self_origin_(self_origin),
         src_origin_(src_origin),
         feature_names_(feature_names),
@@ -44,14 +53,15 @@ class ParsingContext {
   ParsedFeaturePolicy Parse(const String& policy);
 
  private:
+  ParsedFeaturePolicy ParseIR(const internal::FeaturePolicyNode& root);
+  internal::FeaturePolicyNode ParseToIR(const String& policy);
+
   // normally 1 char = 1 byte
   // max length to parse = 2^16 = 64 kB
   static constexpr wtf_size_t MAX_LENGTH_PARSE = 1 << 16;
 
-  // Parse a single feature entry. e.g. feature_a ORIGIN_A ORIGIN_B.
-  // feature_entry = feature_name ' ' allowlist
   base::Optional<ParsedFeaturePolicyDeclaration> ParseFeature(
-      const String& input);
+      const internal::FeaturePolicyDeclarationNode&);
 
   struct ParsedAllowlist {
     std::vector<url::Origin> allowed_origins;
@@ -67,11 +77,6 @@ class ParsingContext {
 
   // Parse allowlist for feature.
   ParsedAllowlist ParseAllowlist(const Vector<String>& origin_strings);
-
-  inline void Log(const String& message) {
-    if (messages_)
-      messages_->push_back(message);
-  }
 
   bool FeatureObserved(mojom::blink::FeaturePolicyFeature feature);
 
@@ -90,7 +95,7 @@ class ParsingContext {
   // yet.
   void ReportAllowlistTypeUsage();
 
-  Vector<String>* messages_;
+  PolicyParserMessageBuffer& logger_;
   scoped_refptr<const SecurityOrigin> self_origin_;
   scoped_refptr<const SecurityOrigin> src_origin_;
   const FeatureNameMap& feature_names_;
@@ -189,11 +194,12 @@ base::Optional<mojom::blink::FeaturePolicyFeature>
 ParsingContext::ParseFeatureName(const String& feature_name) {
   DCHECK(!feature_name.IsEmpty());
   if (!feature_names_.Contains(feature_name)) {
-    Log("Unrecognized feature: '" + feature_name + "'.");
+    logger_.Warn("Unrecognized feature: '" + feature_name + "'.");
     return base::nullopt;
   }
   if (DisabledByOriginTrial(feature_name, delegate_)) {
-    Log("Origin trial controlled feature not enabled: '" + feature_name + "'.");
+    logger_.Warn("Origin trial controlled feature not enabled: '" +
+                 feature_name + "'.");
     return base::nullopt;
   }
   mojom::blink::FeaturePolicyFeature feature = feature_names_.at(feature_name);
@@ -224,7 +230,7 @@ ParsingContext::ParsedAllowlist ParsingContext::ParseAllowlist(
       DCHECK(!origin_string.IsEmpty());
 
       if (!origin_string.ContainsOnlyASCIIOrEmpty()) {
-        Log("Non-ASCII characters in origin.");
+        logger_.Warn("Non-ASCII characters in origin.");
         continue;
       }
 
@@ -274,7 +280,7 @@ ParsingContext::ParsedAllowlist ParsingContext::ParseAllowlist(
           target_origin = parsed_origin->ToUrlOrigin();
           allowlist_includes_origin_ = true;
         } else {
-          Log("Unrecognized origin: '" + origin_string + "'.");
+          logger_.Warn("Unrecognized origin: '" + origin_string + "'.");
           continue;
         }
       }
@@ -303,30 +309,13 @@ ParsingContext::ParsedAllowlist ParsingContext::ParseAllowlist(
 }
 
 base::Optional<ParsedFeaturePolicyDeclaration> ParsingContext::ParseFeature(
-    const String& input) {
-  // Split removes extra whitespaces by default
-  Vector<String> tokens;
-  input.Split(' ', tokens);
-
-  // Empty policy. Skip.
-  if (tokens.IsEmpty())
-    return base::nullopt;
-
-  // Break tokens into head & tail, where
-  // head = feature_name
-  // tail = origins
-  // After feature_name has been parsed, take tail of tokens vector by
-  // erasing the first element.
+    const internal::FeaturePolicyDeclarationNode& declaration_node) {
   base::Optional<mojom::blink::FeaturePolicyFeature> feature =
-      ParseFeatureName(/* feature_name */ tokens.front());
-
-  tokens.erase(tokens.begin());
-
-  ParsedAllowlist parsed_allowlist =
-      ParseAllowlist(/* origin_strings */ tokens);
-
+      ParseFeatureName(declaration_node.feature_name);
   if (!feature)
     return base::nullopt;
+
+  ParsedAllowlist parsed_allowlist = ParseAllowlist(declaration_node.allowlist);
 
   // If same feature appeared more than once, only the first one counts.
   if (FeatureObserved(*feature))
@@ -341,13 +330,32 @@ base::Optional<ParsedFeaturePolicyDeclaration> ParsingContext::ParseFeature(
 }
 
 ParsedFeaturePolicy ParsingContext::Parse(const String& policy) {
+  return ParseIR(ParseToIR(policy));
+}
+
+ParsedFeaturePolicy ParsingContext::ParseIR(
+    const internal::FeaturePolicyNode& root) {
   ParsedFeaturePolicy parsed_policy;
+  for (const internal::FeaturePolicyDeclarationNode& declaration_node : root) {
+    base::Optional<ParsedFeaturePolicyDeclaration> parsed_feature =
+        ParseFeature(declaration_node);
+    if (parsed_feature) {
+      ReportFeatureUsage(parsed_feature->feature);
+      parsed_policy.push_back(*parsed_feature);
+    }
+  }
+  ReportAllowlistTypeUsage();
+  return parsed_policy;
+}
+
+internal::FeaturePolicyNode ParsingContext::ParseToIR(const String& policy) {
+  internal::FeaturePolicyNode root;
 
   if (policy.length() > MAX_LENGTH_PARSE) {
-    Log("Feature policy declaration exceeds size limit(" +
-        String::Number(policy.length()) + ">" +
-        String::Number(MAX_LENGTH_PARSE) + ")");
-    return parsed_policy;
+    logger_.Error("Feature policy declaration exceeds size limit(" +
+                  String::Number(policy.length()) + ">" +
+                  String::Number(MAX_LENGTH_PARSE) + ")");
+    return {};
   }
 
   // RFC2616, section 4.2 specifies that headers appearing multiple times can be
@@ -374,18 +382,26 @@ ParsedFeaturePolicy ParsingContext::Parse(const String& policy) {
     }
 
     for (const String& feature_entry : feature_entries) {
-      base::Optional<ParsedFeaturePolicyDeclaration> parsed_feature =
-          ParseFeature(feature_entry);
-      if (parsed_feature) {
-        ReportFeatureUsage(parsed_feature->feature);
-        parsed_policy.push_back(*parsed_feature);
-      }
+      Vector<String> tokens;
+      feature_entry.Split(' ', tokens);
+
+      if (tokens.IsEmpty())
+        continue;
+
+      internal::FeaturePolicyDeclarationNode declaration_node;
+      // Break tokens into head & tail, where
+      // head = feature_name
+      // tail = allowlist
+      // After feature_name has been set, take tail of tokens vector by
+      // erasing the first element.
+      declaration_node.feature_name = std::move(tokens.front());
+      tokens.erase(tokens.begin());
+      declaration_node.allowlist = std::move(tokens);
+      root.push_back(declaration_node);
     }
   }
 
-  ReportAllowlistTypeUsage();
-
-  return parsed_policy;
+  return root;
 }
 
 }  // namespace
@@ -393,9 +409,9 @@ ParsedFeaturePolicy ParsingContext::Parse(const String& policy) {
 ParsedFeaturePolicy FeaturePolicyParser::ParseHeader(
     const String& policy,
     scoped_refptr<const SecurityOrigin> origin,
-    Vector<String>* messages,
+    PolicyParserMessageBuffer& logger,
     FeaturePolicyParserDelegate* delegate) {
-  return Parse(policy, origin, nullptr, messages, GetDefaultFeatureNameMap(),
+  return Parse(policy, origin, nullptr, logger, GetDefaultFeatureNameMap(),
                delegate);
 }
 
@@ -403,10 +419,10 @@ ParsedFeaturePolicy FeaturePolicyParser::ParseAttribute(
     const String& policy,
     scoped_refptr<const SecurityOrigin> self_origin,
     scoped_refptr<const SecurityOrigin> src_origin,
-    Vector<String>* messages,
-    Document* document) {
-  return Parse(policy, self_origin, src_origin, messages,
-               GetDefaultFeatureNameMap(), document);
+    PolicyParserMessageBuffer& logger,
+    FeaturePolicyParserDelegate* delegate) {
+  return Parse(policy, self_origin, src_origin, logger,
+               GetDefaultFeatureNameMap(), delegate);
 }
 
 // static
@@ -414,10 +430,10 @@ ParsedFeaturePolicy FeaturePolicyParser::Parse(
     const String& policy,
     scoped_refptr<const SecurityOrigin> self_origin,
     scoped_refptr<const SecurityOrigin> src_origin,
-    Vector<String>* messages,
+    PolicyParserMessageBuffer& logger,
     const FeatureNameMap& feature_names,
     FeaturePolicyParserDelegate* delegate) {
-  return ParsingContext(messages, self_origin, src_origin, feature_names,
+  return ParsingContext(logger, self_origin, src_origin, feature_names,
                         delegate)
       .Parse(policy);
 }

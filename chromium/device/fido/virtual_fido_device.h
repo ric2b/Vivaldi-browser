@@ -32,7 +32,7 @@ class ECPrivateKey;
 
 namespace device {
 
-class PublicKey;
+struct PublicKey;
 
 constexpr size_t kMaxPinRetries = 8;
 
@@ -49,6 +49,20 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // representing that key.
     static base::Optional<std::unique_ptr<PrivateKey>> FromPKCS8(
         base::span<const uint8_t> pkcs8_private_key);
+
+    // FreshP256Key returns a randomly generated P-256 PrivateKey.
+    static std::unique_ptr<PrivateKey> FreshP256Key();
+
+    // FreshRSAKey returns a randomly generated RSA PrivateKey.
+    static std::unique_ptr<PrivateKey> FreshRSAKey();
+
+    // FreshEd25519Key returns a randomly generated Ed25519 PrivateKey.
+    static std::unique_ptr<PrivateKey> FreshEd25519Key();
+
+    // FreshInvalidForTestingKey returns a dummy |PrivateKey| with a special
+    // algorithm number that is used to test that unknown public keys are
+    // handled correctly.
+    static std::unique_ptr<PrivateKey> FreshInvalidForTestingKey();
 
     virtual ~PrivateKey();
 
@@ -151,6 +165,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // The random PIN token that is returned as a placeholder for the PIN
     // itself.
     uint8_t pin_token[32];
+    // The permissions parameter for |pin_token|.
+    uint8_t pin_uv_token_permissions = 0;
+    // The permissions RPID for |pin_token|.
+    base::Optional<std::string> pin_uv_token_rpid;
 
     // Number of internal UV retries remaining.
     int uv_retries = kMaxUvRetries;
@@ -258,8 +276,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
 
   scoped_refptr<State> NewReferenceToState() const { return state_; }
 
-  static std::unique_ptr<PrivateKey> FreshP256Key();
-  static std::unique_ptr<PrivateKey> FreshRSAKey();
   static bool Sign(crypto::ECPrivateKey* private_key,
                    base::span<const uint8_t> sign_buffer,
                    std::vector<uint8_t>* signature);

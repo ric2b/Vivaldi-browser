@@ -22,8 +22,10 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_prefs.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -50,6 +52,16 @@ std::string GetRandomCardNumber() {
   return value;
 }
 
+FormRendererId MakeFormRendererId() {
+  static uint32_t counter = 10;
+  return FormRendererId(counter++);
+}
+
+FieldRendererId MakeFieldRendererId() {
+  static uint32_t counter = 10;
+  return FieldRendererId(counter++);
+}
+
 }  // namespace
 
 std::unique_ptr<PrefService> PrefServiceForTesting() {
@@ -74,6 +86,7 @@ void CreateTestFormField(const char* label,
                          const char* value,
                          const char* type,
                          FormFieldData* field) {
+  field->unique_renderer_id = MakeFieldRendererId();
   field->label = ASCIIToUTF16(label);
   field->name = ASCIIToUTF16(name);
   field->value = ASCIIToUTF16(value);
@@ -108,6 +121,27 @@ void CreateTestSelectField(const std::vector<const char*>& values,
   CreateTestSelectField("", "", "", values, values, values.size(), field);
 }
 
+void CreateTestDatalistField(const char* label,
+                             const char* name,
+                             const char* value,
+                             const std::vector<const char*>& values,
+                             const std::vector<const char*>& labels,
+                             FormFieldData* field) {
+  // Fill the base attributes.
+  CreateTestFormField(label, name, value, "text", field);
+
+  std::vector<base::string16> values16(values.size());
+  for (size_t i = 0; i < values.size(); ++i)
+    values16[i] = base::UTF8ToUTF16(values[i]);
+
+  std::vector<base::string16> label16(labels.size());
+  for (size_t i = 0; i < labels.size(); ++i)
+    label16[i] = base::UTF8ToUTF16(labels[i]);
+
+  field->datalist_values = values16;
+  field->datalist_labels = label16;
+}
+
 void CreateTestAddressFormData(FormData* form, const char* unique_id) {
   std::vector<ServerFieldTypeSet> types;
   CreateTestAddressFormData(form, &types, unique_id);
@@ -116,6 +150,7 @@ void CreateTestAddressFormData(FormData* form, const char* unique_id) {
 void CreateTestAddressFormData(FormData* form,
                                std::vector<ServerFieldTypeSet>* types,
                                const char* unique_id) {
+  form->unique_renderer_id = MakeFormRendererId();
   form->name =
       ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   form->button_titles = {
@@ -192,6 +227,7 @@ void CreateTestAddressFormData(FormData* form,
 
 void CreateTestPersonalInformationFormData(FormData* form,
                                            const char* unique_id) {
+  form->unique_renderer_id = MakeFormRendererId();
   form->name =
       ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   form->url = GURL("http://myform.com/form.html");
@@ -216,6 +252,7 @@ void CreateTestCreditCardFormData(FormData* form,
                                   bool use_month_type,
                                   bool split_names,
                                   const char* unique_id) {
+  form->unique_renderer_id = MakeFormRendererId();
   form->name =
       ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   if (is_https) {
@@ -794,6 +831,29 @@ std::string TenYearsFromNow() {
   base::Time::Exploded now;
   AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 10);
+}
+
+FormAndFieldSignatures GetEncodedSignatures(const FormStructure& form) {
+  FormAndFieldSignatures signatures;
+  signatures.emplace_back(form.form_signature(),
+                          std::vector<autofill::FieldSignature>{});
+  for (const auto& field : form) {
+    if (form.ShouldSkipFieldVisibleForTesting(*field))
+      continue;
+    signatures.back().second.push_back(field->GetFieldSignature());
+  }
+  return signatures;
+}
+
+FormAndFieldSignatures GetEncodedSignatures(
+    const std::vector<FormStructure*>& forms) {
+  FormAndFieldSignatures all_signatures;
+  for (const FormStructure* form : forms) {
+    FormAndFieldSignatures form_signatures = GetEncodedSignatures(*form);
+    std::move(form_signatures.begin(), form_signatures.end(),
+              std::back_inserter(all_signatures));
+  }
+  return all_signatures;
 }
 
 }  // namespace test

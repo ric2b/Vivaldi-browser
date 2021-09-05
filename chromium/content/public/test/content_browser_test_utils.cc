@@ -12,7 +12,6 @@
 #include "base/guid.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -95,12 +94,18 @@ bool NavigateToURL(Shell* window,
 
 bool NavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
                                const GURL& url) {
+  return NavigateToURLFromRenderer(adapter, url, url);
+}
+
+bool NavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
+                               const GURL& url,
+                               const GURL& expected_commit_url) {
   RenderFrameHost* rfh = adapter.render_frame_host();
   TestFrameNavigationObserver nav_observer(rfh);
   if (!ExecJs(rfh, JsReplace("location = $1", url)))
     return false;
   nav_observer.Wait();
-  return nav_observer.last_committed_url() == url &&
+  return nav_observer.last_committed_url() == expected_commit_url &&
          nav_observer.last_navigation_succeeded();
 }
 
@@ -145,8 +150,8 @@ void LookupAndLogNameAndIdOfFirstCamera() {
   MediaStreamManager* media_stream_manager =
       BrowserMainLoop::GetInstance()->media_stream_manager();
   base::RunLoop run_loop;
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           [](MediaStreamManager* media_stream_manager,
              base::OnceClosure quit_closure) {

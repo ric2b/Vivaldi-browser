@@ -43,16 +43,23 @@ class DownloadItem;
 }  // namespace download
 
 namespace content {
-class SignedExchangeEnvelope;
+class BrowserContext;
 class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
 class NavigationThrottle;
 class RenderFrameHostImpl;
 class RenderProcessHost;
+class SignedExchangeEnvelope;
 class WebContents;
 
 struct SignedExchangeError;
+
+namespace protocol {
+namespace Audits {
+class InspectorIssue;
+}  // namespace Audits
+}  // namespace protocol
 
 namespace devtools_instrumentation {
 
@@ -129,7 +136,7 @@ void OnRequestWillBeSentExtraInfo(
     int process_id,
     int routing_id,
     const std::string& devtools_request_id,
-    const net::CookieStatusList& request_cookie_list,
+    const net::CookieAccessResultList& request_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers);
 void OnResponseReceivedExtraInfo(
     int process_id,
@@ -180,10 +187,32 @@ void ReportSameSiteCookieIssue(
     blink::mojom::SameSiteCookieOperation operation,
     const base::Optional<std::string>& devtools_request_id);
 
+// This function works similar to RenderFrameHostImpl::AddInspectorIssue, in
+// that it reports an InspectorIssue to DevTools clients. The difference is that
+// |ReportBrowserInitiatedIssue| sends issues directly to clients instead of
+// going through the issue storage in the renderer process. Sending issues
+// directly prevents them from being (potentially) lost during navigations.
+//
+// DevTools must be attached, otherwise issues reported through
+// |ReportBrowserInitiatedIssue| are lost.
+void CONTENT_EXPORT
+ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
+                            protocol::Audits::InspectorIssue* issue);
+
+// Produces a Heavy Ad Issue based on the parameters passed in.
+std::unique_ptr<protocol::Audits::InspectorIssue> GetHeavyAdIssue(
+    RenderFrameHostImpl* frame,
+    blink::mojom::HeavyAdResolutionStatus resolution,
+    blink::mojom::HeavyAdReason reason);
+
 void OnQuicTransportHandshakeFailed(
     RenderFrameHostImpl* frame_host,
     const GURL& url,
     const base::Optional<net::QuicTransportError>& error);
+
+void ApplyNetworkContextParamsOverrides(
+    BrowserContext* browser_context,
+    network::mojom::NetworkContextParams* network_context_params);
 
 }  // namespace devtools_instrumentation
 

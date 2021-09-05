@@ -415,11 +415,20 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
     test_hooks_->NotifyThroughputTrackerResults(std::move(results));
   }
 
+  void SubmitThroughputData(ukm::SourceId source_id,
+                            int aggregated_percent,
+                            int impl_percent,
+                            base::Optional<int> main_percent) override {}
+
   void UpdateLayerTreeHost() override { test_hooks_->UpdateLayerTreeHost(); }
 
   void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override {
     test_hooks_->ApplyViewportChanges(args);
   }
+
+  void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) override {}
 
   void RecordManipulationTypeCounts(ManipulationInfo info) override {}
 

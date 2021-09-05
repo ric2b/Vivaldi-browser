@@ -15,6 +15,7 @@
 #include "base/containers/queue.h"
 #include "base/containers/span.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
@@ -22,6 +23,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/websockets/websocket_event_interface.h"
+#include "services/network/network_service.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
 #include "services/network/websocket_throttler.h"
@@ -34,9 +36,10 @@ class Location;
 }  // namespace base
 
 namespace net {
+class IOBuffer;
 class IsolationInfo;
-class SiteForCookies;
 class SSLInfo;
+class SiteForCookies;
 class WebSocketChannel;
 }  // namespace net
 
@@ -66,13 +69,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client,
       WebSocketThrottler::PendingConnection pending_connection_tracker,
+      DataPipeUseTracker,
       base::TimeDelta delay);
   ~WebSocket() override;
 
   // mojom::WebSocket methods:
-  void SendFrame(bool fin,
-                 mojom::WebSocketMessageType type,
-                 base::span<const uint8_t> data) override;
   void SendMessage(mojom::WebSocketMessageType type,
                    uint64_t data_length) override;
   void StartReceiving() override;
@@ -102,6 +103,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
 
  private:
   class WebSocketEventHandler;
+  struct CloseInfo;
 
   // This class is used to set the WebSocket as user data on a URLRequest. This
   // is used instead of WebSocket directly because SetUserData requires a
@@ -120,10 +122,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   };
 
   struct DataFrame final {
-    DataFrame(mojom::WebSocketMessageType type, uint64_t data_length)
-        : type(type), data_length(data_length) {}
+    DataFrame(mojom::WebSocketMessageType type,
+              uint64_t data_length,
+              bool do_not_fragment)
+        : type(type),
+          data_length(data_length),
+          do_not_fragment(do_not_fragment) {}
     mojom::WebSocketMessageType type;
     uint64_t data_length;
+    const bool do_not_fragment;
   };
 
   void OnConnectionError(const base::Location& set_from);
@@ -165,6 +172,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
 
   // ReadAndSendFromDataPipe() may indirectly delete |this|.
   void ReadAndSendFromDataPipe();
+  void ResumeDataPipeReading();
 
   // |factory_| owns |this|.
   WebSocketFactory* const factory_;
@@ -210,6 +218,30 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   mojo::SimpleWatcher readable_watcher_;
   base::queue<DataFrame> pending_send_data_frames_;
   bool wait_for_readable_ = false;
+  bool blocked_on_websocket_channel_ = false;
+
+  DataPipeUseTracker data_pipe_use_tracker_;
+
+  // True if we should preserve the old behaviour where <=64KB messages were
+  // never fragmented.
+  // TODO(ricea): Remove the flag once we know whether we really need this or
+  // not. See https://crbug.com/1086273.
+  const bool reassemble_short_messages_;
+
+  // Temporary buffer for storage of short messages that have been fragmented by
+  // the data pipe. Only messages that are actually fragmented are copied into
+  // here.
+  scoped_refptr<net::IOBuffer> message_under_reassembly_;
+
+  // Number of bytes that have been written to |message_under_reassembly_| so
+  // far.
+  size_t bytes_reassembled_ = 0;
+
+  // Set when StartClosingHandshake() is called while
+  // |pending_send_data_frames_| is non-empty. This can happen due to a race
+  // condition between the readable signal on the data pipe and the channel on
+  // which StartClosingHandshake() is called.
+  std::unique_ptr<CloseInfo> pending_start_closing_handshake_;
 
   base::WeakPtrFactory<WebSocket> weak_ptr_factory_{this};
 

@@ -16,6 +16,10 @@ namespace base {
 class Clock;
 }
 
+namespace ui {
+class ImageModel;
+}
+
 // This controller provides data and actions for the
 // PasswordSaveUpdateWithAccountStoreView.
 class SaveUpdateWithAccountStoreBubbleController
@@ -68,6 +72,22 @@ class SaveUpdateWithAccountStoreBubbleController
   // Returns true iff the password account store is used.
   bool IsUsingAccountStore();
 
+  // Returns the email of current primary account. Returns empty string if no
+  // account is signed in.
+  std::string GetPrimaryAccountEmail();
+
+  // Returns the avatar of the primary account. Returns an empty image if no
+  // account is signed in.
+  ui::ImageModel GetPrimaryAccountAvatar(int icon_size_dip);
+
+  // Users need to reauth to their account to opt-in using their password
+  // account storage. This method returns whether account auth attempt during
+  // the last password save process failed or not.
+  bool DidAuthForAccountStoreOptInFail() const;
+
+  // PasswordBubbleControllerBase methods:
+  base::string16 GetTitle() const override;
+
   password_manager::ui::State state() const { return state_; }
 
   const autofill::PasswordForm& pending_password() const {
@@ -94,13 +114,11 @@ class SaveUpdateWithAccountStoreBubbleController
 
  private:
   // PasswordBubbleControllerBase methods:
-  base::string16 GetTitle() const override;
   void ReportInteractions() override;
 
-  // URL of the page from where this bubble was triggered.
-  GURL origin_;
+  // Origin of the page from where this bubble was triggered.
+  url::Origin origin_;
   password_manager::ui::State state_;
-  base::string16 title_;
   autofill::PasswordForm pending_password_;
   std::vector<autofill::PasswordForm> existing_credentials_;
   password_manager::InteractionsStats interaction_stats_;

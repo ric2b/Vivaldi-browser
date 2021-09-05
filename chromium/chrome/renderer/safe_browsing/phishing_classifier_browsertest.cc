@@ -12,9 +12,9 @@
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/test_discardable_memory_allocator.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "chrome/renderer/safe_browsing/features.h"
-#include "chrome/renderer/safe_browsing/mock_feature_extractor_clock.h"
 #include "chrome/renderer/safe_browsing/murmurhash3_util.h"
 #include "chrome/renderer/safe_browsing/scorer.h"
 #include "chrome/test/base/chrome_render_view_test.h"
@@ -60,6 +60,8 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
     ChromeRenderViewTest::SetUp();
     PrepareModel();
     SetUpClassifier();
+
+    base::DiscardableMemoryAllocator::SetInstance(&test_allocator_);
   }
 
   void PrepareModel() {
@@ -99,18 +101,16 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
     model.set_max_shingles_per_page(100);
     model.set_shingle_size(3);
 
-    clock_ = new MockFeatureExtractorClock;
+    // Add an empty visual target to ensure visual detection runs.
+    model.mutable_vision_model()->add_targets();
+
     scorer_.reset(Scorer::Create(model.SerializeAsString()));
     ASSERT_TRUE(scorer_.get());
-
-    // These tests don't exercise the extraction timing.
-    EXPECT_CALL(*clock_, Now())
-        .WillRepeatedly(::testing::Return(base::TimeTicks::Now()));
   }
 
   void SetUpClassifier() {
-    classifier_.reset(
-        new PhishingClassifier(view_->GetMainRenderFrame(), clock_));
+    classifier_ =
+        std::make_unique<PhishingClassifier>(view_->GetMainRenderFrame());
     // No scorer yet, so the classifier is not ready.
     ASSERT_FALSE(classifier_->is_ready());
 
@@ -138,6 +138,8 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
                                   verdict.feature_map(i).value());
     }
     is_phishing_ = verdict.is_phishing();
+    screenshot_phash_ = verdict.screenshot_phash();
+    phash_dimension_size_ = verdict.phash_dimension_size();
   }
 
   void LoadHtml(const GURL& url, const std::string& content) {
@@ -153,7 +155,6 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   std::string response_content_;
   std::unique_ptr<Scorer> scorer_;
   std::unique_ptr<PhishingClassifier> classifier_;
-  MockFeatureExtractorClock* clock_;  // Owned by classifier_.
 
   // Features that are in the model.
   const std::string url_tld_token_net_;
@@ -165,6 +166,11 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   FeatureMap feature_map_;
   float phishy_score_;
   bool is_phishing_;
+  std::string screenshot_phash_;
+  int phash_dimension_size_;
+
+  // A DiscardableMemoryAllocator is needed for certain Skia operations.
+  base::TestDiscardableMemoryAllocator test_allocator_;
 };
 
 TEST_F(PhishingClassifierTest, TestClassificationOfPhishingDotComHttp) {
@@ -259,6 +265,15 @@ TEST_F(PhishingClassifierTest, DisableDetection) {
   // Set a NULL scorer, which turns detection back off.
   classifier_->set_phishing_scorer(NULL);
   EXPECT_FALSE(classifier_->is_ready());
+}
+
+TEST_F(PhishingClassifierTest, TestSendsVisualHash) {
+  LoadHtml(GURL("https://host.net"),
+           "<html><body><a href=\"http://safe.com/\">login</a></body></html>");
+  RunPhishingClassifier(&page_text_);
+
+  EXPECT_EQ(phash_dimension_size_, 48);
+  EXPECT_FALSE(screenshot_phash_.empty());
 }
 
 // TODO(jialiul): Add test to verify that classification only starts on GET

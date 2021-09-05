@@ -8,6 +8,7 @@
 #include "platform_media/common/mac/framework_type_conversions.h"
 
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 
 namespace media {

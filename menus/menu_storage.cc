@@ -145,8 +145,8 @@ void OnLoad(const base::FilePath& profile_file,
               bundled_file, bundled_version));
           if (root.get()) {
             MenuCodec codec;
-            if (!codec.Decode(details->root_node(), details->control(),
-                *root.get(), false)) {
+            if (!codec.Decode(details->mainmenu_node(), details->control(),
+                *root.get(), false, "")) {
               LOG(ERROR) << "Menu Storage: Failed to decode JSON content after upgrade";
             } else {
               details->SetHasUpgraded();
@@ -188,8 +188,11 @@ void OnLoad(const base::FilePath& profile_file,
         LOG(ERROR) << "Menu Storage: Content: " << content;
       } else {
         MenuCodec codec;
-        if (!codec.Decode(details->root_node(), details->control(),
-                          *root.get(), file == &bundled_file)) {
+        // Use the version set up in 'details' when reading from the bundle.
+        std::string version = file == &bundled_file ?
+          details->control()->version : "";
+        if (!codec.Decode(details->mainmenu_node(), details->control(),
+                          *root.get(), file == &bundled_file, version)) {
           LOG(ERROR) << "Menu Storage: Failed to decode JSON content from: "
                      << *file;
         }
@@ -202,17 +205,19 @@ void OnLoad(const base::FilePath& profile_file,
                                    base::Passed(&details)));
 }
 
-MenuLoadDetails::MenuLoadDetails(Menu_Node* root, Menu_Control* control,
-                                 int64_t id, bool force_bundle)
-  : root_(root),
+MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
+                                 Menu_Control* control, int64_t id,
+                                 bool force_bundle)
+  : mainmenu_node_(mainmenu_node),
     control_(control),
     id_(id),
     has_upgraded_(false),
     force_bundle_(force_bundle) {}
 
-MenuLoadDetails::MenuLoadDetails(Menu_Node* root, Menu_Control* control,
-                                 const std::string& menu, bool force_bundle)
-  : root_(root),
+MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
+                                 Menu_Control* control, const std::string& menu,
+                                 bool force_bundle)
+  : mainmenu_node_(mainmenu_node),
     control_(control),
     id_(-1),
     has_upgraded_(false),

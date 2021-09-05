@@ -15,12 +15,15 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/power_monitor/power_observer.h"
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/peerconnection/media_stream_track_metrics.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver_impl.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/thermal_resource.h"
+#include "third_party/blink/renderer/modules/peerconnection/thermal_uma_listener.h"
 #include "third_party/blink/renderer/modules/peerconnection/transceiver_state_surfacer.h"
 #include "third_party/blink/renderer/modules/peerconnection/webrtc_media_stream_track_adapter_map.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -210,6 +213,10 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   // Tells the |client_| to close RTCPeerConnection.
   // Make it virtual for testing purpose.
   virtual void CloseClientPeerConnection();
+  // Invoked when a new thermal state is received from the OS.
+  // Virtual for testing purposes.
+  virtual void OnThermalStateChange(
+      base::PowerObserver::DeviceThermalState thermal_state);
 
   // Start recording an event log.
   void StartEventLog(int output_period_ms);
@@ -219,12 +226,19 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   // WebRTC event log fragments sent back from PeerConnection land here.
   void OnWebRtcEventLogWrite(const WTF::Vector<uint8_t>& output);
 
+  // Virtual for testing purposes.
+  virtual scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
+
   bool force_encoded_audio_insertable_streams() {
     return force_encoded_audio_insertable_streams_;
   }
 
   bool force_encoded_video_insertable_streams() {
     return force_encoded_video_insertable_streams_;
+  }
+
+  bool enable_rtp_data_channel() const {
+    return configuration_.enable_rtp_data_channel;
   }
 
  protected:
@@ -273,6 +287,9 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
                            int error_code,
                            const String& error_text);
   void OnInterestingUsage(int usage_pattern);
+
+  // Protected for testing.
+  ThermalUmaListener* thermal_uma_listener() const;
 
  private:
   // Record info about the first SessionDescription from the local and
@@ -366,8 +383,7 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   std::unique_ptr<blink::RTCRtpTransceiverImpl> CreateOrUpdateTransceiver(
       blink::RtpTransceiverState transceiver_state,
       blink::TransceiverStateUpdateMode update_mode);
-
-  scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
+  void MaybeCreateThermalUmaListner();
 
   // Initialize() is never expected to be called more than once, even if the
   // first call fails.
@@ -443,6 +459,15 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   webrtc::PeerConnectionInterface::RTCConfiguration configuration_;
   bool force_encoded_audio_insertable_streams_ = false;
   bool force_encoded_video_insertable_streams_ = false;
+
+  // Resources for Adaptation.
+  // The Thermal Resource is lazily instantiated on platforms where thermal
+  // signals are supported.
+  scoped_refptr<ThermalResource> thermal_resource_ = nullptr;
+  // ThermalUmaListener is only tracked on peer connection that add a track.
+  std::unique_ptr<ThermalUmaListener> thermal_uma_listener_ = nullptr;
+  base::PowerObserver::DeviceThermalState last_thermal_state_ =
+      base::PowerObserver::DeviceThermalState::kUnknown;
 
   // Record info about the first SessionDescription from the local and
   // remote side to record UMA stats once both are set.  We only check

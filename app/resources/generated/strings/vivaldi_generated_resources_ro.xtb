@@ -24,7 +24,6 @@
 <translation id="1601560923496285236">Aplică</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Cameră video</translation>
-<translation id="1635033183663317347">Instalată de custode.</translation>
 <translation id="1682548588986054654">Fereastră incognito nouă</translation>
 <translation id="1698122934742150150">Numai sesiunea privată actuală</translation>
 <translation id="1706625117072057435">Niveluri de zoom</translation>
@@ -112,7 +111,6 @@
 <translation id="3668823961463113931">Handlere</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitare de partajare a ecranului de către <ph name="APP_NAME" /></translation>
-<translation id="3725367690636977613">pagini</translation>
 <translation id="3744111561329211289">Sincronizare în fundal</translation>
 <translation id="3797900183766075808">&amp;Caută „<ph name="SEARCH_TERMS" />” pe <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Arată-le pe toate (recomandat)</translation>
@@ -134,7 +132,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Acceptă pentru grup</translation>
-<translation id="4091434297613116013">foi de hârtie</translation>
 <translation id="4096508467498758490">Dezactivați extensiile care rulează în modul pentru dezvoltatori</translation>
 <translation id="4100839878934973028">Un alt program de pe calculator a adăugat o aplicație care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
@@ -294,7 +291,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8032244173881942855">Nu se poate proiecta fila.</translation>
 <translation id="8071432093239591881">Tipărește ca imagine</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KiB</translation>
-<translation id="8180239481735238521">pagina</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
         =1 {Descărcarea este în desfășurare} other {Descărcările sunt în desfășurare}}</translation>
 <translation id="8230134520748321204">Salvați parola pentru <ph name="ORIGIN" /> ?</translation>
@@ -314,7 +310,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8798099450830957504">Implicit</translation>
 <translation id="8800004011501252845">Se afișează destinații pentru</translation>
 <translation id="8808478386290700967">Magazin web</translation>
-<translation id="8813811964357448561">foaie de hârtie</translation>
 <translation id="8859174528519900719">Subcadru: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Partajați-vă ecranul</translation>
 <translation id="8915370057835397490">Se încarcă sugestiile</translation>

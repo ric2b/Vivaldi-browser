@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.media.ui;
 import android.content.Intent;
 import android.media.AudioManager;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -17,7 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -51,7 +52,7 @@ public class PauseOnHeadsetUnplugTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
+    @FlakyTest
     public void testPause() throws IllegalArgumentException, TimeoutException {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
 
@@ -79,7 +80,7 @@ public class PauseOnHeadsetUnplugTest {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return MediaNotificationManager.hasManagerForTesting(
+                return MediaNotificationManager.hasControllerForTesting(
                         R.id.media_playback_notification);
             }
         });
@@ -87,7 +88,7 @@ public class PauseOnHeadsetUnplugTest {
 
     private void simulateHeadsetUnplug() {
         Intent i = new Intent(InstrumentationRegistry.getTargetContext(),
-                MediaNotificationManager.PlaybackListenerService.class);
+                ChromeMediaNotificationControllerDelegate.PlaybackListenerService.class);
         i.setAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
 
         InstrumentationRegistry.getContext().startService(i);

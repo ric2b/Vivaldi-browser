@@ -64,7 +64,7 @@
 <translation id="1377925789329510816">နောက်ဆုံးခေါင်းစဉ်ကို ရောက်ပါပြီ။ ပထမခေါင်းစဉ်သို့ ပြန်သွားရန် Search+H ကို နှိပ်ပါ သို့မဟုတ် ဤစာမျက်နှာပေါ်ရှိ ဒုတိယခေါင်းစဉ်သို့ သွားရန် Search+Shift+H ကို နှိပ်ပါ။</translation>
 <translation id="138218114945450791">အပြာနု</translation>
 <translation id="1383876407941801731">ရှာဖွေမှု</translation>
-<translation id="1396114365388024581">တဲဘ် စာရင်း</translation>
+<translation id="1396114365388024581">တဘ် စာရင်း</translation>
 <translation id="1405567553485452995">အစိမ်းဖျော့</translation>
 <translation id="1417889266572670458">ရေတပ်ပြာ</translation>
 <translation id="1431911867058218151">မက်မန်း</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">ညာသို့ လှိမ့်ရန်</translation>
 <translation id="1781173782405573156">သော့ဖြင့် ဖြတ်ရန်</translation>
 <translation id="1787176709638001873">လျှို့ဝှက်စကားလုံး တည်းဖြတ်စာသား</translation>
+<translation id="180203835522132923">Search + O၊ ၎င်းနောက် W</translation>
 <translation id="1810107444790159527">စာရင်း အကွက်</translation>
 <translation id="1812527064848182527">အလျားလိုက်</translation>
 <translation id="1829244130665387512">စာမျက်နှာတွင် ရှာရန်</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">ဘယ်ဘက်သို့ လက်နှစ်ချောင်းဖြင့် ပွတ်ဆွဲပါ</translation>
 <translation id="2998131015536248178">ယခင် သင်္ကေတ</translation>
 <translation id="2999559350546931576">ပတ်ချ်အသံ လျော့မည်</translation>
+<translation id="3009352964623081324">Search + O၊ ၎င်းနောက် S။ စကားသံများကို ထည့်သွင်းရန်၊ စီမံရန်နှင့် စိတ်ကြိုက်ပြုလုပ်ရန် အသုံးပြုနိုင်သည်။</translation>
 <translation id="3014130421870723208">@အစက် ၈ စက်စနစ်ကို တည်းဖြတ်ရန်</translation>
 <translation id="3030432017085518523">မီနူး အရာ ရေဒီယို ခလုတ်</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{အပေါ်စတော်ပီ}other{# အပေါ်စတော်ပီ}}</translation>
@@ -294,7 +296,7 @@
 <translation id="3208346789712025453">နောက်ထပ် ထိန်းချုပ်မှု မရှိပါ</translation>
 <translation id="321072937702597574">သစ်ခွခရမ်း</translation>
 <translation id="3218691001991391708"><ph name="TEXT" /> ကို ကူးထည့်ပါ။</translation>
-<translation id="3223701887221307104"><ph name="NAME" />၊ တဲဘ်</translation>
+<translation id="3223701887221307104"><ph name="NAME" />၊ တဘ်</translation>
 <translation id="3223779237381380437">ဖြတ်မျဉ်းထည့်သွင်းမထားပါ</translation>
 <translation id="3226035351387556942">chk</translation>
 <translation id="3232388865800379423">ပေါ့ပ်အပ်ခလုတ်</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ထည့်သွင်းခြင်း</translation>
 <translation id="4511186779140817916">မက်မွန်စေ့ဖျော့</translation>
 <translation id="451510441928265982">ယခင် အဆင့် ၂ ခေါင်းစီး မရှိပါ</translation>
+<translation id="4515799157838123044">နောက်ခံအကြောင်းအရာ မှိန်ထားရန်</translation>
 <translation id="4517854969512651305">တန်ဖိုး တိုးသည်</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{မျဉ်းစောင်း}other{# မျဉ်းစောင်းများ}}</translation>
 <translation id="4537277403911487429">နောက်ထပ် အလားတူ အကြောင်းအရာ</translation>
@@ -541,7 +544,7 @@
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">အဆုံး</translation>
 <translation id="5302089807023311274">ကျမ်းကိုးစာရင်း အညွှန်း</translation>
-<translation id="5304943142864553931"><ph name="TITLE" />၊ တဲဘ်</translation>
+<translation id="5304943142864553931"><ph name="TITLE" />၊ တဘ်</translation>
 <translation id="5308380583665731573">ချိတ်ဆက်ရန်</translation>
 <translation id="5310788376443009632">ဖယ်ရှားပြီး:</translation>
 <translation id="5320727453979144100">စေးကပ် မုဒ် ဖွင့်ပေးထား</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">အစိတ်အပိုင်း</translation>
 <translation id="6637586476836377253">မှတ်တမ်း</translation>
 <translation id="6657128831881431364">တိုးတက်မှု ဘား</translation>
+<translation id="6660819301598582123">သီဟိုဠ်မှ ဉာဏ်ကြီးရှင်သည် အာယုဝဍ္ဎနဆေးညွှန်းစာကို ဇလွန်ဈေးဘေး ဗာဒံပင်ထက် အဓိဋ္ဌာန်လျက် ဂဃနဏဖတ်ခဲ့သည်။</translation>
 <translation id="667999046851023355">စာတမ်း</translation>
 <translation id="6688209025607531203">တုန့်ပြန်ရန်မလိုသော သတိပေးချက်</translation>
 <translation id="6689672606256159458">ဆယ်လမွန်အရင့်</translation>
@@ -715,7 +719,7 @@
 <translation id="6710213216561001401">အရင်</translation>
 <translation id="6714813999819678458">ယခင် အဆင့် ၂ ခေါင်းစီး</translation>
 <translation id="6730312624811567147">'ပင်မစာမျက်နှာ သို့မဟုတ် အဆုံး' အတွက် 'ဘယ် သို့မဟုတ် ညာ ရှာဖွေမှု'၊ 'ပင်မစာမျက်နှာ သို့မဟုတ် အဆုံးကို ထိန်းချုပ်မှု' အတွက် 'ဘယ် သို့မဟုတ် ညာ ရှာဖွေမှု ထိန်းချုပ်စနစ်'၊ 'စာမျက်နှာ အပေါ် သို့မဟုတ် အောက်' အတွက် 'အပေါ် သို့မဟုတ် အောက် ရှာဖွေမှု' ကို အသုံးပြုပါ</translation>
-<translation id="6736510033526053669">တဲဘ် ဖန်တီးပြီး</translation>
+<translation id="6736510033526053669">တဘ် ဖန်တီးပြီး</translation>
 <translation id="675895815784134693">pgbar</translation>
 <translation id="67862343314499040">ခရမ်းပြာ</translation>
 <translation id="6786800275320335305">အကြောင်းအရာ</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">နောက်ထပ် အဆင့် ၅ ခေါင်စီး မရှိပါ</translation>
 <translation id="6955705049214951590">မြူမှုန်လွှမ်းသော နှင်းဆီ</translation>
 <translation id="696356426651109308">အစသို့ သွားရန်</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">ခက်ဆစ်အညွှန်း</translation>
 <translation id="6996566555547746822">နောက် ကွမ်ဘို အကွက်</translation>
 <translation id="6997224546856374593">စာလုံးကြီးများကို ဖတ်သည့်အခါ-</translation>
@@ -778,7 +781,7 @@
 <translation id="7229749224609077523">အစက် ၆ စက်ပါ မျက်မမြင်စာ ဇယားကို ရွေးပါ−</translation>
 <translation id="72393384879519786">ခေါင်းစဉ်</translation>
 <translation id="7240858705033280249">'အသေးစိတ်များ' သို့ သွားပါ</translation>
-<translation id="7241683698754534149">ဖေါ်ပြချက် အရှည်ကို တဲဘ် အသစ် ထဲမှာ ဖွင့်ရန်</translation>
+<translation id="7241683698754534149">ဖေါ်ပြချက် အရှည်ကို တဘ် အသစ် ထဲမှာ ဖွင့်ရန်</translation>
 <translation id="7244947685630430863">ယခင် ဂရပ်ဖစ် မရှိပါ</translation>
 <translation id="7248671827512403053">အပလီကေးရှင်း</translation>
 <translation id="725969808843520477">ရေဒီယို ခလုတ် နောက်တစ်ခု</translation>
@@ -809,7 +812,8 @@
 <translation id="743783356331413498">ဥပမာ</translation>
 <translation id="7439060726180460871">ဒါရိုက်ထရီ</translation>
 <translation id="744163271241493234">pwded</translation>
-<translation id="7491962110804786152">တဲဘ်</translation>
+<translation id="7484805699335881122">အကြောင်းအရာအမျိုးအစားနှင့် မျက်တောင်အဖွင့်အပိတ်ပါသော၊ ဖျက်ထားသော၊ ထင်ရှားအောင်ပြုလုပ်ထားသော၊ ကွင်းစကွင်းပိတ်ပါသော သို့မဟုတ် စာလုံးကြီးပြုလုပ်ထားသော စာသားကိုပြောသည့်အခါ အသံအနေအထားပြောင်းပါ။</translation>
+<translation id="7491962110804786152">တဘ်</translation>
 <translation id="7505149250476994901">စကားလုံးရှေ့တွင် "ကက်ပ်" ဟု ပြောပါ</translation>
 <translation id="7518543783849163354">ChromeVox စကားပြောခြင်းမှ ခေတ္တရပ်ရန် Control ခလုတ်ကို နှိပ်ပါ။</translation>
 <translation id="7533226154149229506">ရွှေချောင်းဝါ အနု</translation>

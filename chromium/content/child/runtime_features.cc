@@ -26,6 +26,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/ui_base_features.h"
@@ -59,8 +60,11 @@ void SetRuntimeFeatureDefaultsForPlatform(
   WebRuntimeFeatures::EnableCompositedSelectionUpdate(true);
 #endif
 #if defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::Version::WIN10)
+  if (base::win::GetVersion() >= base::win::Version::WIN10) {
     WebRuntimeFeatures::EnableWebBluetooth(true);
+    WebRuntimeFeatures::EnableWebBluetoothRemoteCharacteristicNewWriteValue(
+        true);
+  }
 #endif
 
 #if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
@@ -72,7 +76,7 @@ void SetRuntimeFeatureDefaultsForPlatform(
 #if defined(OS_MACOSX)
   const bool enable_canvas_2d_image_chromium =
       command_line.HasSwitch(
-          switches::kEnableGpuMemoryBufferCompositorResources) &&
+          blink::switches::kEnableGpuMemoryBufferCompositorResources) &&
       !command_line.HasSwitch(switches::kDisable2dCanvasImageChromium) &&
       !command_line.HasSwitch(switches::kDisableGpu) &&
       base::FeatureList::IsEnabled(features::kCanvas2DImageChromium);
@@ -85,7 +89,7 @@ void SetRuntimeFeatureDefaultsForPlatform(
 #if defined(OS_MACOSX)
   const bool enable_web_gl_image_chromium =
       command_line.HasSwitch(
-          switches::kEnableGpuMemoryBufferCompositorResources) &&
+          blink::switches::kEnableGpuMemoryBufferCompositorResources) &&
       !command_line.HasSwitch(switches::kDisableWebGLImageChromium) &&
       !command_line.HasSwitch(switches::kDisableGpu) &&
       base::FeatureList::IsEnabled(features::kWebGLImageChromium);
@@ -209,9 +213,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableWebXR, features::kWebXr, kUseFeatureState},
     {wf::EnableWebXRARModule, features::kWebXrArModule, kUseFeatureState},
     {wf::EnableWebXRHitTest, features::kWebXrHitTest, kUseFeatureState},
-    {wf::EnableWebXRIncubations, features::kWebXrIncubations, kEnableOnly},
     {wf::EnableWebXRAnchors, features::kWebXrIncubations, kEnableOnly},
+    {wf::EnableWebXRCameraAccess, features::kWebXrIncubations, kEnableOnly},
     {wf::EnableWebXRLightEstimation, features::kWebXrIncubations, kEnableOnly},
+    {wf::EnableWebXRPlaneDetection, features::kWebXrIncubations, kEnableOnly},
+    {wf::EnableWebXRReflectionEstimation, features::kWebXrIncubations,
+     kEnableOnly},
     {wf::EnableUserActivationPostMessageTransfer,
      features::kUserActivationPostMessageTransfer, kUseFeatureState},
     {wf::EnableUserActivationSameOriginVisibility,
@@ -283,12 +290,15 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableSkipTouchEventFilter, blink::features::kSkipTouchEventFilter,
      kUseFeatureState},
     {wf::EnableSmsReceiver, features::kSmsReceiver, kDisableOnly},
+    {wf::EnableClickPointerEvent, features::kClickPointerEvent, kEnableOnly},
     {wf::EnableConsolidatedMovementXY, features::kConsolidatedMovementXY,
      kUseFeatureState},
     {wf::EnableCooperativeScheduling, features::kCooperativeScheduling,
      kUseFeatureState},
     {wf::EnableMouseSubframeNoImplicitCapture,
      features::kMouseSubframeNoImplicitCapture, kUseFeatureState},
+    {wf::EnableSubresourceWebBundles, features::kSubresourceWebBundles,
+     kUseFeatureState},
     {wf::EnableCookieDeprecationMessages, features::kCookieDeprecationMessages,
      kEnableOnly},
     {wf::EnableSameSiteByDefaultCookies,
@@ -300,12 +310,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableScrollUnification, features::kScrollUnification,
      kUseFeatureState},
     {wf::EnableNeverSlowMode, features::kNeverSlowMode, kUseFeatureState},
-    {wf::EnableShadowDOMV0, blink::features::kWebComponentsV0Enabled,
-     kEnableOnly},
-    {wf::EnableCustomElementsV0, blink::features::kWebComponentsV0Enabled,
-     kEnableOnly},
-    {wf::EnableHTMLImports, blink::features::kWebComponentsV0Enabled,
-     kEnableOnly},
     {wf::EnableVideoPlaybackQuality, features::kVideoPlaybackQuality,
      kUseFeatureState},
     {wf::EnableBrowserVerifiedUserActivationKeyboard,
@@ -320,8 +324,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableInstalledApp, features::kInstalledApp, kDisableOnly},
     {wf::EnableWebAuthenticationGetAssertionFeaturePolicy,
      device::kWebAuthGetAssertionFeaturePolicy, kUseFeatureState},
+    {wf::EnableTransformInterop, blink::features::kTransformInterop,
+     kUseFeatureState},
     {wf::EnableVideoWakeLockOptimisationHiddenMuted,
      media::kWakeLockOptimisationHiddenMuted, kUseFeatureState},
+    {wf::EnableMediaFeeds, media::kMediaFeeds, kUseFeatureState},
+
   };
   for (const auto& mapping : blinkFeatureToBaseFeatureMapping) {
     SetRuntimeFeatureFromChromiumFeature(
@@ -341,36 +349,45 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            blink::features::kAudioWorkletRealtimeThread, kEnableOnly},
           {"BlockCredentialedSubresources",
            features::kBlockCredentialedSubresources, kDisableOnly},
+          {"BlockFlowHandlesWebkitLineClamp",
+           blink::features::kBlockFlowHandlesWebkitLineClamp, kUseFeatureState},
           {"BlockHTMLParserOnStyleSheets",
            blink::features::kBlockHTMLParserOnStyleSheets, kUseFeatureState},
-          {"ConversionMeasurement", features::kConversionMeasurement,
-           kEnableOnly},
+          {"CSSColorSchemeUARendering", features::kCSSColorSchemeUARendering,
+           kUseFeatureState},
           {"CSSReducedFontLoadingInvalidations",
            blink::features::kCSSReducedFontLoadingInvalidations,
            kUseFeatureState},
-          {"CustomElementsV0", blink::features::kWebComponentsV0Enabled,
-           kEnableOnly},
+          {"CSSReducedFontLoadingLayoutInvalidations",
+           blink::features::kCSSReducedFontLoadingLayoutInvalidations,
+           kUseFeatureState},
+          {"CSSMatchedPropertiesCacheDependencies",
+           blink::features::kCSSMatchedPropertiesCacheDependencies,
+           kUseFeatureState},
           {"FeaturePolicyForClientHints",
            features::kFeaturePolicyForClientHints, kUseFeatureState},
           {"FlexGaps", blink::features::kFlexGaps, kEnableOnly},
           {"FontAccess", blink::features::kFontAccess, kUseFeatureState},
           {"FontSrcLocalMatching", features::kFontSrcLocalMatching,
            kUseFeatureState},
-          {"HTMLImports", blink::features::kWebComponentsV0Enabled,
-           kEnableOnly},
+          {"ForceSynchronousHTMLParsing",
+           blink::features::kForceSynchronousHTMLParsing, kUseFeatureState},
           {"IgnoreCrossOriginWindowWhenNamedAccessOnWindow",
            blink::features::kIgnoreCrossOriginWindowWhenNamedAccessOnWindow,
            kEnableOnly},
           {"LayoutNG", blink::features::kLayoutNG, kUseFeatureState},
-          {"LayoutNGFlexBox", blink::features::kFlexNG, kEnableOnly},
+          {"LayoutNGFlexBox", blink::features::kFlexNG, kUseFeatureState},
+          {"LayoutNGFragmentItem", blink::features::kFragmentItem,
+           kUseFeatureState},
+          {"LayoutNGRuby", blink::features::kLayoutNGRuby, kUseFeatureState},
           {"LegacyWindowsDWriteFontFallback",
            features::kLegacyWindowsDWriteFontFallback, kUseFeatureState},
+          {"LinkDisabledNewSpecBehavior",
+           blink::features::kLinkDisabledNewSpecBehavior, kUseFeatureState},
           {"OriginPolicy", features::kOriginPolicy, kUseFeatureState},
           {"OriginIsolationHeader", features::kOriginIsolationHeader,
            kUseFeatureState},
           {"RawClipboard", blink::features::kRawClipboard, kEnableOnly},
-          {"ShadowDOMV0", blink::features::kWebComponentsV0Enabled,
-           kEnableOnly},
           {"StorageAccessAPI", blink::features::kStorageAccessAPI, kEnableOnly},
           {"TrustedDOMTypes", features::kTrustedDOMTypes, kEnableOnly},
           {"UserAgentClientHint", features::kUserAgentClientHint,
@@ -449,9 +466,6 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
        switches::kEnableAccessibilityObjectModel, true},
       {wrf::EnableAllowSyncXHRInPageDismissal,
        switches::kAllowSyncXHRInPageDismissal, true},
-      {wrf::EnableShadowDOMV0, switches::kWebComponentsV0Enabled, true},
-      {wrf::EnableCustomElementsV0, switches::kWebComponentsV0Enabled, true},
-      {wrf::EnableHTMLImports, switches::kWebComponentsV0Enabled, true},
   };
   for (const auto& mapping : switchToFeatureMapping) {
     if (command_line.HasSwitch(mapping.switch_name))
@@ -525,9 +539,7 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
           blink::features::kNativeFileSystemAPI.name,
           base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
     WebRuntimeFeatures::EnableFeatureFromString("NativeFileSystem", true);
-    WebRuntimeFeatures::EnableFeatureFromString(
-        "CloneableNativeFileSystemHandles", true);
-    WebRuntimeFeatures::EnableFeatureFromString("WritableFileStream", true);
+    WebRuntimeFeatures::EnableFeatureFromString("LegacyNativeFileSystem", true);
   }
   if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI) &&
       base::FeatureList::IsEnabled(blink::features::kFileHandlingAPI)) {

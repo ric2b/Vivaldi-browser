@@ -7,8 +7,8 @@
 
 #include <map>
 
+#include "base/check.h"
 #include "base/containers/flat_map.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -49,6 +49,7 @@ class TestcaseBase {
   virtual ~TestcaseBase() = default;
   virtual bool IsFinished() = 0;
   virtual void NextAction() = 0;
+  virtual int NextResponseIndex(TypeId type) = 0;
 };
 
 class Context {
@@ -125,6 +126,7 @@ class Context {
   bool IsFinished();
   void NextAction();
   void PostNextAction();
+  int NextResponseIndex(TypeId type_id);
 
   scoped_refptr<base::SequencedTaskRunner> task_runner() const {
     return task_runner_;

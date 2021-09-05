@@ -119,8 +119,8 @@ TEST(ComputedStyleTest, FocusRingOutset) {
 
 TEST(ComputedStyleTest, SVGStackingContext) {
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
-  style->UpdateIsStackingContext(false, false, true);
-  EXPECT_TRUE(style->IsStackingContext());
+  style->UpdateIsStackingContextWithoutContainment(false, false, true);
+  EXPECT_TRUE(style->IsStackingContextWithoutContainment());
 }
 
 TEST(ComputedStyleTest, Preserve3dForceStackingContext) {
@@ -128,17 +128,18 @@ TEST(ComputedStyleTest, Preserve3dForceStackingContext) {
   style->SetTransformStyle3D(ETransformStyle3D::kPreserve3d);
   style->SetOverflowX(EOverflow::kHidden);
   style->SetOverflowY(EOverflow::kHidden);
-  style->UpdateIsStackingContext(false, false, false);
+  style->UpdateIsStackingContextWithoutContainment(false, false, false);
   EXPECT_EQ(ETransformStyle3D::kFlat, style->UsedTransformStyle3D());
-  EXPECT_TRUE(style->IsStackingContext());
+  EXPECT_TRUE(style->IsStackingContextWithoutContainment());
 }
 
 TEST(ComputedStyleTest, LayoutContainmentStackingContext) {
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
-  EXPECT_FALSE(style->IsStackingContext());
+  EXPECT_FALSE(style->IsStackingContextWithoutContainment());
   style->SetContain(kContainsLayout);
-  style->UpdateIsStackingContext(false, false, false);
-  EXPECT_TRUE(style->IsStackingContext());
+  style->UpdateIsStackingContextWithoutContainment(false, false, false);
+  // Containment doesn't change IsStackingContextWithoutContainment
+  EXPECT_FALSE(style->IsStackingContextWithoutContainment());
 }
 
 TEST(ComputedStyleTest, FirstPublicPseudoStyle) {
@@ -457,7 +458,7 @@ TEST(ComputedStyleTest, BorderStyle) {
   } while (false)
 
 TEST(ComputedStyleTest, AnimationFlags) {
-  Persistent<Document> document = MakeGarbageCollected<Document>();
+  Persistent<Document> document = Document::CreateForTest();
   TEST_ANIMATION_FLAG(HasCurrentTransformAnimation, kNonInherited);
   TEST_ANIMATION_FLAG(HasCurrentOpacityAnimation, kNonInherited);
   TEST_ANIMATION_FLAG(HasCurrentFilterAnimation, kNonInherited);
@@ -740,7 +741,8 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
     ScopedCSSCascadeForTest scoped_cascade_enabled(true);
 
     auto* color_declaration =
-        ParseDeclarationBlock("color:-internal-light-dark(black, white)");
+        ParseDeclarationBlock("color:-internal-light-dark(black, white)",
+                              CSSParserMode::kUASheetMode);
     auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
     auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
 

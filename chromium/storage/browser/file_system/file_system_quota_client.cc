@@ -96,10 +96,6 @@ FileSystemQuotaClient::FileSystemQuotaClient(
 
 FileSystemQuotaClient::~FileSystemQuotaClient() = default;
 
-QuotaClientType FileSystemQuotaClient::type() const {
-  return QuotaClientType::kFileSystem;
-}
-
 void FileSystemQuotaClient::GetOriginUsage(const url::Origin& origin,
                                            StorageType storage_type,
                                            GetUsageCallback callback) {
@@ -174,12 +170,6 @@ void FileSystemQuotaClient::PerformStorageCleanup(StorageType type,
       base::BindOnce(&PerformStorageCleanupOnFileTaskRunner,
                      base::RetainedRef(file_system_context_), fs_type),
       std::move(callback));
-}
-
-bool FileSystemQuotaClient::DoesSupport(StorageType storage_type) const {
-  FileSystemType type = QuotaStorageTypeToFileSystemType(storage_type);
-  DCHECK(type != kFileSystemTypeUnknown);
-  return file_system_context_->IsSandboxFileSystem(type);
 }
 
 base::SequencedTaskRunner* FileSystemQuotaClient::file_task_runner() const {

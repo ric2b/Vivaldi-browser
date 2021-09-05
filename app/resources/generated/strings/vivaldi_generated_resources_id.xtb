@@ -19,7 +19,6 @@
 <translation id="1601560923496285236">Terapkan</translation>
 <translation id="1603914832182249871">(Penyamaran)</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1635033183663317347">Di pasang oleh wali anda.</translation>
 <translation id="1706625117072057435">Tingkat perbesar/perkecil</translation>
 <translation id="1708338024780164500">(Tidak Aktif)</translation>
 <translation id="1729533290416704613">Juga mengontrol halaman apa yang di tampilkan saat anda menelusuri dari Omnibox.</translation>
@@ -88,7 +87,6 @@
 <translation id="3668823961463113931">Pawang</translation>
 <translation id="3678156199662914018">Ekstensi: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Permintaan Berbagi Layar</translation>
-<translation id="3725367690636977613">Semua halaman</translation>
 <translation id="3744111561329211289">Sinkronisasi latar belakang</translation>
 <translation id="3800806661949714323">Tampilkan semua (disarankan)</translation>
 <translation id="385051799172605136">Kembali</translation>
@@ -106,7 +104,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Terima untuk kelompok</translation>
-<translation id="4091434297613116013">Semua lembaran kertas</translation>
 <translation id="4096508467498758490">Jangan aktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
 <translation id="4115080753528843955">Beberapa layanan konten menggunakan penanda unik dengan tujuan untuk memberikan akses ke konten yang diproteksi</translation>
@@ -240,7 +237,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8032244173881942855">Tidak dapat cast tab.</translation>
 <translation id="8071432093239591881">Cetak sebagai gambar</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8180239481735238521">halaman</translation>
 <translation id="8261378640211443080">Ekstensi ini tidak tercantum dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah di tambahkan tanpa sepengetahuan anda.</translation>
 <translation id="8270242299912238708">Dokumen PDF</translation>
 <translation id="8351419472474436977">Ekstensi ini telah mengambil alih kontrol semua pengaturan proxy anda, yang berarti ekstensi dapat mengubah, merusak, atau menyadap apa pun yang anda lakukan secara online. Jika anda tidak yakin mengapa perubahan ini terjadi, mungkin anda tidak menginginkannya.</translation>
@@ -254,7 +250,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8798099450830957504">Standar</translation>
 <translation id="8800004011501252845">Menunjukkan tujuan untuk</translation>
 <translation id="8808478386290700967">Toko Web</translation>
-<translation id="8813811964357448561">lembaran kertas</translation>
 <translation id="8859174528519900719">Subkerangka: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Berbagi layar anda</translation>
 <translation id="8916476537757519021">Subkerangka Penyamaran: <ph name="SUBFRAME_SITE" /></translation>

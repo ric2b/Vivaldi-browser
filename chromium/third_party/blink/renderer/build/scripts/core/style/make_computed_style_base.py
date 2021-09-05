@@ -40,7 +40,6 @@ ALIGNMENT_ORDER = [
     'Vector<GridTrackSize>',
     'Vector<AtomicString>',
     'GridPosition',
-    'GapLength',
     'AtomicString',
     'scoped_refptr',
     'Persistent',
@@ -52,6 +51,7 @@ ALIGNMENT_ORDER = [
     'IntrinsicLength',
     'TextDecorationThickness',
     # Aligns like float
+    'base::Optional<Length>',
     'StyleOffsetRotation',
     'TransformOrigin',
     'ScrollPadding',
@@ -70,6 +70,7 @@ ALIGNMENT_ORDER = [
     'BorderValue',
     'StyleColor',
     'Color',
+    'CSSValueID',
     'LayoutUnit',
     'LineClampValue',
     'OutlineValue',

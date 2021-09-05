@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -87,7 +88,7 @@ class ChromeVariationsClient : public variations::VariationsClient {
 
   ~ChromeVariationsClient() override = default;
 
-  bool IsIncognito() const override {
+  bool IsOffTheRecord() const override {
     return browser_context_->IsOffTheRecord();
   }
 
@@ -107,10 +108,19 @@ class ChromeVariationsClient : public variations::VariationsClient {
   content::BrowserContext* browser_context_;
 };
 
+const char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
 }  // namespace
 
 Profile::OTRProfileID::OTRProfileID(const std::string& profile_id)
     : profile_id_(profile_id) {}
+
+bool Profile::OTRProfileID::AllowsBrowserWindows() const {
+  // Non-Primary OTR profiles are not supposed to create Browser windows.
+  // DevTools::BrowserContext is an exception to this ban.
+  return *this == PrimaryID() ||
+         base::StartsWith(profile_id_, kDevToolsOTRProfileIDPrefix,
+                          base::CompareCase::SENSITIVE);
+}
 
 // static
 const Profile::OTRProfileID Profile::OTRProfileID::PrimaryID() {
@@ -125,6 +135,11 @@ Profile::OTRProfileID Profile::OTRProfileID::CreateUnique(
     const std::string& profile_id_prefix) {
   return OTRProfileID(base::StringPrintf("%s-%i", profile_id_prefix.c_str(),
                                          first_unused_index_++));
+}
+
+// static
+Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForDevTools() {
+  return CreateUnique(kDevToolsOTRProfileIDPrefix);
 }
 
 const std::string& Profile::OTRProfileID::ToString() const {
@@ -337,6 +352,8 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(
       prefs::kProtocolHandlerPerOriginAllowedProtocols);
 
+  registry->RegisterListPref(prefs::kAutoLaunchProtocolsFromOrigins);
+
   // Instead of registering new prefs here, please create a static method and
   // invoke it from RegisterProfilePrefs() in
   // chrome/browser/prefs/browser_prefs.cc.
@@ -351,11 +368,11 @@ std::string Profile::GetDebugName() {
 }
 
 bool Profile::IsRegularProfile() const {
-  return GetProfileType() == REGULAR_PROFILE;
+  return !IsOffTheRecord();
 }
 
 bool Profile::IsIncognitoProfile() const {
-  return GetProfileType() == INCOGNITO_PROFILE;
+  return IsPrimaryOTRProfile() && !IsGuestSession();
 }
 
 bool Profile::IsGuestSession() const {
@@ -373,7 +390,7 @@ bool Profile::IsSystemProfile() const {
   return is_system_profile_;
 }
 
-bool Profile::IsPrimaryOTRProfile() {
+bool Profile::IsPrimaryOTRProfile() const {
   return IsOffTheRecord() && GetOTRProfileID() == OTRProfileID::PrimaryID();
 }
 
@@ -453,7 +470,7 @@ PrefStore* Profile::CreateExtensionPrefStore(Profile* profile,
 
 bool ProfileCompare::operator()(Profile* a, Profile* b) const {
   DCHECK(a && b);
-  if (a->IsSameProfile(b))
+  if (a->IsSameOrParent(b))
     return false;
   return a->GetOriginalProfile() < b->GetOriginalProfile();
 }
@@ -492,11 +509,4 @@ variations::VariationsClient* Profile::GetVariationsClient() {
   if (!chrome_variations_client_)
     chrome_variations_client_ = std::make_unique<ChromeVariationsClient>(this);
   return chrome_variations_client_.get();
-}
-
-void Profile::DestroyOffTheRecordProfile() {
-  OTRProfileID primary_otr_id = OTRProfileID::PrimaryID();
-  if (!HasOffTheRecordProfile(primary_otr_id))
-    return;
-  DestroyOffTheRecordProfile(GetOffTheRecordProfile(primary_otr_id));
 }

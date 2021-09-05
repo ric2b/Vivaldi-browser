@@ -131,21 +131,37 @@ public class WebsitePermissionsFetcher {
         queue.add(new PermissionInfoFetcher(PermissionInfo.Type.CLIPBOARD));
         // Sensors permission is per-origin.
         queue.add(new PermissionInfoFetcher(PermissionInfo.Type.SENSORS));
+
+        // There are two Bluetooth related permissions: Bluetooth scanning and
+        // Bluetooth guard.
+        //
+        // The Bluetooth Scanning permission controls access to the Web Bluetooth
+        // Scanning API, which enables sites to scan for and receive events for
+        // advertisement packets received from nearby Bluetooth devices.
         CommandLine commandLine = CommandLine.getInstance();
         if (commandLine.hasSwitch(ContentSwitches.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES)) {
             // Bluetooth scanning permission is per-origin.
             queue.add(new ExceptionInfoFetcher(ContentSettingsType.BLUETOOTH_SCANNING));
         }
+        // The Bluetooth guard permission controls access to the Web Bluetooth
+        // API, which enables sites to request access to connect to specific
+        // Bluetooth devices. Users are presented with a chooser prompt in which
+        // they must select the Bluetooth device that they would like to allow
+        // the site to connect to. Therefore, this permission also displays a
+        // list of permitted Bluetooth devices that each site can connect to.
+        if (ContentFeatureList.isEnabled(
+                    ContentFeatureList.WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND)) {
+            // Bluetooth device permission is per-origin and per-embedder.
+            queue.add(new ChooserExceptionInfoFetcher(ContentSettingsType.BLUETOOTH_GUARD));
+        }
         if (ContentFeatureList.isEnabled(ContentFeatureList.WEB_NFC)) {
             // NFC permission is per-origin and per-embedder.
             queue.add(new PermissionInfoFetcher(PermissionInfo.Type.NFC));
         }
-        if (ContentFeatureList.isEnabled(ContentFeatureList.WEBXR_PERMISSIONS_API)) {
-            // VIRTUAL_REALITY permission is per-origin and per-embedder.
-            queue.add(new PermissionInfoFetcher(PermissionInfo.Type.VIRTUAL_REALITY));
-            // AR permission is per-origin and per-embedder.
-            queue.add(new PermissionInfoFetcher(PermissionInfo.Type.AUGMENTED_REALITY));
-        }
+        // VIRTUAL_REALITY permission is per-origin and per-embedder.
+        queue.add(new PermissionInfoFetcher(PermissionInfo.Type.VIRTUAL_REALITY));
+        // AR permission is per-origin and per-embedder.
+        queue.add(new PermissionInfoFetcher(PermissionInfo.Type.AUGMENTED_REALITY));
 
         queue.add(new PermissionsAvailableCallbackRunner(callback));
 
@@ -215,6 +231,9 @@ public class WebsitePermissionsFetcher {
         } else if (category.showSites(SiteSettingsCategory.Type.USB)) {
             // USB device permission is per-origin.
             queue.add(new ChooserExceptionInfoFetcher(ContentSettingsType.USB_GUARD));
+        } else if (category.showSites(SiteSettingsCategory.Type.BLUETOOTH)) {
+            // Bluetooth device permission is per-origin.
+            queue.add(new ChooserExceptionInfoFetcher(ContentSettingsType.BLUETOOTH_GUARD));
         } else if (category.showSites(SiteSettingsCategory.Type.CLIPBOARD)) {
             // Clipboard permission is per-origin.
             queue.add(new PermissionInfoFetcher(PermissionInfo.Type.CLIPBOARD));
@@ -233,15 +252,11 @@ public class WebsitePermissionsFetcher {
                 queue.add(new PermissionInfoFetcher(PermissionInfo.Type.NFC));
             }
         } else if (category.showSites(SiteSettingsCategory.Type.VIRTUAL_REALITY)) {
-            if (ContentFeatureList.isEnabled(ContentFeatureList.WEBXR_PERMISSIONS_API)) {
-                // VIRTUAL_REALITY permission is per-origin and per-embedder.
-                queue.add(new PermissionInfoFetcher(PermissionInfo.Type.VIRTUAL_REALITY));
-            }
+            // VIRTUAL_REALITY permission is per-origin and per-embedder.
+            queue.add(new PermissionInfoFetcher(PermissionInfo.Type.VIRTUAL_REALITY));
         } else if (category.showSites(SiteSettingsCategory.Type.AUGMENTED_REALITY)) {
-            if (ContentFeatureList.isEnabled(ContentFeatureList.WEBXR_PERMISSIONS_API)) {
-                // AUGMENTED_REALITY permission is per-origin and per-embedder.
-                queue.add(new PermissionInfoFetcher(PermissionInfo.Type.AUGMENTED_REALITY));
-            }
+            // AUGMENTED_REALITY permission is per-origin and per-embedder.
+            queue.add(new PermissionInfoFetcher(PermissionInfo.Type.AUGMENTED_REALITY));
         }
         queue.add(new PermissionsAvailableCallbackRunner(callback));
         queue.next();

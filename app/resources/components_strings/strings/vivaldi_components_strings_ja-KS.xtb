@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">続ける</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断使う<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2501278716633472235">戻る</translation>
 <translation id="2539524384386349900">検出</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />から無効な応答送られてきよったわ。</translation>
 <translation id="2586657967955657006">クリップボード</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
 <translation id="3227137524299004712">マイク</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
+<translation id="3308738399950580893">広告</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
 <translation id="3427092606871434483">ええよ（デフォルト）</translation>
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲーム無効にしてるわ。</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">証明書情報</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシー、ファイアウォール、DNSの設定確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシーサーバー使ってるんやったら...</translation>
+<translation id="3894751534882749287">ページ見たいんやったら、トラッカーブロッカーポップアップで許可ボタンを押したらトラッキング保護レベル変えれるで</translation>
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />、ブロックされとるわ</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">接続が途中で切れたわ</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断使う<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">トラッカーブロッカー</translation>
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号とか）は第三者に見られへんになってる。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは今だけダウンしてるか、新しいウェブアドレスに引っ越したんかも。</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770"><ph name="LINK" /> ググってみて</translation>
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7260504762447901703">アクセス権取り消す</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
+<translation id="7364115444476960850">Vivaldiの<ph name="BLOCKER_NAME" />が、アクセスしようとしてるページブロックしたわ</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
 <translation id="7445762425076701745">接続してるサーバー、十分な検証ができへんねん。このサーバーは、そのネットワーク内だけでしか有効ちゃう名前使っててな、他所の認証局はその所有権を検証できへんねん。そういう名義の子らに対して無条件に証明書発行する認証局もあるし、接続先が意図したウェブサイトか、悪さしよるユーザーのサイトかかは確認できへんねん。</translation>
 <translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">確認して（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>
 <translation id="808894953321890993">パスワード変更</translation>
+<translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt;にアクセスして、システム管理者が登録したブラックリストのURLとかポリシー、確認してな。</translation>
 <translation id="8149426793427495338">さっきまでパソコン寝とったで。</translation>
 <translation id="8150722005171944719"><ph name="URL" />のファイル、読まれへんわ。消されたんか、どっか他のとこ行ったんちゃう？ファイルへのアクセス権もろてへん可能性もあるけど。</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続、暗号化されてへんで。</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;見つからへんかったわ。もうちょっと見てみるな。</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>
 <translation id="9001074447101275817">プロキシー <ph name="DOMAIN" />にはユーザー名とパスワードが要るで。</translation>
 <translation id="9008201768610948239">無視する</translation>
 <translation id="9011424611726486705">サイト設定を開くで</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
+<translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>
 <translation id="9219103736887031265">画像</translation>
 <translation id="936602727769022409">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>

@@ -131,9 +131,6 @@ bool DragHandle::MaybeShowDragHandleNudge() {
 }
 
 void DragHandle::ShowDragHandleNudge() {
-  if (!features::AreContextualNudgesEnabled())
-    return;
-
   DCHECK(!gesture_nudge_target_visibility_);
   PrefService* pref =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
@@ -179,17 +176,27 @@ void DragHandle::SetColorAndOpacity(SkColor color, float opacity) {
 }
 
 void DragHandle::HideDragHandleNudge(
-    contextual_tooltip::DismissNudgeReason context) {
+    contextual_tooltip::DismissNudgeReason reason) {
   StopDragHandleNudgeShowTimer();
   if (!gesture_nudge_target_visibility())
     return;
 
   split_view_observer_.RemoveAll();
   hide_drag_handle_nudge_timer_.Stop();
-  HideDragHandleNudgeHelper(/*hidden_by_tap=*/context ==
+
+  if (reason == contextual_tooltip::DismissNudgeReason::kPerformedGesture) {
+    contextual_tooltip::HandleGesturePerformed(
+        Shell::Get()->session_controller()->GetLastActiveUserPrefService(),
+        contextual_tooltip::TooltipType::kInAppToHome);
+  } else {
+    // HandleGesturePerformed will also call MaybeLogNudgeDismissedMetrics so we
+    // do not need to call it separately for kPerformedGesture.
+    contextual_tooltip::MaybeLogNudgeDismissedMetrics(
+        contextual_tooltip::TooltipType::kInAppToHome, reason);
+  }
+
+  HideDragHandleNudgeHelper(/*hidden_by_tap=*/reason ==
                             contextual_tooltip::DismissNudgeReason::kTap);
-  contextual_tooltip::LogNudgeDismissedMetrics(
-      contextual_tooltip::TooltipType::kInAppToHome, context);
   gesture_nudge_target_visibility_ = false;
 }
 
@@ -211,15 +218,18 @@ void DragHandle::SetWindowDragFromShelfInProgress(bool gesture_in_progress) {
   if (window_drag_from_shelf_in_progress_) {
     hide_drag_handle_nudge_timer_.Stop();
   } else {
-    HideDragHandleNudge(contextual_tooltip::DismissNudgeReason::kOther);
+    HideDragHandleNudge(
+        contextual_tooltip::DismissNudgeReason::kPerformedGesture);
   }
 }
 
 void DragHandle::OnGestureEvent(ui::GestureEvent* event) {
-  if (!features::AreContextualNudgesEnabled())
+  if (!features::AreContextualNudgesEnabled() ||
+      !gesture_nudge_target_visibility_) {
     return;
+  }
 
-  if (event->type() == ui::ET_GESTURE_TAP && gesture_nudge_target_visibility_) {
+  if (event->type() == ui::ET_GESTURE_TAP) {
     HandleTapOnNudge();
     event->StopPropagation();
   }
@@ -277,7 +287,7 @@ void DragHandle::ShowDragHandleTooltip() {
       this, nullptr /*parent_window*/, ContextualNudge::Position::kTop,
       gfx::Insets(), l10n_util::GetStringUTF16(IDS_ASH_DRAG_HANDLE_NUDGE),
       AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kTextPrimary,
+          AshColorProvider::ContentLayerType::kTextColorPrimary,
           AshColorProvider::AshColorMode::kDark),
       base::BindRepeating(&DragHandle::HandleTapOnNudge,
                           weak_factory_.GetWeakPtr()));

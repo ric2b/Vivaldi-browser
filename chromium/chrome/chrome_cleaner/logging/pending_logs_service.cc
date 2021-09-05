@@ -11,6 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/message_loop/message_loop_current.h"
 #include "chrome/chrome_cleaner/constants/chrome_cleaner_switches.h"
 #include "chrome/chrome_cleaner/logging/logging_service_api.h"
@@ -63,7 +64,7 @@ void PendingLogsService::ScheduleLogsUploadTask(
 
   // To get rid of the temporary file if we are not going to use it.
   base::ScopedClosureRunner delete_file_closure(
-      base::BindOnce(IgnoreResult(&base::DeleteFile), temp_file_path, false));
+      base::BindOnce(base::GetDeleteFileCallback(), temp_file_path));
 
   if (base::WriteFile(temp_file_path, chrome_cleaner_report_string.c_str(),
                       chrome_cleaner_report_string.size()) <= 0) {

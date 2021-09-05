@@ -11,7 +11,6 @@
 <translation id="1546280085599573572">غيّرت هذه الإضافة الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
 <translation id="1588438908519853928">عادي</translation>
 <translation id="1603914832182249871">(المتخفي)</translation>
-<translation id="1635033183663317347">تم التثبيت من قبل الوصيّ.</translation>
 <translation id="1708338024780164500">(غير فعال)</translation>
 <translation id="1729533290416704613">كما أنها تتحكم في الصفحة التي تظهر عند إجراء بحث من المربع متعدد الاستخدامات.</translation>
 <translation id="1744108098763830590">خلفية الصفحة</translation>
@@ -62,7 +61,6 @@
 <translation id="4087089424473531098">تم إنشاء الإضافة:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4091434297613116013">ورقة من الورق</translation>
 <translation id="4096508467498758490">تعطيل إضافات وضع مطور البرامج</translation>
 <translation id="4100839878934973028">‏أضاف برنامج آخر بجهاز الكمبيوتر تطبيقًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="4115080753528843955">Certains services de contenu utilisent des identificateurs uniques pour autoriser l'accès au contenu protégé.
@@ -148,7 +146,6 @@
 <translation id="8351419472474436977">أصبح بإمكان هذه الإضافة التحكم في إعدادات الخادم الوكيل التابعة لك، مما يعني أن بإمكانها تغيير أي إجراء لك عبر الإنترنت أو قطعه أو التجسس عليه. إذا كنت غير متيقن من سبب حدوث هذا التغيير، فأنت لا ترغب فيه على الأرجح.</translation>
 <translation id="8615618338313291042">تطبيق وضع التصفح المتخفي: <ph name="APP_NAME" /></translation>
 <translation id="8808478386290700967">السوق الإلكتروني</translation>
-<translation id="8813811964357448561">ورقة من الورق</translation>
 <translation id="8859174528519900719">هيكل سفلي: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">الإطار الفرعي للتصفح المتخفي: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">إخفاء التفاصيل</translation>

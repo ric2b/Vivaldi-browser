@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/dbus/permission_broker/fake_permission_broker_client.h"
@@ -18,6 +19,7 @@
 
 using permission_broker::kCheckPathAccess;
 using permission_broker::kOpenPath;
+using permission_broker::kOpenPathWithDroppedPrivileges;
 using permission_broker::kPermissionBrokerInterface;
 using permission_broker::kPermissionBrokerServiceName;
 using permission_broker::kPermissionBrokerServicePath;
@@ -62,6 +64,24 @@ class PermissionBrokerClientImpl : public PermissionBrokerClient {
     dbus::MethodCall method_call(kPermissionBrokerInterface, kOpenPath);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(path);
+    proxy_->CallMethodWithErrorCallback(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&PermissionBrokerClientImpl::OnOpenPathResponse,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+        base::BindOnce(&PermissionBrokerClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       std::move(error_callback)));
+  }
+
+  void OpenPathWithDroppedPrivileges(const std::string& path,
+                                     uint32_t allowed_interfaces_mask,
+                                     OpenPathCallback callback,
+                                     ErrorCallback error_callback) override {
+    dbus::MethodCall method_call(kPermissionBrokerInterface,
+                                 kOpenPathWithDroppedPrivileges);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(path);
+    writer.AppendUint32(allowed_interfaces_mask);
     proxy_->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&PermissionBrokerClientImpl::OnOpenPathResponse,

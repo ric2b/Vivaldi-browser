@@ -87,7 +87,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       chrome.automation.getFocus((function(focus) {
                                    if (focus) {
                                      const event = new CustomAutomationEvent(
-                                         EventType.FOCUS, focus, 'page');
+                                         EventType.FOCUS, focus, 'page', []);
                                      this.onFocus(event);
                                    }
                                  }).bind(this));
@@ -190,7 +190,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       // Play a earcon to let the user know they're in the middle of nowhere.
       if ((new Date() - this.lastHoverExit_) >
           DesktopAutomationHandler.MIN_HOVER_EXIT_SOUND_DELAY_MS) {
-        ChromeVoxState.instance.nextEarcons_.engine_.onTouchExitAnchor();
+        ChromeVox.earcons.playEarcon(Earcon.TOUCH_EXIT);
         this.lastHoverExit_ = new Date();
       }
       chrome.tts.stop();
@@ -206,10 +206,9 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       this.textEditHandler_ = null;
     }
 
-    ChromeVoxState.instance.nextEarcons_.engine_.onTouchEnterAnchor();
     Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
-    this.onEventDefault(
-        new CustomAutomationEvent(evt.type, target, evt.eventFrom));
+    this.onEventDefault(new CustomAutomationEvent(
+        evt.type, target, evt.eventFrom, evt.intents));
   }
 
   /**
@@ -256,8 +255,8 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     if (selectionStart.state[StateType.EDITABLE]) {
       selectionStart =
           AutomationUtil.getEditableRoot(selectionStart) || selectionStart;
-      this.onEditableChanged_(
-          new CustomAutomationEvent(evt.type, selectionStart, evt.eventFrom));
+      this.onEditableChanged_(new CustomAutomationEvent(
+          evt.type, selectionStart, evt.eventFrom, evt.intents));
     }
 
     // Non-editable selections are handled in |Background|.
@@ -304,8 +303,8 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     // category flush here or the focus events will all queue up.
     Output.forceModeForNextSpeechUtterance(QueueMode.CATEGORY_FLUSH);
 
-    const event =
-        new CustomAutomationEvent(EventType.FOCUS, node, evt.eventFrom);
+    const event = new CustomAutomationEvent(
+        EventType.FOCUS, node, evt.eventFrom, evt.intents);
     this.onEventDefault(event);
 
     // Refresh the handler, if needed, now that ChromeVox focus is up to date.
@@ -559,7 +558,8 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     // after you close them.
     chrome.automation.getFocus(function(focus) {
       if (focus) {
-        const event = new CustomAutomationEvent(EventType.FOCUS, focus, 'page');
+        const event =
+            new CustomAutomationEvent(EventType.FOCUS, focus, 'page', []);
         this.onFocus(event);
       }
     }.bind(this));
@@ -646,7 +646,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     url = url.substring(0, url.indexOf('#')) || url;
     const pos = ChromeVox.position[url];
 
-    // Disallow recovery for chrome urls.
+    // Deny recovery for chrome urls.
     if (pos && url.indexOf('chrome://') != 0) {
       focusedRoot.hitTestWithReply(
           pos.x, pos.y, this.onHitTestResult.bind(this));

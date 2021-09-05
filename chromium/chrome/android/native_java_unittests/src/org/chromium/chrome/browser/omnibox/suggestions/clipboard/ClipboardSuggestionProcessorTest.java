@@ -102,8 +102,7 @@ public class ClipboardSuggestionProcessorTest {
         mModel = mProcessor.createModel();
         mProcessor.populateModel(mSuggestion, mModel, 0);
         SuggestionViewViewBinder.bind(mModel, mRootView, SuggestionViewProperties.TEXT_LINE_1_TEXT);
-        SuggestionViewViewBinder.bind(
-                mModel, mRootView, SuggestionCommonProperties.USE_DARK_COLORS);
+        SuggestionViewViewBinder.bind(mModel, mRootView, SuggestionCommonProperties.OMNIBOX_THEME);
         SuggestionViewViewBinder.bind(
                 mModel, mRootView, SuggestionViewProperties.IS_SEARCH_SUGGESTION);
         SuggestionViewViewBinder.bind(mModel, mRootView, SuggestionViewProperties.TEXT_LINE_2_TEXT);
@@ -122,13 +121,13 @@ public class ClipboardSuggestionProcessorTest {
     @CalledByNativeJavaTest
     public void clipboardSuggestion_doesNotRefine() {
         createClipboardSuggestion(OmniboxSuggestionType.CLIPBOARD_URL, GURL.emptyGURL());
-        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTION_CALLBACK));
+        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
 
         createClipboardSuggestion(OmniboxSuggestionType.CLIPBOARD_TEXT, GURL.emptyGURL());
-        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTION_CALLBACK));
+        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
 
         createClipboardSuggestion(OmniboxSuggestionType.CLIPBOARD_IMAGE, GURL.emptyGURL());
-        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTION_CALLBACK));
+        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
     }
 
     @CalledByNativeJavaTest
@@ -201,7 +200,7 @@ public class ClipboardSuggestionProcessorTest {
     @CalledByNativeJavaTest
     public void clipboardSuggestion_thumbnailShouldResizeIfTooLarge() {
         int size = ContextUtils.getApplicationContext().getResources().getDimensionPixelSize(
-                R.dimen.omnibox_suggestion_favicon_size);
+                R.dimen.omnibox_suggestion_decoration_image_size);
 
         Bitmap largeBitmap = Bitmap.createBitmap(size * 2, size * 2, Config.ARGB_8888);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();

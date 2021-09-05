@@ -416,8 +416,9 @@ void SourceBuffer::abort(ExceptionState& exception_state) {
       return;
     }
 
-    Deprecation::CountDeprecation(source_->MediaElement()->GetDocument(),
-                                  WebFeature::kMediaSourceAbortRemove);
+    Deprecation::CountDeprecation(
+        source_->MediaElement()->GetExecutionContext(),
+        WebFeature::kMediaSourceAbortRemove);
     CancelRemove();
   }
 
@@ -1442,7 +1443,7 @@ void SourceBuffer::AppendError() {
   source_->EndOfStreamAlgorithm(WebMediaSource::kEndOfStreamStatusDecodeError);
 }
 
-void SourceBuffer::Trace(Visitor* visitor) {
+void SourceBuffer::Trace(Visitor* visitor) const {
   visitor->Trace(source_);
   visitor->Trace(track_defaults_);
   visitor->Trace(async_event_queue_);

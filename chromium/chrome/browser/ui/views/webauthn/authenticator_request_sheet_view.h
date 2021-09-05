@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -72,7 +73,7 @@ class AuthenticatorRequestSheetView : public views::View,
   // Returns the control on this sheet that should initially have focus instead
   // of the OK/Cancel buttons on the dialog; or returns nullptr if the regular
   // dialog button should have focus.
-  views::View* GetInitiallyFocusedView();
+  virtual views::View* GetInitiallyFocusedView();
 
   AuthenticatorRequestSheetModel* model() { return model_.get(); }
 
@@ -96,11 +97,15 @@ class AuthenticatorRequestSheetView : public views::View,
   // Updates the illustration icon shown on the sheet.
   void UpdateIconImageFromModel();
 
+  // Updates the icon color.
+  void UpdateIconColors();
+
   // views::View:
   void OnThemeChanged() override;
 
   std::unique_ptr<AuthenticatorRequestSheetModel> model_;
   views::Button* back_arrow_button_ = nullptr;
+  views::ImageButton* back_arrow_ = nullptr;
   views::View* step_specific_content_ = nullptr;
   NonAccessibleImageView* step_illustration_ = nullptr;
   views::Label* error_label_ = nullptr;

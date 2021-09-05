@@ -56,6 +56,7 @@ Button::WidgetObserverButtonBridge::WidgetObserverButtonBridge(Button* button)
 Button::WidgetObserverButtonBridge::~WidgetObserverButtonBridge() {
   if (owner_)
     owner_->GetWidget()->RemoveObserver(this);
+  CHECK(!IsInObserverList());
 }
 
 void Button::WidgetObserverButtonBridge::OnWidgetPaintAsActiveChanged(
@@ -240,10 +241,12 @@ void Button::SetAnimationDuration(base::TimeDelta duration) {
 }
 
 void Button::SetInstallFocusRingOnFocus(bool install) {
-  if (install)
+  if (focus_ring_ && !install) {
+    RemoveChildViewT(focus_ring_);
+    focus_ring_ = nullptr;
+  } else if (!focus_ring_ && install) {
     focus_ring_ = FocusRing::Install(this);
-  else
-    focus_ring_.reset();
+  }
 }
 
 void Button::SetHotTracked(bool is_hot_tracked) {

@@ -54,7 +54,7 @@ const base::Feature kAutofillCreditCardAssist{
 
 // Controls whether we download server credit cards to the ephemeral
 // account-based storage when sync the transport is enabled.
-const base::Feature kAutofillEnableAccountWalletStorage{
+const base::Feature kAutofillEnableAccountWalletStorage {
   "AutofillEnableAccountWalletStorage",
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_IOS)
       // Wallet transport is only currently available on Win/Mac/Linux.
@@ -64,6 +64,12 @@ const base::Feature kAutofillEnableAccountWalletStorage{
       base::FEATURE_ENABLED_BY_DEFAULT
 #endif
 };
+
+// Controls whether to detect and fill the augmented phone country code field
+// when enabled.
+const base::Feature kAutofillEnableAugmentedPhoneCountryCode{
+    "AutofillEnableAugmentedPhoneCountryCode",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether we use COMPANY as part of Autofill
 const base::Feature kAutofillEnableCompanyName{
@@ -91,6 +97,13 @@ const base::Feature kAutofillEnforceMinRequiredFieldsForUpload{
     "AutofillEnforceMinRequiredFieldsForUpload",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether or not all datalist shall be extracted into FormFieldData.
+// This feature is enabled in both WebView and WebLayer where all datalists
+// instead of only the focused one shall be extracted and sent to Android
+// autofill service when the autofill session created.
+const base::Feature kAutofillExtractAllDatalists{
+    "AutofillExtractAllDatalists", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Autofill uses the local heuristic such that address forms are only filled if
 // at least 3 fields are fillable according to local heuristics. Unfortunately,
 // the criterion for fillability is only that the field type is unknown. So many
@@ -98,6 +111,24 @@ const base::Feature kAutofillEnforceMinRequiredFieldsForUpload{
 // counter, effectively reducing the threshold for some forms.
 const base::Feature kAutofillFixFillableFieldTypes{
     "AutofillFixFillableFieldTypes", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, prefilled country and state values are not reset before
+// an address profile import.
+// TODO(crbug.com/1100231): Remove once fix is tested.
+const base::Feature kAutofillImportPrefilledCountryAndStateValues{
+    "AutofillImportPrefilledCountryAndStateValues",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// When enabled, Autofill keeps the initial field values in the |FormStructure|
+// cache for all field types.
+const base::Feature kAutofillKeepInitialFormValuesInCache{
+    "AutofillKeepCachedFormValues", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// When enabled, Autofill will use FieldRendererIds instead of unique_names
+// to align forms in FormStructure::RetrieveFromCache().
+const base::Feature kAutofillRetrieveFromCacheWithRendererIds{
+    "AutofillRetrieveFromCacheWithRendererIds",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, autofill suggestions are displayed in the keyboard accessory
 // instead of the regular popup.
@@ -123,6 +154,15 @@ const base::Feature kAutofillPreferServerNamePredictions{
 
 const base::Feature kAutofillProfileClientValidation{
     "AutofillProfileClientValidation", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kAutofillProfileImportFromUnifiedSection{
+    "AutofillProfileImportFromUnifiedSection",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// TODO(crbug.com/1101280): Remove once feature is tested.
+const base::Feature kAutofillProfileImportFromUnfocusableFields{
+    "AutofillProfileImportFromUnfocusableFields",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether Autofill uses server-side validation to ensure that fields
 // with invalid data are not suggested.

@@ -142,13 +142,18 @@ WorkerFetchContext::CreateWebSocketHandshakeThrottle() {
 
 bool WorkerFetchContext::ShouldBlockFetchByMixedContentCheck(
     mojom::RequestContextType request_context,
-    ResourceRequest::RedirectStatus redirect_status,
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
     const KURL& url,
     ReportingDisposition reporting_disposition,
     const base::Optional<String>& devtools_id) const {
+  RedirectStatus redirect_status = redirect_info
+                                       ? RedirectStatus::kFollowedRedirect
+                                       : RedirectStatus::kNoRedirect;
+  const KURL& url_before_redirects =
+      redirect_info ? redirect_info->original_url : url;
   return MixedContentChecker::ShouldBlockFetchOnWorker(
-      *this, request_context, redirect_status, url, reporting_disposition,
-      global_scope_->IsWorkletGlobalScope());
+      *this, request_context, url_before_redirects, redirect_status, url,
+      reporting_disposition, global_scope_->IsWorkletGlobalScope());
 }
 
 bool WorkerFetchContext::ShouldBlockFetchAsCredentialedSubresource(
@@ -242,9 +247,10 @@ void WorkerFetchContext::PopulateResourceRequest(
     ResourceType type,
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
-    ResourceRequest& out_request) {
+    ResourceRequest& out_request,
+    const FetchInitiatorInfo& initiator_info) {
   if (!GetResourceFetcherProperties().IsDetached())
-    probe::SetDevToolsIds(Probe(), out_request);
+    probe::SetDevToolsIds(Probe(), out_request, initiator_info);
   MixedContentChecker::UpgradeInsecureRequest(
       out_request,
       &GetResourceFetcherProperties().GetFetchClientSettingsObject(),
@@ -257,10 +263,8 @@ void WorkerFetchContext::PopulateResourceRequest(
 
 mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
 WorkerFetchContext::TakePendingWorkerTimingReceiver(int request_id) {
-  mojo::ScopedMessagePipeHandle pipe =
-      GetWebWorkerFetchContext()->TakePendingWorkerTimingReceiver(request_id);
-  return mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>(
-      std::move(pipe));
+  return GetWebWorkerFetchContext()->TakePendingWorkerTimingReceiver(
+      request_id);
 }
 
 void WorkerFetchContext::SetFirstPartyCookie(ResourceRequest& out_request) {
@@ -282,7 +286,7 @@ bool WorkerFetchContext::AllowRunningInsecureContent(
       enabled_per_settings, url);
 }
 
-void WorkerFetchContext::Trace(Visitor* visitor) {
+void WorkerFetchContext::Trace(Visitor* visitor) const {
   visitor->Trace(global_scope_);
   visitor->Trace(subresource_filter_);
   visitor->Trace(content_security_policy_);

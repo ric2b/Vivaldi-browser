@@ -21,6 +21,7 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -50,6 +51,8 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "components/policy/core/common/policy_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -66,6 +69,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
@@ -367,6 +371,23 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   EXPECT_TRUE(menu3->IsCommandIdVisible(IDC_CONTENT_CONTEXT_COPYLINKTEXT));
 }
 
+// Verifies "Save link as" is not enabled for links blacklisted via policy.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       SaveLinkAsEntryIsDisabledForBlacklistedUrls) {
+  base::Value value(base::Value::Type::LIST);
+  value.Append(base::Value("google.com"));
+  browser()->profile()->GetPrefs()->Set(policy::policy_prefs::kUrlBlacklist,
+                                        std::move(value));
+  base::RunLoop().RunUntilIdle();
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(GURL("http://www.google.com/"),
+                                     GURL("http://www.google.com/"));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
+  EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
+}
+
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuEntriesAreDisabledInLockedFullscreen) {
@@ -505,6 +526,24 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+  ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                          IDC_OPEN_LINK_IN_PROFILE_LAST));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInAppAbsentForIncognito) {
+  InstallTestWebApp(GURL(kAppUrl1));
+  Browser* incognito_browser = CreateIncognitoBrowser();
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNoneInWebContents(
+          incognito_browser->tab_strip_model()->GetActiveWebContents(),
+          GURL(kAppUrl1), GURL(kAppUrl1));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -916,22 +955,28 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
               testing::Not(testing::Contains(IDC_CONTENT_CONTEXT_RELOADFRAME)));
 }
 
-#if defined(OS_MACOSX)
-// TODO(lukasza): https://crbug.com/1090891: Subframe behavior is unexpected on
-// some Mac bots.
-#define MAYBE_MenuContentsVerification_Subframe \
-  DISABLED_MenuContentsVerification_Subframe
-#else
-#define MAYBE_MenuContentsVerification_Subframe \
-  MenuContentsVerification_Subframe
-#endif
 // Check which commands are present after opening the context menu for a
 // subframe.
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
-                       MAYBE_MenuContentsVerification_Subframe) {
+                       MenuContentsVerification_Subframe) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/iframe.html"));
   ui_test_utils::NavigateToURL(browser(), url);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Make sure the subframe doesn't contain any text, because the context menu
+  // may behave differently when opened over text selection.  See also
+  // https://crbug.com/1090891.
+  {
+    content::TestNavigationObserver nav_observer(tab, 1);
+    const char kScript[] = R"(
+        var frame = document.getElementsByTagName('iframe')[0];
+        frame.src = 'data:text/html;charset=utf-8,%3Cbody%3E%3C%2Fbody%3E';
+    )";
+    ASSERT_TRUE(content::ExecJs(tab, kScript));
+    nav_observer.Wait();
+  }
 
   // Open a context menu.
   ContextMenuWaiter menu_observer;
@@ -941,8 +986,6 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(25, 25);  // This is over the subframe.
-  content::WebContents* tab =
-      browser()->tab_strip_model()->GetActiveWebContents();
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);

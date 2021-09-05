@@ -36,6 +36,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "browser_tools_touch.icon",
     "browser_tools_update_touch.icon",
     "cast_for_education.icon",
+    "computer_with_circle_background.icon",
     "copy.icon",
     "crashed_tab.icon",
     "credit_card.icon",
@@ -56,6 +57,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "incognito_profile.icon",
     "input.icon",
     "key.icon",
+    "keyboard_arrow_down.icon",
     "laptop.icon",
     "media_toolbar_button.icon",
     "media_toolbar_button_touch.icon",
@@ -161,6 +163,7 @@ aggregate_vector_icons("chrome_vector_icons") {
 
   if (is_chromeos) {
     icons += [
+      "autocorrect_undo.icon",
       "notification_captive_portal.icon",
       "notification_battery.icon",
       "notification_cellular_alert.icon",

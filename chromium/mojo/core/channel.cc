@@ -11,6 +11,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/ptr_util.h"
@@ -577,7 +578,7 @@ Channel::Channel(Delegate* delegate,
                        ? new ReadBuffer
                        : nullptr) {}
 
-Channel::~Channel() {}
+Channel::~Channel() = default;
 
 void Channel::ShutDown() {
   ShutDownImpl();

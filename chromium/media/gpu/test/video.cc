@@ -26,6 +26,7 @@
 #include "media/filters/vpx_video_decoder.h"
 #include "media/gpu/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/libyuv/include/libyuv/planar_functions.h"
 
 namespace media {
 namespace test {
@@ -98,8 +99,9 @@ bool Video::Decode() {
   bool success = false;
   base::WaitableEvent done;
   decode_thread.task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&Video::DecodeTask, std::move(data_),
-                                &decompressed_data, &success, &done));
+      FROM_HERE,
+      base::BindOnce(&Video::DecodeTask, std::move(data_), resolution_,
+                     &decompressed_data, &success, &done));
   done.Wait();
   decode_thread.Stop();
 
@@ -124,6 +126,10 @@ const base::FilePath& Video::FilePath() const {
 }
 
 const std::vector<uint8_t>& Video::Data() const {
+  return data_;
+}
+
+std::vector<uint8_t>& Video::Data() {
   return data_;
 }
 
@@ -346,6 +352,7 @@ base::Optional<base::FilePath> Video::ResolveFilePath(
 
 // static
 void Video::DecodeTask(const std::vector<uint8_t> data,
+                       const gfx::Size& resolution,
                        std::vector<uint8_t>* decompressed_data,
                        bool* success,
                        base::WaitableEvent* done) {
@@ -385,10 +392,10 @@ void Video::DecodeTask(const std::vector<uint8_t> data,
       base::BindOnce([](media::Status* save_to,
                         media::Status save_from) { *save_to = save_from; },
                      &init_result);
-  decoder.Initialize(
-      config, false, nullptr, std::move(init_cb),
-      base::BindRepeating(&Video::OnFrameDecoded, decompressed_data),
-      base::NullCallback());
+  decoder.Initialize(config, false, nullptr, std::move(init_cb),
+                     base::BindRepeating(&Video::OnFrameDecoded, resolution,
+                                         decompressed_data),
+                     base::NullCallback());
   if (!init_result.is_ok()) {
     done->Signal();
     return;
@@ -415,18 +422,26 @@ void Video::DecodeTask(const std::vector<uint8_t> data,
 }
 
 // static
-void Video::OnFrameDecoded(std::vector<uint8_t>* data,
+void Video::OnFrameDecoded(const gfx::Size& resolution,
+                           std::vector<uint8_t>* data,
                            scoped_refptr<VideoFrame> frame) {
   ASSERT_EQ(frame->format(), VideoPixelFormat::PIXEL_FORMAT_I420);
   size_t num_planes = VideoFrame::NumPlanes(frame->format());
+  // Copy the resolution area.
   for (size_t plane = 0; plane < num_planes; ++plane) {
-    size_t current_pos = data->size();
-    size_t plane_size =
-        VideoFrame::PlaneSize(frame->format(), plane, frame->coded_size())
-            .GetArea();
+    const int stride = frame->stride(plane);
+    const int rows =
+        VideoFrame::Rows(plane, frame->format(), resolution.height());
+    const int row_bytes =
+        VideoFrame::RowBytes(plane, frame->format(), resolution.width());
+    const size_t plane_size =
+        VideoFrame::PlaneSize(frame->format(), plane, resolution).GetArea();
+    const size_t current_pos = data->size();
     // TODO(dstaessens): Avoid resizing.
     data->resize(data->size() + plane_size);
-    std::memcpy(&data->at(current_pos), frame->data(plane), plane_size);
+    uint8_t* dst = &data->at(current_pos);
+    const uint8_t* src = frame->data(plane);
+    libyuv::CopyPlane(src, stride, dst, row_bytes, row_bytes, rows);
   }
 }
 
@@ -478,6 +493,5 @@ base::Optional<VideoPixelFormat> Video::ConvertStringtoPixelFormat(
     return base::nullopt;
   }
 }
-
 }  // namespace test
 }  // namespace media

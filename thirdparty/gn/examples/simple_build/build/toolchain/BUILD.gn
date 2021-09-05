@@ -22,10 +22,9 @@ toolchain("gcc") {
   }
 
   tool("alink") {
-    rspfile = "{{output}}.rsp"
-    command = "rm -f {{output}} && ar rcs {{output}} @$rspfile"
+    command = "rm -f {{output}} && ar rcs {{output}} {{inputs}}"
     description = "AR {{target_output_name}}{{output_extension}}"
-    rspfile_content = "{{inputs}}"
+
     outputs =
         [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
     default_output_extension = ".a"
@@ -36,9 +35,15 @@ toolchain("gcc") {
     soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
     sofile = "{{output_dir}}/$soname"
     rspfile = soname + ".rsp"
+    if (is_mac) {
+      os_specific_option = "-install_name @executable_path/$sofile"
+      rspfile_content = "{{inputs}} {{solibs}} {{libs}}"
+    } else {
+      os_specific_option = "-Wl,-soname=$soname"
+      rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive {{libs}}"
+    }
 
-    command = "g++ -shared {{ldflags}} -o $sofile -Wl,-soname=$soname @$rspfile"
-    rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive {{libs}}"
+    command = "g++ -shared {{ldflags}} -o $sofile $os_specific_option @$rspfile"
 
     description = "SOLINK $soname"
 
@@ -60,7 +65,11 @@ toolchain("gcc") {
   tool("link") {
     outfile = "{{target_output_name}}{{output_extension}}"
     rspfile = "$outfile.rsp"
-    command = "g++ {{ldflags}} -o $outfile -Wl,--start-group @$rspfile {{solibs}} -Wl,--end-group {{libs}}"
+    if (is_mac) {
+      command = "g++ {{ldflags}} -o $outfile @$rspfile {{solibs}} {{libs}}"
+    } else {
+      command = "g++ {{ldflags}} -o $outfile -Wl,--start-group @$rspfile {{solibs}} -Wl,--end-group {{libs}}"
+    }
     description = "LINK $outfile"
     default_output_dir = "{{root_out_dir}}"
     rspfile_content = "{{inputs}}"

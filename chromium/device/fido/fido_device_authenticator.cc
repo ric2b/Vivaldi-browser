@@ -4,6 +4,7 @@
 
 #include "device/fido/fido_device_authenticator.h"
 
+#include <numeric>
 #include <utility>
 
 #include "base/bind.h"
@@ -20,8 +21,45 @@
 #include "device/fido/get_assertion_task.h"
 #include "device/fido/make_credential_task.h"
 #include "device/fido/pin.h"
+#include "device/fido/u2f_command_constructor.h"
 
 namespace device {
+
+namespace {
+
+// Helper method for determining correct bio enrollment version.
+BioEnrollmentRequest::Version GetBioEnrollmentRequestVersion(
+    const AuthenticatorSupportedOptions& options) {
+  DCHECK(options.bio_enrollment_availability_preview !=
+             AuthenticatorSupportedOptions::BioEnrollmentAvailability::
+                 kNotSupported ||
+         options.bio_enrollment_availability !=
+             AuthenticatorSupportedOptions::BioEnrollmentAvailability::
+                 kNotSupported);
+  return options.bio_enrollment_availability !=
+                 AuthenticatorSupportedOptions::BioEnrollmentAvailability::
+                     kNotSupported
+             ? BioEnrollmentRequest::kDefault
+             : BioEnrollmentRequest::kPreview;
+}
+
+CredentialManagementRequest::Version GetCredentialManagementRequestVersion(
+    const AuthenticatorSupportedOptions& options) {
+  DCHECK(options.supports_credential_management_preview ||
+         options.supports_credential_management);
+  return options.supports_credential_management
+             ? CredentialManagementRequest::kDefault
+             : CredentialManagementRequest::kPreview;
+}
+
+uint8_t PermissionsToByte(const std::vector<pin::Permissions>& permissions) {
+  return std::accumulate(permissions.begin(), permissions.end(), 0,
+                         [](uint8_t byte, pin::Permissions flag) {
+                           return byte |= static_cast<uint8_t>(flag);
+                         });
+}
+
+}  // namespace
 
 FidoDeviceAuthenticator::FidoDeviceAuthenticator(
     std::unique_ptr<FidoDevice> device)
@@ -59,12 +97,38 @@ void FidoDeviceAuthenticator::InitializeAuthenticatorDone(
 
 void FidoDeviceAuthenticator::MakeCredential(CtapMakeCredentialRequest request,
                                              MakeCredentialCallback callback) {
-  RunTask<MakeCredentialTask>(std::move(request), std::move(callback));
+  // If the authenticator has UV configured then UV will be required in
+  // order to create a credential (as specified by CTAP 2.0), even if
+  // user-verification is "discouraged". However, if the request is U2F-only
+  // then that doesn't apply and UV must be set to discouraged so that the
+  // request can be translated to U2F.
+  if (!request.pin_auth &&
+      options_->user_verification_availability ==
+          AuthenticatorSupportedOptions::UserVerificationAvailability::
+              kSupportedAndConfigured &&
+      !request.is_u2f_only) {
+    request.user_verification = UserVerificationRequirement::kRequired;
+  } else {
+    request.user_verification = UserVerificationRequirement::kDiscouraged;
+  }
+
+  RunTask<MakeCredentialTask, AuthenticatorMakeCredentialResponse,
+          CtapMakeCredentialRequest>(std::move(request), std::move(callback));
 }
 
 void FidoDeviceAuthenticator::GetAssertion(CtapGetAssertionRequest request,
                                            GetAssertionCallback callback) {
-  RunTask<GetAssertionTask>(std::move(request), std::move(callback));
+  if (!request.pin_auth &&
+      options_->user_verification_availability ==
+          AuthenticatorSupportedOptions::UserVerificationAvailability::
+              kSupportedAndConfigured &&
+      request.user_verification != UserVerificationRequirement::kDiscouraged) {
+    request.user_verification = UserVerificationRequirement::kRequired;
+  } else {
+    request.user_verification = UserVerificationRequirement::kDiscouraged;
+  }
+  RunTask<GetAssertionTask, AuthenticatorGetAssertionResponse,
+          CtapGetAssertionRequest>(std::move(request), std::move(callback));
 }
 
 void FidoDeviceAuthenticator::GetNextAssertion(GetAssertionCallback callback) {
@@ -109,30 +173,62 @@ void FidoDeviceAuthenticator::GetPinRetries(GetRetriesCallback callback) {
 
 void FidoDeviceAuthenticator::GetEphemeralKey(
     GetEphemeralKeyCallback callback) {
+  if (cached_ephemeral_key_.has_value()) {
+    std::move(callback).Run(CtapDeviceResponseCode::kSuccess,
+                            cached_ephemeral_key_);
+    return;
+  }
+
   DCHECK(Options());
   DCHECK(
       Options()->client_pin_availability !=
           AuthenticatorSupportedOptions::ClientPinAvailability::kNotSupported ||
-      Options()->supports_uv_token);
+      Options()->supports_pin_uv_auth_token);
 
   RunOperation<pin::KeyAgreementRequest, pin::KeyAgreementResponse>(
-      pin::KeyAgreementRequest(), std::move(callback),
+      pin::KeyAgreementRequest(),
+      base::BindOnce(&FidoDeviceAuthenticator::OnHaveEphemeralKey,
+                     weak_factory_.GetWeakPtr(), std::move(callback)),
       base::BindOnce(&pin::KeyAgreementResponse::Parse));
 }
 
-void FidoDeviceAuthenticator::GetPINToken(std::string pin,
-                                          GetTokenCallback callback) {
+void FidoDeviceAuthenticator::OnHaveEphemeralKey(
+    GetEphemeralKeyCallback callback,
+    CtapDeviceResponseCode status,
+    base::Optional<pin::KeyAgreementResponse> key) {
+  if (status != CtapDeviceResponseCode::kSuccess) {
+    std::move(callback).Run(status, base::nullopt);
+  }
+  DCHECK(key.has_value());
+
+  cached_ephemeral_key_.emplace(std::move(key.value()));
+  std::move(callback).Run(CtapDeviceResponseCode::kSuccess,
+                          cached_ephemeral_key_);
+}
+
+void FidoDeviceAuthenticator::GetPINToken(
+    std::string pin,
+    const std::vector<pin::Permissions>& permissions,
+    base::Optional<std::string> rp_id,
+    GetTokenCallback callback) {
   DCHECK(Options());
   DCHECK(Options()->client_pin_availability !=
          AuthenticatorSupportedOptions::ClientPinAvailability::kNotSupported);
+  DCHECK_NE(permissions.size(), 0u);
+  DCHECK(!((base::Contains(permissions, pin::Permissions::kMakeCredential)) ||
+           base::Contains(permissions, pin::Permissions::kGetAssertion)) ||
+         rp_id);
 
   GetEphemeralKey(base::BindOnce(
       &FidoDeviceAuthenticator::OnHaveEphemeralKeyForGetPINToken,
-      weak_factory_.GetWeakPtr(), std::move(pin), std::move(callback)));
+      weak_factory_.GetWeakPtr(), std::move(pin),
+      PermissionsToByte(permissions), std::move(rp_id), std::move(callback)));
 }
 
 void FidoDeviceAuthenticator::OnHaveEphemeralKeyForGetPINToken(
     std::string pin,
+    uint8_t permissions,
+    base::Optional<std::string> rp_id,
     GetTokenCallback callback,
     CtapDeviceResponseCode status,
     base::Optional<pin::KeyAgreementResponse> key) {
@@ -140,6 +236,16 @@ void FidoDeviceAuthenticator::OnHaveEphemeralKeyForGetPINToken(
     std::move(callback).Run(status, base::nullopt);
     return;
   }
+
+  if (Options()->supports_pin_uv_auth_token) {
+    pin::PinTokenWithPermissionsRequest request(pin, *key, permissions, rp_id);
+    std::array<uint8_t, 32> shared_key = request.shared_key();
+    RunOperation<pin::PinTokenWithPermissionsRequest, pin::TokenResponse>(
+        std::move(request), std::move(callback),
+        base::BindOnce(&pin::TokenResponse::Parse, std::move(shared_key)));
+    return;
+  }
+
   pin::PinTokenRequest request(pin, *key);
   std::array<uint8_t, 32> shared_key = request.shared_key();
   RunOperation<pin::PinTokenRequest, pin::TokenResponse>(
@@ -216,7 +322,6 @@ FidoDeviceAuthenticator::WillNeedPINToMakeCredential(
   if (Options()->user_verification_availability ==
       AuthenticatorSupportedOptions::UserVerificationAvailability::
           kSupportedAndConfigured) {
-    // TODO(crbug.com/1056317): implement inline bioenrollment.
     return device_support == ClientPinAvailability::kSupportedAndPinSet &&
                    can_collect_pin
                ? MakeCredentialPINDisposition::kUsePINForFallback
@@ -226,11 +331,12 @@ FidoDeviceAuthenticator::WillNeedPINToMakeCredential(
 
   // CTAP 2.0 requires a PIN for credential creation once a PIN has been set.
   // Thus, if fallback to U2F isn't possible, a PIN will be needed if set.
-  const bool supports_u2f =
+  const bool u2f_fallback_possible =
       device()->device_info() &&
-      device()->device_info()->versions.contains(ProtocolVersion::kU2f);
+      device()->device_info()->versions.contains(ProtocolVersion::kU2f) &&
+      IsConvertibleToU2fRegisterCommand(request);
   if (device_support == ClientPinAvailability::kSupportedAndPinSet &&
-      !supports_u2f) {
+      !u2f_fallback_possible) {
     if (can_collect_pin) {
       return MakeCredentialPINDisposition::kUsePIN;
     } else {
@@ -257,7 +363,7 @@ FidoDeviceAuthenticator::WillNeedPINToMakeCredential(
   // else the device supports U2F (because the alternative was handled above)
   // and we'll use a U2F fallback to create a credential without a PIN.
   DCHECK(device_support != ClientPinAvailability::kSupportedAndPinSet ||
-         supports_u2f);
+         u2f_fallback_possible);
   // TODO(agl): perhaps CTAP2 is indicated when, for example, hmac-secret is
   // requested?
   if (request.user_verification == UserVerificationRequirement::kDiscouraged) {
@@ -326,10 +432,7 @@ void FidoDeviceAuthenticator::GetCredentialsMetadata(
 
   RunOperation<CredentialManagementRequest, CredentialsMetadataResponse>(
       CredentialManagementRequest::ForGetCredsMetadata(
-          Options()->supports_credential_management
-              ? CredentialManagementRequest::kDefault
-              : CredentialManagementRequest::kPreview,
-          pin_token),
+          GetCredentialManagementRequestVersion(*Options()), pin_token),
       std::move(callback), base::BindOnce(&CredentialsMetadataResponse::Parse));
 }
 
@@ -359,10 +462,7 @@ void FidoDeviceAuthenticator::EnumerateCredentials(
   state.callback = std::move(callback);
   RunOperation<CredentialManagementRequest, EnumerateRPsResponse>(
       CredentialManagementRequest::ForEnumerateRPsBegin(
-          Options()->supports_credential_management
-              ? CredentialManagementRequest::kDefault
-              : CredentialManagementRequest::kPreview,
-          pin_token),
+          GetCredentialManagementRequestVersion(*Options()), pin_token),
       base::BindOnce(&FidoDeviceAuthenticator::OnEnumerateRPsDone,
                      weak_factory_.GetWeakPtr(), std::move(state)),
       base::BindOnce(&EnumerateRPsResponse::Parse, /*expect_rp_count=*/true),
@@ -394,9 +494,9 @@ void FidoDeviceAuthenticator::OperationClearProxy(
 
 // RunTask starts a |FidoTask| and ensures that |task_| is reset when the given
 // callback is called.
-template <typename Task, typename Request, typename Response>
+template <typename Task, typename Response, typename... RequestArgs>
 void FidoDeviceAuthenticator::RunTask(
-    Request request,
+    RequestArgs&&... request_args,
     base::OnceCallback<void(CtapDeviceResponseCode, base::Optional<Response>)>
         callback) {
   DCHECK(!task_);
@@ -405,7 +505,7 @@ void FidoDeviceAuthenticator::RunTask(
       << "InitializeAuthenticator() must be called first.";
 
   task_ = std::make_unique<Task>(
-      device_.get(), std::move(request),
+      device_.get(), std::forward<RequestArgs>(request_args)...,
       base::BindOnce(
           &FidoDeviceAuthenticator::TaskClearProxy<CtapDeviceResponseCode,
                                                    base::Optional<Response>>,
@@ -459,10 +559,8 @@ void FidoDeviceAuthenticator::OnEnumerateRPsDone(
   state.responses.emplace_back(std::move(*response->rp));
 
   auto request = CredentialManagementRequest::ForEnumerateCredentialsBegin(
-      Options()->supports_credential_management
-          ? CredentialManagementRequest::kDefault
-          : CredentialManagementRequest::kPreview,
-      state.pin_token, std::move(*response->rp_id_hash));
+      GetCredentialManagementRequestVersion(*Options()), state.pin_token,
+      std::move(*response->rp_id_hash));
   RunOperation<CredentialManagementRequest, EnumerateCredentialsResponse>(
       std::move(request),
       base::BindOnce(&FidoDeviceAuthenticator::OnEnumerateCredentialsDone,
@@ -490,9 +588,7 @@ void FidoDeviceAuthenticator::OnEnumerateCredentialsDone(
       state.current_rp_credential_count) {
     RunOperation<CredentialManagementRequest, EnumerateCredentialsResponse>(
         CredentialManagementRequest::ForEnumerateCredentialsGetNext(
-            Options()->supports_credential_management
-                ? CredentialManagementRequest::kDefault
-                : CredentialManagementRequest::kPreview),
+            GetCredentialManagementRequestVersion(*Options())),
         base::BindOnce(&FidoDeviceAuthenticator::OnEnumerateCredentialsDone,
                        weak_factory_.GetWeakPtr(), std::move(state)),
         base::BindOnce(&EnumerateCredentialsResponse::Parse,
@@ -504,9 +600,7 @@ void FidoDeviceAuthenticator::OnEnumerateCredentialsDone(
   if (state.responses.size() < state.rp_count) {
     RunOperation<CredentialManagementRequest, EnumerateRPsResponse>(
         CredentialManagementRequest::ForEnumerateRPsGetNext(
-            Options()->supports_credential_management
-                ? CredentialManagementRequest::kDefault
-                : CredentialManagementRequest::kPreview),
+            GetCredentialManagementRequestVersion(*Options())),
         base::BindOnce(&FidoDeviceAuthenticator::OnEnumerateRPsDone,
                        weak_factory_.GetWeakPtr(), std::move(state)),
         base::BindOnce(&EnumerateRPsResponse::Parse,
@@ -529,22 +623,10 @@ void FidoDeviceAuthenticator::DeleteCredential(
 
   RunOperation<CredentialManagementRequest, DeleteCredentialResponse>(
       CredentialManagementRequest::ForDeleteCredential(
-          Options()->supports_credential_management
-              ? CredentialManagementRequest::kDefault
-              : CredentialManagementRequest::kPreview,
-          pin_token, credential_id),
+          GetCredentialManagementRequestVersion(*Options()), pin_token,
+          credential_id),
       std::move(callback), base::BindOnce(&DeleteCredentialResponse::Parse),
       /*string_fixup_predicate=*/nullptr);
-}
-
-// Helper method for determining correct bio enrollment version.
-static BioEnrollmentRequest::Version GetBioEnrollmentRequestVersion(
-    const AuthenticatorSupportedOptions& options) {
-  return options.bio_enrollment_availability !=
-                 AuthenticatorSupportedOptions::BioEnrollmentAvailability::
-                     kNotSupported
-             ? BioEnrollmentRequest::kDefault
-             : BioEnrollmentRequest::kPreview;
 }
 
 void FidoDeviceAuthenticator::GetModality(BioEnrollmentCallback callback) {
@@ -614,6 +696,22 @@ void FidoDeviceAuthenticator::BioEnrollEnumerate(
       std::move(callback), base::BindOnce(&BioEnrollmentResponse::Parse));
 }
 
+base::Optional<base::span<const int32_t>>
+FidoDeviceAuthenticator::GetAlgorithms() {
+  if (device_->supported_protocol() == ProtocolVersion::kU2f) {
+    static constexpr int32_t kU2fAlgorithms[1] = {
+        static_cast<int32_t>(CoseAlgorithmIdentifier::kEs256)};
+    return kU2fAlgorithms;
+  }
+
+  const base::Optional<AuthenticatorGetInfoResponse>& get_info_response =
+      device_->device_info();
+  if (get_info_response) {
+    return get_info_response->algorithms;
+  }
+  return base::nullopt;
+}
+
 void FidoDeviceAuthenticator::Reset(ResetCallback callback) {
   DCHECK(device_->SupportedProtocolIsInitialized())
       << "InitializeAuthenticator() must be called first.";
@@ -643,6 +741,13 @@ base::string16 FidoDeviceAuthenticator::GetDisplayName() const {
 ProtocolVersion FidoDeviceAuthenticator::SupportedProtocol() const {
   DCHECK(device_->SupportedProtocolIsInitialized());
   return device_->supported_protocol();
+}
+
+bool FidoDeviceAuthenticator::SupportsHMACSecretExtension() const {
+  const base::Optional<AuthenticatorGetInfoResponse>& get_info_response =
+      device_->device_info();
+  return get_info_response && get_info_response->extensions &&
+         base::Contains(*get_info_response->extensions, kExtensionHmacSecret);
 }
 
 const base::Optional<AuthenticatorSupportedOptions>&
@@ -695,13 +800,22 @@ void FidoDeviceAuthenticator::GetUvRetries(GetRetriesCallback callback) {
       base::BindOnce(&pin::RetriesResponse::ParseUvRetries));
 }
 
-void FidoDeviceAuthenticator::GetUvToken(GetTokenCallback callback) {
-  GetEphemeralKey(
-      base::BindOnce(&FidoDeviceAuthenticator::OnHaveEphemeralKeyForUvToken,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+bool FidoDeviceAuthenticator::CanGetUvToken() {
+  return options_->user_verification_availability ==
+             AuthenticatorSupportedOptions::UserVerificationAvailability::
+                 kSupportedAndConfigured &&
+         options_->supports_pin_uv_auth_token;
+}
+
+void FidoDeviceAuthenticator::GetUvToken(base::Optional<std::string> rp_id,
+                                         GetTokenCallback callback) {
+  GetEphemeralKey(base::BindOnce(
+      &FidoDeviceAuthenticator::OnHaveEphemeralKeyForUvToken,
+      weak_factory_.GetWeakPtr(), std::move(rp_id), std::move(callback)));
 }
 
 void FidoDeviceAuthenticator::OnHaveEphemeralKeyForUvToken(
+    base::Optional<std::string> rp_id,
     GetTokenCallback callback,
     CtapDeviceResponseCode status,
     base::Optional<pin::KeyAgreementResponse> key) {
@@ -712,7 +826,7 @@ void FidoDeviceAuthenticator::OnHaveEphemeralKeyForUvToken(
 
   DCHECK(key);
 
-  pin::UvTokenRequest request(*key);
+  pin::UvTokenRequest request(*key, std::move(rp_id));
   std::array<uint8_t, 32> shared_key = request.shared_key();
   RunOperation<pin::UvTokenRequest, pin::TokenResponse>(
       std::move(request), std::move(callback),

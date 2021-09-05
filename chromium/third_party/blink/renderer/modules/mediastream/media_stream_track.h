@@ -57,7 +57,11 @@ class MODULES_EXPORT MediaStreamTrack
   MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
-                   MediaStreamSource::ReadyState);
+                   bool pan_tilt_zoom_allowed);
+  MediaStreamTrack(ExecutionContext*,
+                   MediaStreamComponent*,
+                   MediaStreamSource::ReadyState,
+                   bool pan_tilt_zoom_allowed);
   ~MediaStreamTrack() override;
 
   String kind() const;
@@ -106,7 +110,9 @@ class MODULES_EXPORT MediaStreamTrack
   std::unique_ptr<AudioSourceProvider> CreateWebAudioSource(
       int context_sample_rate);
 
-  void Trace(Visitor*) override;
+  ImageCapture* GetImageCapture() { return image_capture_; }
+
+  void Trace(Visitor*) const override;
 
  private:
   friend class CanvasCaptureMediaStreamTrack;

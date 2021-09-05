@@ -11,6 +11,7 @@
 
 #include "base/build_time.h"
 #include "base/cpu.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_functions.h"
@@ -233,6 +234,7 @@ void MetricsLog::RecordCoreSystemProfile(
 void MetricsLog::RecordHistogramDelta(const std::string& histogram_name,
                                       const base::HistogramSamples& snapshot) {
   DCHECK(!closed_);
+  samples_count_ += snapshot.TotalCount();
   EncodeHistogramDelta(histogram_name, snapshot, &uma_proto_);
 }
 

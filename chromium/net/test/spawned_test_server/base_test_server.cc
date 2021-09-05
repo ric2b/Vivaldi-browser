@@ -19,6 +19,7 @@
 #include "net/base/address_list.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
 #include "net/base/port_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/test_root_certs.h"
@@ -221,7 +222,8 @@ bool BaseTestServer::GetAddressList(AddressList* address_list) const {
   parameters.dns_query_type = DnsQueryType::A;
 
   std::unique_ptr<HostResolver::ResolveHostRequest> request =
-      resolver->CreateRequest(host_port_pair_, NetLogWithSource(), parameters);
+      resolver->CreateRequest(host_port_pair_, NetworkIsolationKey(),
+                              NetLogWithSource(), parameters);
 
   TestCompletionCallback callback;
   int rv = request->Start(callback.callback());
@@ -361,15 +363,14 @@ void BaseTestServer::SetResourcePath(const base::FilePath& document_root,
 bool BaseTestServer::SetAndParseServerData(const std::string& server_data,
                                            int* port) {
   VLOG(1) << "Server data: " << server_data;
-  base::JSONReader json_reader;
-  base::Optional<base::Value> value(json_reader.ReadToValue(server_data));
-  if (!value || !value->is_dict()) {
-    LOG(ERROR) << "Could not parse server data: "
-               << json_reader.GetErrorMessage();
+  base::JSONReader::ValueWithError parsed_json =
+      base::JSONReader::ReadAndReturnValueWithError(server_data);
+  if (!parsed_json.value || !parsed_json.value->is_dict()) {
+    LOG(ERROR) << "Could not parse server data: " << parsed_json.error_message;
     return false;
   }
 
-  server_data_ = std::move(value);
+  server_data_ = std::move(parsed_json.value);
 
   base::Optional<int> port_value = server_data_->FindIntKey("port");
   if (!port_value) {

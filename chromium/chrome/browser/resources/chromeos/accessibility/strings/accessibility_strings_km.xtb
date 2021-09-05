@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">រំកិល​ទៅស្តាំ</translation>
 <translation id="1781173782405573156">ប៊ូតុងឆ្លងកាត់</translation>
 <translation id="1787176709638001873">អត្ថបទកែប្រែពាក្យសម្ងាត់</translation>
+<translation id="180203835522132923">Search + O បន្ទាប់មក W</translation>
 <translation id="1810107444790159527">ប្រអប់បញ្ជី</translation>
 <translation id="1812527064848182527">ផ្ដេក</translation>
 <translation id="1829244130665387512">ស្វែងរកក្នុងទំព័រ</translation>
@@ -194,7 +195,7 @@
 <translation id="2523609930580546572">ការបង្រៀន​របៀបប្រើ ChromeVox</translation>
 <translation id="2525706221823668172">ផ្លូវកាត់ក្តារចុច Chromebook</translation>
 <translation id="2553108862507765288">កំហុសវេយ្យាករណ៍</translation>
-<translation id="257674075312929031">ក្រុម</translation>
+<translation id="257674075312929031">ដាក់ជាក្រុម</translation>
 <translation id="2582407057977008361">Aside</translation>
 <translation id="2592212930811759050">ចុចពីរដង ដើម្បីចាប់ផ្ដើម​កែសម្រួល</translation>
 <translation id="2598495320872286378">កំហុស​វេយ្យាករណ៍</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">អូសម្រាមដៃពីរទៅឆ្វេង</translation>
 <translation id="2998131015536248178">តួអក្សរពីមុន</translation>
 <translation id="2999559350546931576">បន្ថយកម្រិតសម្លេង</translation>
+<translation id="3009352964623081324">Search + O បន្ទាប់មក S។ ប្រើដើម្បី​ដំឡើង គ្រប់គ្រង និងប្ដូរសំឡេង​តាមបំណង។</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">ប៊ូតុងវិទ្យុនៃធាតុម៉ឺនុយ</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{សញ្ញាបន្តក់}other{# សញ្ញាបន្តក់}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ការ​បញ្ចូល</translation>
 <translation id="4511186779140817916">លឿងស្រគាំ</translation>
 <translation id="451510441928265982">គ្មានផ្នែកក្បាលកម្រិតទី 2 មុនទេ</translation>
+<translation id="4515799157838123044">ដាក់ពណ៌ខ្មៅផ្ទៃខាងក្រោយ</translation>
 <translation id="4517854969512651305">បង្កើន​តម្លៃ</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{សញ្ញាទ្រេត}other{# សញ្ញាទ្រេត}}</translation>
 <translation id="4537277403911487429">ធាតុ​ស្រដៀងគ្នា​បន្ទាប់</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ផ្នែក</translation>
 <translation id="6637586476836377253">កំណត់ត្រា</translation>
 <translation id="6657128831881431364">របាប្រតិបត្តិការ</translation>
+<translation id="6660819301598582123">កញ្ជ្រោងពណ៌ត្នោតដ៏រហ័សរហួនបានលោតរំលងឆ្កែកម្ជិល។</translation>
 <translation id="667999046851023355">ឯកសារ</translation>
 <translation id="6688209025607531203">ការរំលឹកដែលមិនមែនជាប្រអប់បញ្ជាក់</translation>
 <translation id="6689672606256159458">ក្រហមចាស់</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">គ្មានផ្នែកក្បាលកម្រិតទី 5 បន្ទាប់ទេ</translation>
 <translation id="6955705049214951590">ស៊ីជំពូស្រាល</translation>
 <translation id="696356426651109308">រំលងទៅផ្នែកចាប់ផ្ដើម</translation>
-<translation id="699159175332639490">ស្វែងរក + O + W</translation>
 <translation id="6994042831499278539">ឯកសារ​យោងនៃ​សទ្ទានុក្រម</translation>
 <translation id="6996566555547746822">ប្រអប់បន្សំបន្ទាប់</translation>
 <translation id="6997224546856374593">នៅពេល​អាន​អក្សរធំ៖</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">ឧទាហរណ៍</translation>
 <translation id="7439060726180460871">ថតឯកសារ</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">ប្ដូរកម្រិតសំឡេង នៅពេលអានប្រភេទធាតុ និងអត្ថបទដែលសរសេរជាអក្សរធំ ក្នុងវង់ក្រចក ដិត លុប ឬនៅក្នុងអព្ភន្តរសញ្ញា។</translation>
 <translation id="7491962110804786152">ផ្ទាំង</translation>
 <translation id="7505149250476994901">និយាយថា "អក្សរធំ" បន្ទាប់ពី​អក្សរ</translation>
 <translation id="7518543783849163354">ដើម្បីបញ្ឈប់ ChromeVox ពីការនិយាយជាបណ្តោះអាសន្ន សូមចុចគ្រាប់ចុច Control ។</translation>

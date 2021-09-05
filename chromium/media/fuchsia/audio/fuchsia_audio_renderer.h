@@ -43,6 +43,7 @@ class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
   void StartPlaying() final;
   void SetVolume(float volume) final;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) final;
+  void SetPreservesPitch(bool preserves_pitch) final;
 
   // TimeSource implementation.
   void StartTicking() final;
@@ -132,6 +133,8 @@ class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
   fuchsia::media::audio::VolumeControlPtr volume_control_;
 
   DemuxerStream* demuxer_stream_ = nullptr;
+  bool is_demuxer_read_pending_ = false;
+
   RendererClient* client_ = nullptr;
 
   // Initialize() completion callback.

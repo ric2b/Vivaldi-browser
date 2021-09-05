@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "media/base/audio_bus.h"
 #include "media/base/data_source.h"

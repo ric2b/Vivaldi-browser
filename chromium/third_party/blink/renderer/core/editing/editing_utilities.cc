@@ -1079,6 +1079,13 @@ Element* TableElementJustBefore(
       visible_position);
 }
 
+Element* EnclosingTableCell(const Position& p) {
+  return To<Element>(EnclosingNodeOfType(p, IsTableCell));
+}
+Element* EnclosingTableCell(const PositionInFlatTree& p) {
+  return To<Element>(EnclosingNodeOfType(p, IsTableCell));
+}
+
 Element* TableElementJustAfter(const VisiblePosition& visible_position) {
   Position downstream(
       MostForwardCaretPosition(visible_position.DeepEquivalent()));
@@ -1115,7 +1122,8 @@ bool IsHTMLListElement(const Node* n) {
 }
 
 bool IsListItem(const Node* n) {
-  return n && n->GetLayoutObject() && n->GetLayoutObject()->IsListItem();
+  return n && n->GetLayoutObject() &&
+         n->GetLayoutObject()->IsListItemIncludingNG();
 }
 
 bool IsPresentationalHTMLElement(const Node* node) {
@@ -1700,7 +1708,7 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
 
   if (layout_object->IsCanvas()) {
     return To<HTMLCanvasElement>(const_cast<Node&>(node))
-        .Snapshot(kFrontBuffer, kPreferNoAcceleration);
+        .Snapshot(kFrontBuffer);
   }
 
   if (!layout_object->IsImage())

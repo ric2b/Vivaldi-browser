@@ -114,6 +114,13 @@ Polymer({
     autoConnectPref_: {
       type: Object,
       observer: 'autoConnectPrefChanged_',
+      value() {
+        return {
+          key: 'fakeAutoConnectPref',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: false,
+        };
+      },
     },
 
     /**
@@ -129,7 +136,18 @@ Polymer({
           type: chrome.settingsPrivate.PrefType.BOOLEAN,
           value: false,
         };
-      }
+      },
+    },
+
+    /**
+     * This gets initialized to managedProperties_.metered.activeValue.
+     * When this is changed from the UI, a change event will update the
+     * property and setMojoNetworkProperties will be called.
+     * @private
+     */
+    meteredOverride_: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -160,6 +178,18 @@ Polymer({
       value() {
         return loadTimeData.valueExists('showTechnologyBadge') &&
             loadTimeData.getBoolean('showTechnologyBadge');
+      }
+    },
+
+    /**
+     * Whether to show the Metered toggle.
+     * @private
+     */
+    showMeteredToggle_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.valueExists('showMeteredToggle') &&
+            loadTimeData.getBoolean('showMeteredToggle');
       }
     },
 
@@ -211,6 +241,12 @@ Polymer({
 
   /** @private {?chromeos.networkConfig.mojom.CrosNetworkConfigRemote} */
   networkConfig_: null,
+
+  /**
+   * Prevents re-saving incoming changes.
+   * @private {boolean}
+   */
+  applyingChanges_: false,
 
   /** @override */
   attached() {
@@ -370,6 +406,11 @@ Polymer({
     }
     this.updateAutoConnectPref_();
 
+    const metered = this.managedProperties_.metered;
+    if (metered && metered.activeValue != this.meteredOverride_) {
+      this.meteredOverride_ = metered.activeValue;
+    }
+
     const priority = this.managedProperties_.priority;
     if (priority) {
       const preferNetwork = priority.activeValue > 0;
@@ -387,8 +428,10 @@ Polymer({
     this.parentNode.pageTitle = networkName;
     Polymer.dom.flush();
 
-    if (!this.didSetFocus_) {
-      // Focus a button once the initial state is set.
+    if (!this.didSetFocus_ &&
+        !settings.Router.getInstance().getQueryParameters().has('search')) {
+      // Unless the page was navigated to via search, focus a button once the
+      // initial state is set.
       this.didSetFocus_ = true;
       const button = this.$$('#titleDiv .action-button:not([hidden])');
       if (button) {
@@ -494,6 +537,19 @@ Polymer({
     this.autoConnectPref_ = newPrefValue;
   },
 
+  /**
+   * @param {!CustomEvent<boolean>} e
+   * @private
+   */
+  meteredChanged_(e) {
+    if (!this.propertiesReceived_) {
+      return;
+    }
+    const config = this.getDefaultConfigProperties_();
+    config.metered = {value: e.detail.value};
+    this.setMojoNetworkProperties_(config);
+  },
+
   /** @private */
   preferNetworkChanged_() {
     if (!this.propertiesReceived_) {
@@ -556,7 +612,8 @@ Polymer({
       return;
     }
 
-    this.managedProperties_ = properties;
+    this.updateManagedProperties_(properties);
+
     // Detail page should not be shown when Arc VPN is not connected.
     if (this.isArcVpn_(this.managedProperties_) &&
         !this.isConnectedState_(this.managedProperties_)) {
@@ -568,6 +625,17 @@ Polymer({
     if (!this.deviceState_) {
       this.getDeviceState_();
     }
+  },
+
+  /**
+   * @param {!mojom.ManagedProperties|undefined} properties
+   * @private
+   */
+  updateManagedProperties_(properties) {
+    this.applyingChanges_ = true;
+    this.managedProperties_ = properties;
+    Polymer.RenderStatus.afterNextRender(
+        this, () => this.applyingChanges_ = false);
   },
 
   /**
@@ -599,7 +667,7 @@ Polymer({
             networkState.typeState.wifi.signalStrength;
         break;
     }
-    this.managedProperties_ = managedProperties;
+    this.updateManagedProperties_(managedProperties);
 
     this.propertiesReceived_ = true;
     this.outOfRange_ = false;
@@ -629,7 +697,7 @@ Polymer({
    * @private
    */
   setMojoNetworkProperties_(config) {
-    if (!this.propertiesReceived_ || !this.guid) {
+    if (!this.propertiesReceived_ || !this.guid || this.applyingChanges_) {
       return;
     }
     this.networkConfig_.setProperties(this.guid, config).then(response => {
@@ -1372,22 +1440,64 @@ Polymer({
 
   /**
    * @param {!mojom.ManagedProperties} managedProperties
-   * @param {!mojom.GlobalPolicy} globalPolicy
-   * @param {boolean} managedNetworkAvailable
-   * @param {boolean} isWifiSyncEnabled
-   * @return {boolean} If the synced/shared message section should be shown.
+   * @return {string} To display in the shared notice section.
    * @private
    */
-  showSyncedShared_(
-      managedProperties, globalPolicy, managedNetworkAvailable,
-      isWifiSyncEnabled) {
-    if (this.propertiesMissingOrBlockedByPolicy_()) {
-      return false;
+  sharedString_(managedProperties) {
+    if (!managedProperties.typeProperties.wifi) {
+      return this.i18n('networkShared');
+    } else if (managedProperties.typeProperties.wifi.isConfiguredByActiveUser) {
+      return this.i18n('networkSharedOwner');
+    } else {
+      return this.i18n('networkSharedNotOwner');
     }
+  },
 
-    return managedProperties.source == mojom.OncSource.kDevice &&
-        (isWifiSyncEnabled && !!managedProperties.typeProperties.wifi &&
-         managedProperties.typeProperties.wifi.isSyncable);
+  /**
+   * @param {!mojom.ManagedProperties} managedProperties
+   * @return {string} To show in the synced notice section.
+   * @private
+   */
+  syncedString_(managedProperties) {
+    if (!managedProperties.typeProperties.wifi) {
+      return '';
+    } else if (!managedProperties.typeProperties.wifi.isSyncable) {
+      return this.i18nAdvanced('networkNotSynced');
+    } else if (managedProperties.source == mojom.OncSource.kUser) {
+      return this.i18nAdvanced('networkSyncedUser');
+    } else {
+      return this.i18nAdvanced('networkSyncedDevice');
+    }
+  },
+
+  /**
+   * @param {string} name
+   * @param {!mojom.ManagedProperties} managedProperties
+   * @param {!mojom.GlobalPolicy} globalPolicy
+   * @param {boolean} managedNetworkAvailable
+   * @param {boolean} isSecondaryUser
+   * @param {boolean} isWifiSyncEnabled
+   * @return {string} Returns 'continuation' class for shared networks.
+   * @private
+   */
+  messagesDividerClass_(
+      name, managedProperties, globalPolicy, managedNetworkAvailable,
+      isSecondaryUser, isWifiSyncEnabled) {
+    let first;
+    if (this.isBlockedByPolicy_(
+            managedProperties, globalPolicy, managedNetworkAvailable)) {
+      first = 'policy';
+    } else if (isSecondaryUser) {
+      first = 'secondary';
+    } else if (this.showShared_(
+                   managedProperties, globalPolicy, managedNetworkAvailable)) {
+      first = 'shared';
+    } else if (this.showSynced_(
+                   managedProperties, globalPolicy, managedNetworkAvailable,
+                   isWifiSyncEnabled)) {
+      first = 'synced';
+    }
+    return first === name ? 'continuation' : '';
   },
 
   /**
@@ -1395,40 +1505,27 @@ Polymer({
    * @param {!mojom.GlobalPolicy} globalPolicy
    * @param {boolean} managedNetworkAvailable
    * @param {boolean} isWifiSyncEnabled
-   * @return {boolean} If the synced/shared message section should be shown.
+   * @return {boolean} Synced message section should be shown.
    * @private
    */
-  showSyncedUser_(
+  showSynced_(
       managedProperties, globalPolicy, managedNetworkAvailable,
       isWifiSyncEnabled) {
-    if (this.propertiesMissingOrBlockedByPolicy_()) {
-      return false;
-    }
-
-    return managedProperties.source == mojom.OncSource.kUser &&
-        isWifiSyncEnabled && !!managedProperties.typeProperties.wifi &&
-        managedProperties.typeProperties.wifi.isSyncable;
+    return !this.propertiesMissingOrBlockedByPolicy_() && isWifiSyncEnabled &&
+        !!managedProperties.typeProperties.wifi;
   },
 
   /**
    * @param {!mojom.ManagedProperties} managedProperties
    * @param {!mojom.GlobalPolicy} globalPolicy
    * @param {boolean} managedNetworkAvailable
-   * @param {boolean} isWifiSyncEnabled
-   * @return {boolean} If the synced/shared message section should be shown.
+   * @return {boolean} If the shared message section should be shown.
    * @private
    */
-  showShared_(
-      managedProperties, globalPolicy, managedNetworkAvailable,
-      isWifiSyncEnabled) {
-    if (this.propertiesMissingOrBlockedByPolicy_()) {
-      return false;
-    }
-
-    return (managedProperties.source == mojom.OncSource.kDevice ||
-            managedProperties.source == mojom.OncSource.kDevicePolicy) &&
-        (!isWifiSyncEnabled || !managedProperties.typeProperties.wifi ||
-         !managedProperties.typeProperties.wifi.isSyncable);
+  showShared_(managedProperties, globalPolicy, managedNetworkAvailable) {
+    return !this.propertiesMissingOrBlockedByPolicy_() &&
+        (managedProperties.source == mojom.OncSource.kDevice ||
+         managedProperties.source == mojom.OncSource.kDevicePolicy);
   },
 
   /**
@@ -1445,6 +1542,18 @@ Polymer({
         !this.isArcVpn_(managedProperties) &&
         !this.isBlockedByPolicy_(
             managedProperties, globalPolicy, managedNetworkAvailable);
+  },
+
+  /**
+   * @param {!mojom.ManagedProperties} managedProperties
+   * @return {boolean}
+   * @private
+   */
+  showMetered_(managedProperties) {
+    return !!this.showMeteredToggle_ && !!managedProperties &&
+        this.isRemembered_(managedProperties) &&
+        (managedProperties.type == mojom.NetworkType.kCellular ||
+         managedProperties.type == mojom.NetworkType.kWiFi);
   },
 
   /**

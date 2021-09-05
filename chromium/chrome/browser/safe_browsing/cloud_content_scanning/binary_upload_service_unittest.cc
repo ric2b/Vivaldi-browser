@@ -16,6 +16,7 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_fcm_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/multipart_uploader.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
@@ -33,7 +34,10 @@ using ::testing::SaveArg;
 class MockRequest : public BinaryUploadService::Request {
  public:
   explicit MockRequest(BinaryUploadService::Callback callback)
-      : BinaryUploadService::Request(std::move(callback)) {}
+      : BinaryUploadService::Request(std::move(callback), GURL()) {}
+  explicit MockRequest(BinaryUploadService::ContentAnalysisCallback callback,
+                       const GURL& url)
+      : BinaryUploadService::Request(std::move(callback), url) {}
   MOCK_METHOD1(GetRequestData, void(DataCallback));
 };
 
@@ -142,7 +146,7 @@ class BinaryUploadServiceTest : public testing::Test {
 
   void ReceiveMessageForRequest(BinaryUploadService::Request* request,
                                 const DeepScanningClientResponse& response) {
-    service_->OnGetResponse(request, response);
+    service_->OnGetLegacyResponse(request, response);
   }
 
   void ReceiveResponseFromUpload(BinaryUploadService::Request* request,
@@ -450,7 +454,7 @@ TEST_F(BinaryUploadServiceTest, ReturnsAsynchronouslyWithNoFCM) {
 TEST_F(BinaryUploadServiceTest, IsAuthorizedValidTimer) {
   // The 24 hours timer should be started on the first IsAuthorized call.
   ValidateAuthorizationTimerIdle();
-  service_->IsAuthorized(base::DoNothing());
+  service_->IsAuthorized(GURL(), base::DoNothing());
   ValidateAuthorizationTimerStarted();
 }
 
@@ -520,6 +524,71 @@ TEST_F(BinaryUploadServiceTest, AdvancedProtectionDlpRequestUnauthorized) {
   content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(scanning_result, BinaryUploadService::Result::UNAUTHORIZED);
+}
+
+TEST_F(BinaryUploadServiceTest, ConnectorUrlParams) {
+  {
+    MockRequest request(
+        base::DoNothing(),
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/scan"));
+    request.set_device_token("fake_token1");
+    request.set_analysis_connector(enterprise_connectors::FILE_ATTACHED);
+    request.add_tag("dlp");
+    request.add_tag("malware");
+
+    ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
+                   "scan?device_token=fake_token1&connector=OnFileAttached&tag="
+                   "dlp&tag=malware"),
+              request.GetUrlWithParams());
+  }
+  {
+    MockRequest request(
+        base::DoNothing(),
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/scan"));
+    request.set_device_token("fake_token2");
+    request.set_analysis_connector(enterprise_connectors::FILE_DOWNLOADED);
+    request.add_tag("malware");
+
+    ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
+                   "scan?device_token=fake_token2&connector=OnFileDownloaded&"
+                   "tag=malware"),
+              request.GetUrlWithParams());
+  }
+  {
+    MockRequest request(
+        base::DoNothing(),
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/scan"));
+    request.set_device_token("fake_token3");
+    request.set_analysis_connector(enterprise_connectors::BULK_DATA_ENTRY);
+    request.add_tag("dlp");
+
+    ASSERT_EQ(
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
+             "scan?device_token=fake_token3&connector=OnBulkDataEntry&tag=dlp"),
+        request.GetUrlWithParams());
+  }
+  {
+    MockRequest request(
+        base::DoNothing(),
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/scan"));
+    request.set_device_token("fake_token4");
+
+    ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
+                   "scan?device_token=fake_token4"),
+              request.GetUrlWithParams());
+  }
+  {
+    MockRequest request(
+        base::DoNothing(),
+        GURL("https://safebrowsing.google.com/safebrowsing/uploads/scan"));
+    request.set_device_token("fake_token5");
+    request.set_analysis_connector(
+        enterprise_connectors::ANALYSIS_CONNECTOR_UNSPECIFIED);
+
+    ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
+                   "scan?device_token=fake_token5"),
+              request.GetUrlWithParams());
+  }
 }
 
 }  // namespace safe_browsing

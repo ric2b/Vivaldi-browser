@@ -6,6 +6,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/lookalikes/core/features.h"
@@ -41,15 +43,6 @@ namespace {
 using security_interstitials::MetricsHelper;
 using security_interstitials::SecurityInterstitialCommand;
 using UkmEntry = ukm::builders::LookalikeUrl_NavigationSuggestion;
-
-enum class FeatureStatus {
-  // Feature is enabled.
-  kEnabled,
-  // Feature is disabled.
-  kDisabled,
-  // Both Interstitial and Target Embedding Features are enabled.
-  kEnabledAndTargetEmbeddingEnabled
-};
 
 // An engagement score above MEDIUM.
 const int kHighEngagement = 20;
@@ -139,7 +132,8 @@ void SendInterstitialCommand(content::WebContents* web_contents,
 }
 
 void SendInterstitialCommandSync(Browser* browser,
-                                 SecurityInterstitialCommand command) {
+                                 SecurityInterstitialCommand command,
+                                 bool punycode_interstitial = false) {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
 
@@ -151,7 +145,13 @@ void SendInterstitialCommandSync(Browser* browser,
   navigation_observer.Wait();
 
   EXPECT_EQ(nullptr, GetCurrentInterstitial(web_contents));
-  EXPECT_TRUE(IsUrlShowing(browser));
+  if (punycode_interstitial) {
+    // "Back to safety" button on the punycode interstitial goes to the New
+    // Tab Page which doesn't show the URL.
+    EXPECT_FALSE(IsUrlShowing(browser));
+  } else {
+    EXPECT_TRUE(IsUrlShowing(browser));
+  }
 }
 
 // Verify that no interstitial is shown, regardless of feature state.
@@ -173,23 +173,37 @@ void TestInterstitialNotShown(Browser* browser, const GURL& navigated_url) {
 
 class LookalikeUrlNavigationThrottleBrowserTest
     : public InProcessBrowserTest,
-      public testing::WithParamInterface<FeatureStatus> {
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
  protected:
   void SetUp() override {
-    switch (feature_status()) {
-      case FeatureStatus::kDisabled:
-        feature_list_.InitAndDisableFeature(
-            features::kLookalikeUrlNavigationSuggestionsUI);
-        break;
-      case FeatureStatus::kEnabledAndTargetEmbeddingEnabled:
-        feature_list_.InitAndEnableFeature(
-            lookalikes::features::kDetectTargetEmbeddingLookalikes);
-        break;
-      case FeatureStatus::kEnabled:
-        break;
+    std::vector<base::test::ScopedFeatureList::FeatureAndParams>
+        enabled_features;
+    std::vector<base::Feature> disabled_features;
+
+    if (target_embedding_enabled()) {
+      base::FieldTrialParams params;
+      enabled_features.emplace_back(
+          lookalikes::features::kDetectTargetEmbeddingLookalikes, params);
+    } else {
+      disabled_features.push_back(
+          lookalikes::features::kDetectTargetEmbeddingLookalikes);
     }
+
+    if (punycode_interstitial_enabled()) {
+      enabled_features.emplace_back(
+          lookalikes::features::kLookalikeInterstitialForPunycode,
+          base::FieldTrialParams());
+    } else {
+      disabled_features.push_back(
+          lookalikes::features::kLookalikeInterstitialForPunycode);
+    }
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
     InProcessBrowserTest::SetUp();
   }
+
+  bool target_embedding_enabled() const { return std::get<0>(GetParam()); }
+  bool punycode_interstitial_enabled() const { return std::get<1>(GetParam()); }
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -246,23 +260,14 @@ class LookalikeUrlNavigationThrottleBrowserTest
         test_ukm_recorder()->GetEntriesByName(UkmEntry::kEntryName).empty());
   }
 
-  // Tests that the histogram event |expected_event| is recorded. If the UI is
-  // enabled, additional events for interstitial display and link click will
-  // also be tested.
-  void TestMetricsRecordedAndMaybeInterstitialShown(
+  // Tests that the histogram event |expected_event| is recorded, the
+  // interstitial is displayed and clicking the link on the interstitial works.
+  void TestMetricsRecordedAndInterstitialShown(
       Browser* browser,
       const GURL& navigated_url,
       const GURL& expected_suggested_url,
       NavigationSuggestionEvent expected_event) {
     base::HistogramTester histograms;
-    if (feature_status() == FeatureStatus::kDisabled) {
-      TestInterstitialNotShown(browser, navigated_url);
-      histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
-      histograms.ExpectBucketCount(lookalikes::kHistogramName, expected_event,
-                                   1);
-
-      return;
-    }
 
     history::HistoryService* const history_service =
         HistoryServiceFactory::GetForProfile(
@@ -294,22 +299,49 @@ class LookalikeUrlNavigationThrottleBrowserTest
                                  MetricsHelper::TOTAL_VISITS, 1);
   }
 
-  // Tests that the histogram event |expected_event| is recorded. If the UI is
-  // enabled, additional events for interstitial display and dismissal will also
-  // be tested.
+  // Tests that the histogram event |expected_event| is recorded, the
+  // interstitial is displayed and clicking "Back to safety" on the interstitial
+  // works.
+  void TestPunycodeInterstitialShown(Browser* browser,
+                                     const GURL& navigated_url,
+                                     NavigationSuggestionEvent expected_event) {
+    base::HistogramTester histograms;
+
+    history::HistoryService* const history_service =
+        HistoryServiceFactory::GetForProfile(
+            browser->profile(), ServiceAccessType::EXPLICIT_ACCESS);
+    ui_test_utils::WaitForHistoryToLoad(history_service);
+
+    LoadAndCheckInterstitialAt(browser, navigated_url);
+
+    // Clicking "Back to safety" should go to the new tab page.
+    SendInterstitialCommandSync(browser,
+                                SecurityInterstitialCommand::CMD_DONT_PROCEED,
+                                /*punycode_interstitial=*/true);
+    EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
+              browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+
+    histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+    histograms.ExpectBucketCount(lookalikes::kHistogramName, expected_event, 1);
+
+    histograms.ExpectTotalCount(kInterstitialDecisionMetric, 2);
+    histograms.ExpectBucketCount(kInterstitialDecisionMetric,
+                                 MetricsHelper::SHOW, 1);
+    histograms.ExpectBucketCount(kInterstitialDecisionMetric,
+                                 MetricsHelper::DONT_PROCEED, 1);
+
+    histograms.ExpectTotalCount(kInterstitialInteractionMetric, 1);
+    histograms.ExpectBucketCount(kInterstitialInteractionMetric,
+                                 MetricsHelper::TOTAL_VISITS, 1);
+  }
+
+  // Tests that the histogram event |expected_event| is recorded, the
+  // interstitial is displayed and clicking through the interstitial works.
   void TestHistogramEventsRecordedWhenInterstitialIgnored(
       Browser* browser,
       base::HistogramTester* histograms,
       const GURL& navigated_url,
       NavigationSuggestionEvent expected_event) {
-    if (feature_status() == FeatureStatus::kDisabled) {
-      TestInterstitialNotShown(browser, navigated_url);
-      histograms->ExpectTotalCount(lookalikes::kHistogramName, 1);
-      histograms->ExpectBucketCount(lookalikes::kHistogramName, expected_event,
-                                    1);
-
-      return;
-    }
 
     history::HistoryService* const history_service =
         HistoryServiceFactory::GetForProfile(
@@ -350,20 +382,15 @@ class LookalikeUrlNavigationThrottleBrowserTest
 
   base::SimpleTestClock* test_clock() { return &test_clock_; }
 
-  virtual FeatureStatus feature_status() const { return GetParam(); }
-
  private:
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
   base::SimpleTestClock test_clock_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    LookalikeUrlNavigationThrottleBrowserTest,
-    ::testing::Values(FeatureStatus::kEnabled,
-                      FeatureStatus::kEnabledAndTargetEmbeddingEnabled,
-                      FeatureStatus::kDisabled));
+INSTANTIATE_TEST_SUITE_P(All,
+                         LookalikeUrlNavigationThrottleBrowserTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 // Navigating to a non-IDN shouldn't show an interstitial or record metrics.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
@@ -402,7 +429,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // considered for lookalike suggestions.
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
 
-  TestMetricsRecordedAndMaybeInterstitialShown(
+  TestMetricsRecordedAndInterstitialShown(
       browser(), kNavigatedUrl, kExpectedSuggestedUrl,
       NavigationSuggestionEvent::kMatchSkeletonTop500);
 
@@ -419,13 +446,13 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   const GURL kExpectedSuggestedUrl = GetURLWithoutPath("google.com");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
 
-  // |TestMetricsRecordedAndMaybeInterstitialShown| assumes everything should be
-  // recorded if feature_status is not disabled. But only for target embedding
-  // checks, if TargetEmbedding is not explicitly enabled, it treated just like
-  // it is disabled. So we make sure an interstitial is not shown if target
-  // embedding is not enabled. And defer to
-  // |TestMetricsRecordedAndMaybeInterstitialShown| otherwise.
-  if (feature_status() != FeatureStatus::kEnabledAndTargetEmbeddingEnabled) {
+  // |TestMetricsRecordedAndInterstitialShown| assumes everything should be
+  // recorded if target embedding is not disabled. But only for target embedding
+  // checks, if TargetEmbedding is not explicitly enabled, it should be treated
+  // just like it is disabled. So we make sure an interstitial is not shown if
+  // target embedding is not enabled. And defer to
+  // |TestMetricsRecordedAndInterstitialShown| otherwise.
+  if (!target_embedding_enabled()) {
     base::HistogramTester histograms;
     TestInterstitialNotShown(browser(), kNavigatedUrl);
     histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
@@ -433,7 +460,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
         lookalikes::kHistogramName,
         NavigationSuggestionEvent::kMatchTargetEmbedding, 1);
   } else {
-    TestMetricsRecordedAndMaybeInterstitialShown(
+    TestMetricsRecordedAndInterstitialShown(
         browser(), kNavigatedUrl, kExpectedSuggestedUrl,
         NavigationSuggestionEvent::kMatchTargetEmbedding);
   }
@@ -482,7 +509,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // considered for lookalike suggestions.
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
 
-  TestMetricsRecordedAndMaybeInterstitialShown(
+  TestMetricsRecordedAndInterstitialShown(
       browser(), kNavigatedUrl, kExpectedSuggestedUrl,
       NavigationSuggestionEvent::kMatchSkeletonTop500);
 
@@ -490,13 +517,62 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
            LookalikeUrlMatchType::kSkeletonMatchTop500);
 }
 
-// The navigated domain will fall back to punycode because it fails spoof checks
-// in IDN spoof checker, but there won't be an interstitial because the domain
+// The navigated domain will fall back to punycode because it fails standard
+// ICU spoof checks in IDN spoof checker. If the feature flag to show
+// interstitials for punycode fallback is enabled, this will show a punycode
+// interstitial. Otherwise, the navigation won't be blocked.
+// but there won't be an interstitial because the domain
 // doesn't match a top domain.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       Punycode_NoMatch) {
-  TestInterstitialNotShown(browser(), GetURL("ɴoτ-τoρ-ďoᛖaiɴ.com"));
-  CheckNoUkm();
+                       Punycode_NoSuggestedUrl_NoInterstitial) {
+  const GURL kNavigatedUrl = GetURL("ɴoτ-τoρ-ďoᛖaiɴ.com");
+
+  if (!punycode_interstitial_enabled()) {
+    TestInterstitialNotShown(browser(), kNavigatedUrl);
+    CheckNoUkm();
+  } else {
+    TestPunycodeInterstitialShown(
+        browser(), kNavigatedUrl,
+        NavigationSuggestionEvent::kFailedSpoofChecks);
+    CheckUkm({kNavigatedUrl}, "MatchType",
+             LookalikeUrlMatchType::kFailedSpoofChecks);
+  }
+}
+
+// The navigated domain will fall back to punycode because it fails spoof checks
+// in IDN spoof checker. The heuristic that changes this domain to punycode
+// (latin middle dot) is configured to show a punycode interstitial.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
+                       Punycode_NoSuggestedUrl_Interstitial) {
+  if (!punycode_interstitial_enabled()) {
+    return;
+  }
+  // Navigate to a domain that doesn't trigger target embedding:
+  const GURL kNavigatedUrl = GetURL("example·com.com");
+  TestPunycodeInterstitialShown(browser(), kNavigatedUrl,
+                                NavigationSuggestionEvent::kFailedSpoofChecks);
+  CheckUkm({kNavigatedUrl}, "MatchType",
+           LookalikeUrlMatchType::kFailedSpoofChecks);
+}
+
+// The navigated domain will fall back to punycode because it fails spoof checks
+// in IDN spoof checker. The heuristic that changes this domain to punycode
+// (latin middle dot) is configured to show a punycode interstitial. The domain
+// is also caught by the target embedding heuristic. Target embedding should
+// take priority.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
+                       PunycodeAndTargetEmbedding_NoSuggestedUrl_Interstitial) {
+  if (!(target_embedding_enabled() && punycode_interstitial_enabled())) {
+    return;
+  }
+  // Navigate to a domain that triggers target embedding:
+  const GURL kNavigatedUrl = GetURL("google·com.com");
+  const GURL kExpectedSuggestedUrl = GetURLWithoutPath("google.com");
+  TestMetricsRecordedAndInterstitialShown(
+      browser(), kNavigatedUrl, kExpectedSuggestedUrl,
+      NavigationSuggestionEvent::kMatchTargetEmbedding);
+  CheckUkm({kNavigatedUrl}, "MatchType",
+           LookalikeUrlMatchType::kTargetEmbedding);
 }
 
 // The navigated domain itself is a top domain or a subdomain of a top domain.
@@ -687,8 +763,9 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // site engagement score above a certain threshold. This should record metrics.
 // It should also show lookalike warning interstitial if configured via
 // a feature param.
+// Disabled for flakes, crbug.com/1106402.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       Idn_SiteEngagement_Match) {
+                       DISABLED_Idn_SiteEngagement_Match) {
   const char* const kEngagedSites[] = {
       "http://site1.com", "http://www.site2.com", "http://sité3.com",
       "http://www.sité4.com"};
@@ -733,7 +810,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
     // site list.
     test_clock()->Advance(base::TimeDelta::FromHours(1));
 
-    TestMetricsRecordedAndMaybeInterstitialShown(
+    TestMetricsRecordedAndInterstitialShown(
         browser(), kNavigatedUrl, kExpectedSuggestedUrl,
         NavigationSuggestionEvent::kMatchSiteEngagement);
 
@@ -768,7 +845,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   SetEngagementScore(browser(), kExpectedSuggestedUrl, kHighEngagement);
-  TestMetricsRecordedAndMaybeInterstitialShown(
+  TestMetricsRecordedAndInterstitialShown(
       browser(), kNavigatedUrl, kExpectedSuggestedUrl,
       NavigationSuggestionEvent::kMatchSiteEngagement);
 }
@@ -825,7 +902,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // site list.
   test_clock()->Advance(base::TimeDelta::FromHours(1));
 
-  TestMetricsRecordedAndMaybeInterstitialShown(
+  TestMetricsRecordedAndInterstitialShown(
       browser(), kNavigatedUrl, kExpectedSuggestedUrl,
       NavigationSuggestionEvent::kMatchSiteEngagement);
 
@@ -855,7 +932,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
     // Advance the clock to force LookalikeUrlService to fetch a new engaged
     // site list.
     test_clock()->Advance(base::TimeDelta::FromHours(1));
-    TestMetricsRecordedAndMaybeInterstitialShown(
+    TestMetricsRecordedAndInterstitialShown(
         browser(), kNavigatedUrl, kEngagedUrl,
         NavigationSuggestionEvent::kMatchSiteEngagement);
 
@@ -880,7 +957,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   {
     test_clock()->Advance(base::TimeDelta::FromHours(1));
 
-    TestMetricsRecordedAndMaybeInterstitialShown(
+    TestMetricsRecordedAndInterstitialShown(
         incognito, kNavigatedUrl, kEngagedUrl,
         NavigationSuggestionEvent::kMatchSiteEngagement);
     ukm_urls.push_back(kNavigatedUrl);
@@ -968,9 +1045,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // we display an interstitial along the way.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        Interstitial_CapturesRedirects) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   {
     // Verify it works when the lookalike domain is the first in the chain
     const GURL kNavigatedUrl =
@@ -1006,9 +1080,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // from the interstitial without interacting with it.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        UkmRecordedAfterNavigateAway) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   const GURL navigated_url = GetURL("googlé.com");
   const GURL subsequent_url = GetURL("example.com");
 
@@ -1022,9 +1093,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // the navigation suggestion.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        UkmRecordedAfterSuggestionAccepted) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   const GURL navigated_url = GetURL("googlé.com");
 
   LoadAndCheckInterstitialAt(browser(), navigated_url);
@@ -1038,9 +1106,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // the navigation suggestion.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        UkmRecordedAfterSuggestionIgnored) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   const GURL navigated_url = GetURL("googlé.com");
 
   LoadAndCheckInterstitialAt(browser(), navigated_url);
@@ -1053,9 +1118,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // Verify that the URL shows normally on pages after a lookalike interstitial.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        UrlShownAfterInterstitial) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   LoadAndCheckInterstitialAt(browser(), GetURL("googlé.com"));
 
   // URL should be showing again when we navigate to a normal URL
@@ -1066,9 +1128,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // Verify that bypassing warnings in the main profile does not affect incognito.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        MainProfileDoesNotAffectIncognito) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   const GURL kNavigatedUrl = GetURL("googlé.com");
 
   // Set low engagement scores in the main profile and in incognito.
@@ -1087,9 +1146,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // Verify that bypassing warnings in incognito does not affect the main profile.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        IncognitoDoesNotAffectMainProfile) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   const GURL kNavigatedUrl = GetURL("sité1.com");
   const GURL kEngagedUrl = GetURL("site1.com");
 
@@ -1112,9 +1168,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // Regression test for crbug/941886.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        RefreshDoesntDismiss) {
-  if (feature_status() == FeatureStatus::kDisabled) {
-    return;
-  }
   // Verify it works when the lookalike domain is the first in the chain.
   const GURL kNavigatedUrl =
       GetLongRedirect("googlé.com", "example.net", "example.com");

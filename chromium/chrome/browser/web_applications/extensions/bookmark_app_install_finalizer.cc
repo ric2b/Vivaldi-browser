@@ -116,14 +116,6 @@ void BookmarkAppInstallFinalizer::FinalizeInstall(
   crx_installer->InstallWebApp(web_app_info);
 }
 
-void BookmarkAppInstallFinalizer::FinalizeFallbackInstallAfterSync(
-    const web_app::AppId& app_id,
-    InstallFinalizedCallback callback) {
-  // TODO(crbug.com/1018630): Install synced bookmark apps using a freshly
-  // fetched manifest instead of sync data.
-  NOTREACHED();
-}
-
 void BookmarkAppInstallFinalizer::FinalizeUninstallAfterSync(
     const web_app::AppId& app_id,
     UninstallWebAppCallback callback) {
@@ -139,8 +131,6 @@ void BookmarkAppInstallFinalizer::FinalizeUpdate(
 
   const Extension* existing_extension = GetEnabledExtension(expected_app_id);
   if (!existing_extension) {
-    DCHECK(ExtensionRegistry::Get(profile_)->GetInstalledExtension(
-        expected_app_id));
     std::move(callback).Run(web_app::AppId(),
                             web_app::InstallResultCode::kWebAppDisabled);
     return;
@@ -149,10 +139,10 @@ void BookmarkAppInstallFinalizer::FinalizeUpdate(
 
   scoped_refptr<CrxInstaller> crx_installer =
       crx_installer_factory_.Run(profile_);
-  crx_installer->set_installer_callback(
-      base::BindOnce(&BookmarkAppInstallFinalizer::OnExtensionUpdated,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(expected_app_id),
-                     std::move(callback), crx_installer));
+  crx_installer->set_installer_callback(base::BindOnce(
+      &BookmarkAppInstallFinalizer::OnExtensionUpdated,
+      weak_ptr_factory_.GetWeakPtr(), std::move(expected_app_id),
+      existing_extension->short_name(), std::move(callback), crx_installer));
   crx_installer->InitializeCreationFlagsForUpdate(existing_extension,
                                                   Extension::NO_FLAGS);
   crx_installer->set_install_source(existing_extension->location());
@@ -289,12 +279,13 @@ void BookmarkAppInstallFinalizer::OnExtensionInstalled(
 
   SetLaunchType(profile_, extension->id(), launch_type);
 
-  registry_controller().SetExperimentalTabbedWindowMode(
-      extension->id(), enable_experimental_tabbed_window);
-
   SetBookmarkAppIsLocallyInstalled(profile_, extension, is_locally_installed);
 
-  registrar().NotifyWebAppInstalled(extension->id());
+  if (!is_legacy_finalizer()) {
+    registry_controller().SetExperimentalTabbedWindowMode(
+        extension->id(), enable_experimental_tabbed_window);
+    registrar().NotifyWebAppInstalled(extension->id());
+  }
 
   std::move(callback).Run(extension->id(),
                           web_app::InstallResultCode::kSuccessNewInstall);
@@ -302,6 +293,7 @@ void BookmarkAppInstallFinalizer::OnExtensionInstalled(
 
 void BookmarkAppInstallFinalizer::OnExtensionUpdated(
     const web_app::AppId& expected_app_id,
+    const std::string& old_name,
     InstallFinalizedCallback callback,
     scoped_refptr<CrxInstaller> crx_installer,
     const base::Optional<CrxInstallError>& error) {
@@ -321,6 +313,9 @@ void BookmarkAppInstallFinalizer::OnExtensionUpdated(
                             web_app::InstallResultCode::kWebAppDisabled);
     return;
   }
+
+  if (!is_legacy_finalizer())
+    registrar().NotifyWebAppManifestUpdated(extension->id(), old_name);
 
   std::move(callback).Run(extension->id(),
                           web_app::InstallResultCode::kSuccessAlreadyInstalled);

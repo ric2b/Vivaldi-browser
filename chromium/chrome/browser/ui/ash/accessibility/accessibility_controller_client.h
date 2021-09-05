@@ -31,6 +31,7 @@ class AccessibilityControllerClient
   void RequestSelectToSpeakStateChange() override;
   void RequestAutoclickScrollableBoundsForPoint(
       gfx::Point& point_in_screen) override;
+  void OnSwitchAccessDisabled() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AccessibilityControllerClient);

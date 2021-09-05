@@ -17,7 +17,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -159,6 +158,7 @@ ThumbnailCache::ThumbnailCache(size_t default_cache_size,
       ui_resource_provider_(nullptr) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   memory_pressure_ = std::make_unique<base::MemoryPressureListener>(
+      FROM_HERE,
       base::Bind(&ThumbnailCache::OnMemoryPressure, base::Unretained(this)));
 }
 
@@ -640,7 +640,7 @@ void ThumbnailCache::WriteTask(TabId tab_id,
   if (!success)
     base::DeleteFile(file_path, false);
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI}, post_write_task);
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, post_write_task);
 }
 
 void ThumbnailCache::WriteJpegTask(
@@ -665,7 +665,7 @@ void ThumbnailCache::WriteJpegTask(
   if (!success)
     base::DeleteFile(file_path, false);
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI}, post_write_task);
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, post_write_task);
 }
 
 void ThumbnailCache::PostWriteTask() {
@@ -709,8 +709,8 @@ void ThumbnailCache::CompressionTask(
     }
   }
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(post_compression_task,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(post_compression_task,
                                 std::move(compressed_data), content_size));
 }
 
@@ -740,8 +740,8 @@ void ThumbnailCache::JpegProcessingTask(
       gfx::JPEGCodec::Encode(result_bitmap, kCompressionQuality, &data);
   DCHECK(result);
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(post_processing_task, std::move(data)));
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(post_processing_task, std::move(data)));
 }
 
 void ThumbnailCache::PostCompressionTask(TabId tab_id,
@@ -897,8 +897,8 @@ void ThumbnailCache::ReadTask(
         base::BindOnce(post_read_task, std::move(compressed_data), scale,
                        content_size));
   } else {
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(post_read_task, std::move(compressed_data),
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(post_read_task, std::move(compressed_data),
                                   scale, content_size));
   }
 }
@@ -994,8 +994,8 @@ void ThumbnailCache::DecompressionTask(
     }
   }
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(post_decompression_callback, success, raw_data_small));
 }
 

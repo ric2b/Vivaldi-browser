@@ -420,6 +420,7 @@ void MixedContentChecker::Count(Frame* frame,
 bool MixedContentChecker::ShouldBlockFetch(
     LocalFrame* frame,
     mojom::RequestContextType request_context,
+    const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
     const base::Optional<String>& devtools_id,
@@ -450,7 +451,7 @@ bool MixedContentChecker::ShouldBlockFetch(
   MixedContentChecker::Count(mixed_frame, request_context, frame);
   if (ContentSecurityPolicy* policy =
           frame->GetSecurityContext()->GetContentSecurityPolicy())
-    policy->ReportMixedContent(url, redirect_status);
+    policy->ReportMixedContent(url_before_redirects, redirect_status);
 
   Settings* settings = mixed_frame->GetSettings();
   // Use the current local frame's client; the embedder doesn't distinguish
@@ -543,8 +544,9 @@ bool MixedContentChecker::ShouldBlockFetch(
   // receive an issue with a devtools_id which it can match to a request.
   CreateMixedContentIssue(
       MainResourceUrlForFrame(mixed_frame), url, request_context, frame,
-      allowed ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
-              : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+      allowed
+          ? mojom::blink::MixedContentResolutionStatus::kMixedContentWarning
+          : mojom::blink::MixedContentResolutionStatus::kMixedContentBlocked,
       devtools_id);
   return !allowed;
 }
@@ -553,6 +555,7 @@ bool MixedContentChecker::ShouldBlockFetch(
 bool MixedContentChecker::ShouldBlockFetchOnWorker(
     const WorkerFetchContext& worker_fetch_context,
     mojom::RequestContextType request_context,
+    const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
     ReportingDisposition reporting_disposition,
@@ -567,7 +570,7 @@ bool MixedContentChecker::ShouldBlockFetchOnWorker(
   worker_fetch_context.CountUsage(WebFeature::kMixedContentPresent);
   worker_fetch_context.CountUsage(WebFeature::kMixedContentBlockable);
   if (auto* policy = worker_fetch_context.GetContentSecurityPolicy())
-    policy->ReportMixedContent(url, redirect_status);
+    policy->ReportMixedContent(url_before_redirects, redirect_status);
 
   // Blocks all mixed content request from worklets.
   // TODO(horo): Revise this when the spec is updated.
@@ -665,8 +668,9 @@ bool MixedContentChecker::IsWebSocketAllowed(
   CreateMixedContentIssue(
       MainResourceUrlForFrame(mixed_frame), url,
       mojom::blink::RequestContextType::FETCH, frame,
-      allowed ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
-              : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+      allowed
+          ? mojom::blink::MixedContentResolutionStatus::kMixedContentWarning
+          : mojom::blink::MixedContentResolutionStatus::kMixedContentBlocked,
       base::Optional<String>());
   return allowed;
 }
@@ -740,7 +744,7 @@ bool MixedContentChecker::IsMixedFormAction(
   CreateMixedContentIssue(
       MainResourceUrlForFrame(mixed_frame), url,
       mojom::blink::RequestContextType::FORM, frame,
-      mojom::blink::MixedContentResolutionStatus::MixedContentWarning,
+      mojom::blink::MixedContentResolutionStatus::kMixedContentWarning,
       base::Optional<String>());
 
   return true;
@@ -780,22 +784,22 @@ bool MixedContentChecker::ShouldAutoupgrade(
 void MixedContentChecker::CheckMixedPrivatePublic(
     LocalFrame* frame,
     const AtomicString& resource_ip_address) {
-  if (!frame || !frame->GetDocument() || !frame->GetDocument()->Loader())
+  if (!frame)
     return;
 
   // Just count these for the moment, don't block them.
   if (network_utils::IsReservedIPAddress(resource_ip_address) &&
-      frame->GetDocument()->GetSecurityContext().AddressSpace() ==
+      frame->GetSecurityContext()->AddressSpace() ==
           network::mojom::IPAddressSpace::kPublic) {
-    UseCounter::Count(frame->GetDocument(),
+    UseCounter::Count(frame->DomWindow(),
                       WebFeature::kMixedContentPrivateHostnameInPublicHostname);
     // We can simplify the IP checks here, as we've already verified that
     // |resourceIPAddress| is a reserved IP address, which means it's also a
     // valid IP address in a normalized form.
     if (resource_ip_address.StartsWith("127.0.0.") ||
         resource_ip_address == "[::1]") {
-      UseCounter::Count(frame->GetDocument(),
-                        frame->GetDocument()->IsSecureContext()
+      UseCounter::Count(frame->DomWindow(),
+                        frame->DomWindow()->IsSecureContext()
                             ? WebFeature::kLoopbackEmbeddedInSecureContext
                             : WebFeature::kLoopbackEmbeddedInNonSecureContext);
     }
@@ -832,6 +836,7 @@ void MixedContentChecker::MixedContentFound(
     const KURL& mixed_content_url,
     mojom::RequestContextType request_context,
     bool was_allowed,
+    const KURL& url_before_redirects,
     bool had_redirect,
     std::unique_ptr<SourceLocation> source_location) {
   // Logs to the frame console.
@@ -842,15 +847,15 @@ void MixedContentChecker::MixedContentFound(
   CreateMixedContentIssue(
       main_resource_url, mixed_content_url, request_context, frame,
       was_allowed
-          ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
-          : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+          ? mojom::blink::MixedContentResolutionStatus::kMixedContentWarning
+          : mojom::blink::MixedContentResolutionStatus::kMixedContentBlocked,
       base::Optional<String>());
   // Reports to the CSP policy.
   ContentSecurityPolicy* policy =
       frame->GetSecurityContext()->GetContentSecurityPolicy();
   if (policy) {
     policy->ReportMixedContent(
-        mixed_content_url,
+        url_before_redirects,
         had_redirect ? ResourceRequest::RedirectStatus::kFollowedRedirect
                      : ResourceRequest::RedirectStatus::kNoRedirect);
   }
@@ -935,7 +940,7 @@ void MixedContentChecker::UpgradeInsecureRequest(
                                 resource_request.Url(), context,
                                 window->document()->GetFrame(),
                                 mojom::blink::MixedContentResolutionStatus::
-                                    MixedContentAutomaticallyUpgraded,
+                                    kMixedContentAutomaticallyUpgraded,
                                 resource_request.GetDevToolsId());
       }
       resource_request.SetIsAutomaticUpgrade(true);

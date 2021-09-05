@@ -56,16 +56,13 @@ android_resources("content_java_resources") {
   ]
 }
 
-action("generate_sandboxed_service_srcjar") {
+action_with_pydeps("generate_sandboxed_service_srcjar") {
   script = "//content/public/android/generate_child_service.py"
-  depfile = "$target_gen_dir/$target_name.d"
 
   _srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
   _rebased_srcjar_path = rebase_path(_srcjar_path, root_build_dir)
 
   args = [
-    "--depfile",
-    rebase_path(depfile, root_build_dir),
     "40",
     _rebased_srcjar_path,
   ]
@@ -282,6 +279,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/DeviceUtils.java",
     "java/src/org/chromium/content_public/browser/GestureListenerManager.java",
     "java/src/org/chromium/content_public/browser/GestureStateListener.java",
+    "java/src/org/chromium/content_public/browser/GestureStateListenerWithScroll.java",
     "java/src/org/chromium/content_public/browser/ImageDownloadCallback.java",
     "java/src/org/chromium/content_public/browser/ImeAdapter.java",
     "java/src/org/chromium/content_public/browser/ImeEventObserver.java",
@@ -347,7 +345,6 @@ java_cpp_enum("content_public_android_java_enums_srcjar") {
     "//content/public/browser/invalidate_type.h",
     "//content/public/browser/navigation_controller.h",
     "//content/public/browser/visibility.h",
-    "//content/public/browser/xr_consent_prompt_level.h",
     "//content/public/common/browser_controls_state.h",
     "//content/public/common/console_message_level.h",
     "//content/public/common/screen_orientation_values.h",
@@ -486,6 +483,7 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/ContentViewScrollingTest.java",
     "javatests/src/org/chromium/content/browser/EncodeHtmlDataUriTest.java",
     "javatests/src/org/chromium/content/browser/GestureDetectorResetTest.java",
+    "javatests/src/org/chromium/content/browser/GestureListenerManagerTest.java",
     "javatests/src/org/chromium/content/browser/ImportantFileWriterAndroidTest.java",
     "javatests/src/org/chromium/content/browser/JavaBridgeActivityTestRule.java",
     "javatests/src/org/chromium/content/browser/JavaBridgeArrayCoercionTest.java",
@@ -571,7 +569,10 @@ junit_binary("content_junit_tests") {
     "//content/public/test/android:content_java_test_support",
     "//media/mojo/mojom:mojom_java",
     "//mojo/public/java:bindings_java",
+    "//mojo/public/mojom/base:base_java",
+    "//third_party/android_deps:androidx_test_core_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
+    "//third_party/hamcrest:hamcrest_java",
     "//ui/android:ui_java",
     "//ui/gfx/geometry/mojom:mojom_java",
   ]

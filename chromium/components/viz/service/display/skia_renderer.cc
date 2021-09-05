@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/optional.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
@@ -62,6 +63,10 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
+
+#if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
+#endif
 
 namespace viz {
 
@@ -836,8 +841,6 @@ void SkiaRenderer::BindFramebufferToOutputSurface() {
   switch (draw_mode_) {
     case DrawMode::DDL: {
       root_canvas_ = skia_output_surface_->BeginPaintCurrentFrame();
-      // TODO(https://crbug.com/1038107): Handle BeginPaintCurrentFrame() fail.
-      CHECK(root_canvas_);
       break;
     }
     case DrawMode::SKPRECORD: {
@@ -1119,12 +1122,25 @@ void SkiaRenderer::PrepareCanvasForRPDQ(const DrawRPDQParams& rpdq_params,
     }
   }
 
+  if (rpdq_params.mask_image.get()) {
+    // The old behavior (in skia) was to filter the clipmask based on the
+    // setting in the layer's paint. Now we can set that to whatever we want
+    // when we make the clip-shader. For now, I will replicate the old (impl)
+    // logic.
+    SkFilterQuality filtering =
+        layer_paint.getFilterQuality() == kNone_SkFilterQuality
+            ? kNone_SkFilterQuality
+            : kLow_SkFilterQuality;
+    current_canvas_->save();
+    current_canvas_->clipShader(rpdq_params.mask_image->makeShader(
+        SkTileMode::kClamp, SkTileMode::kClamp,
+        &rpdq_params.mask_to_quad_matrix, filtering));
+  }
   SkRect bounds = gfx::RectFToSkRect(rpdq_params.bypass_clip.has_value()
                                          ? *rpdq_params.bypass_clip
                                          : params->visible_rect);
-  current_canvas_->saveLayer(SkCanvas::SaveLayerRec(
-      &bounds, &layer_paint, backdrop_filter.get(),
-      rpdq_params.mask_image.get(), &rpdq_params.mask_to_quad_matrix, 0));
+  current_canvas_->saveLayer(
+      SkCanvas::SaveLayerRec(&bounds, &layer_paint, backdrop_filter.get(), 0));
 
   // If we have backdrop filtered content (and not transparent black like with
   // regular render passes), we have to clear out the parts of the layer that
@@ -2167,11 +2183,47 @@ void SkiaRenderer::ScheduleOverlays() {
   }
   skia_output_surface_->ScheduleOverlays(
       std::move(current_frame()->overlay_list), std::move(sync_tokens));
-#elif defined(OS_MACOSX) || defined(USE_OZONE)
+#elif defined(OS_MACOSX)
+  DCHECK(output_surface_->capabilities().supports_surfaceless);
+  auto& locks = pending_overlay_locks_.back();
+  std::vector<gpu::SyncToken> sync_tokens;
+  for (CALayerOverlay& ca_layer_overlay : current_frame()->overlay_list) {
+    // Some overlays are for solid-color layers.
+    if (!ca_layer_overlay.contents_resource_id)
+      continue;
+
+    // TODO(https://crbug.com/894929): Track IOSurface in-use instead of just
+    // unlocking after the next SwapBuffers is completed.
+    locks.emplace_back(resource_provider_,
+                       ca_layer_overlay.contents_resource_id);
+    auto& lock = locks.back();
+
+    // Sync tokens ensure the texture to be overlaid is available before
+    // scheduling it for display.
+    if (lock.sync_token().HasData())
+      sync_tokens.push_back(lock.sync_token());
+
+    // Populate the |mailbox| of the CALayerOverlay which will be used to look
+    // up the corresponding GLImageIOSurface when building the CALayer tree.
+    ca_layer_overlay.mailbox = lock.mailbox();
+    DCHECK(!ca_layer_overlay.mailbox.IsZero());
+  }
+  skia_output_surface_->ScheduleOverlays(
+      std::move(current_frame()->overlay_list), std::move(sync_tokens));
+#elif defined(USE_OZONE)
+  // For platforms that don't support overlays, the
+  // current_frame()->overlay_list should be empty, and this code should not be
+  // reached.
+  if (!features::IsUsingOzonePlatform()) {
+    NOTREACHED();
+    return;
+  }
+
   NOTIMPLEMENTED_LOG_ONCE();
 #else
-  // For platforms doesn't support overlays, the current_frame()->overlay_list
-  // should be empty, and here should not be reached.
+  // For platforms that don't support overlays, the
+  // current_frame()->overlay_list should be empty, and this code should not be
+  // reached.
   NOTREACHED();
 #endif
 }
@@ -2411,6 +2463,10 @@ void SkiaRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad,
     }
   }
 
+  if (!content_image) {
+    return;
+  }
+
   // If the RP generated mipmaps when it was created, set quality to medium,
   // which turns on mipmap filtering in Skia.
   if (backing.generate_mipmap)
@@ -2562,8 +2618,10 @@ void SkiaRenderer::AllocateRenderPassResourceIfNeeded(
     const RenderPassId& render_pass_id,
     const RenderPassRequirements& requirements) {
   auto it = render_pass_backings_.find(render_pass_id);
-  if (it != render_pass_backings_.end())
+  if (it != render_pass_backings_.end()) {
+    DCHECK(gfx::Rect(it->second.size).Contains(gfx::Rect(requirements.size)));
     return;
+  }
 
   // TODO(penghuang): check supported format correctly.
   gpu::Capabilities caps;

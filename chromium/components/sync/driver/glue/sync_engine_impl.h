@@ -76,12 +76,10 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   void ActivateProxyDataType(ModelType type) override;
   void DeactivateProxyDataType(ModelType type) override;
   void EnableEncryptEverything() override;
-  UserShare* GetUserShare() const override;
   const Status& GetDetailedStatus() const override;
   void HasUnsyncedItemsForTest(
       base::OnceCallback<void(bool)> cb) const override;
   void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const override;
-  void FlushDirectory() const override;
   void RequestBufferedProtocolEventsAndEnableForwarding() override;
   void DisableProtocolEventForwarding() override;
   void EnableDirectoryTypeDebugInfoForwarding() override;

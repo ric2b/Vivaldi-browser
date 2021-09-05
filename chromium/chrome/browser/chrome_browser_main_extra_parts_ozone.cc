@@ -1,0 +1,58 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/chrome_browser_main_extra_parts_ozone.h"
+
+#include "base/bind.h"
+#include "base/callback.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+
+#if defined(USE_X11)
+#include "ui/base/x/x11_error_handler.h"
+#else
+#include "ui/base/ui_base_features.h"
+#include "ui/ozone/public/ozone_platform.h"
+#endif
+
+ChromeBrowserMainExtraPartsOzone::ChromeBrowserMainExtraPartsOzone() = default;
+
+ChromeBrowserMainExtraPartsOzone::~ChromeBrowserMainExtraPartsOzone() = default;
+
+void ChromeBrowserMainExtraPartsOzone::PreEarlyInitialization() {
+#if defined(USE_OZONE)
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::PreEarlyInitialization();
+    return;
+  }
+#endif
+#if defined(USE_X11)
+  ui::SetNullErrorHandlers();
+#endif
+}
+
+void ChromeBrowserMainExtraPartsOzone::PostMainMessageLoopStart() {
+  auto shutdown_cb = base::BindOnce(&chrome::SessionEnding);
+#if defined(USE_OZONE)
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::GetInstance()->PostMainMessageLoopStart(
+        std::move(shutdown_cb));
+    return;
+  }
+#endif
+#if defined(USE_X11)
+  ui::SetErrorHandlers(std::move(shutdown_cb));
+#endif
+}
+
+void ChromeBrowserMainExtraPartsOzone::PostMainMessageLoopRun() {
+#if defined(USE_OZONE)
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::GetInstance()->PostMainMessageLoopRun();
+    return;
+  }
+#endif
+#if defined(USE_X11)
+  ui::SetEmptyErrorHandlers();
+#endif
+}

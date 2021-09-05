@@ -264,6 +264,7 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
 
   setup.build_settings()->set_python_path(
       base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
+  setup.build_settings()->set_ninja_required_version(Version{1, 9, 0});
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
@@ -286,10 +287,12 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
       " | obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input1\n"
       "  depfile = gen/input1.d\n"
+      "  deps = gcc\n"
       "build input2.out: __foo_bar___rule ../../foo/input2.txt"
       " | obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input2\n"
       "  depfile = gen/input2.d\n"
+      "  deps = gcc\n"
       "\n"
       "build obj/foo/bar.stamp: stamp input1.out input2.out\n";
   EXPECT_EQ(expected_linux, out.str());

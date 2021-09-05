@@ -161,9 +161,9 @@ class MockVideoCaptureObserver final
 
 media::mojom::VideoFrameInfoPtr GetVideoFrameInfo() {
   return media::mojom::VideoFrameInfo::New(
-      base::TimeDelta(), base::Value(base::Value::Type::DICTIONARY),
-      media::PIXEL_FORMAT_I420, gfx::Size(320, 180), gfx::Rect(320, 180),
-      gfx::ColorSpace::CreateREC709(), nullptr);
+      base::TimeDelta(), media::VideoFrameMetadata(), media::PIXEL_FORMAT_I420,
+      gfx::Size(320, 180), gfx::Rect(320, 180), gfx::ColorSpace::CreateREC709(),
+      nullptr);
 }
 
 }  // namespace
@@ -187,8 +187,8 @@ class SingleClientVideoCaptureHostTest : public ::testing::Test {
     run_loop.Run();
 
     // The video capture device is launched.
-    EXPECT_TRUE(!!launched_device_);
-    EXPECT_TRUE(!!frame_receiver_);
+    EXPECT_TRUE(launched_device_);
+    EXPECT_TRUE(frame_receiver_);
   }
 
   ~SingleClientVideoCaptureHostTest() override {

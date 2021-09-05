@@ -85,7 +85,7 @@ SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin,
+    const url::Origin& origin,
     const CredentialsCallback& callback) {
   NOTIMPLEMENTED();
   return false;
@@ -163,10 +163,6 @@ IOSChromePasswordManagerClient::GetPasswordFeatureManager() const {
   return &password_feature_manager_;
 }
 
-bool IOSChromePasswordManagerClient::IsMainFrameSecure() const {
-  return password_manager::WebStateContentIsSecureHtml(delegate_.webState);
-}
-
 PrefService* IOSChromePasswordManagerClient::GetPrefs() const {
   return (delegate_.browserState)->GetPrefs();
 }
@@ -184,7 +180,7 @@ PasswordStore* IOSChromePasswordManagerClient::GetAccountPasswordStore() const {
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin) {
+    const url::Origin& origin) {
   DCHECK(!local_forms.empty());
   helper_.NotifyUserAutoSignin();
   [delegate_ showAutosigninNotification:std::move(local_forms[0])];
@@ -225,8 +221,16 @@ bool IOSChromePasswordManagerClient::IsFillingEnabled(const GURL& url) const {
          GURL(password_manager::kPasswordManagerAccountDashboardURL);
 }
 
-const GURL& IOSChromePasswordManagerClient::GetLastCommittedEntryURL() const {
+bool IOSChromePasswordManagerClient::IsCommittedMainFrameSecure() const {
+  return password_manager::WebStateContentIsSecureHtml(delegate_.webState);
+}
+
+const GURL& IOSChromePasswordManagerClient::GetLastCommittedURL() const {
   return delegate_.lastCommittedURL;
+}
+
+url::Origin IOSChromePasswordManagerClient::GetLastCommittedOrigin() const {
+  return url::Origin::Create(delegate_.lastCommittedURL);
 }
 
 std::string IOSChromePasswordManagerClient::GetPageLanguage() const {
@@ -252,7 +256,7 @@ ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
 PasswordManagerMetricsRecorder*
 IOSChromePasswordManagerClient::GetMetricsRecorder() {
   if (!metrics_recorder_) {
-    metrics_recorder_.emplace(GetUkmSourceId(), delegate_.lastCommittedURL,
+    metrics_recorder_.emplace(GetUkmSourceId(),
                               /*navigation_metric_recorder=*/nullptr);
   }
   return base::OptionalOrNullptr(metrics_recorder_);

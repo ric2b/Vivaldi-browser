@@ -53,8 +53,12 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
       'removeCompromisedCredential',
       'recordPasswordCheckInteraction',
       'recordPasswordCheckReferrer',
+      'isOptedInForAccountStorage',
       'removeSavedPassword',
+      'removeSavedPasswords',
+      'movePasswordToAccount',
       'removeException',
+      'removeExceptions',
     ]);
 
     /** @private {!PasswordManagerExpectations} */
@@ -112,6 +116,17 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
   }
 
   /** @override */
+  movePasswordToAccount(id) {
+    this.methodCalled('movePasswordToAccount', id);
+  }
+
+  /** @override */
+  removeSavedPasswords(ids) {
+    this.actual_.removed.passwords += ids.length;
+    this.methodCalled('removeSavedPasswords', ids);
+  }
+
+  /** @override */
   addExceptionListChangedListener(listener) {
     this.actual_.listening.exceptions++;
     this.lastCallback.addExceptionListChangedListener = listener;
@@ -132,6 +147,12 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
   removeException(id) {
     this.actual_.removed.exceptions++;
     this.methodCalled('removeException', id);
+  }
+
+  /** @override */
+  removeExceptions(ids) {
+    this.actual_.removed.exceptions += ids.length;
+    this.methodCalled('removeExceptions', ids);
   }
 
   /** @override */
@@ -167,6 +188,7 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
 
   /** @override */
   isOptedInForAccountStorage() {
+    this.methodCalled('isOptedInForAccountStorage');
     this.actual_.requested.accountStorageOptInState++;
     return Promise.resolve(this.isOptedInForAccountStorage_);
   }

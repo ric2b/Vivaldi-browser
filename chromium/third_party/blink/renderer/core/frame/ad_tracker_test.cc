@@ -113,7 +113,7 @@ class TestAdTracker : public AdTracker {
   void SetAdSuffix(const String& ad_suffix) { ad_suffix_ = ad_suffix; }
   ~TestAdTracker() override {}
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(execution_context_);
     AdTracker::Trace(visitor);
   }
@@ -1257,8 +1257,12 @@ TEST_F(AdTrackerSimTest, StyleRecalcCausedByAdScript) {
   )HTML");
   stylesheet.Complete(kStylesheetWithVanillaResources);
 
+  Compositor().BeginFrame();
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(ad_tracker_->UrlHasBeenRequested(kVanillaFontURL));
+  // @font-face rules have fetches set up for src descriptors when the font face
+  // is initialized in FontFace::InitCSSFontFace(). The fetch is not actually
+  // performed, but the AdTracker is notified.
+  EXPECT_TRUE(ad_tracker_->UrlHasBeenRequested(kVanillaFontURL));
   EXPECT_FALSE(ad_tracker_->UrlHasBeenRequested(kVanillaImageURL));
 
   // We override these to ensure the ad script appears on top of the stack when

@@ -61,7 +61,7 @@ class MockPlatformTiming : public DocumentTimeline::PlatformTiming {
  public:
   MOCK_METHOD1(WakeAfter, void(base::TimeDelta));
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     DocumentTimeline::PlatformTiming::Trace(visitor);
   }
 };
@@ -75,7 +75,9 @@ class TestDocumentTimeline : public DocumentTimeline {
     DocumentTimeline::ScheduleServiceOnNextFrame();
     schedule_next_service_called_ = true;
   }
-  void Trace(Visitor* visitor) override { DocumentTimeline::Trace(visitor); }
+  void Trace(Visitor* visitor) const override {
+    DocumentTimeline::Trace(visitor);
+  }
   bool ScheduleNextServiceCalled() const {
     return schedule_next_service_called_;
   }
@@ -198,7 +200,7 @@ TEST_F(AnimationDocumentTimelineTest, CurrentTimeSeconds) {
   EXPECT_EQ(2, timeline->CurrentTimeSeconds());
   EXPECT_EQ(2000, timeline->currentTime());
 
-  auto* document_without_frame = MakeGarbageCollected<Document>();
+  auto* document_without_frame = Document::CreateForTest();
   auto* inactive_timeline = MakeGarbageCollected<DocumentTimeline>(
       document_without_frame, base::TimeDelta(), platform_timing);
 

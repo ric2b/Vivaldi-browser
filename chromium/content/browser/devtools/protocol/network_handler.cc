@@ -64,6 +64,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -181,10 +182,10 @@ class CookieRetrieverNetworkService
   CookieRetrieverNetworkService(std::unique_ptr<GetCookiesCallback> callback)
       : callback_(std::move(callback)) {}
 
-  void GotCookies(const net::CookieStatusList& cookies,
-                  const net::CookieStatusList& excluded_cookies) {
-    for (const auto& cookie_with_status : cookies) {
-      const net::CanonicalCookie& cookie = cookie_with_status.cookie;
+  void GotCookies(const net::CookieAccessResultList& cookies,
+                  const net::CookieAccessResultList& excluded_cookies) {
+    for (const auto& cookie_with_access_result : cookies) {
+      const net::CanonicalCookie& cookie = cookie_with_access_result.cookie;
       std::string key = base::StringPrintf(
           "%s::%s::%s::%d", cookie.Name().c_str(), cookie.Domain().c_str(),
           cookie.Path().c_str(), cookie.IsSecure());
@@ -440,6 +441,11 @@ std::unique_ptr<Network::ResourceTiming> GetTiming(
                            load_timing.request_start))
       .SetWorkerStart(-1)
       .SetWorkerReady(-1)
+      .SetWorkerFetchStart(timeDelta(load_timing.service_worker_fetch_start,
+                                     load_timing.request_start))
+      .SetWorkerRespondWithSettled(
+          timeDelta(load_timing.service_worker_respond_with_settled,
+                    load_timing.request_start))
       .SetSendStart(
           timeDelta(load_timing.send_start, load_timing.request_start))
       .SetSendEnd(timeDelta(load_timing.send_end, load_timing.request_start))
@@ -543,65 +549,64 @@ std::unique_ptr<Array<Network::SignedExchangeError>> BuildSignedExchangeErrors(
 }
 
 std::unique_ptr<Array<Network::SetCookieBlockedReason>>
-GetProtocolBlockedSetCookieReason(
-    net::CanonicalCookie::CookieInclusionStatus status) {
+GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
   std::unique_ptr<Array<Network::SetCookieBlockedReason>> blockedReasons =
       std::make_unique<Array<Network::SetCookieBlockedReason>>();
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SECURE_ONLY)) {
+          net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY)) {
     blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::SecureOnly);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_STRICT)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::SameSiteStrict);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
     blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::SameSiteLax);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::
+          net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_NONE_INSECURE)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::SameSiteNoneInsecure);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_USER_PREFERENCES)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::UserPreferences);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_FAILURE_TO_STORE)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE)) {
     blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::SyntaxError);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_NONCOOKIEABLE_SCHEME)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_NONCOOKIEABLE_SCHEME)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::SchemeNotSupported);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_OVERWRITE_SECURE)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_OVERWRITE_SECURE)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::OverwriteSecure);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_INVALID_DOMAIN)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::InvalidDomain);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_INVALID_PREFIX)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_INVALID_PREFIX)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::InvalidPrefix);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
+          net::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::UnknownError);
   }
@@ -610,49 +615,48 @@ GetProtocolBlockedSetCookieReason(
 }
 
 std::unique_ptr<Array<Network::CookieBlockedReason>>
-GetProtocolBlockedCookieReason(
-    net::CanonicalCookie::CookieInclusionStatus status) {
+GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
   std::unique_ptr<Array<Network::CookieBlockedReason>> blockedReasons =
       std::make_unique<Array<Network::CookieBlockedReason>>();
 
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SECURE_ONLY)) {
+          net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::SecureOnly);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH)) {
+          net::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::NotOnPath);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_DOMAIN_MISMATCH)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::DomainMismatch);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_STRICT)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteStrict);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteLax);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::
+          net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
     blockedReasons->push_back(
         Network::CookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_NONE_INSECURE)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE)) {
     blockedReasons->push_back(
         Network::CookieBlockedReasonEnum::SameSiteNoneInsecure);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_USER_PREFERENCES)) {
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
     blockedReasons->push_back(
         Network::CookieBlockedReasonEnum::UserPreferences);
   }
   if (status.HasExclusionReason(
-          net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
+          net::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::UnknownError);
   }
 
@@ -683,16 +687,16 @@ BuildProtocolBlockedSetCookies(const net::CookieAndLineStatusList& net_list) {
 }
 
 std::unique_ptr<Array<Network::BlockedCookieWithReason>>
-BuildProtocolAssociatedCookies(const net::CookieStatusList& net_list) {
+BuildProtocolAssociatedCookies(const net::CookieAccessResultList& net_list) {
   auto protocol_list =
       std::make_unique<Array<Network::BlockedCookieWithReason>>();
 
-  for (const net::CookieWithStatus& cookie : net_list) {
+  for (const net::CookieWithAccessResult& cookie : net_list) {
     std::unique_ptr<Array<Network::CookieBlockedReason>> blocked_reasons =
-        GetProtocolBlockedCookieReason(cookie.status);
+        GetProtocolBlockedCookieReason(cookie.access_result.status);
     // Note that the condition below is not always true,
     // as there might be blocked reasons that we do not report.
-    if (blocked_reasons->size() || cookie.status.IsInclude()) {
+    if (blocked_reasons->size() || cookie.access_result.status.IsInclude()) {
       protocol_list->push_back(
           Network::BlockedCookieWithReason::Create()
               .SetBlockedReasons(std::move(blocked_reasons))
@@ -814,8 +818,7 @@ NetworkHandler::NetworkHandler(
   have_configured_service_worker_context = true;
 }
 
-NetworkHandler::~NetworkHandler() {
-}
+NetworkHandler::~NetworkHandler() = default;
 
 // static
 std::unique_ptr<Array<Network::Cookie>> NetworkHandler::BuildCookieArray(
@@ -1212,10 +1215,9 @@ void NetworkHandler::SetCookies(
     cookie_manager->SetCanonicalCookie(
         *cookie, net::cookie_util::SimulatedCookieSource(*cookie, "https"),
         options,
-        base::BindOnce(
-            [](base::RepeatingClosure callback,
-               net::CanonicalCookie::CookieInclusionStatus) { callback.Run(); },
-            barrier_closure));
+        base::BindOnce([](base::RepeatingClosure callback,
+                          net::CookieInclusionStatus) { callback.Run(); },
+                       barrier_closure));
   }
 }
 
@@ -1433,6 +1435,20 @@ std::unique_ptr<protocol::Object> BuildResponseHeaders(
   return std::make_unique<protocol::Object>(std::move(headers_dict));
 }
 
+String BuildServiceWorkerResponseSource(
+    const network::mojom::URLResponseHead& info) {
+  switch (info.service_worker_response_source) {
+    case network::mojom::FetchResponseSource::kCacheStorage:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::CacheStorage;
+    case network::mojom::FetchResponseSource::kHttpCache:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::HttpCache;
+    case network::mojom::FetchResponseSource::kNetwork:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::Network;
+    case network::mojom::FetchResponseSource::kUnspecified:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::FallbackCode;
+  }
+}
+
 std::unique_ptr<Network::Response> BuildResponse(
     const GURL& url,
     const network::mojom::URLResponseHead& info) {
@@ -1464,7 +1480,18 @@ std::unique_ptr<Network::Response> BuildResponse(
                                 info.load_timing.request_start_time)
           .Build();
   response->SetFromServiceWorker(info.was_fetched_via_service_worker);
+  if (info.was_fetched_via_service_worker) {
+    response->SetServiceWorkerResponseSource(
+        BuildServiceWorkerResponseSource(info));
+  }
   response->SetFromPrefetchCache(info.was_in_prefetch_cache);
+  if (!info.response_time.is_null()) {
+    response->SetResponseTime(info.response_time.ToJsTimeIgnoringNull());
+  }
+  if (!info.cache_storage_cache_name.empty()) {
+    response->SetCacheStorageCacheName(info.cache_storage_cache_name);
+  }
+
   auto* raw_info = info.raw_request_response_info.get();
   if (raw_info) {
     if (raw_info->http_status_code) {
@@ -2095,7 +2122,7 @@ void NetworkHandler::SetNetworkConditions(
 
 void NetworkHandler::OnRequestWillBeSentExtraInfo(
     const std::string& devtools_request_id,
-    const net::CookieStatusList& request_cookie_list,
+    const net::CookieAccessResultList& request_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers) {
   if (!enabled_)
     return;

@@ -19,6 +19,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_discover_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
@@ -29,6 +30,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_sink.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_favicon_mediator.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_service_bridge_observer.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
@@ -93,6 +95,9 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 // suggested content.
 @property(nonatomic, strong)
     ContentSuggestionsSectionInformation* learnMoreSectionInfo;
+// Section Info for the section containing the Discover feed.
+@property(nonatomic, strong)
+    ContentSuggestionsSectionInformation* discoverSectionInfo;
 // Whether the page impression has been recorded.
 @property(nonatomic, assign) BOOL recordedPageImpression;
 // The ContentSuggestionsService, serving suggestions.
@@ -111,6 +116,8 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 // reading list count.
 @property(nonatomic, strong)
     ContentSuggestionsMostVisitedActionItem* readingListItem;
+// Item for the Discover feed.
+@property(nonatomic, strong) ContentSuggestionsDiscoverItem* discoverItem;
 // Number of unread items in reading list model.
 @property(nonatomic, assign) NSInteger readingListUnreadCount;
 
@@ -130,7 +137,8 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
            mostVisitedSite:
                (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites
           readingListModel:(ReadingListModel*)readingListModel
-               prefService:(PrefService*)prefService {
+               prefService:(PrefService*)prefService
+              discoverFeed:(UIViewController*)discoverFeed {
   self = [super init];
   if (self) {
     _contentArticlesEnabled =
@@ -151,6 +159,10 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
     _learnMoreSectionInfo = LearnMoreSectionInformation();
 
     _learnMoreItem = [[ContentSuggestionsLearnMoreItem alloc] init];
+
+    _discoverSectionInfo = DiscoverSectionInformation();
+    _discoverItem = [[ContentSuggestionsDiscoverItem alloc] init];
+    _discoverItem.discoverFeed = discoverFeed;
 
     _notificationPromo = std::make_unique<NotificationPromoWhatsNew>(
         GetApplicationContext()->GetLocalState());
@@ -204,22 +216,29 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 
   [sectionsInfo addObject:self.mostVisitedSectionInfo];
 
-  std::vector<ntp_snippets::Category> categories =
-      self.contentService->GetCategories();
+  if (!IsDiscoverFeedEnabled()) {
+    std::vector<ntp_snippets::Category> categories =
+        self.contentService->GetCategories();
 
-  for (auto& category : categories) {
-    ContentSuggestionsCategoryWrapper* categoryWrapper =
-        [ContentSuggestionsCategoryWrapper wrapperWithCategory:category];
-    if (!self.sectionInformationByCategory[categoryWrapper]) {
-      [self addSectionInformationForCategory:category];
+    for (auto& category : categories) {
+      ContentSuggestionsCategoryWrapper* categoryWrapper =
+          [ContentSuggestionsCategoryWrapper wrapperWithCategory:category];
+      if (!self.sectionInformationByCategory[categoryWrapper]) {
+        [self addSectionInformationForCategory:category];
+      }
+      if ([self isCategoryAvailable:category]) {
+        [sectionsInfo
+            addObject:self.sectionInformationByCategory[categoryWrapper]];
+      }
     }
-    if ([self isCategoryAvailable:category]) {
-      [sectionsInfo
-          addObject:self.sectionInformationByCategory[categoryWrapper]];
-    }
+
+    [sectionsInfo addObject:self.learnMoreSectionInfo];
   }
 
-  [sectionsInfo addObject:self.learnMoreSectionInfo];
+  if (IsDiscoverFeedEnabled() &&
+      self.contentArticlesEnabled->GetValue()->GetBool()) {
+    [sectionsInfo addObject:self.discoverSectionInfo];
+  }
 
   return sectionsInfo;
 }
@@ -246,7 +265,9 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
     [convertedSuggestions addObjectsFromArray:self.actionButtonItems];
   } else if (sectionInfo == self.learnMoreSectionInfo) {
     [convertedSuggestions addObject:self.learnMoreItem];
-  } else {
+  } else if (sectionInfo == self.discoverSectionInfo) {
+    [convertedSuggestions addObject:self.discoverItem];
+  } else if (!IsDiscoverFeedEnabled()) {
     ntp_snippets::Category category =
         [[self categoryWrapperForSectionInfo:sectionInfo] category];
 

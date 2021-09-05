@@ -23,6 +23,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
 #include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -38,8 +39,6 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_service.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/features/feature_session_type.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
 #include "ui/base/ui_base_features.h"
@@ -100,56 +99,12 @@ void RecordKioskLaunchUMA(bool is_auto_launch) {
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// AppLaunchController::AppWindowWatcher
-
-class AppLaunchController::AppWindowWatcher
-    : public extensions::AppWindowRegistry::Observer {
- public:
-  explicit AppWindowWatcher(AppLaunchController* controller,
-                            const std::string& app_id)
-      : controller_(controller),
-        app_id_(app_id),
-        window_registry_(
-            extensions::AppWindowRegistry::Get(controller->profile_)) {
-    if (!window_registry_->GetAppWindowsForApp(app_id).empty()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::BindOnce(&AppWindowWatcher::NotifyAppWindowCreated,
-                                    weak_factory_.GetWeakPtr()));
-      return;
-    } else {
-      window_registry_->AddObserver(this);
-    }
-  }
-  ~AppWindowWatcher() override { window_registry_->RemoveObserver(this); }
-
- private:
-  // extensions::AppWindowRegistry::Observer overrides:
-  void OnAppWindowAdded(extensions::AppWindow* app_window) override {
-    if (app_window->extension_id() == app_id_) {
-      window_registry_->RemoveObserver(this);
-      NotifyAppWindowCreated();
-    }
-  }
-
-  void NotifyAppWindowCreated() { controller_->OnAppWindowCreated(); }
-
-  AppLaunchController* controller_;
-  std::string app_id_;
-  extensions::AppWindowRegistry* window_registry_;
-  base::WeakPtrFactory<AppWindowWatcher> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppWindowWatcher);
-};
-
-////////////////////////////////////////////////////////////////////////////////
 // AppLaunchController
 
 AppLaunchController::AppLaunchController(const std::string& app_id,
-                                         bool diagnostic_mode,
                                          LoginDisplayHost* host,
                                          OobeUI* oobe_ui)
     : app_id_(app_id),
-      diagnostic_mode_(diagnostic_mode),
       host_(host),
       oobe_ui_(oobe_ui),
       app_launch_splash_screen_view_(
@@ -160,10 +115,10 @@ AppLaunchController::~AppLaunchController() {
     app_launch_splash_screen_view_->SetDelegate(nullptr);
 }
 
-void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
+void AppLaunchController::StartAppLaunch(bool auto_launch) {
   SYSLOG(INFO) << "Starting kiosk mode...";
 
-  RecordKioskLaunchUMA(is_auto_launch);
+  RecordKioskLaunchUMA(auto_launch);
 
   host_->GetLoginDisplay()->SetUIEnabled(true);
 
@@ -177,28 +132,12 @@ void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
   CHECK(KioskAppManager::Get());
   CHECK(KioskAppManager::Get()->GetApp(app_id_, &app));
 
-  int auto_launch_delay = -1;
-  if (is_auto_launch) {
-    if (!CrosSettings::Get()->GetInteger(
-            kAccountsPrefDeviceLocalAccountAutoLoginDelay,
-            &auto_launch_delay)) {
-      auto_launch_delay = 0;
-    }
-    DCHECK_EQ(0, auto_launch_delay)
-        << "Kiosks do not support non-zero auto-login delays";
-
-    // If we are launching a kiosk app with zero delay, mark it appropriately.
-    if (auto_launch_delay == 0)
-      KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(app_id_);
+  if (auto_launch) {
+    KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(app_id_);
   }
 
-  extensions::SetCurrentFeatureSessionType(
-      is_auto_launch && auto_launch_delay == 0
-          ? extensions::FeatureSessionType::AUTOLAUNCHED_KIOSK
-          : extensions::FeatureSessionType::KIOSK);
-
-  kiosk_profile_loader_.reset(
-      new KioskProfileLoader(app.account_id, false, this));
+  kiosk_profile_loader_.reset(new KioskProfileLoader(
+      app.account_id, KioskAppType::CHROME_APP, false, this));
   kiosk_profile_loader_->Start();
 }
 
@@ -314,8 +253,7 @@ void AppLaunchController::OnProfileLoaded(Profile* profile) {
   ChromeKeyboardControllerClient::Get()->RebuildKeyboardIfEnabled();
 
   kiosk_profile_loader_.reset();
-  startup_app_launcher_.reset(
-      new StartupAppLauncher(profile_, app_id_, diagnostic_mode_, this));
+  startup_app_launcher_.reset(new StartupAppLauncher(profile_, app_id_, this));
   startup_app_launcher_->Initialize();
 
   if (show_network_config_ui_after_profile_load_)
@@ -325,6 +263,11 @@ void AppLaunchController::OnProfileLoaded(Profile* profile) {
 void AppLaunchController::OnProfileLoadFailed(
     KioskAppLaunchError::Error error) {
   OnLaunchFailed(error);
+}
+
+void AppLaunchController::OnOldEncryptionDetected(
+    const UserContext& user_context) {
+  NOTREACHED();
 }
 
 void AppLaunchController::ClearNetworkWaitTimer() {
@@ -458,16 +401,16 @@ void AppLaunchController::InitializeNetwork() {
     OnNetworkStateChanged(/*online*/ true);
   }
 }
-bool AppLaunchController::IsNetworkReady() {
+bool AppLaunchController::IsNetworkReady() const {
   return app_launch_splash_screen_view_ &&
          app_launch_splash_screen_view_->IsNetworkReady();
 }
 
-bool AppLaunchController::ShouldSkipAppInstallation() {
+bool AppLaunchController::ShouldSkipAppInstallation() const {
   return false;
 }
 
-void AppLaunchController::OnInstallingApp() {
+void AppLaunchController::OnAppInstalling() {
   if (!app_launch_splash_screen_view_)
     return;
 
@@ -486,7 +429,7 @@ void AppLaunchController::OnInstallingApp() {
   }
 }
 
-void AppLaunchController::OnReadyToLaunch() {
+void AppLaunchController::OnAppPrepared() {
   launcher_ready_ = true;
 
   if (block_app_launch)
@@ -512,22 +455,19 @@ void AppLaunchController::OnReadyToLaunch() {
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(kAppInstallSplashScreenMinTimeMS -
                                           time_taken_ms),
-        this, &AppLaunchController::OnReadyToLaunch);
+        this, &AppLaunchController::OnAppPrepared);
     return;
   }
 
   startup_app_launcher_->LaunchApp();
 }
 
-void AppLaunchController::OnLaunchSucceeded() {
+void AppLaunchController::OnAppLaunched() {
   SYSLOG(INFO) << "Kiosk launch succeeded, wait for app window.";
   if (app_launch_splash_screen_view_) {
     app_launch_splash_screen_view_->UpdateAppLaunchState(
         AppLaunchSplashScreenView::APP_LAUNCH_STATE_WAITING_APP_WINDOW);
   }
-
-  DCHECK(!app_window_watcher_);
-  app_window_watcher_.reset(new AppWindowWatcher(this, app_id_));
 }
 
 void AppLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
@@ -552,7 +492,7 @@ void AppLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
   chrome::AttemptUserExit();
 }
 
-bool AppLaunchController::IsShowingNetworkConfigScreen() {
+bool AppLaunchController::IsShowingNetworkConfigScreen() const {
   return network_config_requested_;
 }
 

@@ -19,6 +19,7 @@ const SubstitutionTypes CSubstitutions = {
     &CSubstitutionLinkerInputs, &CSubstitutionLinkerInputsNewline,
     &CSubstitutionLdFlags,      &CSubstitutionLibs,
     &CSubstitutionSoLibs,       &CSubstitutionFrameworks,
+    &CSubstitutionRlibs,
 
     &CSubstitutionArFlags,
 };
@@ -44,6 +45,7 @@ const Substitution CSubstitutionLinkerInputsNewline = {"{{inputs_newline}}",
 const Substitution CSubstitutionLdFlags = {"{{ldflags}}", "ldflags"};
 const Substitution CSubstitutionLibs = {"{{libs}}", "libs"};
 const Substitution CSubstitutionSoLibs = {"{{solibs}}", "solibs"};
+const Substitution CSubstitutionRlibs = {"{{rlibs}}", "rlibs"};
 const Substitution CSubstitutionFrameworks = {"{{frameworks}}", "frameworks"};
 
 // Valid for alink only.
@@ -71,7 +73,8 @@ bool IsValidLinkerSubstitution(const Substitution* type) {
          type == &CSubstitutionLinkerInputs ||
          type == &CSubstitutionLinkerInputsNewline ||
          type == &CSubstitutionLdFlags || type == &CSubstitutionLibs ||
-         type == &CSubstitutionSoLibs || type == &CSubstitutionFrameworks;
+         type == &CSubstitutionSoLibs || type == &CSubstitutionFrameworks ||
+         type == &CSubstitutionRlibs;
 }
 
 bool IsValidLinkerOutputsSubstitution(const Substitution* type) {

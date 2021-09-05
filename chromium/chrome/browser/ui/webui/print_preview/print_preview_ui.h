@@ -21,10 +21,10 @@
 #include "chrome/browser/ui/webui/constrained_web_dialog_ui.h"
 #include "components/printing/common/print.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "printing/mojom/print.mojom-forward.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-struct PrintHostMsg_DidStartPreview_Params;
 struct PrintHostMsg_PreviewIds;
 struct PrintHostMsg_RequestPrintPreview_Params;
 
@@ -41,7 +41,6 @@ class Rect;
 namespace printing {
 
 class PrintPreviewHandler;
-struct PageSizeMargins;
 
 class PrintPreviewUI : public ConstrainedWebDialogUI,
                        public mojom::PrintPreviewUI {
@@ -62,6 +61,10 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
   void SetOptionsFromDocument(const mojom::OptionsFromDocumentParamsPtr params,
                               int32_t request_id) override;
   void PrintPreviewFailed(int32_t document_cookie, int32_t request_id) override;
+  void PrintPreviewCancelled(int32_t document_cookie,
+                             int32_t request_id) override;
+  void PrinterSettingsInvalid(int32_t document_cookie,
+                              int32_t request_id) override;
 
   bool IsBound() const;
 
@@ -138,12 +141,12 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
   virtual void OnPrintPreviewRequest(int request_id);
 
   // Notifies the Web UI about the properties of the request preview.
-  void OnDidStartPreview(const PrintHostMsg_DidStartPreview_Params& params,
+  void OnDidStartPreview(const mojom::DidStartPreviewParams& params,
                          int request_id);
 
   // Notifies the Web UI of the default page layout according to the currently
   // selected printer and page size.
-  void OnDidGetDefaultPageLayout(const PageSizeMargins& page_layout,
+  void OnDidGetDefaultPageLayout(const mojom::PageSizeMargins& page_layout,
                                  const gfx::Rect& printable_area,
                                  bool has_custom_page_size_style,
                                  int request_id);
@@ -172,17 +175,9 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
   // closed, which may occur for several reasons, e.g. tab closure or crash.
   void OnPrintPreviewDialogClosed();
 
-  // Notifies the Web UI that the preview request identified by |request_id|
-  // was cancelled.
-  void OnPrintPreviewCancelled(int request_id);
-
   // Notifies the Web UI that initiator is closed, so we can disable all the
   // controls that need the initiator for generating the preview data.
   void OnInitiatorClosed();
-
-  // Notifies the Web UI that the printer is unavailable or its settings are
-  // invalid. |request_id| is the preview request id with the invalid printer.
-  void OnInvalidPrinterSettings(int request_id);
 
   // Notifies the Web UI to cancel the pending preview request.
   virtual void OnCancelPendingPreviewRequest();

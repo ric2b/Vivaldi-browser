@@ -23,6 +23,7 @@
 #endif
 
 #include "base/base_export.h"
+#include "base/callback_forward.h"
 #include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -34,7 +35,6 @@
 #include "base/win/windows_types.h"
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include "base/file_descriptor_posix.h"
-#include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #endif
 
@@ -59,21 +59,15 @@ BASE_EXPORT FilePath MakeAbsoluteFilePath(const FilePath& input);
 BASE_EXPORT int64_t ComputeDirectorySize(const FilePath& root_path);
 
 // Deletes the given path, whether it's a file or a directory.
-// If it's a directory, it's perfectly happy to delete all of the
-// directory's contents.  Passing true to recursive deletes
-// subdirectories and their contents as well.
-// Returns true if successful, false otherwise. It is considered successful
-// to attempt to delete a file that does not exist.
+// If it's a directory, it's perfectly happy to delete all of the directory's
+// contents, but it will not recursively delete subdirectories and their
+// contents.
+// Returns true if successful, false otherwise. It is considered successful to
+// attempt to delete a file that does not exist.
 //
 // In POSIX environment and if |path| is a symbolic link, this deletes only
 // the symlink. (even if the symlink points to a non-existent file)
-//
-// WARNING: USING THIS WITH recursive==true IS EQUIVALENT
-//          TO "rm -rf", SO USE WITH CAUTION.
-//
-// Note: The |recursive| parameter is in the process of being removed. Use
-// DeleteFileRecursively() instead. See https://crbug.com/1009837
-BASE_EXPORT bool DeleteFile(const FilePath& path, bool recursive);
+BASE_EXPORT bool DeleteFile(const FilePath& path);
 
 // Deletes the given path, whether it's a file or a directory.
 // If it's a directory, it's perfectly happy to delete all of the
@@ -85,7 +79,34 @@ BASE_EXPORT bool DeleteFile(const FilePath& path, bool recursive);
 // the symlink. (even if the symlink points to a non-existent file)
 //
 // WARNING: USING THIS EQUIVALENT TO "rm -rf", SO USE WITH CAUTION.
+// TODO(thestig): Rename to DeletePathRecursively().
 BASE_EXPORT bool DeleteFileRecursively(const FilePath& path);
+
+// DEPRECATED. Please use the functions immediately above.
+// https://crbug.com/1009837
+//
+// Deletes the given path, whether it's a file or a directory.
+// If it's a directory, it's perfectly happy to delete all of the
+// directory's contents.  Passing true to recursively delete
+// subdirectories and their contents as well.
+// Returns true if successful, false otherwise. It is considered successful
+// to attempt to delete a file that does not exist.
+//
+// In POSIX environment and if |path| is a symbolic link, this deletes only
+// the symlink. (even if the symlink points to a non-existent file)
+//
+// WARNING: USING THIS WITH recursive==true IS EQUIVALENT
+//          TO "rm -rf", SO USE WITH CAUTION.
+BASE_EXPORT bool DeleteFile(const FilePath& path, bool recursive);
+
+// Simplified way to get a callback to do DeleteFile(path) and ignore the
+// DeleteFile() result.
+BASE_EXPORT OnceCallback<void(const FilePath&)> GetDeleteFileCallback();
+
+// Simplified way to get a callback to do DeleteFileRecursively(path) and ignore
+// the DeleteFileRecursively() result.
+BASE_EXPORT OnceCallback<void(const FilePath&)>
+GetDeletePathRecursivelyCallback();
 
 #if defined(OS_WIN)
 // Schedules to delete the given path, whether it's a file or a directory, until
@@ -222,6 +243,15 @@ BASE_EXPORT ScopedFD CreateAndOpenFdForTemporaryFileInDir(const FilePath& dir,
 #endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 #if defined(OS_POSIX)
+
+// ReadFileToStringNonBlocking is identical to ReadFileToString except it
+// guarantees that it will not block. This guarantee is provided on POSIX by
+// opening the file as O_NONBLOCK. This variant should only be used on files
+// which are guaranteed not to block (such as kernel files). Or in situations
+// where a partial read would be acceptable because the backing store returned
+// EWOULDBLOCK.
+BASE_EXPORT bool ReadFileToStringNonBlocking(const base::FilePath& file,
+                                             std::string* ret);
 
 // Creates a symbolic link at |symlink| pointing to |target|.  Returns
 // false on failure.

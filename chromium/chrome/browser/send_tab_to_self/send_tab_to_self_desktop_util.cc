@@ -53,8 +53,6 @@ void CreateNewEntry(content::WebContents* tab,
           ->GetSendTabToSelfModel();
   DCHECK(model);
 
-  UMA_HISTOGRAM_BOOLEAN("SendTabToSelf.Sync.ModelLoadedInTime",
-                        model->IsReady());
   if (!model->IsReady()) {
     DesktopNotificationHandler(profile).DisplayFailureMessage(shared_url);
     return;
@@ -94,12 +92,6 @@ void RecordSendTabToSelfClickResult(const std::string& entry_point,
                                     SendTabToSelfClickResult state) {
   base::UmaHistogramEnumeration("SendTabToSelf." + entry_point + ".ClickResult",
                                 state);
-}
-
-void RecordSendTabToSelfDeviceCount(const std::string& entry_point,
-                                    const int& device_count) {
-  base::UmaHistogramCounts100("SendTabToSelf." + entry_point + ".DeviceCount",
-                              device_count);
 }
 
 size_t GetValidDeviceCount(Profile* profile) {

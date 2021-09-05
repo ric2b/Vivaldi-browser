@@ -22,8 +22,6 @@
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/extension.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/win/shell.h"
@@ -41,11 +39,9 @@ VivaldiNativeAppWindowViews::Create() {
 }
 
 VivaldiNativeAppWindowViewsWin::VivaldiNativeAppWindowViewsWin()
-    : glass_frame_view_(NULL), is_translucent_(false), weak_ptr_factory_(this) {
-}
+    : is_translucent_(false), weak_ptr_factory_(this) {}
 
-VivaldiNativeAppWindowViewsWin::~VivaldiNativeAppWindowViewsWin() {
-}
+VivaldiNativeAppWindowViewsWin::~VivaldiNativeAppWindowViewsWin() = default;
 
 HWND VivaldiNativeAppWindowViewsWin::GetNativeAppWindowHWND() const {
   return views::HWNDForWidget(widget()->GetTopLevelWidget());
@@ -61,27 +57,24 @@ void VivaldiNativeAppWindowViewsWin::EnsureCaptionStyleSet() {
 }
 
 gfx::Insets VivaldiNativeAppWindowViewsWin::GetFrameInsets() const {
-  if (IsFrameless())
+  if (is_frameless())
     return VivaldiNativeAppWindowViews::GetFrameInsets();
   else
     return gfx::Insets();
 }
 
 void VivaldiNativeAppWindowViewsWin::OnBeforeWidgetInit(
-    const extensions::AppWindow::CreateParams& create_params,
-    views::Widget::InitParams* init_params,
-    views::Widget* widget) {
-  VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(create_params, init_params,
-                                                     widget);
-  init_params->native_widget =
+    views::Widget::InitParams& init_params) {
+  VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(init_params);
+  init_params.native_widget =
       new VivaldiAppWindowDesktopNativeWidgetAuraWin(this);
 
-  is_translucent_ = init_params->opacity ==
+  is_translucent_ = init_params.opacity ==
                     views::Widget::InitParams::WindowOpacity::kTranslucent;
 }
 
 void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
-    const extensions::AppWindow::CreateParams& create_params) {
+    const VivaldiBrowserWindowParams& create_params) {
   VivaldiNativeAppWindowViewsAura::InitializeDefaultWindow(create_params);
 
   const extensions::Extension* extension = window()->extension();
@@ -102,11 +95,6 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
 
   if (!create_params.alpha_enabled)
     EnsureCaptionStyleSet();
-}
-
-views::NonClientFrameView*
-VivaldiNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
-  return VivaldiNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
 }
 
 bool VivaldiNativeAppWindowViewsWin::IsOnCurrentWorkspace() const {

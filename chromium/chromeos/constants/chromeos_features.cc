@@ -34,6 +34,10 @@ const base::Feature kArcAdbSideloadingFeature{
 const base::Feature kArcManagedAdbSideloadingSupport{
     "ArcManagedAdbSideloadingSupport", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether to enable support for View.onKeyPreIme() of ARC apps.
+const base::Feature kArcPreImeKeyEventSupport{
+    "ArcPreImeKeyEventSupport", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables auto screen-brightness adjustment when ambient light
 // changes.
 const base::Feature kAutoScreenBrightness{"AutoScreenBrightness",
@@ -75,9 +79,14 @@ const base::Feature kBluetoothNextHandsfreeProfile{
 const base::Feature kCameraSystemWebApp{"CameraSystemWebApp",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, options page for each input method will be opened in ChromeOS
+// settings. Otherwise it will be opened in a new web page in Chrome browser.
+const base::Feature kImeOptionsInSettings{"ImeOptionsInSettings",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables Crostini port forwarding.
 const base::Feature kCrostiniPortForwarding{"CrostiniPortForwarding",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Crostini Disk Resizing.
 const base::Feature kCrostiniDiskResizing{"CrostiniDiskResizing",
@@ -86,10 +95,6 @@ const base::Feature kCrostiniDiskResizing{"CrostiniDiskResizing",
 // Enables or disables Crostini using Buster container images.
 const base::Feature kCrostiniUseBusterImage{"CrostiniUseBusterImage",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables or disables Crostini Username picking.
-const base::Feature kCrostiniUsername{"CrostiniUsername",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the option to share the mic with Crostini or not
 const base::Feature kCrostiniShowMicSetting{"CrostiniShowMicSetting",
@@ -101,7 +106,7 @@ const base::Feature kCrostiniGpuSupport{"CrostiniGpuSupport",
 
 // Enables or disables Crostini usb mounting for unsupported devices.
 const base::Feature kCrostiniUsbAllowUnsupported{
-    "CrostiniUsbAllowUnsupported", base::FEATURE_DISABLED_BY_DEFAULT};
+    "CrostiniUsbAllowUnsupported", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables the new WebUI Crostini upgrader.
 const base::Feature kCrostiniWebUIUpgrader{"CrostiniWebUIUpgrader",
@@ -173,6 +178,10 @@ const base::Feature kExoPointerLock{"ExoPointerLock",
 // Enables the next generation file manager.
 const base::Feature kFilesNG{"FilesNG", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enable file transfer details in progress center.
+const base::Feature kFilesTransferDetails{"FilesTransferDetails",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables new ZIP archive handling in Files App.
 // https://crbug.com/912236
 const base::Feature kFilesZipNoNaCl{"FilesZipNoNaCl",
@@ -183,6 +192,10 @@ const base::Feature kFilesZipNoNaCl{"FilesZipNoNaCl",
 // must use PowerManagerMojoClient::Get().
 const base::Feature kMojoDBusRelay{"MojoDBusRelay",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to launch IME service with an 'ime' sandbox.
+const base::Feature kEnableImeSandbox{"EnableImeSandbox",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, will display blocking screens during re-authentication after a
 // supervision transition occurred.
@@ -204,6 +217,12 @@ const base::Feature kGaiaActionButtons{"GaiaActionButtons",
 // The new ChromeOS Help App. https://crbug.com/1012578.
 const base::Feature kHelpAppV2{"HelpAppV2", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enable the help app in the first run experience. This opens the help app
+// after the OOBE, and provides some extra functionality like a getting started
+// guide inside the app.
+const base::Feature kHelpAppFirstRun{"HelpAppFirstRun",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enable or disable Unified Input Logic for HMM decoder in the IME extension
 // on Chrome OS.
 const base::Feature kImeInputLogicHmm{"ImeInputLogicHmm",
@@ -219,10 +238,6 @@ const base::Feature kImeInputLogicFst{"ImeInputLogicFst",
 const base::Feature kImeInputLogicMozc{"ImeInputLogicMozc",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable or disable IME service decoder engine and 'ime' sandbox on Chrome OS.
-const base::Feature kImeDecoderWithSandbox{"ImeDecoderWithSandbox",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enable or disable using the floating virtual keyboard as the default option
 // on Chrome OS.
 const base::Feature kVirtualKeyboardFloatingDefault{
@@ -230,7 +245,7 @@ const base::Feature kVirtualKeyboardFloatingDefault{
 
 // Enables or disables Instant Tethering on Chrome OS.
 const base::Feature kInstantTethering{"InstantTethering",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables "Linux and Chrome OS" support. Allows a Linux version of Chrome
 // ("lacros-chrome") to run as a Wayland client with this instance of Chrome
@@ -238,9 +253,20 @@ const base::Feature kInstantTethering{"InstantTethering",
 const base::Feature kLacrosSupport{"LacrosSupport",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables or disables device management disclosure on login / lock screen.
+const base::Feature kLoginDeviceManagementDisclosure{
+    "LoginDeviceManagementDisclosure", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables the display password button on login / lock screen.
 const base::Feature kLoginDisplayPasswordButton{
     "LoginDisplayPasswordButton", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to enable the requirement of a minimum chrome version on the
+// device through the policy MinimumChromeVersionEnforced. If the requirement is
+// not met and the warning time in the policy has expired, the user is
+// restricted from using the session.
+const base::Feature kMinimumChromeVersion{"MinimumChromeVersion",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 // ChromeOS Media App. https://crbug.com/996088.
 const base::Feature kMediaApp{"MediaApp", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -251,21 +277,28 @@ const base::Feature kNativeRuleBasedTyping{"NativeRuleBasedTyping",
 
 // Controls whether to use screen priorities to decide if transition from one
 // Oobe screen to another is allowed.
+// TODO(https://crbug.com/1064271): Remove this flag once the feature is stable.
 const base::Feature kOobeScreensPriority{"OobeScreensPriority",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether to enable OS Settings fuzzy search, and disable search using
 // exact string matching.
 const base::Feature kNewOsSettingsSearch{"NewOsSettingsSearch",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether to enable the Parental Controls section of settings.
 const base::Feature kParentalControlsSettings{
     "ChromeOSParentalControlsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables the option to share the camera with PluginVm or not
-const base::Feature kPluginVmShowCameraSetting{
-    "PluginVmShowCameraSetting", base::FEATURE_DISABLED_BY_DEFAULT};
+// Controls whether the camera permissions should be shown in the Plugin
+// VM app settings.
+const base::Feature kPluginVmShowCameraPermissions{
+    "PluginVmShowCameraPermissions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether the microphone permissions should be shown in the Plugin
+// VM app settings.
+const base::Feature kPluginVmShowMicrophonePermissions{
+    "PluginVmShowMicrophonePermissions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to show printer statuses.
 const base::Feature kPrinterStatus{"PrinterStatus",
@@ -273,7 +306,7 @@ const base::Feature kPrinterStatus{"PrinterStatus",
 
 // Controls whether to enable the Print Job Management App.
 const base::Feature kPrintJobManagementApp{"PrintJobManagementApp",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether to enable quick answers.
 const base::Feature kQuickAnswers{"QuickAnswers",
@@ -290,6 +323,14 @@ const base::Feature kQuickAnswersDogfood{"QuickAnswersDogfood",
 // Controls whether to enable quick answers text annotator.
 const base::Feature kQuickAnswersTextAnnotator{
     "QuickAnswersTextAnnotator", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to enable quick answers setting sub toggle.
+const base::Feature kQuickAnswersSubToggle{"QuickAnswersSubToggle",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to enable quick answers translation.
+const base::Feature kQuickAnswersTranslation{"QuickAnswersTranslation",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // ChromeOS Files App mounts RAR archives via rar2fs instead of avfs.
 // https://crbug.com/996549
@@ -349,24 +390,29 @@ const base::Feature kSmartDimNewMlAgent{"SmartDimNewMlAgent",
 const base::Feature kSmartDimModelV3{"SmartDimModelV3",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables separate sync controls for OS settings (display, keyboard, etc.).
-// For example, the user could choose to sync OS settings but not browser
-// settings.
+// This feature:
+// - Creates a new "Sync your settings" section in Chrome OS settings
+// - Moves app, wallpaper and Wi-Fi sync to OS settings
+// - Provides a separate toggle for OS preferences, distinct from browser
+//   preferences
+// - Makes the OS ModelTypes run in sync transport mode, controlled by a
+//   master pref for the OS sync feature
+// - Updates the OOBE sync consent screen
+//
+// NOTE: The feature is rolling out via a client-side Finch trial, so the actual
+// state will vary. See config in
+// chrome/browser/chromeos/sync/split_settings_sync_field_trial.cc
 const base::Feature kSplitSettingsSync{"SplitSettingsSync",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Introduces a new OOBE dialog for the OS sync feature. Uses the same browser
-// sync consent dialog as Windows/Mac/Linux. Allows the user to fully opt-out of
-// browser sync, including marking the signin primary account as unconsented.
-// Requires SplitSettingsSync.
-// NOTE: Use IsSplitSyncConsentEnabled() to test the flag, see implementation.
-const base::Feature kSplitSyncConsent{"SplitSyncConsent",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables a settings UI toggle that controls Suggested Content status. Also
 // enables a corresponding notice in the Launcher about Suggested Content.
 const base::Feature kSuggestedContentToggle{"SuggestedContentToggle",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables Chrome OS Telemetry Extension.
+const base::Feature kTelemetryExtension{"TelemetryExtension",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables unified media view in Files app to browse recently-modified media
 // files from local local, Google Drive, and Android.
@@ -376,6 +422,13 @@ const base::Feature kUnifiedMediaView{"UnifiedMediaView",
 // Enables the updated cellular activation UI; see go/cros-cellular-design.
 const base::Feature kUpdatedCellularActivationUi{
     "UpdatedCellularActivationUi", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Uses the same browser sync consent dialog as Windows/Mac/Linux. Allows the
+// user to fully opt-out of browser sync, including marking the IdentityManager
+// primary account as unconsented. Requires SplitSettingsSync.
+// NOTE: Call UseBrowserSyncConsent() to test the flag, see implementation.
+const base::Feature kUseBrowserSyncConsent{"UseBrowserSyncConsent",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use the staging URL as part of the "Messages" feature under "Connected
 // Devices" settings.
@@ -394,13 +447,9 @@ const base::Feature kUserActivityPrediction{"UserActivityPrediction",
 const base::Feature kUseSearchClickForRightClick{
     "UseSearchClickForRightClick", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable or disable native controls in video player on Chrome OS.
-const base::Feature kVideoPlayerNativeControls{
-    "VideoPlayerNativeControls", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable or disable bordered key for virtual keyboard on Chrome OS.
 const base::Feature kVirtualKeyboardBorderedKey{
-    "VirtualKeyboardBorderedKey", base::FEATURE_DISABLED_BY_DEFAULT};
+    "VirtualKeyboardBorderedKey", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable or disable resizable floating virtual keyboard on Chrome OS.
 const base::Feature kVirtualKeyboardFloatingResizable{
@@ -408,7 +457,7 @@ const base::Feature kVirtualKeyboardFloatingResizable{
 
 // Enable or disable MOZC IME to use protobuf as interactive message format.
 const base::Feature kImeMozcProto{"ImeMozcProto",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -420,8 +469,8 @@ bool IsEduCoexistenceEnabled() {
   return base::FeatureList::IsEnabled(kEduCoexistence);
 }
 
-bool IsImeDecoderWithSandboxEnabled() {
-  return base::FeatureList::IsEnabled(kImeDecoderWithSandbox);
+bool IsImeSandboxEnabled() {
+  return base::FeatureList::IsEnabled(kEnableImeSandbox);
 }
 
 bool IsInstantTetheringBackgroundAdvertisingSupported() {
@@ -433,8 +482,16 @@ bool IsLacrosSupportEnabled() {
   return base::FeatureList::IsEnabled(kLacrosSupport);
 }
 
+bool IsLoginDeviceManagementDisclosureEnabled() {
+  return base::FeatureList::IsEnabled(kLoginDeviceManagementDisclosure);
+}
+
 bool IsLoginDisplayPasswordButtonEnabled() {
   return base::FeatureList::IsEnabled(kLoginDisplayPasswordButton);
+}
+
+bool IsMinimumChromeVersionEnabled() {
+  return base::FeatureList::IsEnabled(kMinimumChromeVersion);
 }
 
 bool IsOobeScreensPriorityEnabled() {
@@ -458,25 +515,30 @@ bool IsQuickAnswersRichUiEnabled() {
 }
 
 bool IsQuickAnswersSettingToggleEnabled() {
-  return IsQuickAnswersEnabled() && IsQuickAnswersRichUiEnabled();
+  return IsQuickAnswersEnabled() && IsQuickAnswersRichUiEnabled() &&
+         base::FeatureList::IsEnabled(kQuickAnswersSubToggle);
 }
 
 bool IsQuickAnswersTextAnnotatorEnabled() {
   return base::FeatureList::IsEnabled(kQuickAnswersTextAnnotator);
 }
 
+bool IsQuickAnswersTranslationEnabled() {
+  return base::FeatureList::IsEnabled(kQuickAnswersTranslation);
+}
+
 bool IsSplitSettingsSyncEnabled() {
   return base::FeatureList::IsEnabled(kSplitSettingsSync);
 }
 
-bool IsSplitSyncConsentEnabled() {
-  // SplitSyncConsent requires SplitSettingsSync.
-  return base::FeatureList::IsEnabled(kSplitSettingsSync) &&
-         base::FeatureList::IsEnabled(kSplitSyncConsent);
-}
-
 bool ShouldShowPlayStoreInDemoMode() {
   return base::FeatureList::IsEnabled(kShowPlayInDemoMode);
+}
+
+bool ShouldUseBrowserSyncConsent() {
+  // UseBrowserSyncConsent requires SplitSettingsSync.
+  return base::FeatureList::IsEnabled(kSplitSettingsSync) &&
+         base::FeatureList::IsEnabled(kUseBrowserSyncConsent);
 }
 
 bool ShouldUseV1DeviceSync() {

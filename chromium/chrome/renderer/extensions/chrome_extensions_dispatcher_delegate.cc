@@ -14,7 +14,6 @@
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/extensions/accessibility_private_hooks_delegate.h"
 #include "chrome/renderer/extensions/app_hooks_delegate.h"
-#include "chrome/renderer/extensions/cast_streaming_native_handler.h"
 #include "chrome/renderer/extensions/extension_hooks_delegate.h"
 #include "chrome/renderer/extensions/media_galleries_custom_bindings.h"
 #include "chrome/renderer/extensions/notifications_native_handler.h"
@@ -92,10 +91,6 @@ void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
   module_system->RegisterNativeHandler(
       "page_capture", std::unique_ptr<NativeHandler>(
                           new extensions::PageCaptureCustomBindings(context)));
-  module_system->RegisterNativeHandler(
-      "cast_streaming_natives",
-      std::make_unique<extensions::CastStreamingNativeHandler>(
-          context, bindings_system));
 
   // The following are native handlers that are defined in //extensions, but
   // are only used for APIs defined in Chrome.
@@ -163,7 +158,7 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
                              IDR_FILE_SYSTEM_PROVIDER_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("platformKeys",
                              IDR_PLATFORM_KEYS_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("platformKeys.getPublicKey",
+  source_map->RegisterSource("platformKeys.getPublicKeyUtil",
                              IDR_PLATFORM_KEYS_GET_PUBLIC_KEY_JS);
   source_map->RegisterSource("platformKeys.internalAPI",
                              IDR_PLATFORM_KEYS_INTERNAL_API_JS);
@@ -179,18 +174,12 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
                              IDR_IME_SERVICE_MOJOM_JS);
   source_map->RegisterSource("chromeos.ime.service",
                              IDR_IME_SERVICE_BINDINGS_JS);
+
+  source_map->RegisterSource("chromeos.tts.mojom.tts_stream.mojom",
+                             IDR_TTS_STREAM_MOJOM_JS);
+  source_map->RegisterSource("chromeos.tts.stream", IDR_TTS_STREAM_BINDINGS_JS);
 #endif  // defined(OS_CHROMEOS)
 
-  source_map->RegisterSource("cast.streaming.rtpStream",
-                             IDR_CAST_STREAMING_RTP_STREAM_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("cast.streaming.session",
-                             IDR_CAST_STREAMING_SESSION_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource(
-      "cast.streaming.udpTransport",
-      IDR_CAST_STREAMING_UDP_TRANSPORT_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource(
-      "cast.streaming.receiverSession",
-      IDR_CAST_STREAMING_RECEIVER_SESSION_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource(
       "webrtcDesktopCapturePrivate",
       IDR_WEBRTC_DESKTOP_CAPTURE_PRIVATE_CUSTOM_BINDINGS_JS);

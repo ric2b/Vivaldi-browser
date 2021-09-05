@@ -1,11 +1,12 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
+#include "components/request_filter/adblock_filter/adblock_rule_parser.h"
+
 #include <ostream>
 #include <string>
 #include <vector>
 
 #include "components/request_filter/adblock_filter/adblock_filter_rule.h"
-#include "components/request_filter/adblock_filter/adblock_rule_parser.h"
 #include "components/request_filter/adblock_filter/parse_result.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -618,7 +619,7 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern = "bad-script";
-  expected_rules.back().redirect = FilterRule::kBlankJS;
+  expected_rules.back().redirect = "blank-js";
   expected_rules.back().included_domains.emplace_back("some.domain");
 
   EXPECT_EQ(RuleParser::kFilterRule,
@@ -630,7 +631,7 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().party.set();
   expected_rules.back().anchor_type.set(FilterRule::kAnchorHost);
   expected_rules.back().pattern = "bad.host/bad-image";
-  expected_rules.back().redirect = FilterRule::k1x1TransparentGIF;
+  expected_rules.back().redirect = "1x1-transparent-gif";
   expected_rules.back().included_domains.emplace_back("some.domain");
 
   EXPECT_EQ(RuleParser::kFilterRule,
@@ -642,19 +643,59 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().party.set(FilterRule::kFirstParty);
   expected_rules.back().anchor_type.set(FilterRule::kAnchorHost);
   expected_rules.back().pattern = "tracking.host/bad-style";
-  expected_rules.back().redirect = FilterRule::kBlankCss;
+  expected_rules.back().redirect = "blank-css";
 
-  EXPECT_EQ(RuleParser::kError,
+  EXPECT_EQ(
+      RuleParser::kError,
+      rule_parser.Parse("*bad-script$rewrite=blank-js,domains=some.domain"));
+
+  ASSERT_EQ(expected_rules.size(), parse_result.filter_rules.size());
+
+  auto actual_rules_it = parse_result.filter_rules.begin();
+  for (const auto& rule : expected_rules) {
+    EXPECT_EQ(rule, *actual_rules_it);
+    actual_rules_it++;
+  }
+}
+
+TEST(AdBlockRuleParserTest, Redirect) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result);
+
+  std::vector<FilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kFilterRule,
+            rule_parser.Parse("*bad-script.js$redirect=noop.js,script"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set(FilterRule::kScript);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "bad-script.js";
+  expected_rules.back().redirect = "noop.js";
+
+  EXPECT_EQ(RuleParser::kFilterRule,
             rule_parser.Parse(
-                "||tracking.host/bad-style$rewrite=abp-resource:blank-css"));
-  EXPECT_EQ(RuleParser::kError,
-            rule_parser.Parse("*bad-resource$rewrite=abp-resource:blank-text"));
-  EXPECT_EQ(RuleParser::kError,
-            rule_parser.Parse(
-                "bad-media$rewrite=abp-resource:blank-mp3,domain=some.domain"));
-  EXPECT_EQ(RuleParser::kError,
-            rule_parser.Parse(
-                "*bad-script$rewrite=http://example.com,domains=some.domain"));
+                "||bad.host/bad-image$redirect=1x1-transparent.gif,image"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set(FilterRule::kImage);
+  expected_rules.back().party.set();
+  expected_rules.back().anchor_type.set(FilterRule::kAnchorHost);
+  expected_rules.back().pattern = "bad.host/bad-image";
+  expected_rules.back().redirect = "1x1-transparent.gif";
+
+  EXPECT_EQ(RuleParser::kFilterRule,
+            rule_parser.Parse("||tracking.host/"
+                              "bad-file$redirect=empty,~third-party"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set(FilterRule::kFirstParty);
+  expected_rules.back().anchor_type.set(FilterRule::kAnchorHost);
+  expected_rules.back().pattern = "tracking.host/bad-file";
+  expected_rules.back().redirect = "empty";
+
+  EXPECT_EQ(
+      RuleParser::kError,
+      rule_parser.Parse(
+          "*bad-script$redirect=noop-js,redirect=empty,domains=some.domain"));
 
   ASSERT_EQ(expected_rules.size(), parse_result.filter_rules.size());
 

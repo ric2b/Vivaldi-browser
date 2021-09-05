@@ -14,6 +14,8 @@ import android.widget.ImageButton;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.Invalidator;
@@ -76,6 +78,9 @@ public class TopToolbarCoordinator implements Toolbar {
     private final IdentityDiscController mIdentityDiscController;
     private OptionalBrowsingModeButtonController mOptionalButtonController;
 
+    private Callback<OverviewModeBehavior> mOverviewModeBehaviorSupplierObserver;
+    private ObservableSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
+
     private HomepageManager.HomepageStateListener mHomepageStateListener =
             new HomepageManager.HomepageStateListener() {
                 @Override
@@ -92,6 +97,8 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param userEducationHelper Helper class for showing in-product help text bubbles.
      * @param buttonDataProviders List of classes that wish to display an optional button in the
      *         browsing mode toolbar.
+     * @param overviewModeBehaviorSupplier Supplier of the overview mode manager for the current
+     *                                     profile.
      * @param normalThemeColorProvider The {@link ThemeColorProvider} for normal mode.
      * @param overviewThemeColorProvider The {@link ThemeColorProvider} for overview mode.
      */
@@ -99,12 +106,17 @@ public class TopToolbarCoordinator implements Toolbar {
             ToolbarLayout toolbarLayout, IdentityDiscController identityDiscController,
             ToolbarDataProvider toolbarDataProvider, ToolbarTabController tabController,
             UserEducationHelper userEducationHelper, List<ButtonDataProvider> buttonDataProviders,
+            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ThemeColorProvider normalThemeColorProvider,
             ThemeColorProvider overviewThemeColorProvider) {
         mToolbarLayout = toolbarLayout;
         mIdentityDiscController = identityDiscController;
         mOptionalButtonController = new OptionalBrowsingModeButtonController(buttonDataProviders,
                 userEducationHelper, mToolbarLayout, () -> toolbarDataProvider.getTab());
+
+        mOverviewModeBehaviorSupplier = overviewModeBehaviorSupplier;
+        mOverviewModeBehaviorSupplierObserver = this::setOverviewModeBehavior;
+        mOverviewModeBehaviorSupplier.addObserver(mOverviewModeBehaviorSupplierObserver);
 
         // NOTE (david@vivaldi.com): We don't need the TabSwitcherModeTTCoordinatorPhone because the
         // VivaldiTopToolbarCoordinator is responsible to create it's own tab switcher toolbar.
@@ -113,7 +125,8 @@ public class TopToolbarCoordinator implements Toolbar {
             if (StartSurfaceConfiguration.isStartSurfaceEnabled()) {
                 mStartSurfaceToolbarCoordinator = new StartSurfaceToolbarCoordinator(
                         controlContainer.getRootView().findViewById(R.id.tab_switcher_toolbar_stub),
-                        mIdentityDiscController, userEducationHelper, overviewThemeColorProvider);
+                        mIdentityDiscController, userEducationHelper, mOverviewModeBehaviorSupplier,
+                        overviewThemeColorProvider);
             } else {
                 mTabSwitcherModeCoordinatorPhone = new TabSwitcherModeTTCoordinatorPhone(
                         controlContainer.getRootView().findViewById(
@@ -155,14 +168,11 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param newTabClickHandler The click handler for the new tab button.
      * @param bookmarkClickHandler The click handler for the bookmarks button.
      * @param customTabsBackClickHandler The click handler for the custom tabs back button.
-     * @param overviewModeBehavior The {@link OverviewModeBehavior} to observe overview mode
-     *         changes.
      */
-    public void initializeWithNative(TabModelSelector tabModelSelector,
-            LayoutManager layoutManager, OnClickListener tabSwitcherClickHandler,
+    public void initializeWithNative(TabModelSelector tabModelSelector, LayoutManager layoutManager,
+            OnClickListener tabSwitcherClickHandler,
             OnLongClickListener tabSwitcherLongClickHandler, OnClickListener newTabClickHandler,
-            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler,
-            OverviewModeBehavior overviewModeBehavior) {
+            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler) {
         if (mTabSwitcherModeCoordinatorPhone != null) {
             mTabSwitcherModeCoordinatorPhone.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
             mTabSwitcherModeCoordinatorPhone.setOnNewTabClickHandler(newTabClickHandler);
@@ -170,7 +180,6 @@ public class TopToolbarCoordinator implements Toolbar {
         } else if (mStartSurfaceToolbarCoordinator != null) {
             mStartSurfaceToolbarCoordinator.setOnNewTabClickHandler(newTabClickHandler);
             mStartSurfaceToolbarCoordinator.setTabModelSelector(tabModelSelector);
-            mStartSurfaceToolbarCoordinator.setOverviewModeBehavior(overviewModeBehavior);
             mStartSurfaceToolbarCoordinator.setTabSwitcherListener(tabSwitcherClickHandler);
             mStartSurfaceToolbarCoordinator.setOnTabSwitcherLongClickHandler(
                     tabSwitcherLongClickHandler);
@@ -185,9 +194,13 @@ public class TopToolbarCoordinator implements Toolbar {
         mToolbarLayout.setBookmarkClickHandler(bookmarkClickHandler);
         mToolbarLayout.setCustomTabCloseClickHandler(customTabsBackClickHandler);
         mToolbarLayout.setLayoutUpdateHost(layoutManager);
-        mToolbarLayout.setOverviewModeBehavior(overviewModeBehavior);
 
         mToolbarLayout.onNativeLibraryReady();
+    }
+
+    private void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        assert overviewModeBehavior != null;
+        mToolbarLayout.setOverviewModeBehavior(overviewModeBehavior);
     }
 
     /**
@@ -216,6 +229,11 @@ public class TopToolbarCoordinator implements Toolbar {
      */
     public void destroy() {
         HomepageManager.getInstance().removeListener(mHomepageStateListener);
+        if (mOverviewModeBehaviorSupplier != null) {
+            mOverviewModeBehaviorSupplier.removeObserver(mOverviewModeBehaviorSupplierObserver);
+            mOverviewModeBehaviorSupplier = null;
+            mOverviewModeBehaviorSupplierObserver = null;
+        }
         mToolbarLayout.destroy();
         if (mTabSwitcherModeCoordinatorPhone != null) {
             mTabSwitcherModeCoordinatorPhone.destroy();

@@ -317,8 +317,8 @@ RTCRtpReceiverImpl::DtlsTransportInformation() {
   return internal_->state().webrtc_dtls_transport_information();
 }
 
-const blink::WebMediaStreamTrack& RTCRtpReceiverImpl::Track() const {
-  return internal_->state().track_ref()->web_track();
+MediaStreamComponent* RTCRtpReceiverImpl::Track() const {
+  return internal_->state().track_ref()->track();
 }
 
 Vector<String> RTCRtpReceiverImpl::StreamIds() const {

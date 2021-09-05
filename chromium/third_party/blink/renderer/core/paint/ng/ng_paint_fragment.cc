@@ -46,63 +46,6 @@ struct SameSizeAsNGPaintFragment : public RefCounted<NGPaintFragment>,
 static_assert(sizeof(NGPaintFragment) == sizeof(SameSizeAsNGPaintFragment),
               "NGPaintFragment should stay small.");
 
-LogicalRect ComputeLogicalRectFor(const PhysicalRect& physical_rect,
-                                  WritingMode writing_mode,
-                                  TextDirection text_direction,
-                                  const PhysicalSize& outer_size) {
-  const LogicalOffset logical_offset = physical_rect.offset.ConvertToLogical(
-      writing_mode, text_direction, outer_size, physical_rect.size);
-  const LogicalSize logical_size =
-      physical_rect.size.ConvertToLogical(writing_mode);
-  return {logical_offset, logical_size};
-}
-
-LogicalRect ComputeLogicalRectFor(const PhysicalRect& physical_rect,
-                                  const NGPaintFragment& paint_fragment) {
-  return ComputeLogicalRectFor(
-      physical_rect, paint_fragment.Style().GetWritingMode(),
-      paint_fragment.PhysicalFragment().ResolvedDirection(),
-      paint_fragment.Size());
-}
-
-LogicalRect ComputeLogicalRectFor(const PhysicalRect& physical_rect,
-                                  const NGInlineCursor& cursor) {
-  if (const NGPaintFragment* paint_fragment = cursor.CurrentPaintFragment())
-    return ComputeLogicalRectFor(physical_rect, *paint_fragment);
-
-  const NGFragmentItem& item = *cursor.CurrentItem();
-  return ComputeLogicalRectFor(physical_rect, item.GetWritingMode(),
-                               item.ResolvedDirection(), item.Size());
-}
-
-PhysicalRect ComputePhysicalRectFor(const LogicalRect& logical_rect,
-                                    WritingMode writing_mode,
-                                    TextDirection text_direction,
-                                    const PhysicalSize& outer_size) {
-  const PhysicalSize physical_size =
-      ToPhysicalSize(logical_rect.size, writing_mode);
-  const PhysicalOffset physical_offset = logical_rect.offset.ConvertToPhysical(
-      writing_mode, text_direction, outer_size, physical_size);
-
-  return {physical_offset, physical_size};
-}
-PhysicalRect ComputePhysicalRectFor(const LogicalRect& logical_rect,
-                                    const NGPaintFragment& paint_fragment) {
-  return ComputePhysicalRectFor(
-      logical_rect, paint_fragment.Style().GetWritingMode(),
-      paint_fragment.PhysicalFragment().ResolvedDirection(),
-      paint_fragment.Size());
-}
-
-PhysicalRect ComputePhysicalRectFor(const LogicalRect& logical_rect,
-                                    const NGInlineCursor& cursor) {
-  if (const NGPaintFragment* paint_fragment = cursor.CurrentPaintFragment())
-    return ComputePhysicalRectFor(logical_rect, *paint_fragment);
-  const NGFragmentItem& item = *cursor.CurrentItem();
-  return ComputePhysicalRectFor(logical_rect, item.GetWritingMode(),
-                                item.ResolvedDirection(), item.Size());
-}
-
 LogicalRect ExpandedSelectionRectForSoftLineBreakIfNeeded(
     const LogicalRect& rect,
     const NGInlineCursor& cursor,
@@ -142,22 +85,7 @@ LogicalRect ExpandSelectionRectToLineHeight(const LogicalRect& rect,
           cursor.Current().OffsetInContainerBlock(),
       line.Current().Size());
   return ExpandSelectionRectToLineHeight(
-      rect, ComputeLogicalRectFor(line_physical_rect, cursor));
-}
-
-LogicalOffset ChildLogicalOffsetInParent(const NGPaintFragment& child) {
-  DCHECK(child.Parent());
-  const NGPaintFragment& parent = *child.Parent();
-  return child.Offset().ConvertToLogical(parent.Style().GetWritingMode(),
-                                         parent.Style().Direction(),
-                                         parent.Size(), child.Size());
-}
-
-LogicalSize ChildLogicalSizeInParent(const NGPaintFragment& child) {
-  DCHECK(child.Parent());
-  const NGPaintFragment& parent = *child.Parent();
-  return NGFragment(parent.Style().GetWritingMode(), child.PhysicalFragment())
-      .Size();
+      rect, cursor.Current().ConvertChildToLogical(line_physical_rect));
 }
 
 base::Optional<PositionWithAffinity> PositionForPointInChild(
@@ -530,7 +458,7 @@ void NGPaintFragment::ClearAssociationWithLayoutObject() {
       }
     }
     if (fragment.IsLineBox() || fragment.IsInlineBox() ||
-        fragment.IsColumnBox()) {
+        fragment.IsFragmentainerBox()) {
       child->ClearAssociationWithLayoutObject();
     } else {
       DCHECK(fragment.IsText() || fragment.IsFormattingContextRoot());
@@ -815,7 +743,8 @@ PhysicalRect ComputeLocalSelectionRectForText(
     const LayoutSelectionStatus& selection_status) {
   const PhysicalRect selection_rect =
       cursor.CurrentLocalRect(selection_status.start, selection_status.end);
-  LogicalRect logical_rect = ComputeLogicalRectFor(selection_rect, cursor);
+  LogicalRect logical_rect =
+      cursor.Current().ConvertChildToLogical(selection_rect);
   // Let LocalRect for line break have a space width to paint line break
   // when it is only character in a line or only selected in a line.
   if (selection_status.start != selection_status.end &&
@@ -834,7 +763,7 @@ PhysicalRect ComputeLocalSelectionRectForText(
   const LogicalRect line_height_expanded_rect =
       ExpandSelectionRectToLineHeight(line_break_extended_rect, cursor);
   const PhysicalRect physical_rect =
-      ComputePhysicalRectFor(line_height_expanded_rect, cursor);
+      cursor.Current().ConvertChildToPhysical(line_height_expanded_rect);
   return physical_rect;
 }
 
@@ -844,11 +773,12 @@ PhysicalRect ComputeLocalSelectionRectForReplaced(
     const NGInlineCursor& cursor) {
   DCHECK(cursor.Current().GetLayoutObject()->IsLayoutReplaced());
   const PhysicalRect selection_rect = PhysicalRect({}, cursor.Current().Size());
-  LogicalRect logical_rect = ComputeLogicalRectFor(selection_rect, cursor);
+  LogicalRect logical_rect =
+      cursor.Current().ConvertChildToLogical(selection_rect);
   const LogicalRect line_height_expanded_rect =
       ExpandSelectionRectToLineHeight(logical_rect, cursor);
   const PhysicalRect physical_rect =
-      ComputePhysicalRectFor(line_height_expanded_rect, cursor);
+      cursor.Current().ConvertChildToPhysical(line_height_expanded_rect);
   return physical_rect;
 }
 
@@ -897,10 +827,11 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineLevelBox(
     if (child->PhysicalFragment().IsFloating())
       continue;
 
-    const LayoutUnit child_inline_min =
-        ChildLogicalOffsetInParent(*child).inline_offset;
+    const LogicalRect logical_child_rect =
+        PhysicalFragment().ConvertChildToLogical(child->Rect());
+    const LayoutUnit child_inline_min = logical_child_rect.offset.inline_offset;
     const LayoutUnit child_inline_max =
-        child_inline_min + ChildLogicalSizeInParent(*child).inline_size;
+        child_inline_min + logical_child_rect.size.inline_size;
 
     // Try to resolve if |point| falls in any child in inline direction.
     if (inline_point >= child_inline_min && inline_point <= child_inline_max) {
@@ -936,25 +867,6 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineLevelBox(
       return child_position.value();
   }
 
-  if (PhysicalFragment().IsLineBox()) {
-    // There are no inline items to hit in this line box, e.g. <span> with
-    // size and border. We try in lines before |this| line in the block.
-    // See editing/selection/last-empty-inline.html
-    NGInlineCursor cursor(*Parent());
-    cursor.MoveTo(*this);
-    const PhysicalOffset point_in_line = point - OffsetInContainerBlock();
-    for (;;) {
-      cursor.MoveToPreviousLine();
-      if (!cursor)
-        break;
-      const NGPaintFragment& line = *cursor.CurrentPaintFragment();
-      const PhysicalOffset adjusted_point =
-          point_in_line + line.OffsetInContainerBlock();
-      if (auto position = line.PositionForPointInInlineLevelBox(adjusted_point))
-        return position;
-    }
-  }
-
   return PositionWithAffinity();
 }
 
@@ -972,23 +884,29 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineFormattingContext(
       PhysicalSize(LayoutUnit(1), LayoutUnit(1)));
   const LayoutUnit block_point = logical_point.block_offset;
 
-  // Stores the closest line box child above |point| in the block direction.
-  // Used if we can't find any child |point| falls in to resolve the position.
-  const NGPaintFragment* closest_line_before = nullptr;
-  LayoutUnit closest_line_before_block_offset = LayoutUnit::Min();
-
   // Stores the closest line box child below |point| in the block direction.
   // Used if we can't find any child |point| falls in to resolve the position.
-  const NGPaintFragment* closest_line_after = nullptr;
-  LayoutUnit closest_line_after_block_offset = LayoutUnit::Max();
+  const NGPaintFragment* closest_line_below = nullptr;
+  LayoutUnit closest_line_below_block_offset = LayoutUnit::Min();
+
+  // Stores the closest line box child above |point| in the block direction.
+  // Used if we can't find any child |point| falls in to resolve the position.
+  const NGPaintFragment* closest_line_above = nullptr;
+  LayoutUnit closest_line_above_block_offset = LayoutUnit::Max();
 
   for (const NGPaintFragment* child : Children()) {
-    if (!child->PhysicalFragment().IsLineBox() || child->Children().IsEmpty())
+    if (!child->PhysicalFragment().IsLineBox())
       continue;
+    if (!NGInlineCursor(*child).TryToMoveToFirstInlineLeafChild()) {
+      // editing/selection/last-empty-inline.html requires this to skip
+      // empty <span> with padding.
+      continue;
+    }
 
-    const LayoutUnit line_min = ChildLogicalOffsetInParent(*child).block_offset;
-    const LayoutUnit line_max =
-        line_min + ChildLogicalSizeInParent(*child).block_size;
+    const LogicalRect logical_child_rect =
+        PhysicalFragment().ConvertChildToLogical(child->Rect());
+    const LayoutUnit line_min = logical_child_rect.offset.block_offset;
+    const LayoutUnit line_max = line_min + logical_child_rect.size.block_size;
 
     // Try to resolve if |point| falls in a line box in block direction.
     // Hitting on line bottom doesn't count, to match legacy behavior.
@@ -1000,30 +918,61 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineFormattingContext(
     }
 
     if (block_point < line_min) {
-      if (line_min < closest_line_after_block_offset) {
-        closest_line_after = child;
-        closest_line_after_block_offset = line_min;
+      if (line_min < closest_line_above_block_offset) {
+        closest_line_above = child;
+        closest_line_above_block_offset = line_min;
       }
     }
 
     if (block_point >= line_max) {
-      if (line_max > closest_line_before_block_offset) {
-        closest_line_before = child;
-        closest_line_before_block_offset = line_max;
+      if (line_max > closest_line_below_block_offset) {
+        closest_line_below = child;
+        closest_line_below_block_offset = line_max;
       }
     }
   }
 
-  if (closest_line_after) {
-    if (auto child_position =
-            PositionForPointInChild(*closest_line_after, point))
+  // Note: |move_caret_to_boundary| is true for Mac and Unix.
+  const bool move_caret_to_boundary =
+      To<LayoutBlockFlow>(GetLayoutObject())
+          ->ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom();
+
+  // At here, |point| is not inside any line in |this|:
+  //   |closest_line_above|
+  //   |point|
+  //   |closest_line_below|
+  if (closest_line_above) {
+    if (move_caret_to_boundary) {
+      // Tests[1-3] reach here.
+      // [1] editing/selection/click-in-margins-inside-editable-div.html
+      // [2] fast/writing-mode/flipped-blocks-hit-test-line-edges.html
+      // [3] All/LayoutViewHitTestTest.HitTestHorizontal/4
+      NGInlineCursor line_box(*this);
+      line_box.MoveTo(*closest_line_above);
+      if (auto first_position = line_box.PositionForStartOfLine())
+        return PositionWithAffinity(first_position.GetPosition());
+    } else if (auto child_position =
+                   PositionForPointInChild(*closest_line_above, point)) {
       return child_position.value();
+    }
   }
 
-  if (closest_line_before) {
-    if (auto child_position =
-            PositionForPointInChild(*closest_line_before, point))
+  if (closest_line_below) {
+    if (move_caret_to_boundary) {
+      // Tests[1-3] reach here.
+      // [1] editing/selection/click-in-margins-inside-editable-div.html
+      // [2] fast/writing-mode/flipped-blocks-hit-test-line-edges.html
+      // [3] All/LayoutViewHitTestTest.HitTestHorizontal/4
+      NGInlineCursor line_box(*this);
+      line_box.MoveTo(*closest_line_below);
+      if (auto last_position = line_box.PositionForEndOfLine())
+        return PositionWithAffinity(last_position.GetPosition());
+    } else if (auto child_position =
+                   PositionForPointInChild(*closest_line_below, point)) {
+      // Test[1] reaches here.
+      // [1] editing/selection/last-empty-inline.html
       return child_position.value();
+    }
   }
 
   // TODO(xiaochengh): Looking at only the closest lines may not be enough,

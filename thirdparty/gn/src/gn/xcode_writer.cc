@@ -30,6 +30,7 @@
 #include "gn/scheduler.h"
 #include "gn/settings.h"
 #include "gn/source_file.h"
+#include "gn/substitution_writer.h"
 #include "gn/target.h"
 #include "gn/value.h"
 #include "gn/variables.h"
@@ -251,12 +252,12 @@ const SourceFileSet& XCTestFilesResolver::SearchFilesForTarget(
 
 // Add xctest files to the "Compiler Sources" of corresponding test module
 // native targets.
-void AddXCTestFilesToTestModuleTarget(const SourceFileSet& xctest_file_list,
+void AddXCTestFilesToTestModuleTarget(const std::vector<SourceFile>& sources,
                                       PBXNativeTarget* native_target,
                                       PBXProject* project,
                                       SourceDir source_dir,
                                       const BuildSettings* build_settings) {
-  for (const SourceFile& source : xctest_file_list) {
+  for (const SourceFile& source : sources) {
     std::string source_path = RebasePath(source.value(), source_dir,
                                          build_settings->root_path_utf8());
 
@@ -368,17 +369,142 @@ PBXAttributes ProjectAttributesFromBuildSettings(
       break;
   }
 
+  // Xcode complains that the project needs to be upgraded if those keys are
+  // not set. Since the generated Xcode project is only used for debugging
+  // and the source of truth for build settings is the .gn files themselves,
+  // we can safely set them in the project as they won't be used by "ninja".
+  attributes["ALWAYS_SEARCH_USER_PATHS"] = "NO";
+  attributes["CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED"] = "YES";
+  attributes["CLANG_WARN__DUPLICATE_METHOD_MATCH"] = "YES";
+  attributes["CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING"] = "YES";
+  attributes["CLANG_WARN_BOOL_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_COMMA"] = "YES";
+  attributes["CLANG_WARN_CONSTANT_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS"] = "YES";
+  attributes["CLANG_WARN_EMPTY_BODY"] = "YES";
+  attributes["CLANG_WARN_ENUM_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_INFINITE_RECURSION"] = "YES";
+  attributes["CLANG_WARN_INT_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_NON_LITERAL_NULL_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF"] = "YES";
+  attributes["CLANG_WARN_OBJC_LITERAL_CONVERSION"] = "YES";
+  attributes["CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER"] = "YES";
+  attributes["CLANG_WARN_RANGE_LOOP_ANALYSIS"] = "YES";
+  attributes["CLANG_WARN_STRICT_PROTOTYPES"] = "YES";
+  attributes["CLANG_WARN_SUSPICIOUS_MOVE"] = "YES";
+  attributes["CLANG_WARN_UNREACHABLE_CODE"] = "YES";
+  attributes["ENABLE_STRICT_OBJC_MSGSEND"] = "YES";
+  attributes["ENABLE_TESTABILITY"] = "YES";
+  attributes["GCC_NO_COMMON_BLOCKS"] = "YES";
+  attributes["GCC_WARN_64_TO_32_BIT_CONVERSION"] = "YES";
+  attributes["GCC_WARN_ABOUT_RETURN_TYPE"] = "YES";
+  attributes["GCC_WARN_UNDECLARED_SELECTOR"] = "YES";
+  attributes["GCC_WARN_UNINITIALIZED_AUTOS"] = "YES";
+  attributes["GCC_WARN_UNUSED_FUNCTION"] = "YES";
+  attributes["GCC_WARN_UNUSED_VARIABLE"] = "YES";
+  attributes["ONLY_ACTIVE_ARCH"] = "YES";
+
   return attributes;
 }
 
 }  // namespace
 
-// Class corresponding to the "Products" project in the generated workspace.
+// Class representing the workspace embedded in an xcodeproj file used to
+// configure the build settings shared by all targets in the project (used
+// to configure the build system).
+class XcodeWorkspace {
+ public:
+  XcodeWorkspace(const BuildSettings* build_settings,
+                 XcodeWriter::Options options);
+  ~XcodeWorkspace();
+
+  XcodeWorkspace(const XcodeWorkspace&) = delete;
+  XcodeWorkspace& operator=(const XcodeWorkspace&) = delete;
+
+  // Generates the .xcworkspace files to disk.
+  bool WriteWorkspace(const std::string& name, Err* err) const;
+
+ private:
+  // Writes the workspace data file.
+  bool WriteWorkspaceDataFile(const std::string& name, Err* err) const;
+
+  // Writes the settings file.
+  bool WriteSettingsFile(const std::string& name, Err* err) const;
+
+  const BuildSettings* build_settings_ = nullptr;
+  XcodeWriter::Options options_;
+};
+
+XcodeWorkspace::XcodeWorkspace(const BuildSettings* build_settings,
+                               XcodeWriter::Options options)
+    : build_settings_(build_settings), options_(options) {}
+
+XcodeWorkspace::~XcodeWorkspace() = default;
+
+bool XcodeWorkspace::WriteWorkspace(const std::string& name, Err* err) const {
+  return WriteWorkspaceDataFile(name, err) && WriteSettingsFile(name, err);
+}
+
+bool XcodeWorkspace::WriteWorkspaceDataFile(const std::string& name,
+                                            Err* err) const {
+  const SourceFile source_file =
+      build_settings_->build_dir().ResolveRelativeFile(
+          Value(nullptr, name + "/contents.xcworkspacedata"), err);
+  if (source_file.is_null())
+    return false;
+
+  std::stringstream out;
+  out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      << "<Workspace\n"
+      << "   version = \"1.0\">\n"
+      << "   <FileRef\n"
+      << "      location = \"self:\">\n"
+      << "   </FileRef>\n"
+      << "</Workspace>\n";
+
+  return WriteFileIfChanged(build_settings_->GetFullPath(source_file),
+                            out.str(), err);
+}
+
+bool XcodeWorkspace::WriteSettingsFile(const std::string& name,
+                                       Err* err) const {
+  const SourceFile source_file =
+      build_settings_->build_dir().ResolveRelativeFile(
+          Value(nullptr, name + "/xcshareddata/WorkspaceSettings.xcsettings"),
+          err);
+  if (source_file.is_null())
+    return false;
+
+  std::stringstream out;
+  out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      << "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+      << "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+      << "<plist version=\"1.0\">\n"
+      << "<dict>\n";
+
+  switch (options_.build_system) {
+    case XcodeBuildSystem::kLegacy:
+      out << "\t<key>BuildSystemType</key>\n"
+          << "\t<string>Original</string>\n";
+      break;
+    case XcodeBuildSystem::kNew:
+      break;
+  }
+
+  out << "</dict>\n"
+      << "</plist>\n";
+
+  return WriteFileIfChanged(build_settings_->GetFullPath(source_file),
+                            out.str(), err);
+}
+
+// Class responsible for constructing and writing the .xcodeproj from the
+// targets known to gn. It currently requires using the "Legacy build system"
+// so it will embed an .xcworkspace file to force the setting.
 class XcodeProject {
  public:
   XcodeProject(const BuildSettings* build_settings,
-               XcodeWriter::Options options,
-               const std::string& name);
+               XcodeWriter::Options options);
   ~XcodeProject();
 
   // Recursively finds "source" files from |builder| and adds them to the
@@ -442,11 +568,10 @@ class XcodeProject {
 };
 
 XcodeProject::XcodeProject(const BuildSettings* build_settings,
-                           XcodeWriter::Options options,
-                           const std::string& name)
+                           XcodeWriter::Options options)
     : build_settings_(build_settings),
       options_(options),
-      project_(name,
+      project_(options.project_name,
                ConfigNameFromBuildSettings(build_settings),
                SourcePathFromBuildSettings(build_settings),
                ProjectAttributesFromBuildSettings(build_settings)) {}
@@ -495,7 +620,7 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
     if (!item->AsConfig() && !item->AsTarget() && !item->AsToolchain())
       continue;
 
-    const SourceFile build = Loader::BuildFileForLabel(item->label());
+    const SourceFile build = builder.loader()->BuildFileForLabel(item->label());
     if (ShouldIncludeFileInProject(build))
       sources.insert(build);
 
@@ -631,13 +756,18 @@ bool XcodeProject::AddCXTestSourceFilesForTestModuleTargets(
       target_with_xctest_files = target;
     }
 
-    const SourceFileSet& xctest_file_list =
+    const SourceFileSet& sources =
         resolver.SearchFilesForTarget(target_with_xctest_files);
+
+    // Sort files to ensure deterministic generation of the project file (and
+    // nicely sorted file list in Xcode).
+    std::vector<SourceFile> sorted_sources(sources.begin(), sources.end());
+    std::sort(sorted_sources.begin(), sorted_sources.end());
 
     // Add xctest files to the "Compiler Sources" of corresponding xctest
     // and xcuitest native targets for proper indexing and for discovery of
     // tests function.
-    AddXCTestFilesToTestModuleTarget(xctest_file_list, pair.second, &project_,
+    AddXCTestFilesToTestModuleTarget(sorted_sources, pair.second, &project_,
                                      source_dir, build_settings_);
   }
 
@@ -681,8 +811,14 @@ bool XcodeProject::WriteFile(Err* err) const {
   std::stringstream pbxproj_string_out;
   WriteFileContent(pbxproj_string_out);
 
-  return WriteFileIfChanged(build_settings_->GetFullPath(pbxproj_file),
-                            pbxproj_string_out.str(), err);
+  if (!WriteFileIfChanged(build_settings_->GetFullPath(pbxproj_file),
+                          pbxproj_string_out.str(), err)) {
+    return false;
+  }
+
+  XcodeWorkspace workspace(build_settings_, options_);
+  return workspace.WriteWorkspace(
+      project_.Name() + ".xcodeproj/project.xcworkspace", err);
 }
 
 std::optional<std::vector<const Target*>> XcodeProject::GetTargetsFromBuilder(
@@ -742,8 +878,25 @@ PBXNativeTarget* XcodeProject::AddBinaryTarget(const Target* target,
                                                Err* err) {
   DCHECK_EQ(target->output_type(), Target::EXECUTABLE);
 
-  const std::string output_dir = RebasePath(target->output_dir().value(),
-      build_settings_->build_dir());
+  std::string output_dir = target->output_dir().value();
+  if (output_dir.empty()) {
+    const Tool* tool = target->toolchain()->GetToolForTargetFinalOutput(target);
+    if (!tool) {
+      std::string tool_name = Tool::GetToolTypeForTargetFinalOutput(target);
+      *err = Err(nullptr, tool_name + " tool not defined",
+                 "The toolchain " +
+                     target->toolchain()->label().GetUserVisibleName(false) +
+                     " used by target " +
+                     target->label().GetUserVisibleName(false) +
+                     " doesn't define a \"" + tool_name + "\" tool.");
+      return nullptr;
+    }
+    output_dir = SubstitutionWriter::ApplyPatternToLinkerAsOutputFile(
+                     target, tool, tool->default_output_dir())
+                     .value();
+  } else {
+    output_dir = RebasePath(output_dir, build_settings_->build_dir());
+  }
 
   return project_.AddNativeTarget(
       target->label().name(), "compiled.mach-o.executable",
@@ -769,6 +922,9 @@ PBXNativeTarget* XcodeProject::AddBundleTarget(const Target* target,
 
   PBXAttributes xcode_extra_attributes =
       target->bundle_data().xcode_extra_attributes();
+  if (options_.build_system == XcodeBuildSystem::kLegacy) {
+    xcode_extra_attributes["CODE_SIGN_IDENTITY"] = "";
+  }
 
   const std::string& target_output_name = RebasePath(
       target->bundle_data().GetBundleRootDirOutput(target->settings()).value(),
@@ -813,99 +969,22 @@ void XcodeProject::WriteFileContent(std::ostream& out) const {
       << "}\n";
 }
 
-// Class corresponding to the generated workspace.
-class XcodeWorkspace {
- public:
-  XcodeWorkspace(const BuildSettings* settings, XcodeWriter::Options options);
-  ~XcodeWorkspace();
-
-  // Adds a project to the workspace.
-  XcodeProject* CreateProject(const std::string& name);
-
-  // Generates the workspace file and the .xcworkspace file to disk if updated
-  // (i.e. if the generated workspace is identical to the currently existing
-  // one, it is not overwritten).
-  bool WriteFile(Err* err) const;
-
- private:
-  // Generates the content of the .xcworkspace file into |out|.
-  void WriteFileContent(std::ostream& out) const;
-
-  // Returns the name of the workspace.
-  const std::string& Name() const;
-
-  const BuildSettings* build_settings_;
-  XcodeWriter::Options options_;
-  std::map<std::string, std::unique_ptr<XcodeProject>> projects_;
-};
-
-XcodeWorkspace::XcodeWorkspace(const BuildSettings* build_settings,
-                               XcodeWriter::Options options)
-    : build_settings_(build_settings), options_(options) {}
-
-XcodeWorkspace::~XcodeWorkspace() = default;
-
-XcodeProject* XcodeWorkspace::CreateProject(const std::string& name) {
-  DCHECK(!base::ContainsKey(projects_, name));
-  projects_.insert(std::make_pair(
-      name, std::make_unique<XcodeProject>(build_settings_, options_, name)));
-  auto iter = projects_.find(name);
-  DCHECK(iter != projects_.end());
-  DCHECK(iter->second);
-  return iter->second.get();
-}
-
-bool XcodeWorkspace::WriteFile(Err* err) const {
-  SourceFile xcworkspacedata_file =
-      build_settings_->build_dir().ResolveRelativeFile(
-          Value(nullptr, Name() + ".xcworkspace/contents.xcworkspacedata"),
-          err);
-  if (xcworkspacedata_file.is_null())
-    return false;
-
-  std::stringstream xcworkspacedata_string_out;
-  WriteFileContent(xcworkspacedata_string_out);
-
-  return WriteFileIfChanged(build_settings_->GetFullPath(xcworkspacedata_file),
-                            xcworkspacedata_string_out.str(), err);
-}
-
-void XcodeWorkspace::WriteFileContent(std::ostream& out) const {
-  out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      << "<Workspace version = \"1.0\">\n";
-  for (const auto& pair : projects_) {
-    out << "  <FileRef location = \"group:" << pair.first
-        << ".xcodeproj\"></FileRef>\n";
-  }
-  out << "</Workspace>\n";
-}
-
-const std::string& XcodeWorkspace::Name() const {
-  static std::string all("all");
-  return !options_.workspace_name.empty() ? options_.workspace_name : all;
-}
-
 // static
 bool XcodeWriter::RunAndWriteFiles(const BuildSettings* build_settings,
                                    const Builder& builder,
                                    Options options,
                                    Err* err) {
-  XcodeWorkspace workspace(build_settings, options);
-
-  XcodeProject* products = workspace.CreateProject("products");
-  if (!products->AddSourcesFromBuilder(builder, err))
+  XcodeProject project(build_settings, options);
+  if (!project.AddSourcesFromBuilder(builder, err))
     return false;
 
-  if (!products->AddTargetsFromBuilder(builder, err))
+  if (!project.AddTargetsFromBuilder(builder, err))
     return false;
 
-  if (!products->AssignIds(err))
+  if (!project.AssignIds(err))
     return false;
 
-  if (!products->WriteFile(err))
-    return false;
-
-  if (!workspace.WriteFile(err))
+  if (!project.WriteFile(err))
     return false;
 
   return true;

@@ -63,9 +63,6 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
                                          const std::string& password,
                                          bool authenticated_by_pin,
                                          OnAuthenticateCallback callback);
-  void AuthenticateUserWithExternalBinary(const AccountId& account_id,
-                                          OnAuthenticateCallback callback);
-  void EnrollUserWithExternalBinary(OnAuthenticateCallback callback);
   void AuthenticateUserWithEasyUnlock(const AccountId& account_id);
   void AuthenticateUserWithChallengeResponse(const AccountId& account_id,
                                              OnAuthenticateCallback callback);
@@ -83,7 +80,6 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
   void OnMaxIncorrectPasswordAttempted(const AccountId& account_id);
   void FocusLockScreenApps(bool reverse);
   void ShowGaiaSignin(const AccountId& prefilled_account);
-  void HideGaiaSignin();
   void OnRemoveUserWarningShown();
   void RemoveUser(const AccountId& account_id);
   void LaunchPublicSession(const AccountId& account_id,
@@ -139,8 +135,8 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
   // KioskAppMenu:
   void SetKioskApps(
       const std::vector<KioskAppMenuEntry>& kiosk_apps,
-      const base::RepeatingCallback<void(const KioskAppMenuEntry&)>& launch_app)
-      override;
+      const base::RepeatingCallback<void(const KioskAppMenuEntry&)>& launch_app,
+      const base::RepeatingClosure& on_show_menu) override;
 
   AuthenticationStage authentication_stage() const {
     return authentication_stage_;

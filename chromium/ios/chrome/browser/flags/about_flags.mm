@@ -40,6 +40,8 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
+#import "components/policy/core/common/policy_loader_ios_constants.h"
+#include "components/policy/policy_constants.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/security_state/core/features.h"
 #include "components/send_tab_to_self/features.h"
@@ -59,6 +61,7 @@
 #include "ios/chrome/browser/passwords/password_manager_features.h"
 #include "ios/chrome/browser/policy/policy_features.h"
 #include "ios/chrome/browser/system_flags.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/download/features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
@@ -375,6 +378,11 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillEnableCompanyNameName,
      flag_descriptions::kAutofillEnableCompanyNameDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableCompanyName)},
+    {"webpage-default-zoom-from-dynamic-type",
+     flag_descriptions::kWebPageDefaultZoomFromDynamicTypeName,
+     flag_descriptions::kWebPageDefaultZoomFromDynamicTypeDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::kWebPageDefaultZoomFromDynamicType)},
     {"webpage-text-accessibility",
      flag_descriptions::kWebPageTextAccessibilityName,
      flag_descriptions::kWebPageTextAccessibilityDescription, flags_ui::kOsIos,
@@ -434,12 +442,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"send-uma-cellular", flag_descriptions::kSendUmaOverAnyNetwork,
      flag_descriptions::kSendUmaOverAnyNetworkDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kUmaCellular)},
-    {"autofill-no-local-save-on-unmask-success",
-     flag_descriptions::kAutofillNoLocalSaveOnUnmaskSuccessName,
-     flag_descriptions::kAutofillNoLocalSaveOnUnmaskSuccessDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillNoLocalSaveOnUnmaskSuccess)},
     {"omnibox-preserve-default-match-against-async-update",
      flag_descriptions::kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName,
      flag_descriptions::
@@ -463,21 +465,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableSyncTrustedVaultName,
      flag_descriptions::kEnableSyncTrustedVaultDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(switches::kSyncSupportTrustedVaultPassphrase)},
-    {"enable-sync-uss-nigori", flag_descriptions::kEnableSyncUSSNigoriName,
-     flag_descriptions::kEnableSyncUSSNigoriDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(switches::kSyncUSSNigori)},
     {"collections-card-presentation-style",
      flag_descriptions::kCollectionsCardPresentationStyleName,
      flag_descriptions::kCollectionsCardPresentationStyleDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kCollectionsCardPresentationStyle)},
-    {"enable-autofill-credit-card-upload-editable-expiration-date",
-     flag_descriptions::
-         kEnableAutofillCreditCardUploadEditableExpirationDateName,
-     flag_descriptions::
-         kEnableAutofillCreditCardUploadEditableExpirationDateDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillUpstreamEditableExpirationDate)},
     {"credit-card-scanner", flag_descriptions::kCreditCardScannerName,
      flag_descriptions::kCreditCardScannerDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kCreditCardScanner)},
@@ -496,10 +487,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kConfirmInfobarMessagesUIName,
      flag_descriptions::kConfirmInfobarMessagesUIDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kConfirmInfobarMessagesUI)},
-    {"disable-animation-on-low-battery",
-     flag_descriptions::kDisableAnimationOnLowBatteryName,
-     flag_descriptions::kDisableAnimationOnLowBatteryDescription,
-     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kDisableAnimationOnLowBattery)},
+    {"disable-progress-bar-animation",
+     flag_descriptions::kDisableProgressBarAnimationName,
+     flag_descriptions::kDisableProgressBarAnimationDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kDisableProgressBarAnimation)},
     {"messages-save-card-infobar",
      flag_descriptions::kSaveCardInfobarMessagesUIName,
      flag_descriptions::kSaveCardInfobarMessagesUIDescription, flags_ui::kOsIos,
@@ -560,9 +551,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"contained-browser-bvc", flag_descriptions::kContainedBVCName,
      flag_descriptions::kContainedBVCDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kContainedBVC)},
-    {"clear-synced-data", flag_descriptions::kClearSyncedDataName,
-     flag_descriptions::kClearSyncedDataDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kClearSyncedData)},
     {"ssl-committed-interstitials",
      flag_descriptions::kSSLCommittedInterstitialsName,
      flag_descriptions::kSSLCommittedInterstitialsDescription, flags_ui::kOsIos,
@@ -590,9 +578,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"safe-browsing-available", flag_descriptions::kSafeBrowsingAvailableName,
      flag_descriptions::kSafeBrowsingAvailableDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(safe_browsing::kSafeBrowsingAvailableOnIOS)},
-    {"new-signin-architecture", flag_descriptions::kNewSigninArchitectureName,
-     flag_descriptions::kNewSigninArchitectureDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kNewSigninArchitecture)},
     {"qr-code-generation", flag_descriptions::kQRCodeGenerationName,
      flag_descriptions::kQRCodeGenerationDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kQRCodeGeneration)},
@@ -639,10 +624,52 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(
          autofill::features::kAutofillEnableCardNicknameManagement)},
+    {"password-check", flag_descriptions::kPasswordCheckName,
+     flag_descriptions::kPasswordCheckDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(password_manager::features::kPasswordCheck)},
+    {"enable-ios-managed-settings-ui",
+     flag_descriptions::kEnableIOSManagedSettingsUIName,
+     flag_descriptions::kEnableIOSManagedSettingsUIDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kEnableIOSManagedSettingsUI)},
+    {"safety-check-ios", flag_descriptions::kSafetyCheckIOSName,
+     flag_descriptions::kSafetyCheckIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kSafetyCheckIOS)},
+    {"discover-feed-ntp-ios", flag_descriptions::kDiscoverFeedInNtpName,
+     flag_descriptions::kDiscoverFeedInNtpDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kDiscoverFeedInNtp)},
+    {"autofill-enable-card-nickname-upstream",
+     flag_descriptions::kAutofillEnableCardNicknameUpstreamName,
+     flag_descriptions::kAutofillEnableCardNicknameUpstreamDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnableCardNicknameUpstream)},
+    {"illustrated-empty-states", flag_descriptions::kIllustratedEmptyStatesName,
+     flag_descriptions::kIllustratedEmptyStatesDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kIllustratedEmptyStates)},
     {"messages-block-popup-infobars",
      flag_descriptions::kBlockPopupInfobarMessagesUIName,
      flag_descriptions::kBlockPopupInfobarMessagesUIDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kBlockPopupInfobarMessagesUI)},
+    {"enable-native-context-menus",
+     flag_descriptions::kEnableNativeContextMenusName,
+     flag_descriptions::kEnableNativeContextMenusDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kEnableNativeContextMenus)},
+    {"expanded-tab-strip", flag_descriptions::kExpandedTabStripName,
+     flag_descriptions::kExpandedTabStripDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kExpandedTabStrip)},
+    {"autofill-enable-offers-in-downstream",
+     flag_descriptions::kAutofillEnableOffersInDownstreamName,
+     flag_descriptions::kAutofillEnableOffersInDownstreamDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableOffersInDownstream)},
+    {"shared-highlighting-ios", flag_descriptions::kSharedHighlightingIOSName,
+     flag_descriptions::kSharedHighlightingIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kSharedHighlightingIOS)},
+    {"add-web-content-drop-interaction",
+     flag_descriptions::kAddWebContentDropInteractionName,
+     flag_descriptions::kAddWebContentDropInteractionDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::features::kAddWebContentDropInteraction)},
 };
 
 bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {
@@ -670,9 +697,40 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &bugfix);
     std::string product = base::StringPrintf("Version/%d.%d", major, minor);
 
-    command_line->AppendSwitchASCII(
-        switches::kUserAgent,
-        web::BuildUserAgentFromProduct(web::UserAgentType::MOBILE, product));
+    command_line->AppendSwitchASCII(switches::kUserAgent,
+                                    web::BuildMobileUserAgent(product));
+  }
+
+  // Set some sample policy values for testing if EnableSamplePolicies is
+  // enabled.
+  if ([defaults boolForKey:@"EnableSamplePolicies"]) {
+    // List the sample policies to enable as experimental. This is necessary for
+    // the flag to work on Beta.
+    NSArray* experimental_policies = @[
+      base::SysUTF8ToNSString(policy::key::kAutofillCreditCardEnabled),
+      base::SysUTF8ToNSString(policy::key::kChromeVariations),
+      base::SysUTF8ToNSString(policy::key::kDefaultPopupsSetting),
+      base::SysUTF8ToNSString(policy::key::kPasswordManagerEnabled)
+    ];
+
+    // Define sample policies to enable.
+    NSDictionary* testing_policies = @{
+      base::SysUTF8ToNSString(policy::key::kEnableExperimentalPolicies) :
+          experimental_policies,
+
+      base::SysUTF8ToNSString(policy::key::kAutofillCreditCardEnabled) : @NO,
+
+      // 2 = Disable all variations
+      base::SysUTF8ToNSString(policy::key::kChromeVariations) : @2,
+
+      // 2 = Do not allow any site to show popups
+      base::SysUTF8ToNSString(policy::key::kDefaultPopupsSetting) : @2,
+
+      base::SysUTF8ToNSString(policy::key::kPasswordManagerEnabled) : @NO,
+    };
+    NSDictionary* registration_defaults =
+        @{kPolicyLoaderIOSConfigurationKey : testing_policies};
+    [defaults registerDefaults:registration_defaults];
   }
 
   // Freeform commandline flags.  These are added last, so that any flags added

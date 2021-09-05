@@ -38,10 +38,6 @@
 
 class Profile;
 
-namespace content {
-class RenderProcessHost;
-}
-
 namespace network {
 class SimpleURLLoader;
 class SharedURLLoaderFactory;
@@ -49,11 +45,11 @@ class SharedURLLoaderFactory;
 
 namespace safe_browsing {
 class ClientPhishingRequest;
+class ClientSideDetectionHost;
 
 // Main service which pushes models to the renderers, responds to classification
 // requests. This owns two ModelLoader objects.
-class ClientSideDetectionService : public content::NotificationObserver,
-                                   public KeyedService {
+class ClientSideDetectionService : public KeyedService {
  public:
   // void(GURL phishing_url, bool is_phishing).
   typedef base::Callback<void(GURL, bool)> ClientReportPhishingRequestCallback;
@@ -72,13 +68,11 @@ class ClientSideDetectionService : public content::NotificationObserver,
     return enabled_;
   }
 
+  void AddClientSideDetectionHost(ClientSideDetectionHost* host);
+  void RemoveClientSideDetectionHost(ClientSideDetectionHost* host);
+
   void OnURLLoaderComplete(network::SimpleURLLoader* url_loader,
                            std::unique_ptr<std::string> response_body);
-
-  // content::NotificationObserver overrides:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
 
   // Sends a request to the SafeBrowsing servers with the ClientPhishingRequest.
   // The URL scheme of the |url()| in the request should be HTTP.  This method
@@ -122,9 +116,21 @@ class ClientSideDetectionService : public content::NotificationObserver,
 
   base::WeakPtr<ClientSideDetectionService> GetWeakPtr();
 
-  // Get the model status for the given client-side model (extended reporting or
-  // regular).
-  ModelLoader::ClientModelStatus GetLastModelStatus(bool use_extended_model);
+  // Get the model status for the given client-side model.
+  ModelLoader::ClientModelStatus GetLastModelStatus();
+
+  // Returns the model string. Virtual so that mock implementation can override
+  // it.
+  virtual std::string GetModelStr();
+
+  // Makes ModelLoaders be constructed by calling |factory| rather than the
+  // default constructor.
+  void SetModelLoaderFactoryForTesting(
+      base::RepeatingCallback<std::unique_ptr<ModelLoader>()> factory);
+
+  // Overrides the SharedURLLoaderFactory
+  void SetURLLoaderFactoryForTesting(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
  private:
   friend class ClientSideDetectionServiceTest;
@@ -134,6 +140,9 @@ class ClientSideDetectionService : public content::NotificationObserver,
                            ServiceObjectDeletedBeforeCallbackDone);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest,
                            SendClientReportPhishingRequest);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest, GetNumReportTest);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest,
+                           TestModelFollowsPrefs);
 
   // CacheState holds all information necessary to respond to a caller without
   // actually making a HTTP request.
@@ -151,15 +160,13 @@ class ClientSideDetectionService : public content::NotificationObserver,
   static const int kNegativeCacheIntervalDays;
   static const int kPositiveCacheIntervalMinutes;
 
-  // Called when the prefs have changed in a way we may need to respond to.
-  void OnPrefsUpdated();
-
-  // Enables or disables the service, and refreshes the state of all renderers.
+  // Called when the prefs have changed in a way we may need to respond to. May
+  // enable or disable the service and refresh the state of all renderers.
   // Disabling cancels any pending requests; existing ClientSideDetectionHosts
   // will have their callbacks called with "false" verdicts.  Enabling starts
   // downloading the model after a delay.  In all cases, each render process is
   // updated to match the state
-  void SetEnabledAndRefreshState(bool enabled);
+  void OnPrefsUpdated();
 
   // Starts sending the request to the client-side detection frontends.
   // This method takes ownership of both pointers.
@@ -187,9 +194,6 @@ class ClientSideDetectionService : public content::NotificationObserver,
   // trims off the old elements.
   int GetNumReports(base::queue<base::Time>* report_times);
 
-  // Send the model to the given renderer.
-  void SendModelToProcess(content::RenderProcessHost* process);
-
   // Returns the URL that will be used for phishing requests.
   static GURL GetClientReportUrl(const std::string& report_url);
 
@@ -200,10 +204,11 @@ class ClientSideDetectionService : public content::NotificationObserver,
   // it won't download the model nor report detected phishing URLs.
   bool enabled_;
 
-  // We load two models: One for stadard Safe Browsing profiles,
-  // and one for those opted into extended reporting.
-  std::unique_ptr<ModelLoader> model_loader_standard_;
-  std::unique_ptr<ModelLoader> model_loader_extended_;
+  // Whether the service is in extended reporting mode or not. This affects the
+  // choice of model.
+  bool extended_reporting_;
+
+  std::unique_ptr<ModelLoader> model_loader_;
 
   // Map of client report phishing request to the corresponding callback that
   // has to be invoked when the request is done.
@@ -228,10 +233,13 @@ class ClientSideDetectionService : public content::NotificationObserver,
   // The URLLoaderFactory we use to issue network requests.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
-  content::NotificationRegistrar registrar_;
-
   // PrefChangeRegistrar used to track when the Safe Browsing pref changes.
   PrefChangeRegistrar pref_change_registrar_;
+
+  std::vector<ClientSideDetectionHost*> csd_hosts_;
+
+  // Factory used for constructing ModelLoaders
+  base::RepeatingCallback<std::unique_ptr<ModelLoader>()> model_factory_;
 
   // Used to asynchronously call the callbacks for
   // SendClientReportPhishingRequest.

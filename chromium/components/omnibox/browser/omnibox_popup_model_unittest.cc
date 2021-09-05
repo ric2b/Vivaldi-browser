@@ -46,6 +46,27 @@ class TestOmniboxEditModel : public OmniboxEditModel {
                        std::unique_ptr<OmniboxClient> client)
       : OmniboxEditModel(view, controller, std::move(client)) {}
   bool PopupIsOpen() const override { return true; }
+
+  const base::string16& text() const { return text_; }
+  bool is_temporary_text() const { return is_temporary_text_; }
+
+  void OnPopupDataChanged(const base::string16& text,
+                          bool is_temporary_text,
+                          const base::string16& prefix_autocompletion_text,
+                          const base::string16& keyword,
+                          bool is_keyword_hint,
+                          const base::string16& additional_text) override {
+    OmniboxEditModel::OnPopupDataChanged(text, is_temporary_text,
+                                         prefix_autocompletion_text, keyword,
+                                         is_keyword_hint, additional_text);
+    text_ = text;
+    is_temporary_text_ = is_temporary_text;
+  }
+
+ private:
+  // Contains the most recent text passed by the popup model to the edit model.
+  base::string16 text_;
+  bool is_temporary_text_ = false;
 };
 
 }  // namespace
@@ -62,7 +83,7 @@ class OmniboxPopupModelTest : public ::testing::Test {
   }
 
   TestingPrefServiceSimple* pref_service() { return &pref_service_; }
-  OmniboxEditModel* model() { return &model_; }
+  TestOmniboxEditModel* model() { return &model_; }
   OmniboxPopupModel* popup_model() { return &popup_model_; }
 
  private:
@@ -97,11 +118,11 @@ TEST_F(OmniboxPopupModelTest, SetSelectedLine) {
   result->AppendMatches(input, matches);
   result->SortAndCull(input, nullptr);
   popup_model()->OnResultChanged();
-  EXPECT_FALSE(popup_model()->has_selected_match());
-  popup_model()->SetSelectedLine(0, true, false);
-  EXPECT_FALSE(popup_model()->has_selected_match());
-  popup_model()->SetSelectedLine(0, false, false);
-  EXPECT_TRUE(popup_model()->has_selected_match());
+  EXPECT_TRUE(popup_model()->SelectionOnInitialLine());
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(0), true, false);
+  EXPECT_TRUE(popup_model()->SelectionOnInitialLine());
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(0), false, false);
+  EXPECT_TRUE(popup_model()->SelectionOnInitialLine());
 }
 
 TEST_F(OmniboxPopupModelTest, SetSelectedLineWithNoDefaultMatches) {
@@ -122,19 +143,19 @@ TEST_F(OmniboxPopupModelTest, SetSelectedLineWithNoDefaultMatches) {
 
   popup_model()->OnResultChanged();
   EXPECT_EQ(OmniboxPopupModel::kNoMatch, popup_model()->selected_line());
-  EXPECT_FALSE(popup_model()->has_selected_match());
+  EXPECT_TRUE(popup_model()->SelectionOnInitialLine());
 
-  popup_model()->SetSelectedLine(0, false, false);
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(0), false, false);
   EXPECT_EQ(0U, popup_model()->selected_line());
-  EXPECT_TRUE(popup_model()->has_selected_match());
+  EXPECT_FALSE(popup_model()->SelectionOnInitialLine());
 
-  popup_model()->SetSelectedLine(1, false, false);
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(1), false, false);
   EXPECT_EQ(1U, popup_model()->selected_line());
-  EXPECT_TRUE(popup_model()->has_selected_match());
+  EXPECT_FALSE(popup_model()->SelectionOnInitialLine());
 
   popup_model()->ResetToInitialState();
   EXPECT_EQ(OmniboxPopupModel::kNoMatch, popup_model()->selected_line());
-  EXPECT_FALSE(popup_model()->has_selected_match());
+  EXPECT_TRUE(popup_model()->SelectionOnInitialLine());
 }
 
 TEST_F(OmniboxPopupModelTest, PopupPositionChanging) {
@@ -357,6 +378,85 @@ TEST_F(OmniboxPopupModelTest, PopupStepSelectionWithHiddenGroupIds) {
   }
 }
 
+TEST_F(OmniboxPopupModelTest, PopupInlineAutocompleteAndTemporaryText) {
+  // Create a set of three matches "a|1" (inline autocompleted), "a2", "a3".
+  // The third match has a suggestion group ID.
+  ACMatches matches;
+  for (size_t i = 0; i < 3; ++i) {
+    AutocompleteMatch match(nullptr, 1000, false,
+                            AutocompleteMatchType::SEARCH_SUGGEST);
+    match.allowed_to_be_default_match = true;
+    matches.push_back(match);
+  }
+
+  matches[0].fill_into_edit = base::UTF8ToUTF16("a1");
+  matches[0].inline_autocompletion = base::UTF8ToUTF16("1");
+  matches[1].fill_into_edit = base::UTF8ToUTF16("a2");
+  matches[2].fill_into_edit = base::UTF8ToUTF16("a3");
+  matches[2].suggestion_group_id = 7;
+
+  auto* result = &model()->autocomplete_controller()->result_;
+  AutocompleteInput input(base::UTF8ToUTF16("a"),
+                          metrics::OmniboxEventProto::NTP,
+                          TestSchemeClassifier());
+  result->AppendMatches(input, matches);
+  result->SortAndCull(input, nullptr);
+  popup_model()->OnResultChanged();
+
+  // Simulate OmniboxController updating the popup, then check initial state.
+  model()->OnPopupDataChanged(base::UTF8ToUTF16("1"),
+                              /*is_temporary_text=*/false, base::string16(),
+                              base::string16(), false, base::string16());
+  EXPECT_EQ(Selection(0, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::UTF8ToUTF16("1"), model()->text());
+  EXPECT_FALSE(model()->is_temporary_text());
+
+  // Tab down to second match.
+  popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                               OmniboxPopupModel::kStateOrLine);
+  EXPECT_EQ(Selection(1, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::UTF8ToUTF16("a2"), model()->text());
+  EXPECT_TRUE(model()->is_temporary_text());
+
+  // Tab down to header above the third match, expect that we have an empty
+  // string for our temporary text.
+  popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                               OmniboxPopupModel::kStateOrLine);
+  EXPECT_EQ(Selection(2, OmniboxPopupModel::HEADER_BUTTON_FOCUSED),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::string16(), model()->text());
+  EXPECT_TRUE(model()->is_temporary_text());
+
+  // Now tab down to the third match, and expect that we update the temporary
+  // text to the third match.
+  popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                               OmniboxPopupModel::kStateOrLine);
+  EXPECT_EQ(Selection(2, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::UTF8ToUTF16("a3"), model()->text());
+  EXPECT_TRUE(model()->is_temporary_text());
+
+  // Now tab backwards to the header again, expect that we have an empty string
+  // for our temporary text.
+  popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                               OmniboxPopupModel::kStateOrLine);
+  EXPECT_EQ(Selection(2, OmniboxPopupModel::HEADER_BUTTON_FOCUSED),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::string16(), model()->text());
+  EXPECT_TRUE(model()->is_temporary_text());
+
+  // Now tab backwards to the second match, expect we update the temporary text
+  // to the second match.
+  popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                               OmniboxPopupModel::kStateOrLine);
+  EXPECT_EQ(Selection(1, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  EXPECT_EQ(base::UTF8ToUTF16("a2"), model()->text());
+  EXPECT_TRUE(model()->is_temporary_text());
+}
+
 TEST_F(OmniboxPopupModelTest, ComputeMatchMaxWidths) {
   int contents_max_width, description_max_width;
   const int separator_width = 10;
@@ -512,12 +612,12 @@ TEST_F(OmniboxPopupModelTest, TestFocusFixing) {
   result->AppendMatches(input, matches);
   result->SortAndCull(input, nullptr);
   popup_model()->OnResultChanged();
-  popup_model()->SetSelectedLine(0, true, false);
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(0), true, false);
   // The default state should be unfocused.
   EXPECT_EQ(OmniboxPopupModel::NORMAL, popup_model()->selected_line_state());
 
   // Focus the selection.
-  popup_model()->SetSelectedLine(0, false, false);
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(0));
   popup_model()->SetSelectedLineState(OmniboxPopupModel::BUTTON_FOCUSED);
   EXPECT_EQ(OmniboxPopupModel::BUTTON_FOCUSED,
             popup_model()->selected_line_state());
@@ -535,17 +635,7 @@ TEST_F(OmniboxPopupModelTest, TestFocusFixing) {
             popup_model()->selected_line_state());
 
   // Changing selection should change focused state.
-  popup_model()->SetSelectedLine(1, false, false);
-  EXPECT_EQ(OmniboxPopupModel::NORMAL, popup_model()->selected_line_state());
-
-  // Changing selection to same selection might change state.
-  popup_model()->SetSelectedLineState(OmniboxPopupModel::BUTTON_FOCUSED);
-  // Letting routine filter selecting same line should not change it.
-  popup_model()->SetSelectedLine(1, false, false);
-  EXPECT_EQ(OmniboxPopupModel::BUTTON_FOCUSED,
-            popup_model()->selected_line_state());
-  // Forcing routine to handle selecting same line should change it.
-  popup_model()->SetSelectedLine(1, false, true);
+  popup_model()->SetSelection(OmniboxPopupModel::Selection(1));
   EXPECT_EQ(OmniboxPopupModel::NORMAL, popup_model()->selected_line_state());
 
   // Adding a match at end will reset selection to first, so should change
@@ -574,7 +664,8 @@ TEST_F(OmniboxPopupModelTest, TestFocusFixing) {
 
   // Selecting |kNoMatch| should clear focus.
   popup_model()->SetSelectedLineState(OmniboxPopupModel::BUTTON_FOCUSED);
-  popup_model()->SetSelectedLine(OmniboxPopupModel::kNoMatch, false, false);
+  popup_model()->SetSelection(
+      OmniboxPopupModel::Selection(OmniboxPopupModel::kNoMatch));
   popup_model()->OnResultChanged();
   EXPECT_EQ(OmniboxPopupModel::NORMAL, popup_model()->selected_line_state());
 }

@@ -76,8 +76,8 @@ WebViewPasswordManagerClient::WebViewPasswordManagerClient(
       password_feature_manager_(pref_service, sync_service),
       credentials_filter_(
           this,
-          base::Bind(&WebViewPasswordManagerClient::GetSyncService,
-                     base::Unretained(this))),
+          base::BindRepeating(&WebViewPasswordManagerClient::GetSyncService,
+                              base::Unretained(this))),
       helper_(this) {
   saving_passwords_enabled_.Init(
       password_manager::prefs::kCredentialsEnableService, GetPrefs());
@@ -91,7 +91,7 @@ SyncState WebViewPasswordManagerClient::GetPasswordSyncState() const {
 
 bool WebViewPasswordManagerClient::PromptUserToChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin,
+    const url::Origin& origin,
     const CredentialsCallback& callback) {
   NOTIMPLEMENTED();
   return false;
@@ -167,10 +167,6 @@ WebViewPasswordManagerClient::GetPasswordFeatureManager() const {
   return &password_feature_manager_;
 }
 
-bool WebViewPasswordManagerClient::IsMainFrameSecure() const {
-  return password_manager::WebStateContentIsSecureHtml(web_state_);
-}
-
 PrefService* WebViewPasswordManagerClient::GetPrefs() const {
   return pref_service_;
 }
@@ -185,7 +181,7 @@ PasswordStore* WebViewPasswordManagerClient::GetAccountPasswordStore() const {
 
 void WebViewPasswordManagerClient::NotifyUserAutoSignin(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin) {
+    const url::Origin& origin) {
   DCHECK(!local_forms.empty());
   helper_.NotifyUserAutoSignin();
   [delegate_ showAutosigninNotification:std::move(local_forms[0])];
@@ -214,8 +210,16 @@ bool WebViewPasswordManagerClient::IsSavingAndFillingEnabled(
          IsFillingEnabled(url);
 }
 
-const GURL& WebViewPasswordManagerClient::GetLastCommittedEntryURL() const {
+bool WebViewPasswordManagerClient::IsCommittedMainFrameSecure() const {
+  return password_manager::WebStateContentIsSecureHtml(web_state_);
+}
+
+const GURL& WebViewPasswordManagerClient::GetLastCommittedURL() const {
   return delegate_.lastCommittedURL;
+}
+
+url::Origin WebViewPasswordManagerClient::GetLastCommittedOrigin() const {
+  return url::Origin::Create(delegate_.lastCommittedURL);
 }
 
 const password_manager::CredentialsFilter*

@@ -116,8 +116,7 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
           GetApplicationContext()->GetApplicationLocale())),
       infobar_manager_(infobar_manager),
       password_manager_(password_manager),
-      unmask_controller_(browser_state->GetPrefs(),
-                         browser_state->IsOffTheRecord()),
+      unmask_controller_(browser_state->GetPrefs()),
       // TODO(crbug.com/928595): Replace the closure with a callback to the
       // renderer that indicates if log messages should be sent from the
       // renderer.
@@ -319,19 +318,15 @@ void ChromeAutofillClientIOS::ScanCreditCard(CreditCardScanCallback callback) {
 }
 
 void ChromeAutofillClientIOS::ShowAutofillPopup(
-    const gfx::RectF& element_bounds,
-    base::i18n::TextDirection text_direction,
-    const std::vector<Suggestion>& suggestions,
-    bool /*unused_autoselect_first_suggestion*/,
-    PopupType popup_type,
+    const AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<AutofillPopupDelegate> delegate) {
-  [bridge_ showAutofillPopup:suggestions popupDelegate:delegate];
+  [bridge_ showAutofillPopup:open_args.suggestions popupDelegate:delegate];
 }
 
 void ChromeAutofillClientIOS::UpdateAutofillPopupDataListValues(
     const std::vector<base::string16>& values,
     const std::vector<base::string16>& labels) {
-  NOTREACHED();
+  // No op. ios/web_view does not support display datalist.
 }
 
 base::span<const Suggestion> ChromeAutofillClientIOS::GetPopupSuggestions()
@@ -342,6 +337,12 @@ base::span<const Suggestion> ChromeAutofillClientIOS::GetPopupSuggestions()
 
 void ChromeAutofillClientIOS::PinPopupView() {
   NOTIMPLEMENTED();
+}
+
+AutofillClient::PopupOpenArgs ChromeAutofillClientIOS::GetReopenPopupArgs()
+    const {
+  NOTIMPLEMENTED();
+  return {};
 }
 
 void ChromeAutofillClientIOS::UpdatePopup(

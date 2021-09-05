@@ -118,9 +118,11 @@ network::mojom::LoadTimingInfo ToMojoLoadTiming(
       load_timing.proxy_resolve_start, load_timing.proxy_resolve_end,
       load_timing.connect_timing, load_timing.send_start, load_timing.send_end,
       load_timing.receive_headers_start, load_timing.receive_headers_end,
-      load_timing.push_start, load_timing.push_end,
-      load_timing.service_worker_start_time,
-      load_timing.service_worker_ready_time);
+      load_timing.first_early_hints_time, load_timing.push_start,
+      load_timing.push_end, load_timing.service_worker_start_time,
+      load_timing.service_worker_ready_time,
+      load_timing.service_worker_fetch_start,
+      load_timing.service_worker_respond_with_settled);
 }
 
 // This is complementary to ConvertNetPriorityToWebKitPriority, defined in
@@ -927,12 +929,14 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetConnectionReused(head.load_timing.socket_reused);
   response->SetWasFetchedViaSPDY(head.was_fetched_via_spdy);
   response->SetWasFetchedViaServiceWorker(head.was_fetched_via_service_worker);
+  response->SetServiceWorkerResponseSource(head.service_worker_response_source);
   response->SetWasFallbackRequiredByServiceWorker(
       head.was_fallback_required_by_service_worker);
   response->SetType(head.response_type);
   response->SetUrlListViaServiceWorker(head.url_list_via_service_worker);
   response->SetCacheStorageCacheName(
-      head.is_in_cache_storage
+      head.service_worker_response_source ==
+              network::mojom::FetchResponseSource::kCacheStorage
           ? blink::WebString::FromUTF8(head.cache_storage_cache_name)
           : blink::WebString());
   blink::WebVector<blink::WebString> cors_exposed_header_names(
@@ -1112,7 +1116,7 @@ void WebURLLoaderImpl::LoadSynchronously(
         WebString::FromLatin1(sync_load_response.downloaded_blob->uuid),
         WebString::FromLatin1(sync_load_response.downloaded_blob->content_type),
         sync_load_response.downloaded_blob->size,
-        sync_load_response.downloaded_blob->blob.PassPipe());
+        std::move(sync_load_response.downloaded_blob->blob));
   }
 
   data.Assign(sync_load_response.data.data(), sync_load_response.data.size());

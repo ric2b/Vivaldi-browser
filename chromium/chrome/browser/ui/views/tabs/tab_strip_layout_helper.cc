@@ -265,11 +265,8 @@ int TabStripLayoutHelper::UpdateIdealBounds(int available_width) {
         }
         break;
       case ViewType::kGroupHeader:
-        if (slot.view->dragging()) {
-          slot.view->SetBoundsRect(bounds[i]);
-        } else {
+        if (!slot.view->dragging())
           group_header_ideal_bounds_[slot.view->group().value()] = bounds[i];
-        }
         break;
     }
   }
@@ -336,11 +333,24 @@ std::vector<gfx::Rect> TabStripLayoutHelper::CalculateIdealBounds(
         i == active_tab_slot_index ? TabActive::kActive : TabActive::kInactive;
     auto pinned = i <= last_pinned_tab_slot_index ? TabPinned::kPinned
                                                   : TabPinned::kUnpinned;
-    auto open =
-        slots_[i].animation->IsClosing() ? TabOpen::kClosed : TabOpen::kOpen;
+
+    // The slot can only be collapsed if it is a tab and in a collapsed group.
+    // If the slot is indeed a tab and in a group, check the collapsed state of
+    // the group to determine if it is collapsed.
+    // A collapsed tab animates close like a closed tab.
+    base::Optional<tab_groups::TabGroupId> id = slots_[i].view->group();
+    bool slot_is_collapsed_tab =
+        (slots_[i].type == ViewType::kTab && id.has_value())
+            ? controller_->IsGroupCollapsed(id.value())
+            : false;
+
+    auto open = (slots_[i].animation->IsClosing() || slot_is_collapsed_tab)
+                    ? TabOpen::kClosed
+                    : TabOpen::kOpen;
     TabAnimationState ideal_animation_state =
         TabAnimationState::ForIdealTabState(open, pinned, active, 0);
     TabSizeInfo size_info = slots_[i].view->GetTabSizeInfo();
+
     tab_widths.push_back(TabWidthConstraints(ideal_animation_state,
                                              layout_constants, size_info));
   }

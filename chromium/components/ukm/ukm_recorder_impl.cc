@@ -13,6 +13,7 @@
 #include "base/metrics/crc32.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/rand_util.h"
@@ -106,7 +107,13 @@ void RecordDroppedSource(DroppedDataReason reason) {
       static_cast<int>(DroppedDataReason::NUM_DROPPED_DATA_REASONS));
 }
 
-void RecordDroppedEntry(DroppedDataReason reason) {
+void RecordDroppedEntry(uint64_t event_hash, DroppedDataReason reason) {
+  // The enum for this histogram gets populated by the PopulateEnumWithUkmEvents
+  // function in populate_enums.py when producing the merged XML.
+  base::UmaHistogramSparse("UKM.Entries.Dropped.ByEntryHash",
+                           // Truncate the unsigned 64-bit hash to 31 bits, to
+                           // make it a suitable histogram sample.
+                           event_hash & 0x7fffffff);
   UMA_HISTOGRAM_ENUMERATION(
       "UKM.Entries.Dropped", static_cast<int>(reason),
       static_cast<int>(DroppedDataReason::NUM_DROPPED_DATA_REASONS));
@@ -363,8 +370,8 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
       if (!base::Contains(source_ids_seen, kv.first)) {
         continue;
       } else {
-        // Source of base::UkmSourceId::Type::UKM type will not be kept after
-        // entries are logged.
+        // Source of base::UkmSourceId::Type::DEFAULT type will not be kept
+        // after entries are logged.
         MarkSourceForDeletion(kv.first);
       }
     }
@@ -433,8 +440,9 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   UMA_HISTOGRAM_COUNTS_1000("UKM.Sources.UnmatchedSourcesCount",
                             num_sources_unmatched);
 
-  UMA_HISTOGRAM_COUNTS_1000("UKM.Sources.SerializedCount2.Ukm",
-                            serialized_source_type_counts[SourceIdType::UKM]);
+  UMA_HISTOGRAM_COUNTS_1000(
+      "UKM.Sources.SerializedCount2.Default",
+      serialized_source_type_counts[SourceIdType::DEFAULT]);
   UMA_HISTOGRAM_COUNTS_1000(
       "UKM.Sources.SerializedCount2.Navigation",
       serialized_source_type_counts[SourceIdType::NAVIGATION_ID]);
@@ -681,12 +689,14 @@ void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {
   DCHECK(!HasUnknownMetrics(decode_map_, *entry));
 
   if (!recording_enabled_) {
-    RecordDroppedEntry(DroppedDataReason::RECORDING_DISABLED);
+    RecordDroppedEntry(entry->event_hash,
+                       DroppedDataReason::RECORDING_DISABLED);
     return;
   }
 
   if (!ApplyEntryFilter(entry.get())) {
-    RecordDroppedEntry(DroppedDataReason::REJECTED_BY_FILTER);
+    RecordDroppedEntry(entry->event_hash,
+                       DroppedDataReason::REJECTED_BY_FILTER);
     return;
   }
 
@@ -703,7 +713,7 @@ void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {
 
   if (ShouldRestrictToWhitelistedEntries() &&
       !base::Contains(whitelisted_entry_hashes_, entry->event_hash)) {
-    RecordDroppedEntry(DroppedDataReason::NOT_WHITELISTED);
+    RecordDroppedEntry(entry->event_hash, DroppedDataReason::NOT_WHITELISTED);
     event_aggregate.dropped_due_to_whitelist++;
     for (auto& metric : entry->metrics)
       event_aggregate.metrics[metric.first].dropped_due_to_whitelist++;
@@ -718,7 +728,7 @@ void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {
     bool sampled_in = IsSampledIn(entry->source_id, entry->event_hash);
 
     if (!sampled_in) {
-      RecordDroppedEntry(DroppedDataReason::SAMPLED_OUT);
+      RecordDroppedEntry(entry->event_hash, DroppedDataReason::SAMPLED_OUT);
       event_aggregate.dropped_due_to_sampling++;
       for (auto& metric : entry->metrics)
         event_aggregate.metrics[metric.first].dropped_due_to_sampling++;
@@ -727,7 +737,7 @@ void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {
   }
 
   if (recordings_.entries.size() >= GetMaxEntries()) {
-    RecordDroppedEntry(DroppedDataReason::MAX_HIT);
+    RecordDroppedEntry(entry->event_hash, DroppedDataReason::MAX_HIT);
     event_aggregate.dropped_due_to_limits++;
     for (auto& metric : entry->metrics)
       event_aggregate.metrics[metric.first].dropped_due_to_limits++;

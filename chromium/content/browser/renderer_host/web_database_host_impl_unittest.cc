@@ -15,7 +15,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/fake_mojo_message_dispatch_context.h"
-#include "mojo/core/embedder/embedder.h"
+#include "mojo/public/cpp/system/functions.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "storage/common/database/database_identifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -115,8 +115,8 @@ class WebDatabaseHostImplTest : public ::testing::Test {
 };
 
 TEST_F(WebDatabaseHostImplTest, BadMessagesUnauthorized) {
-  const url::Origin correct_origin =
-      url::Origin::Create(GURL("http://correct.com"));
+  const GURL correct_url("http://correct.com");
+  const url::Origin correct_origin = url::Origin::Create(correct_url);
   const url::Origin incorrect_origin =
       url::Origin::Create(GURL("http://incorrect.net"));
   const base::string16 db_name(base::ASCIIToUTF16("db_name"));
@@ -128,9 +128,8 @@ TEST_F(WebDatabaseHostImplTest, BadMessagesUnauthorized) {
   security_policy->AddIsolatedOrigins(
       {correct_origin, incorrect_origin},
       ChildProcessSecurityPolicy::IsolatedOriginSource::TEST);
-
-  security_policy->LockToOrigin(IsolationContext(browser_context()),
-                                process_id(), correct_origin.GetURL());
+  security_policy->LockProcessForTesting(IsolationContext(browser_context()),
+                                         process_id(), correct_url);
   ASSERT_TRUE(
       security_policy->CanAccessDataForOrigin(process_id(), correct_origin));
   ASSERT_FALSE(
@@ -202,8 +201,8 @@ TEST_F(WebDatabaseHostImplTest, BadMessagesInvalid) {
 }
 
 TEST_F(WebDatabaseHostImplTest, ProcessShutdown) {
-  const url::Origin correct_origin =
-      url::Origin::Create(GURL("http://correct.com"));
+  const GURL correct_url("http://correct.com");
+  const url::Origin correct_origin = url::Origin::Create(correct_url);
   const url::Origin incorrect_origin =
       url::Origin::Create(GURL("http://incorrect.net"));
   const base::string16 db_name(base::ASCIIToUTF16("db_name"));
@@ -215,15 +214,15 @@ TEST_F(WebDatabaseHostImplTest, ProcessShutdown) {
   security_policy->AddIsolatedOrigins(
       {correct_origin, incorrect_origin},
       ChildProcessSecurityPolicy::IsolatedOriginSource::TEST);
-  security_policy->LockToOrigin(IsolationContext(browser_context()),
-                                process_id(), correct_origin.GetURL());
+  security_policy->LockProcessForTesting(IsolationContext(browser_context()),
+                                         process_id(), correct_url);
 
   bool success_callback_was_called = false;
   auto success_callback = base::BindLambdaForTesting(
       [&](base::File) { success_callback_was_called = true; });
   base::Optional<std::string> error_callback_message;
 
-  mojo::core::SetDefaultProcessErrorCallback(base::BindLambdaForTesting(
+  mojo::SetDefaultProcessErrorHandler(base::BindLambdaForTesting(
       [&](const std::string& message) { error_callback_message = message; }));
 
   // Verify that an error occurs with OpenFile() call before process shutdown.
@@ -269,8 +268,7 @@ TEST_F(WebDatabaseHostImplTest, ProcessShutdown) {
     EXPECT_FALSE(error_callback_message.has_value());
   }
 
-  mojo::core::SetDefaultProcessErrorCallback(
-      mojo::core::ProcessErrorCallback());
+  mojo::SetDefaultProcessErrorHandler(base::NullCallback());
 }
 
 }  // namespace content

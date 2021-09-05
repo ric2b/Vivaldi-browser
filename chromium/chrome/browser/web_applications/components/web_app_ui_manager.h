@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_UI_MANAGER_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_UI_MANAGER_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/callback_forward.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 
@@ -25,7 +28,12 @@ class WebAppUiManager {
  public:
   static std::unique_ptr<WebAppUiManager> Create(Profile* profile);
 
+  static bool ShouldHideAppFromUser(const AppId& app_id);
+
   virtual ~WebAppUiManager() = default;
+
+  virtual void Start() = 0;
+  virtual void Shutdown() = 0;
 
   // A safe downcast.
   virtual WebAppUiManagerImpl* AsImpl() = 0;

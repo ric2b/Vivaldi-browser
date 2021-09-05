@@ -22,18 +22,28 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/unloaded_extension_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/web_app_linked_shortcut_items.h"
 #include "url/gurl.h"
 
 using web_app::DisplayMode;
 
 namespace extensions {
+namespace {
+// These need to match the keys in
+// chrome/browser/extensions/chrome_app_sorting.cc
+const char kPrefAppLaunchOrdinal[] = "app_launcher_ordinal";
+const char kPrefPageOrdinal[] = "page_ordinal";
+}  // namespace
 
 BookmarkAppRegistrar::BookmarkAppRegistrar(Profile* profile)
     : AppRegistrar(profile) {
-  extension_observer_.Add(ExtensionRegistry::Get(profile));
 }
 
 BookmarkAppRegistrar::~BookmarkAppRegistrar() = default;
+
+void BookmarkAppRegistrar::Start() {
+  extension_observer_.Add(ExtensionRegistry::Get(profile()));
+}
 
 bool BookmarkAppRegistrar::IsInstalled(const web_app::AppId& app_id) const {
   const Extension* extension = GetEnabledExtension(app_id);
@@ -170,6 +180,23 @@ DisplayMode BookmarkAppRegistrar::GetAppUserDisplayMode(
   }
 }
 
+base::Time BookmarkAppRegistrar::GetAppLastLaunchTime(
+    const web_app::AppId& app_id) const {
+  const Extension* extension = GetBookmarkAppDchecked(app_id);
+  return extension
+             ? extensions::ExtensionPrefs::Get(profile())->GetLastLaunchTime(
+                   extension->id())
+             : base::Time();
+}
+
+base::Time BookmarkAppRegistrar::GetAppInstallTime(
+    const web_app::AppId& app_id) const {
+  const Extension* extension = GetBookmarkAppDchecked(app_id);
+  return extension ? extensions::ExtensionPrefs::Get(profile())->GetInstallTime(
+                         extension->id())
+                   : base::Time();
+}
+
 std::vector<WebApplicationIconInfo> BookmarkAppRegistrar::GetAppIconInfos(
     const web_app::AppId& app_id) const {
   std::vector<WebApplicationIconInfo> result;
@@ -180,7 +207,8 @@ std::vector<WebApplicationIconInfo> BookmarkAppRegistrar::GetAppIconInfos(
        LinkedAppIcons::GetLinkedAppIcons(extension).icons) {
     WebApplicationIconInfo web_app_icon_info;
     web_app_icon_info.url = icon_info.url;
-    web_app_icon_info.square_size_px = icon_info.size;
+    if (icon_info.size != LinkedAppIcons::kAnySize)
+      web_app_icon_info.square_size_px = icon_info.size;
     result.push_back(std::move(web_app_icon_info));
   }
   return result;
@@ -191,6 +219,45 @@ std::vector<SquareSizePx> BookmarkAppRegistrar::GetAppDownloadedIconSizes(
   const Extension* extension = GetBookmarkAppDchecked(app_id);
   return extension ? GetBookmarkAppDownloadedIconSizes(extension)
                    : std::vector<SquareSizePx>();
+}
+
+std::vector<WebApplicationShortcutsMenuItemInfo>
+BookmarkAppRegistrar::GetAppShortcutInfos(const web_app::AppId& app_id) const {
+  std::vector<WebApplicationShortcutsMenuItemInfo> result;
+  const Extension* extension = GetBookmarkAppDchecked(app_id);
+  if (!extension)
+    return result;
+
+  const WebAppLinkedShortcutItems& linked_shortcut_items =
+      WebAppLinkedShortcutItems::GetWebAppLinkedShortcutItems(extension);
+  result.reserve(linked_shortcut_items.shortcut_item_infos.size());
+  for (const WebAppLinkedShortcutItems::ShortcutItemInfo& linked_item_info :
+       linked_shortcut_items.shortcut_item_infos) {
+    WebApplicationShortcutsMenuItemInfo shortcut_item_info;
+    shortcut_item_info.name = linked_item_info.name;
+    shortcut_item_info.url = linked_item_info.url;
+    shortcut_item_info.shortcut_icon_infos.reserve(
+        linked_item_info.shortcut_item_icon_infos.size());
+    for (const WebAppLinkedShortcutItems::ShortcutItemInfo::IconInfo&
+             shortcut_item_icon_info :
+         linked_item_info.shortcut_item_icon_infos) {
+      WebApplicationShortcutsMenuItemInfo::Icon shortcut_icon_info;
+      shortcut_icon_info.square_size_px = shortcut_item_icon_info.size;
+      shortcut_icon_info.url = shortcut_item_icon_info.url;
+      shortcut_item_info.shortcut_icon_infos.emplace_back(
+          std::move(shortcut_icon_info));
+    }
+    result.emplace_back(std::move(shortcut_item_info));
+  }
+  return result;
+}
+
+std::vector<std::vector<SquareSizePx>>
+BookmarkAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
+    const web_app::AppId& app_id) const {
+  const Extension* extension = GetBookmarkAppDchecked(app_id);
+  return extension ? GetBookmarkAppDownloadedShortcutsMenuIconsSizes(extension)
+                   : std::vector<std::vector<SquareSizePx>>();
 }
 
 std::vector<web_app::AppId> BookmarkAppRegistrar::GetAppIds() const {
@@ -210,6 +277,28 @@ web_app::WebAppRegistrar* BookmarkAppRegistrar::AsWebAppRegistrar() {
 
 BookmarkAppRegistrar* BookmarkAppRegistrar::AsBookmarkAppRegistrar() {
   return this;
+}
+
+syncer::StringOrdinal BookmarkAppRegistrar::GetUserPageOrdinal(
+    const web_app::AppId& app_id) const {
+  std::string page_ordinal_raw_data;
+  // If the preference read fails then raw_data will still be unset and we
+  // will return an invalid StringOrdinal to signal that no page ordinal was
+  // found.
+  extensions::ExtensionPrefs::Get(profile())->ReadPrefAsString(
+      app_id, kPrefPageOrdinal, &page_ordinal_raw_data);
+  return syncer::StringOrdinal(page_ordinal_raw_data);
+}
+
+syncer::StringOrdinal BookmarkAppRegistrar::GetUserLaunchOrdinal(
+    const web_app::AppId& app_id) const {
+  std::string launch_ordinal_raw_data;
+  // If the preference read fails then raw_data will still be unset and we
+  // will return an invalid StringOrdinal to signal that no page ordinal was
+  // found.
+  extensions::ExtensionPrefs::Get(profile())->ReadPrefAsString(
+      app_id, kPrefAppLaunchOrdinal, &launch_ordinal_raw_data);
+  return syncer::StringOrdinal(launch_ordinal_raw_data);
 }
 
 const Extension* BookmarkAppRegistrar::FindExtension(

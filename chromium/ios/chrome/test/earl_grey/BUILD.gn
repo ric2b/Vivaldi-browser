@@ -61,7 +61,7 @@ chrome_ios_eg_test("ios_chrome_bookmarks_egtests") {
 }
 
 chrome_ios_eg_test("ios_chrome_signin_egtests") {
-  deps = [ "//ios/chrome/browser/ui/signin_interaction:eg_tests" ]
+  deps = [ "//ios/chrome/browser/ui/authentication/signin:eg_tests" ]
 }
 
 chrome_ios_eg_test("ios_chrome_settings_egtests") {
@@ -73,11 +73,6 @@ chrome_ios_eg_test("ios_chrome_settings_egtests") {
     "//ios/chrome/browser/ui/settings/language:eg_tests",
     "//ios/chrome/browser/ui/settings/password:eg_tests",
     "//ios/chrome/browser/ui/settings/sync:eg_tests",
-  ]
-
-  executable_args = [
-    "--args-json",
-    "{\"test_args\": [\"--enable-features=ClearSyncedData\"]}",
   ]
   xctest = false
 }
@@ -121,16 +116,11 @@ chrome_ios_eg_test("ios_chrome_web_egtests") {
 }
 
 chrome_ios_eg_test("ios_chrome_multitasking_egtests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [
-    "//ios/chrome/app/multitasking_test_application_delegate.h",
-    "//ios/chrome/app/multitasking_test_application_delegate.mm",
-  ]
-
   deps = [
     ":test_support",
     "//base",
     "//ios/chrome/app:app_internal",
+    "//ios/chrome/app:multitasking_test_app_delegate",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
 
     # Depends on all EarlGrey test suites to create multitasking tests suite.
@@ -251,6 +241,7 @@ source_set("test_support") {
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
     "//components/metrics:demographic_metrics_provider",
+    "//components/prefs",
     "//components/strings",
     "//components/sync/base",
     "//components/translate/core/browser",
@@ -313,6 +304,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/buttons",
     "//ios/chrome/browser/ui/toolbar/public",
+    "//ios/chrome/browser/ui/toolbar/public:feature_flags",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web:tab_id_tab_helper",
     "//ios/chrome/test/app:test_support",
@@ -395,6 +387,7 @@ source_set("eg_app_support+eg2") {
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
     "//components/metrics:demographic_metrics_provider",
+    "//components/prefs",
     "//components/strings",
     "//components/sync/base",
     "//components/translate/core/browser",
@@ -469,7 +462,6 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/settings/password:password_constants",
     "//ios/chrome/browser/ui/settings/privacy:privacy_ui",
     "//ios/chrome/browser/ui/settings/sync",
-    "//ios/chrome/browser/ui/signin_interaction:eg_app_support+eg2",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui_constants",
     "//ios/chrome/browser/ui/tab_grid/grid:grid_ui_constants",
     "//ios/chrome/browser/ui/table_view:feature_flags",
@@ -477,6 +469,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/toolbar:eg_app_support+eg2",
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
+    "//ios/chrome/browser/ui/toolbar/public:feature_flags",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/util:eg_app_support+eg2",
     "//ios/chrome/browser/web:eg_app_support+eg2",

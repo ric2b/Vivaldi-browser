@@ -17,7 +17,6 @@
 
 #include "base/containers/mru_cache.h"
 #include "base/gtest_prod_util.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
@@ -35,6 +34,7 @@
 #include "net/quic/network_connection.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_clock_skew_detector.h"
+#include "net/quic/quic_connectivity_monitor.h"
 #include "net/quic/quic_context.h"
 #include "net/quic/quic_crypto_client_config_handle.h"
 #include "net/quic/quic_session_key.h"
@@ -99,6 +99,12 @@ enum QuicPlatformNotification {
   NETWORK_SOON_TO_DISCONNECT,
   NETWORK_IP_ADDRESS_CHANGED,
   NETWORK_NOTIFICATION_MAX
+};
+
+enum AllActiveSessionsGoingAwayReason {
+  kClockSkewDetected,
+  kIPAddressChanged,
+  kCertDBChanged
 };
 
 // Encapsulates a pending request for a QuicChromiumClientSession.
@@ -396,7 +402,9 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
                     NetworkChangeNotifier::NetworkHandle* network);
   void ActivateSession(const QuicSessionAliasKey& key,
                        QuicChromiumClientSession* session);
-  void MarkAllActiveSessionsGoingAway();
+  // Go away all active sessions. May disable session's connectivity monitoring
+  // based on the |reason|.
+  void MarkAllActiveSessionsGoingAway(AllActiveSessionsGoingAwayReason reason);
 
   void ConfigureInitialRttEstimate(
       const quic::QuicServerId& server_id,
@@ -456,6 +464,14 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // |recent_crypto_config_map_|, an MRU cache.
   void OnAllCryptoClientRefReleased(
       QuicCryptoClientConfigMap::iterator& map_iterator);
+
+  // Called when a network change happens.
+  // Collect platform notification metrics, and if the change affects the
+  // original default network interface, collect connectivity degradation
+  // metrics from |connectivity_monitor_| and add to histograms.
+  void CollectDataOnPlatformNotification(
+      enum QuicPlatformNotification notification,
+      NetworkChangeNotifier::NetworkHandle affected_network) const;
 
   std::unique_ptr<QuicCryptoClientConfigHandle> GetCryptoConfigForTesting(
       const NetworkIsolationKey& network_isolation_key);
@@ -555,6 +571,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   NetworkConnection network_connection_;
 
   int num_push_streams_created_;
+
+  QuicConnectivityMonitor connectivity_monitor_;
 
   quic::QuicClientPushPromiseIndex push_promise_index_;
 

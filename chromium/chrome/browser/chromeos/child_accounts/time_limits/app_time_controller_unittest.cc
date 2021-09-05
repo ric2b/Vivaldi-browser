@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/services/app_service/public/cpp/icon_loader.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/system_clock/system_clock_client.h"
 #include "chromeos/settings/timezone_settings.h"
@@ -32,6 +31,7 @@
 #include "components/arc/test/fake_app_instance.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/services/app_service/public/cpp/icon_loader.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image_skia.h"
@@ -571,7 +571,7 @@ TEST_F(AppTimeControllerTest, MetricsTest) {
   controller()->app_registry()->SaveAppActivity();
   controller()->RecordMetricsOnShutdown();
   DeleteController();
-  histogram_tester.ExpectBucketCount(kPolicyUpdateCountMetric, 1, 1);
+  histogram_tester.ExpectBucketCount(kPolicyChangeCountMetric, 1, 1);
 
   InstantiateController();
 
@@ -583,12 +583,12 @@ TEST_F(AppTimeControllerTest, MetricsTest) {
   // metrics.
   histogram_tester.ExpectBucketCount(kBlockedAppsCountMetric, 1, 1);
   histogram_tester.ExpectBucketCount(kAppsWithTimeLimitMetric, 1, 1);
-  histogram_tester.ExpectBucketCount(kPolicyUpdateCountMetric, 1, 1);
+  histogram_tester.ExpectBucketCount(kPolicyChangeCountMetric, 1, 1);
 
   controller()->RecordMetricsOnShutdown();
   DeleteController();
   // There was actually no policy update when the controller was reinstantiated.
-  histogram_tester.ExpectBucketCount(kPolicyUpdateCountMetric, 0, 1);
+  histogram_tester.ExpectBucketCount(kPolicyChangeCountMetric, 0, 1);
 }
 
 TEST_F(AppTimeControllerTest, SetLastResetTimeTest) {

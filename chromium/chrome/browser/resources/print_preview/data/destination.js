@@ -10,6 +10,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 // <if expr="chromeos">
 import {ColorModeRestriction, DestinationPolicies, DuplexModeRestriction, PinModeRestriction} from './destination_policies.js';
+import {PrinterStatusReason} from '../data/printer_status_cros.js';
 // </if>
 
 /**
@@ -139,7 +140,7 @@ export let VendorCapability;
  * only on Chrome OS.
  *
  * @typedef {{
- *   vendor_capability: !Array<!VendorCapability>,
+ *   vendor_capability: (Array<!VendorCapability>|undefined),
  *   collate: ({default: (boolean|undefined)}|undefined),
  *   color: ({
  *     option: !Array<{
@@ -162,7 +163,8 @@ export let VendorCapability;
  *       type: (string|undefined),
  *       vendor_id: (string|undefined),
  *       custom_display_name: (string|undefined),
- *       is_default: (boolean|undefined)
+ *       is_default: (boolean|undefined),
+ *       name: (string|undefined),
  *     }>
  *   }|undefined),
  *   dpi: ({
@@ -412,6 +414,12 @@ export class Destination {
      * @private {string}
      */
     this.eulaUrl_ = '';
+
+    /**
+     * Stores the printer status reason for a local Chrome OS printer.
+     * @private {!PrinterStatusReason}
+     */
+    this.printerStatusReason_ = PrinterStatusReason.UNKNOWN_REASON;
     // </if>
 
     assert(
@@ -596,6 +604,22 @@ export class Destination {
   /** @param {string} eulaUrl The EULA URL to be set. */
   set eulaUrl(eulaUrl) {
     this.eulaUrl_ = eulaUrl;
+  }
+
+  /**
+   * @return {!PrinterStatusReason} The printer status reason for a local
+   *    Chrome OS printer.
+   */
+  get printerStatusReason() {
+    return this.printerStatusReason_;
+  }
+
+  /**
+   * @param {!PrinterStatusReason} printerStatusReason The printer status reason
+   *    to be set.
+   */
+  set printerStatusReason(printerStatusReason) {
+    this.printerStatusReason_ = printerStatusReason;
   }
   // </if>
 

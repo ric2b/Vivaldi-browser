@@ -48,8 +48,10 @@
 #include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_features.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
 #include "ui/gfx/switches.h"
@@ -95,35 +97,28 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
     ::switches::kUseCmdDecoder,
+    ::switches::kUseANGLE,
     ::switches::kDisableGpuWatchdog,
     ::switches::kDisableGpuCompositing,
     ::switches::kDisableGpuRasterization,
-    ::switches::kDisableLowResTiling,
     ::switches::kDisableOopRasterization,
-    ::switches::kDisablePartialRaster,
     ::switches::kDisablePepper3DImageChromium,
     ::switches::kDisablePreferCompositingToLCDText,
-    ::switches::kDisableRGBA4444Textures,
     ::switches::kDisableThreadedScrolling,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableVideoCaptureUseGpuMemoryBuffer,
     ::switches::kDisableYUVImageDecoding,
-    ::switches::kDisableZeroCopy,
     ::switches::kEnableBlinkFeatures,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
-    ::switches::kEnableLowResTiling,
     ::switches::kEnableNativeGpuMemoryBuffers,
     ::switches::kEnableOopRasterization,
     ::switches::kEnablePreferCompositingToLCDText,
-    ::switches::kEnableRGBA4444Textures,
     ::switches::kEnableTouchDragDrop,
     ::switches::kEnableUnifiedDesktop,
-    ::switches::kEnableUseHDRTransferFunction,
     ::switches::kEnableUseZoomForDSF,
     ::switches::kEnableViewport,
-    ::switches::kEnableZeroCopy,
     ::switches::kEnableHardwareOverlays,
     ::switches::kEdgeTouchFiltering,
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
@@ -133,7 +128,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kMainFrameResizesAreOrientationChanges,
     ::switches::kForceDeviceScaleFactor,
     ::switches::kForceGpuMemAvailableMb,
-    ::switches::kGpuRasterizationMSAASampleCount,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
     ::switches::kNumRasterThreads,
@@ -172,6 +166,14 @@ void DeriveCommandLine(const GURL& start_url,
     ash::switches::kAuraLegacyPowerButton,
     ash::switches::kEnableDimShelf,
     ash::switches::kShowTaps,
+    blink::switches::kDisableLowResTiling,
+    blink::switches::kDisablePartialRaster,
+    blink::switches::kDisableRGBA4444Textures,
+    blink::switches::kDisableZeroCopy,
+    blink::switches::kEnableLowResTiling,
+    blink::switches::kEnableRGBA4444Textures,
+    blink::switches::kEnableZeroCopy,
+    blink::switches::kGpuRasterizationMSAASampleCount,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,
@@ -232,6 +234,7 @@ void DeriveCommandLine(const GURL& start_url,
 void DeriveEnabledFeatures(base::CommandLine* out_command_line) {
   static const base::Feature* kForwardEnabledFeatures[] = {
       &ash::features::kAutoNightLight,
+      &display::features::kUseHDRTransferFunction,
   };
 
   std::vector<std::string> enabled_features;

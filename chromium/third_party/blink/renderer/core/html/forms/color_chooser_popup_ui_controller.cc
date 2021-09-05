@@ -63,7 +63,7 @@ ColorChooserPopupUIController::~ColorChooserPopupUIController() {
   DCHECK(!popup_);
 }
 
-void ColorChooserPopupUIController::Trace(Visitor* visitor) {
+void ColorChooserPopupUIController::Trace(Visitor* visitor) const {
   visitor->Trace(chrome_client_);
   visitor->Trace(eye_dropper_chooser_);
   ColorChooserUIController::Trace(visitor);
@@ -102,7 +102,9 @@ void ColorChooserPopupUIController::WriteColorPickerDocument(
       client_->ElementRectRelativeToViewport(), frame_->View());
 
   PagePopupClient::AddString(
-      "<!DOCTYPE html><head><meta charset='UTF-8'><style>\n", data);
+      "<!DOCTYPE html><head><meta charset='UTF-8'><meta name='color-scheme' "
+      "content='light dark'><style>\n",
+      data);
   data->Append(ChooserResourceLoader::GetPickerCommonStyleSheet());
   data->Append(ChooserResourceLoader::GetColorPickerStyleSheet());
   PagePopupClient::AddString(
@@ -161,7 +163,9 @@ void ColorChooserPopupUIController::WriteColorSuggestionPickerDocument(
       client_->ElementRectRelativeToViewport(), frame_->View());
 
   PagePopupClient::AddString(
-      "<!DOCTYPE html><head><meta charset='UTF-8'><style>\n", data);
+      "<!DOCTYPE html><head><meta charset='UTF-8'><meta name='color-scheme' "
+      "content='light dark'><style>\n",
+      data);
   data->Append(ChooserResourceLoader::GetPickerCommonStyleSheet());
   data->Append(ChooserResourceLoader::GetColorSuggestionPickerStyleSheet());
   if (features::IsFormControlsRefreshEnabled())
@@ -225,6 +229,7 @@ void ColorChooserPopupUIController::SetValue(const String& value) {
 
 void ColorChooserPopupUIController::DidClosePopup() {
   popup_ = nullptr;
+  eye_dropper_chooser_.reset();
 
   if (!chooser_)
     EndChooser();

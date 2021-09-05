@@ -50,7 +50,6 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
@@ -226,8 +225,8 @@ void MaybeCreateSafeBrowsing(
   if (!render_process_host)
     return;
 
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, rph_id,
                      resource_context, std::move(get_checker_delegate),
                      std::move(receiver)));
@@ -403,6 +402,9 @@ bool AwContentBrowserClient::ForceSniffingFileUrlsForHtml() {
 void AwContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line,
     int child_process_id) {
+  // AppCache should always be enabled for WebView until it is removed.
+  command_line->AppendSwitch(switches::kAppCacheForceEnabled);
+
   if (!command_line->HasSwitch(switches::kSingleProcess)) {
     // The only kind of a child process WebView can have is renderer or utility.
     std::string process_type =
@@ -683,7 +685,7 @@ void AwContentBrowserClient::ExposeInterfacesToRenderer(
           base::BindRepeating(
               &AwContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate,
               base::Unretained(this))),
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}));
+      content::GetUIThreadTaskRunner({}));
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   auto create_spellcheck_host =
@@ -691,9 +693,8 @@ void AwContentBrowserClient::ExposeInterfacesToRenderer(
         mojo::MakeSelfOwnedReceiver(std::make_unique<SpellCheckHostImpl>(),
                                     std::move(receiver));
       };
-  registry->AddInterface(
-      base::BindRepeating(create_spellcheck_host),
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}));
+  registry->AddInterface(base::BindRepeating(create_spellcheck_host),
+                         content::GetUIThreadTaskRunner({}));
 #endif
 }
 
@@ -841,8 +842,8 @@ bool AwContentBrowserClient::HandleExternalProtocol(
         0 /* process_id */, std::move(receiver), mojo::NullRemote(),
         true /* intercept_only */, base::nullopt /* security_options */);
   } else {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::IO},
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             [](mojo::PendingReceiver<network::mojom::URLLoaderFactory>
                    receiver) {
@@ -895,15 +896,6 @@ bool AwContentBrowserClient::ShouldLockToOrigin(
   // returning false helps avoid accidentally applying citadel-style Site
   // Isolation enforcement to Android WebView (and causing incorrect renderer
   // kills).
-  return false;
-}
-
-bool AwContentBrowserClient::DoesWebUISchemeRequireProcessLock(
-    base::StringPiece scheme) {
-  // TODO(nasko,alexmos): WebView does not currently lock processes for WebUI
-  // navigations, even though it does cross-process navigations. It should be
-  // fixed and this method can be removed.
-  // See https://crbug.com/1071464.
   return false;
 }
 
@@ -971,8 +963,8 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
           preferences.allow_file_access_from_file_urls ||
           preferences.allow_universal_access_from_file_urls;
     }
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::IO},
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy, process_id,
                        std::move(proxied_receiver),
                        std::move(target_factory_remote), security_options));
@@ -980,8 +972,8 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
     // A service worker and worker subresources set nullptr to |frame|, and
     // work without seeing the AllowUniversalAccessFromFileURLs setting. So,
     // we don't pass a valid |security_options| here.
-    base::PostTask(FROM_HERE, {content::BrowserThread::IO},
-                   base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
                                   process_id, std::move(proxied_receiver),
                                   std::move(target_factory_remote),
                                   base::nullopt /* security_options */));

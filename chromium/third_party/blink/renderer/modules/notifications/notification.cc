@@ -99,19 +99,18 @@ Notification* Notification::Create(ExecutionContext* context,
   }
 
   auto* window = DynamicTo<LocalDOMWindow>(context);
-  auto* document = window ? window->document() : nullptr;
   if (context->IsSecureContext()) {
     UseCounter::Count(context, WebFeature::kNotificationSecureOrigin);
-    if (document) {
-      document->CountUseOnlyInCrossOriginIframe(
+    if (window) {
+      window->CountUseOnlyInCrossOriginIframe(
           WebFeature::kNotificationAPISecureOriginIframe);
     }
   } else {
     Deprecation::CountDeprecation(context,
                                   WebFeature::kNotificationInsecureOrigin);
-    if (document) {
+    if (window) {
       Deprecation::CountDeprecationCrossOriginIframe(
-          *document, WebFeature::kNotificationAPIInsecureOriginIframe);
+          window, WebFeature::kNotificationAPIInsecureOriginIframe);
     }
   }
 
@@ -139,9 +138,9 @@ Notification* Notification::Create(ExecutionContext* context,
 
   notification->SchedulePrepareShow();
 
-  if (document) {
+  if (window) {
     if (auto* document_resource_coordinator =
-            document->GetResourceCoordinator()) {
+            window->document()->GetResourceCoordinator()) {
       document_resource_coordinator->OnNonPersistentNotificationCreated();
     }
   }
@@ -498,7 +497,7 @@ bool Notification::HasPendingActivity() const {
   return false;
 }
 
-void Notification::Trace(Visitor* visitor) {
+void Notification::Trace(Visitor* visitor) const {
   visitor->Trace(show_trigger_);
   visitor->Trace(loader_);
   visitor->Trace(listener_receiver_);

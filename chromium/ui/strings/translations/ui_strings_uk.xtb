@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Калібрування завершено</translation>
 <translation id="252373100621549798">Невідомий дисплей</translation>
 <translation id="2545651323591713692">Відкласти</translation>
+<translation id="2570734079541893434">Керувати налаштуваннями</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{через 1 год}one{через # год}few{через # год}many{через # год}other{через # год}}</translation>
 <translation id="2583543531130364912">Відкалібруйте сенсорний екран</translation>
 <translation id="2666092431469916601">Верх</translation>
 <translation id="2701330563083355633">Надіслано з пристрою "<ph name="DEVICE_NAME" />"</translation>
+<translation id="271033894570825754">Новий</translation>
 <translation id="2743387203779672305">Копіювати в буфер</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Відкрити папку</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Смайли та символи</translation>
 <translation id="5476505524087279545">зняти прапорець</translation>
 <translation id="547979256943495781">Полицю розташовано праворуч</translation>
+<translation id="5528053674512161860">Не вдалося завантажити сторінку, оскільки не встановлено модуль інтерфейсу розробника (dev_ui)</translation>
 <translation id="5574202486608032840">Система <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Курсор ліворуч</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Закрити</translation>
 <translation id="6119846243427417423">активувати</translation>
 <translation id="6129953537138746214">Пробіл</translation>
+<translation id="6134259848159370930">Шукайте на пристрої, у додатках, налаштуваннях та Інтернеті.</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> б/сек.</translation>
 <translation id="6156262341071374681">Розгорнути всі додатки</translation>
 <translation id="6165508094623778733">Докладніше</translation>
+<translation id="6166852626429024716">Шукайте на пристрої, в додатках, налаштуваннях та Інтернеті…</translation>
 <translation id="6264365405983206840">Вибрати &amp;всі</translation>
 <translation id="6351032674660237738">ПРОПОЗИЦІЇ ДОДАТКІВ</translation>
 <translation id="6364916375976753737">Прокрутка вліво</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Залишилась 1 хв}one{Залишилася # хв}few{Залишилося # хв}many{Залишилося # хв}other{Залишилося # хв}}</translation>
 <translation id="7319740667687257810">Панель запуску, частковий перегляд</translation>
-<translation id="7352651011704765696">Виникли проблеми</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 хв тому}one{# хв тому}few{# хв тому}many{# хв тому}other{# хв тому}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Залишилась 1 хвилина}one{Залишилася # хвилина}few{Залишилося # хвилини}many{Залишилося # хвилин}other{Залишилося # хвилини}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">Переміщено на сторінку <ph name="PAGE_NUMBER" />, рядок <ph name="ROW_NUMBER" />, стовпець <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Не блокувати</translation>
 <translation id="7907591526440419938">Відкрити файл</translation>
+<translation id="7952747673138230804">ОС Chrome показує пропозиції нового контенту. Система надсилає статистику для покращення цієї функції, лише якщо ви погодилися ділитися даними про використання. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Клавіша Command</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Понад 1 непрочитане сповіщення}one{Понад # непрочитане сповіщення}few{Понад # непрочитані сповіщення}many{Понад # непрочитаних сповіщень}other{Понад # непрочитаного сповіщення}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{через 1 хв}one{через # хв}few{через # хв}many{через # хв}other{через # хв}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623">файл <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Полицю завжди видно</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> КБ/сек.</translation>
+<translation id="8685326675965865247">Шукайте на пристрої, у додатках, налаштуваннях та Інтернеті. Натискайте клавіші зі стрілками, щоб переходити між додатками.</translation>
 <translation id="8725488761726303204">і ще <ph name="NUMBER" /></translation>
 <translation id="8730621377337864115">Готово</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 год}one{# год}few{# год}many{# год}other{# год}}</translation>

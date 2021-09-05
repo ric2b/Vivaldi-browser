@@ -125,6 +125,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - Сүлжээнд нэвтрэх</translation>
 <translation id="5987687638152509985">Синкийг эхлүүлэхийн тулд Chromium-г шинэчлэх</translation>
 <translation id="6013050204643758987">Chromium OS нь <ph name="BEGIN_LINK_CROS_OSS" />нээлттэй эхийн нэмэлт программ хангамж<ph name="END_LINK_CROS_OSS" /> болох <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Бэта)<ph name="END_LINK_LINUX_OSS" />-н тусламжтайгаар боломжтой болсон.</translation>
+<translation id="6039377483953237732">Chromium үйлдлийн системийн хувилбар</translation>
 <translation id="6055895534982063517">Chromium-ийн шинэ хувилбар боломжтой байна. Хэзээ хэзээнээс ч хурдан.</translation>
 <translation id="6063093106622310249">&amp;Chromium-д нээх</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" />-г Chromium-д нэмсэн</translation>
@@ -220,8 +221,6 @@
 <translation id="8586442755830160949">Chromium-ийн зохиогчийн эрх <ph name="YEAR" />. Бүх эрхийг хуулиар хамгаалсан.</translation>
 <translation id="8619360774459241877">Chromium-г эхлүүлж байна...</translation>
 <translation id="8621669128220841554">Гэнэтийн алдаанаас болж суулгах ажиллагаа амжилтгүй боллоо. Chromium-ыг дахин татаж авна уу.</translation>
-<translation id="8682540261359803721">Хэрэв энэ хуудсан дээр тохиргоог харуулахгүй байгаа бол <ph name="LINK_BEGIN" />
-      Chromium хөтчийнхөө тохиргоо<ph name="LINK_END" /> дотроос хайна уу</translation>
 <translation id="8697124171261953979">Энэ нь мөн таныг Chromium-ыг эхлүүлж байх үед эсвэл Omnibox-аас хайлт хийж буй үед гарч ирдэг хуудсыг хянаж байдаг.</translation>
 <translation id="8704119203788522458">Энэ бол таны Chromium.</translation>
 <translation id="8796602469536043152">Энэ сайтыг ашиглахын тулд Chromium-д таны камер болон микрофонд хандах зөвшөөрөл шаардлагатай</translation>

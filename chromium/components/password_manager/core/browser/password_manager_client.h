@@ -21,6 +21,7 @@
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -49,6 +50,11 @@ class IdentityManager;
 
 namespace signin_metrics {
 enum class AccessPoint;
+enum class ReauthAccessPoint;
+}  // namespace signin_metrics
+
+namespace url {
+class Origin;
 }
 
 class GURL;
@@ -65,7 +71,6 @@ class FieldInfoManager;
 class PasswordFeatureManager;
 class BiometricAuthenticator;
 class PasswordFormManagerForUI;
-class PasswordManager;
 class PasswordManagerDriver;
 class PasswordManagerMetricsRecorder;
 class HttpAuthManager;
@@ -114,7 +119,7 @@ class PasswordManagerClient {
   // Checks asynchronously whether HTTP Strict Transport Security (HSTS) is
   // active for the host of the given origin. Notifies |callback| with the
   // result on the calling thread.
-  virtual void PostHSTSQueryForHost(const GURL& origin,
+  virtual void PostHSTSQueryForHost(const url::Origin& origin,
                                     HSTSCallback callback) const;
 
   // Informs the embedder of a password form that can be saved or updated in
@@ -171,7 +176,7 @@ class PasswordManagerClient {
   // |callback| should be invoked with the chosen form.
   virtual bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin,
+      const url::Origin& origin,
       const CredentialsCallback& callback) = 0;
 
   // Instructs the client to show the Touch To Fill UI.
@@ -191,7 +196,7 @@ class PasswordManagerClient {
   // auto signed in to.
   virtual void NotifyUserAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin) = 0;
+      const url::Origin& origin) = 0;
 
   // Inform the embedder that automatic signin would have happened if the user
   // had been through the first-run experience to ensure their opt-in. |form|
@@ -211,7 +216,7 @@ class PasswordManagerClient {
   // Update the CredentialCache used to display fetched credentials in the UI.
   // Currently only implemented on Android.
   virtual void UpdateCredentialCache(
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<const autofill::PasswordForm*>& best_matches,
       bool is_blacklisted);
 
@@ -229,7 +234,7 @@ class PasswordManagerClient {
   // implementation is a noop.
   virtual void PasswordWasAutofilled(
       const std::vector<const autofill::PasswordForm*>& best_matches,
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<const autofill::PasswordForm*>* federated_matches);
 
   // Sends username/password from |preferred_match| for filling in the http auth
@@ -242,9 +247,12 @@ class PasswordManagerClient {
                                                const GURL& origin,
                                                const base::string16& username);
 
-  // Requests a reauth for the primary account and triggers the
-  // |reauth_callback| with ReauthSucceeded(true) if reauthentication succeeded.
+  // Requests a reauth for the primary account with |access_point| representing
+  // where the reauth was triggered.
+  // Triggers the |reauth_callback| with ReauthSucceeded(true) if
+  // reauthentication succeeded.
   virtual void TriggerReauthForPrimaryAccount(
+      signin_metrics::ReauthAccessPoint access_point,
       base::OnceCallback<void(ReauthSucceeded)> reauth_callback);
 
   // Redirects the user to a sign-in in a new tab. |access_point| is used for
@@ -298,13 +306,14 @@ class PasswordManagerClient {
   // Returns the AutofillDownloadManager for votes uploading.
   virtual autofill::AutofillDownloadManager* GetAutofillDownloadManager();
 
-  // Returns the main frame URL.
-  virtual const GURL& GetMainFrameURL() const;
-
   // Returns true if the main frame URL has a secure origin.
-  virtual bool IsMainFrameSecure() const;
+  virtual bool IsCommittedMainFrameSecure() const;
 
-  virtual const GURL& GetLastCommittedEntryURL() const = 0;
+  // Returns the committed main frame URL.
+  virtual const GURL& GetLastCommittedURL() const = 0;
+
+  // Returns last committed origin of the main frame.
+  virtual url::Origin GetLastCommittedOrigin() const = 0;
 
   // Use this to filter credentials before handling them in password manager.
   virtual const CredentialsFilter* GetStoreResultFilter() const = 0;
@@ -401,6 +410,9 @@ class PasswordManagerClient {
 
   // Returns a FieldInfoManager associated with the current profile.
   virtual FieldInfoManager* GetFieldInfoManager() const = 0;
+
+  // Returns the currently set autofill-assistant mode.
+  virtual AutofillAssistantMode GetAutofillAssistantMode() const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerClient);

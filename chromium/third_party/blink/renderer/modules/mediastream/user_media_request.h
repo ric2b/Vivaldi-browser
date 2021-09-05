@@ -83,7 +83,7 @@ class MODULES_EXPORT UserMediaRequest final
     virtual void OnError(ScriptWrappable* callback_this_value,
                          DOMExceptionOrOverconstrainedError) = 0;
 
-    virtual void Trace(Visitor*) {}
+    virtual void Trace(Visitor*) const {}
 
    protected:
     Callbacks() = default;
@@ -118,7 +118,7 @@ class MODULES_EXPORT UserMediaRequest final
 
   void Start();
 
-  void Succeed(MediaStreamDescriptor*);
+  void Succeed(MediaStreamDescriptor*, bool pan_tilt_zoom_allowed);
   void FailConstraint(const String& constraint_name, const String& message);
   void Fail(Error name, const String& message);
 
@@ -149,7 +149,7 @@ class MODULES_EXPORT UserMediaRequest final
     return has_transient_user_activation_;
   }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   MediaType media_type_;

@@ -83,8 +83,6 @@ api::automation::EventType ToAutomationEvent(ax::mojom::Event event_type) {
       return api::automation::EVENT_TYPE_MENULISTVALUECHANGED;
     case ax::mojom::Event::kMenuPopupEnd:
       return api::automation::EVENT_TYPE_MENUPOPUPEND;
-    case ax::mojom::Event::kMenuPopupHide:
-      return api::automation::EVENT_TYPE_MENUPOPUPHIDE;
     case ax::mojom::Event::kMenuPopupStart:
       return api::automation::EVENT_TYPE_MENUPOPUPSTART;
     case ax::mojom::Event::kMenuStart:
@@ -188,6 +186,7 @@ api::automation::EventType ToAutomationEvent(
     // but mapping for backward compat).
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
     case ui::AXEventGenerator::Event::COLLAPSED:
+    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::EXPANDED:
     case ui::AXEventGenerator::Event::IMAGE_ANNOTATION_CHANGED:
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED:
@@ -203,7 +202,6 @@ api::automation::EventType ToAutomationEvent(
     case ui::AXEventGenerator::Event::CONTROLS_CHANGED:
     case ui::AXEventGenerator::Event::CLASS_NAME_CHANGED:
     case ui::AXEventGenerator::Event::DESCRIBED_BY_CHANGED:
-    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
@@ -248,6 +246,7 @@ AutomationAXTreeWrapper::AutomationAXTreeWrapper(
     : tree_id_(tree_id), owner_(owner), event_generator_(&tree_) {
   tree_.AddObserver(this);
   ui::AXTreeManagerMap::GetInstance().AddTreeManager(tree_id, this);
+  event_generator_.set_always_fire_load_complete(true);
 }
 
 AutomationAXTreeWrapper::~AutomationAXTreeWrapper() {
@@ -304,12 +303,9 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
       owner_->SendNodesRemovedEvent(&tree_, deleted_node_ids_);
 
       if (update.nodes.size() && did_send_tree_change_during_unserialization_) {
-        ui::AXNode* target = tree_.GetFromId(update.nodes[0].id);
-        if (target) {
-          owner_->SendTreeChangeEvent(
-              api::automation::TREE_CHANGE_TYPE_SUBTREEUPDATEEND, &tree_,
-              target);
-        }
+        owner_->SendTreeChangeEvent(
+            api::automation::TREE_CHANGE_TYPE_SUBTREEUPDATEEND, &tree_,
+            tree_.root());
       }
     }
   }
@@ -363,6 +359,7 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
       ui::AXEvent generated_event;
       generated_event.id = targeted_event.node->id();
       generated_event.event_from = targeted_event.event_params.event_from;
+      generated_event.event_intents = targeted_event.event_params.event_intents;
       owner_->SendAutomationEvent(event_bundle.tree_id,
                                   event_bundle.mouse_location, generated_event,
                                   event_type);
@@ -571,7 +568,6 @@ bool AutomationAXTreeWrapper::IsEventTypeHandledByAXEventGenerator(
     case api::automation::EVENT_TYPE_LAYOUTCOMPLETE:
     case api::automation::EVENT_TYPE_MENULISTVALUECHANGED:
     case api::automation::EVENT_TYPE_MENUPOPUPEND:
-    case api::automation::EVENT_TYPE_MENUPOPUPHIDE:
     case api::automation::EVENT_TYPE_MENUPOPUPSTART:
     case api::automation::EVENT_TYPE_SELECTIONADD:
     case api::automation::EVENT_TYPE_SELECTIONREMOVE:

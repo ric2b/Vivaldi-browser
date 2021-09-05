@@ -150,19 +150,19 @@ class DisplayLockContextTest
     return context->needs_graphics_layer_collection_;
   }
 
-  mojom::blink::FindOptionsPtr FindOptions(bool find_next = false) {
+  mojom::blink::FindOptionsPtr FindOptions(bool new_session = true) {
     auto find_options = mojom::blink::FindOptions::New();
     find_options->run_synchronously_for_testing = true;
-    find_options->find_next = find_next;
+    find_options->new_session = new_session;
     find_options->forward = true;
     return find_options;
   }
 
   void Find(String search_text,
             DisplayLockTestFindInPageClient& client,
-            bool find_next = false) {
+            bool new_session = true) {
     client.Reset();
-    GetFindInPage()->Find(FAKE_FIND_ID, search_text, FindOptions(find_next));
+    GetFindInPage()->Find(FAKE_FIND_ID, search_text, FindOptions(new_session));
     test::RunPendingTasks();
   }
 
@@ -333,6 +333,85 @@ TEST_F(DisplayLockContextTest,
   EXPECT_EQ(1, client.Count());
   EXPECT_TRUE(container->GetDisplayLockContext()->IsLocked());
   EXPECT_GT(GetDocument().scrollingElement()->scrollTop(), 1000);
+}
+
+TEST_F(DisplayLockContextTest, FindInPageContinuesAfterRelock) {
+  ResizeAndFocus();
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+    .spacer {
+      height: 10000px;
+    }
+    #container {
+      width: 100px;
+      height: 100px;
+    }
+    .auto { content-visibility: auto }
+    </style>
+    <body><div class=spacer></div><div id="container" class=auto>testing</div></body>
+  )HTML");
+
+  const String search_text = "testing";
+  DisplayLockTestFindInPageClient client;
+  client.SetFrame(LocalMainFrame());
+
+  // Finds on a normal element.
+  Find(search_text, client);
+  EXPECT_EQ(1, client.Count());
+
+  auto* container = GetDocument().getElementById("container");
+  GetDocument().scrollingElement()->setScrollTop(0);
+
+  UpdateAllLifecyclePhasesForTest();
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_TRUE(container->GetDisplayLockContext()->IsLocked());
+
+  // Clears selections since we're going to use the same query next time.
+  GetFindInPage()->StopFinding(
+      mojom::StopFindAction::kStopFindActionKeepSelection);
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // This should not crash.
+  Find(search_text, client, false);
+
+  EXPECT_EQ(1, client.Count());
+}
+
+TEST_F(DisplayLockContextTest, FindInPageTargetBelowLockedSize) {
+  ResizeAndFocus();
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+    .spacer { height: 1000px; }
+    #container { contain-intrinsic-size: 1px; }
+    .auto { content-visibility: auto }
+    </style>
+    <body>
+      <div class=spacer></div>
+      <div id=container class=auto>
+        <div class=spacer></div>
+        <div id=target>testing</div>
+      </div>
+      <div class=spacer></div>
+      <div class=spacer></div>
+    </body>
+  )HTML");
+
+  const String search_text = "testing";
+  DisplayLockTestFindInPageClient client;
+  client.SetFrame(LocalMainFrame());
+
+  Find(search_text, client);
+  EXPECT_EQ(1, client.Count());
+
+  auto* container = GetDocument().getElementById("container");
+  // The container should be unlocked.
+  EXPECT_FALSE(container->GetDisplayLockContext()->IsLocked());
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(container->GetDisplayLockContext()->IsLocked());
+
+  EXPECT_FLOAT_EQ(GetDocument().scrollingElement()->scrollTop(), 1768.5);
 }
 
 TEST_F(DisplayLockContextTest,
@@ -637,7 +716,7 @@ TEST_F(DisplayLockContextTest,
   CommitElement(*div_one);
 
   // Going forward from #one would go to #three.
-  Find(search_text, client, true /* find_next */);
+  Find(search_text, client, false /* new_session */);
   EXPECT_EQ(2, client.Count());
   EXPECT_EQ(2, client.ActiveIndex());
   EXPECT_EQ(text_rect(div_three), client.ActiveMatchRect());
@@ -1849,6 +1928,52 @@ TEST_F(DisplayLockContextRenderingTest,
   EXPECT_FALSE(child_layer->NeedsVisualOverflowRecalc());
 }
 
+TEST_F(DisplayLockContextRenderingTest, FloatChildLocked) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .hidden { content-visibility: hidden }
+      #floating { float: left; width: 100px; height: 100px }
+    </style>
+    <div id=lockable style="width: 200px; height: 50px; position: absolute">
+      <div id=floating></div>
+    </div>
+  )HTML");
+
+  auto* lockable = GetDocument().getElementById("lockable");
+  auto* lockable_box = lockable->GetLayoutBox();
+  auto* floating = GetDocument().getElementById("floating");
+  EXPECT_EQ(LayoutRect(0, 0, 200, 100), lockable_box->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 100), lockable_box->LayoutOverflowRect());
+
+  lockable->classList().Add("hidden");
+  UpdateAllLifecyclePhasesForTest();
+
+  // Verify that the display lock knows that the descendant dependent flags
+  // update was blocked.
+  ASSERT_TRUE(lockable->GetDisplayLockContext());
+  EXPECT_TRUE(DescendantDependentFlagUpdateWasBlocked(
+      lockable->GetDisplayLockContext()));
+  EXPECT_EQ(LayoutRect(0, 0, 200, 50), lockable_box->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 50), lockable_box->LayoutOverflowRect());
+
+  floating->setAttribute(html_names::kStyleAttr, "height: 200px");
+  // The following should not crash/DCHECK.
+  UpdateAllLifecyclePhasesForTest();
+
+  ASSERT_TRUE(lockable->GetDisplayLockContext());
+  EXPECT_TRUE(DescendantDependentFlagUpdateWasBlocked(
+      lockable->GetDisplayLockContext()));
+  EXPECT_EQ(LayoutRect(0, 0, 200, 50), lockable_box->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 50), lockable_box->LayoutOverflowRect());
+
+  // After unlocking, we should process the pending visual overflow recalc.
+  lockable->classList().Remove("hidden");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), lockable_box->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), lockable_box->LayoutOverflowRect());
+}
+
 TEST_F(DisplayLockContextRenderingTest,
        VisualOverflowCalculateOnChildPaintLayerInForcedLock) {
   SetHtmlInnerHTML(R"HTML(
@@ -2025,15 +2150,7 @@ TEST_F(DisplayLockContextRenderingTest,
   auto* unrelated_element = GetDocument().getElementById("unrelated");
   auto* outer_element = GetDocument().getElementById("outer");
 
-  // Since visibility switch happens at the start of the next lifecycle, we
-  // should have clean layout for now.
-  EXPECT_FALSE(outer_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->SelfNeedsLayout());
-
+  // Ensure that the visibility switch happens.
   RunStartOfLifecycleTasks();
 
   // Now that the intersection observer notifications switch the visibility of
@@ -2164,15 +2281,7 @@ TEST_F(DisplayLockContextRenderingTest, NestedLockDoesHideWhenItIsOffscreen) {
   auto* unrelated_element = GetDocument().getElementById("unrelated");
   auto* outer_element = GetDocument().getElementById("outer");
 
-  // Since visibility switch happens at the start of the next lifecycle, we
-  // should have clean layout for now.
-  EXPECT_FALSE(outer_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->SelfNeedsLayout());
-
+  // Ensure that the visibility switch happens.
   RunStartOfLifecycleTasks();
 
   // Now that the intersection observer notifications switch the visibility of
@@ -2463,6 +2572,50 @@ TEST_F(DisplayLockContextRenderingTest, ContainStrictChild) {
   UpdateAllLifecyclePhasesForTest();
 }
 
+TEST_F(DisplayLockContextRenderingTest, UseCounter) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .auto { content-visibility: auto; }
+      .hidden { content-visibility: hidden; }
+      .matchable { content-visibility: hidden-matchable; }
+    </style>
+    <div id=e1></div>
+    <div id=e2></div>
+    <div id=e3></div>
+  )HTML");
+
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityAuto));
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kContentVisibilityHidden));
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kContentVisibilityHiddenMatchable));
+
+  GetDocument().getElementById("e1")->classList().Add("auto");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityAuto));
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kContentVisibilityHidden));
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kContentVisibilityHiddenMatchable));
+
+  GetDocument().getElementById("e2")->classList().Add("hidden");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityAuto));
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityHidden));
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kContentVisibilityHiddenMatchable));
+
+  GetDocument().getElementById("e3")->classList().Add("matchable");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityAuto));
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kContentVisibilityHidden));
+  EXPECT_TRUE(GetDocument().IsUseCounted(
+      WebFeature::kContentVisibilityHiddenMatchable));
+}
+
 TEST_F(DisplayLockContextRenderingTest, CompositingRootIsSkippedIfLocked) {
   SetHtmlInnerHTML(R"HTML(
     <style>
@@ -2606,6 +2759,102 @@ TEST_F(DisplayLockContextRenderingTest,
 
   auto scope = GetScopedForcedUpdate(hide, true /* include self */);
   EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdateForNode(*target));
+}
+
+TEST_F(DisplayLockContextRenderingTest, InnerScrollerAutoVisibilityMargin) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .auto { content-visibility: auto; }
+      #scroller { height: 300px; overflow: scroll }
+      #target { height: 10px; width: 10px; }
+      .spacer { height: 3000px }
+    </style>
+    <div id=scroller>
+      <div class=spacer></div>
+      <div id=target class=auto></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  auto* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target->GetDisplayLockContext());
+  EXPECT_TRUE(target->GetDisplayLockContext()->IsLocked());
+
+  auto* scroller = GetDocument().getElementById("scroller");
+  // 2600 is spacer (3000) minus scroller height (300) minus 100 for some extra
+  // padding.
+  scroller->setScrollTop(2600);
+  UpdateAllLifecyclePhasesForTest();
+
+  // Since the intersection observation is delivered on the next frame, run
+  // another lifecycle.
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_FALSE(target->GetDisplayLockContext()->IsLocked());
+}
+
+TEST_F(DisplayLockContextRenderingTest,
+       AutoReachesStableStateOnContentSmallerThanLockedSize) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .spacer { height: 10000px; }
+      .auto {
+        content-visibility: auto;
+        contain-intrinsic-size: 1px 10000px;
+      }
+      .auto > div {
+        height: 3000px;
+      }
+    </style>
+
+    <div class=spacer></div>
+    <div id=e1 class=auto><div>content</div></div>
+    <div id=e2 class=auto><div>content</div></div>
+    <div class=spacer></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  GetDocument().scrollingElement()->setScrollTop(19000);
+
+  Element* element = GetDocument().getElementById("e1");
+
+  // Note that this test also unlock/relocks #e2 but we only care about #e1
+  // settling into a steady state.
+
+  // Initially we start with locked in the viewport.
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(element->GetDisplayLockContext()->IsLocked());
+  EXPECT_EQ(GetDocument().scrollingElement()->scrollTop(), 19000.);
+
+  // It gets unlocked because it's in the viewport.
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(element->GetDisplayLockContext()->IsLocked());
+  EXPECT_EQ(GetDocument().scrollingElement()->scrollTop(), 19000.);
+
+  // By unlocking it, it shrinks so next time it gets relocked.
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(element->GetDisplayLockContext()->IsLocked());
+  EXPECT_EQ(GetDocument().scrollingElement()->scrollTop(), 19000.);
+
+  // It again gets unlocked and shrink.
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(element->GetDisplayLockContext()->IsLocked());
+  EXPECT_EQ(GetDocument().scrollingElement()->scrollTop(), 19000.);
+
+  // On the next relock we select the following element as an anchor and thus
+  // the scroll top changes to be higher.
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(element->GetDisplayLockContext()->IsLocked());
+  EXPECT_GT(GetDocument().scrollingElement()->scrollTop(), 19000.);
+
+  // Subsequent updates no longer unlock the element because even if its locked
+  // state it is far enough off-screen.
+  for (int i = 0; i < 5; ++i) {
+    UpdateAllLifecyclePhasesForTest();
+    EXPECT_TRUE(element->GetDisplayLockContext()->IsLocked());
+    EXPECT_GT(GetDocument().scrollingElement()->scrollTop(), 19000.);
+  }
 }
 
 class DisplayLockContextLegacyRenderingTest

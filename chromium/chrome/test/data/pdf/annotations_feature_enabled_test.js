@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$} from 'chrome://resources/js/util.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {testAsync} from './test_util.js';
 
 window.onerror = e => chrome.test.fail(e.stack);
 window.onunhandledrejection = e => chrome.test.fail(e.reason);
@@ -22,26 +23,17 @@ function waitFor(predicate) {
 }
 
 function contentElement() {
-  return document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  return viewer.shadowRoot.elementFromPoint(innerWidth / 2, innerHeight / 2);
 }
 
 function isAnnotationMode() {
-  return document.querySelector('#toolbar').annotationMode;
-}
-
-async function testAsync(f) {
-  try {
-    await f();
-    chrome.test.succeed();
-  } catch (e) {
-    chrome.test.fail(e.stack);
-  }
+  return viewer.shadowRoot.querySelector('#toolbar').annotationMode;
 }
 
 chrome.test.runTests([
   function testAnnotationsEnabled() {
-    const toolbar = document.body.querySelector('#toolbar');
-    chrome.test.assertTrue(toolbar.pdfAnnotationsEnabled);
+    const toolbar = viewer.shadowRoot.querySelector('#toolbar');
+    chrome.test.assertTrue(loadTimeData.getBoolean('pdfAnnotationsEnabled'));
     chrome.test.assertTrue(
         toolbar.shadowRoot.querySelector('#annotate') != null);
     chrome.test.succeed();
@@ -51,7 +43,7 @@ chrome.test.runTests([
       chrome.test.assertEq('EMBED', contentElement().tagName);
 
       // Enter annotation mode.
-      $('toolbar').toggleAnnotation();
+      viewer.shadowRoot.querySelector('#toolbar').toggleAnnotation();
       await viewer.loaded;
       chrome.test.assertEq('VIEWER-INK-HOST', contentElement().tagName);
     });
@@ -63,8 +55,8 @@ chrome.test.runTests([
       const cameras = [];
       inkHost.ink_.setCamera = camera => cameras.push(camera);
 
-      viewer.viewport_.setZoom(1);
-      viewer.viewport_.setZoom(2);
+      viewer.viewport.setZoom(1);
+      viewer.viewport.setZoom(2);
       chrome.test.assertEq(2, cameras.length);
 
       window.scrollTo(100, 100);
@@ -95,7 +87,8 @@ chrome.test.runTests([
       inkHost.ink_.setAnnotationTool = value => tool = value;
 
       // Pen defaults.
-      const viewerPdfToolbar = document.querySelector('viewer-pdf-toolbar');
+      const viewerPdfToolbar =
+          viewer.shadowRoot.querySelector('viewer-pdf-toolbar');
       const pen = viewerPdfToolbar.$$('#pen');
       pen.click();
       chrome.test.assertEq('pen', tool.tool);
@@ -152,7 +145,8 @@ chrome.test.runTests([
   function testStrokeUndoRedo() {
     testAsync(async () => {
       const inkHost = contentElement();
-      const viewerPdfToolbar = document.querySelector('viewer-pdf-toolbar');
+      const viewerPdfToolbar =
+          viewer.shadowRoot.querySelector('viewer-pdf-toolbar');
       const undo = viewerPdfToolbar.$$('#undo');
       const redo = viewerPdfToolbar.$$('#redo');
 
@@ -192,8 +186,7 @@ chrome.test.runTests([
       const inkHost = contentElement();
       inkHost.resetPenMode();
       const events = [];
-      inkHost.ink_.dispatchPointerEvent = (type, init) =>
-          events.push({type: type, init: init});
+      inkHost.ink_.dispatchPointerEvent = (ev) => void events.push(ev);
 
       const mouse = {pointerId: 1, pointerType: 'mouse', buttons: 1};
       const pen = {
@@ -214,7 +207,7 @@ chrome.test.runTests([
           const expectation = expectations.shift();
           chrome.test.assertEq(expectation.type, event.type);
           for (const key of Object.keys(expectation.init)) {
-            chrome.test.assertEq(expectation.init[key], event.init[key]);
+            chrome.test.assertEq(expectation.init[key], event[key]);
           }
         }
       }
@@ -376,7 +369,7 @@ chrome.test.runTests([
     testAsync(async () => {
       chrome.test.assertTrue(isAnnotationMode());
       // Exit annotation mode.
-      $('toolbar').toggleAnnotation();
+      viewer.shadowRoot.querySelector('#toolbar').toggleAnnotation();
       await viewer.loaded;
       chrome.test.assertEq('EMBED', contentElement().tagName);
     });

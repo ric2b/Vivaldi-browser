@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/base/load_flags.h"
+#include "net/base/url_util.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
@@ -672,11 +673,11 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
     alternative_service_info_ =
         GetAlternativeServiceInfoFor(request_info_, delegate_, stream_type_);
   }
-  quic::ParsedQuicVersion quic_version = quic::UnsupportedQuicVersion();
+  quic::ParsedQuicVersion quic_version = quic::ParsedQuicVersion::Unsupported();
   if (alternative_service_info_.protocol() == kProtoQUIC) {
     quic_version =
         SelectQuicVersion(alternative_service_info_.advertised_versions());
-    DCHECK_NE(quic_version, quic::UnsupportedQuicVersion());
+    DCHECK_NE(quic_version, quic::ParsedQuicVersion::Unsupported());
   }
 
   if (is_preconnect_) {
@@ -1014,7 +1015,8 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
       if (!is_any_broken) {
         // Only log the broken alternative service once per request.
         is_any_broken = true;
-        HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_BROKEN, false);
+        HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_BROKEN, false,
+                                        HasGoogleHost(original_url));
       }
       continue;
     }
@@ -1060,7 +1062,7 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
     // If there is no QUIC version in the advertised versions that is
     // supported, ignore this entry.
     if (SelectQuicVersion(alternative_service_info.advertised_versions()) ==
-        quic::UnsupportedQuicVersion())
+        quic::ParsedQuicVersion::Unsupported())
       continue;
 
     // Check whether there is an existing QUIC session to use for this origin.
@@ -1106,13 +1108,13 @@ quic::ParsedQuicVersion HttpStreamFactory::JobController::SelectQuicVersion(
   for (const quic::ParsedQuicVersion& advertised : advertised_versions) {
     for (const quic::ParsedQuicVersion& supported : supported_versions) {
       if (supported == advertised) {
-        DCHECK_NE(quic::UnsupportedQuicVersion(), supported);
+        DCHECK_NE(quic::ParsedQuicVersion::Unsupported(), supported);
         return supported;
       }
     }
   }
 
-  return quic::UnsupportedQuicVersion();
+  return quic::ParsedQuicVersion::Unsupported();
 }
 
 bool HttpStreamFactory::JobController::ShouldCreateAlternativeProxyServerJob(
@@ -1170,22 +1172,23 @@ void HttpStreamFactory::JobController::ReportAlternateProtocolUsage(
 
   bool proxy_server_used =
       alternative_job_->alternative_proxy_server().is_quic();
+  bool is_google_host = HasGoogleHost(job->origin_url());
 
   if (job == main_job_.get()) {
     HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_LOST_RACE,
-                                    proxy_server_used);
+                                    proxy_server_used, is_google_host);
     return;
   }
 
   DCHECK_EQ(alternative_job_.get(), job);
   if (job->using_existing_quic_session()) {
     HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_NO_RACE,
-                                    proxy_server_used);
+                                    proxy_server_used, is_google_host);
     return;
   }
 
   HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_WON_RACE,
-                                  proxy_server_used);
+                                  proxy_server_used, is_google_host);
 }
 
 bool HttpStreamFactory::JobController::IsJobOrphaned(Job* job) const {

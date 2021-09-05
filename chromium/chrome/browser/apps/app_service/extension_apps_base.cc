@@ -47,10 +47,10 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
-#include "chrome/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/ui_util.h"
@@ -173,7 +173,7 @@ class ExtensionAppsEnableFlow : public ExtensionEnableFlowDelegate {
 
     if (!flow_) {
       flow_ = std::make_unique<ExtensionEnableFlow>(profile_, app_id_, this);
-      flow_->StartForNativeWindow(nullptr);
+      flow_->Start();
     }
   }
 
@@ -237,11 +237,22 @@ void ExtensionAppsBase::OnExtensionUninstalled(
 void ExtensionAppsBase::SetShowInFields(
     apps::mojom::AppPtr& app,
     const extensions::Extension* extension) {
+#if defined(OS_CHROMEOS)
+  if (extension->id() == extension_misc::kWallpaperManagerId) {
+    // Explicitly show the Wallpaper Picker app in search only.
+    app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
+    app->show_in_shelf = apps::mojom::OptionalBool::kTrue;
+    app->show_in_search = apps::mojom::OptionalBool::kTrue;
+    app->show_in_management = apps::mojom::OptionalBool::kFalse;
+    return;
+  }
+#endif  // defined(OS_CHROMEOS)
   if (ShouldShow(extension, profile_)) {
     auto show = ShouldShownInLauncher(extension)
                     ? apps::mojom::OptionalBool::kTrue
                     : apps::mojom::OptionalBool::kFalse;
     app->show_in_launcher = show;
+    app->show_in_shelf = show;
     app->show_in_search = show;
     app->show_in_management = show;
 
@@ -266,13 +277,14 @@ void ExtensionAppsBase::SetShowInFields(
           system_web_app_manager.ShouldShowInLauncher(system_app_type.value())
               ? apps::mojom::OptionalBool::kTrue
               : apps::mojom::OptionalBool::kFalse;
-      app->show_in_search =
+      app->show_in_shelf = app->show_in_search =
           system_web_app_manager.ShouldShowInSearch(system_app_type.value())
               ? apps::mojom::OptionalBool::kTrue
               : apps::mojom::OptionalBool::kFalse;
     }
   } else {
     app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
+    app->show_in_shelf = apps::mojom::OptionalBool::kFalse;
     app->show_in_search = apps::mojom::OptionalBool::kFalse;
     app->show_in_management = apps::mojom::OptionalBool::kFalse;
   }
@@ -416,8 +428,7 @@ void ExtensionAppsBase::Initialize(
     app_registrar_observer_.Add(&provider->registrar());
   }
 
-  if (app_type_ == apps::mojom::AppType::kWeb &&
-      base::FeatureList::IsEnabled(features::kDesktopPWAsUnifiedLaunch)) {
+  if (app_type_ == apps::mojom::AppType::kWeb) {
     web_app_launch_manager_ =
         std::make_unique<web_app::WebAppLaunchManager>(profile_);
   }
@@ -438,8 +449,8 @@ void ExtensionAppsBase::Connect(
                   apps::mojom::Readiness::kDisabledByUser, &apps);
     ConvertVector(registry->terminated_extensions(),
                   apps::mojom::Readiness::kTerminated, &apps);
-    // blacklisted_extensions and blocked_extensions, corresponding to
-    // kDisabledByBlacklist and kDisabledByPolicy, are deliberately ignored.
+    // blocklisted_extensions and blocked_extensions, corresponding to
+    // kDisabledByBlocklist and kDisabledByPolicy, are deliberately ignored.
     //
     // If making changes to which sets are consulted, also change ShouldShow,
     // OnHideWebStoreIconPrefChanged.
@@ -723,8 +734,8 @@ void ExtensionAppsBase::OnExtensionUnloaded(
     case extensions::UnloadedExtensionReason::DISABLE:
       readiness = apps::mojom::Readiness::kDisabledByUser;
       break;
-    case extensions::UnloadedExtensionReason::BLACKLIST:
-      readiness = apps::mojom::Readiness::kDisabledByBlacklist;
+    case extensions::UnloadedExtensionReason::BLOCKLIST:
+      readiness = apps::mojom::Readiness::kDisabledByBlocklist;
       break;
     case extensions::UnloadedExtensionReason::TERMINATE:
       readiness = apps::mojom::Readiness::kTerminated;
@@ -867,8 +878,9 @@ void ExtensionAppsBase::PopulateIntentFilters(
     const base::Optional<GURL>& app_scope,
     std::vector<mojom::IntentFilterPtr>* target) {
   if (app_scope != base::nullopt) {
-    target->push_back(
-        apps_util::CreateIntentFilterForUrlScope(app_scope.value()));
+    target->push_back(apps_util::CreateIntentFilterForUrlScope(
+        app_scope.value(),
+        base::FeatureList::IsEnabled(features::kIntentHandlingSharing)));
   }
 }
 

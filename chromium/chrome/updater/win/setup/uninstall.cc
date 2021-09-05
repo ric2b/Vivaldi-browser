@@ -22,8 +22,8 @@
 #include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/work_item_list.h"
+#include "chrome/updater/app/server/win/updater_idl.h"
 #include "chrome/updater/constants.h"
-#include "chrome/updater/server/win/updater_idl.h"
 #include "chrome/updater/util.h"
 #include "chrome/updater/win/constants.h"
 #include "chrome/updater/win/setup/setup_util.h"
@@ -81,7 +81,7 @@ int Uninstall(bool is_machine) {
       std::make_unique<base::win::ScopedCOMInitializer>(
           base::win::ScopedCOMInitializer::kMTA);
 
-  updater::UnregisterUpdateAppsTask();
+  updater::UnregisterWakeTask();
 
   std::unique_ptr<WorkItemList> uninstall_list(WorkItem::CreateWorkItemList());
   uninstall_list->AddDeleteRegKeyWorkItem(key, base::ASCIIToUTF16(UPDATER_KEY),
@@ -97,9 +97,9 @@ int Uninstall(bool is_machine) {
     DeleteComService();
   DeleteComServer(key);
 
-  base::FilePath product_dir;
-  if (!GetProductDirectory(&product_dir)) {
-    LOG(ERROR) << "GetProductDirectory failed.";
+  base::FilePath versioned_dir;
+  if (!GetVersionedDirectory(&versioned_dir)) {
+    LOG(ERROR) << "GetVersionedDirectory failed.";
     return -1;
   }
 
@@ -109,7 +109,7 @@ int Uninstall(bool is_machine) {
   if (!size || size >= MAX_PATH)
     return -1;
 
-  base::FilePath script_path = product_dir.AppendASCII(kUninstallScript);
+  base::FilePath script_path = versioned_dir.AppendASCII(kUninstallScript);
 
   base::string16 cmdline = cmd_path;
   base::StringAppendF(&cmdline, L" /Q /C \"%ls\"", script_path.value().c_str());

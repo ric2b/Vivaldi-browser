@@ -19,6 +19,7 @@ viz_component("resource_format_utils") {
   sources = [
     "resources/resource_format_utils.cc",
     "resources/resource_format_utils.h",
+    "resources/resource_format_utils_mac.mm",
     "resources/resource_sizes.h",
     "viz_resource_format_export.h",
   ]
@@ -141,6 +142,7 @@ viz_component("common") {
   sources = [
     "constants.cc",
     "constants.h",
+    "delegated_ink_metadata.h",
     "display/de_jelly.cc",
     "display/de_jelly.h",
     "display/overlay_strategy.cc",

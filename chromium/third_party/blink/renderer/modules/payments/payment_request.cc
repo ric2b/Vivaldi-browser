@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
@@ -93,6 +94,9 @@ using ::payments::mojom::blink::PaymentValidationErrorsPtr;
 const char kHasEnrolledInstrumentDebugName[] = "hasEnrolledInstrument";
 const char kGooglePayMethod[] = "https://google.com/pay";
 const char kAndroidPayMethod[] = "https://android.com/pay";
+const char kGooglePlayBillingMethod[] = "https://play.google.com/billing";
+const char kUnknownCurrency[] = "ZZZ";
+const char kAppStoreBillingLabelPlaceHolder[] = "AppStoreBillingPlaceHolder";
 
 }  // namespace
 
@@ -264,6 +268,23 @@ void ValidateShippingOptionOrPaymentItem(const T* item,
         "Empty " + item_name + " label may be confusing the user"));
     return;
   }
+}
+
+const WTF::HashSet<String> GetAppStoreBillingMethods() {
+  static const WTF::HashSet<String> app_store_billing_methods = {
+      kGooglePlayBillingMethod};
+  return app_store_billing_methods;
+}
+
+bool RequestingOnlyAppStoreBillingMethods(
+    const Vector<payments::mojom::blink::PaymentMethodDataPtr>& method_data) {
+  DCHECK(!method_data.IsEmpty());
+  const WTF::HashSet<String> billing_methods = GetAppStoreBillingMethods();
+  for (const auto& method : method_data) {
+    if (!billing_methods.Contains(method->supported_method))
+      return false;
+  }
+  return true;
 }
 
 void ValidateAndConvertDisplayItems(
@@ -504,17 +525,50 @@ void ValidateAndConvertPaymentDetailsBase(const PaymentDetailsBase* input,
   }
 }
 
+PaymentItemPtr CreateTotalPlaceHolderForAppStoreBilling(
+    ExecutionContext& execution_context) {
+  PaymentItemPtr total = payments::mojom::blink::PaymentItem::New();
+  total->label = kAppStoreBillingLabelPlaceHolder;
+  total->amount = payments::mojom::blink::PaymentCurrencyAmount::New();
+  total->amount->currency = kUnknownCurrency;
+  total->amount->value = "0";
+
+  return total;
+}
+
 void ValidateAndConvertPaymentDetailsInit(const PaymentDetailsInit* input,
                                           const PaymentOptions* options,
                                           PaymentDetailsPtr& output,
                                           String& shipping_option_output,
+                                          bool ignore_total,
                                           ExecutionContext& execution_context,
                                           ExceptionState& exception_state) {
-  DCHECK(input->hasTotal());
-  ValidateAndConvertTotal(input->total(), "total", output->total,
-                          execution_context, exception_state);
-  if (exception_state.HadException())
-    return;
+  if (ignore_total) {
+    output->total = CreateTotalPlaceHolderForAppStoreBilling(execution_context);
+    if (input->hasTotal()) {
+      execution_context.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kJavaScript,
+          mojom::blink::ConsoleMessageLevel::kWarning,
+          "Specified total is ignored for in-app purchases with app stores. "
+          "User will be shown the total derived from the product identifier."));
+    }
+  } else {
+    // Whether details (i.e., input) being omitted, null, defined or {} is
+    // indistinguishable, so we check all of its attributes to decide whether it
+    // has been provided.
+    if (!input->hasTotal() && !input->hasId()) {
+      exception_state.ThrowTypeError("required member details is undefined.");
+      return;
+    }
+    if (!input->hasTotal()) {
+      exception_state.ThrowTypeError("required member total is undefined.");
+      return;
+    }
+    ValidateAndConvertTotal(input->total(), "total", output->total,
+                            execution_context, exception_state);
+    if (exception_state.HadException())
+      return;
+  }
 
   ValidateAndConvertPaymentDetailsBase(input, options, output,
                                        shipping_option_output,
@@ -525,6 +579,7 @@ void ValidateAndConvertPaymentDetailsUpdate(const PaymentDetailsUpdate* input,
                                             const PaymentOptions* options,
                                             PaymentDetailsPtr& output,
                                             String& shipping_option_output,
+                                            bool ignore_total,
                                             ExecutionContext& execution_context,
                                             ExceptionState& exception_state) {
   ValidateAndConvertPaymentDetailsBase(input, options, output,
@@ -532,12 +587,17 @@ void ValidateAndConvertPaymentDetailsUpdate(const PaymentDetailsUpdate* input,
                                        execution_context, exception_state);
   if (exception_state.HadException())
     return;
-
   if (input->hasTotal()) {
-    ValidateAndConvertTotal(input->total(), "total", output->total,
-                            execution_context, exception_state);
-    if (exception_state.HadException())
-      return;
+    DCHECK(!RuntimeEnabledFeatures::DigitalGoodsEnabled() || !ignore_total);
+    if (ignore_total) {
+      output->total =
+          CreateTotalPlaceHolderForAppStoreBilling(execution_context);
+    } else {
+      ValidateAndConvertTotal(input->total(), "total", output->total,
+                              execution_context, exception_state);
+      if (exception_state.HadException())
+        return;
+    }
   }
 
   if (input->hasError()) {
@@ -603,6 +663,13 @@ void ValidateAndConvertPaymentMethodData(
           "Invalid payment method identifier format");
       return;
     }
+
+    if (method_names.Contains(payment_method_data->supportedMethod())) {
+      exception_state.ThrowRangeError(
+          "Cannot have duplicate payment method identifiers");
+      return;
+    }
+
     method_names.insert(payment_method_data->supportedMethod());
 
     output.push_back(payments::mojom::blink::PaymentMethodData::New());
@@ -665,9 +732,9 @@ PaymentRequest* PaymentRequest::Create(
     const HeapVector<Member<PaymentMethodData>>& method_data,
     const PaymentDetailsInit* details,
     ExceptionState& exception_state) {
-  return MakeGarbageCollected<PaymentRequest>(execution_context, method_data,
-                                              details, PaymentOptions::Create(),
-                                              exception_state);
+  return MakeGarbageCollected<PaymentRequest>(
+      execution_context, method_data, details, PaymentOptions::Create(),
+      mojo::NullRemote(), exception_state);
 }
 
 PaymentRequest* PaymentRequest::Create(
@@ -677,7 +744,8 @@ PaymentRequest* PaymentRequest::Create(
     const PaymentOptions* options,
     ExceptionState& exception_state) {
   return MakeGarbageCollected<PaymentRequest>(
-      execution_context, method_data, details, options, exception_state);
+      execution_context, method_data, details, options, mojo::NullRemote(),
+      exception_state);
 }
 
 PaymentRequest::~PaymentRequest() = default;
@@ -982,7 +1050,7 @@ void PaymentRequest::OnUpdatePaymentDetails(
   PaymentDetailsPtr validated_details =
       payments::mojom::blink::PaymentDetails::New();
   ValidateAndConvertPaymentDetailsUpdate(
-      details, options_, validated_details, shipping_option_,
+      details, options_, validated_details, shipping_option_, ignore_total_,
       *GetExecutionContext(), exception_state);
   if (exception_state.HadException()) {
     resolver->Reject(exception_state.GetException());
@@ -1030,7 +1098,7 @@ bool PaymentRequest::IsInteractive() const {
   return !!GetPendingAcceptPromiseResolver();
 }
 
-void PaymentRequest::Trace(Visitor* visitor) {
+void PaymentRequest::Trace(Visitor* visitor) const {
   visitor->Trace(options_);
   visitor->Trace(shipping_address_);
   visitor->Trace(payment_response_);
@@ -1067,6 +1135,8 @@ PaymentRequest::PaymentRequest(
     const HeapVector<Member<PaymentMethodData>>& method_data,
     const PaymentDetailsInit* details,
     const PaymentOptions* options,
+    mojo::PendingRemote<payments::mojom::blink::PaymentRequest>
+        mock_payment_provider,
     ExceptionState& exception_state)
     : ExecutionContextLifecycleObserver(execution_context),
       options_(options),
@@ -1081,8 +1151,8 @@ PaymentRequest::PaymentRequest(
           this,
           &PaymentRequest::OnUpdatePaymentDetailsTimeout),
       is_waiting_for_show_promise_to_resolve_(false) {
+  DCHECK(details);
   DCHECK(GetExecutionContext()->IsSecureContext());
-
   if (!AllowedToUsePaymentRequest(execution_context)) {
     exception_state.ThrowSecurityError(
         "Must be in a top-level browsing context or an iframe needs to specify "
@@ -1114,11 +1184,27 @@ PaymentRequest::PaymentRequest(
   if (exception_state.HadException())
     return;
 
+  ignore_total_ = RuntimeEnabledFeatures::DigitalGoodsEnabled() &&
+                  RequestingOnlyAppStoreBillingMethods(validated_method_data);
   ValidateAndConvertPaymentDetailsInit(details, options_, validated_details,
-                                       shipping_option_, *GetExecutionContext(),
-                                       exception_state);
+                                       shipping_option_, ignore_total_,
+                                       *GetExecutionContext(), exception_state);
   if (exception_state.HadException())
     return;
+
+  const WTF::HashSet<String> billing_methods = GetAppStoreBillingMethods();
+  for (const PaymentMethodDataPtr& data : validated_method_data) {
+    if (billing_methods.Contains(data->supported_method) &&
+        (options_->requestShipping() || options_->requestPayerName() ||
+         options_->requestPayerEmail() || options_->requestPayerPhone())) {
+      execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kJavaScript,
+          mojom::blink::ConsoleMessageLevel::kError,
+          "Payment method \"" + data->supported_method +
+          "\" cannot be used with \"requestShipping\", \"requestPayerName\", "
+          "\"requestPayerEmail\", or \"requestPayerPhone\"."));
+    }
+  }
 
   if (options_->requestShipping()) {
     shipping_type_ = options_->shippingType();
@@ -1143,8 +1229,14 @@ PaymentRequest::PaymentRequest(
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       execution_context->GetTaskRunner(TaskType::kUserInteraction);
 
-  GetFrame()->GetBrowserInterfaceBroker().GetInterface(
-      payment_provider_.BindNewPipeAndPassReceiver(task_runner));
+  if (mock_payment_provider) {
+    payment_provider_.Bind(
+        std::move(mock_payment_provider),
+        execution_context->GetTaskRunner(TaskType::kMiscPlatformAPI));
+  } else {
+    GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+        payment_provider_.BindNewPipeAndPassReceiver(task_runner));
+  }
   payment_provider_.set_disconnect_handler(
       WTF::Bind(&PaymentRequest::OnConnectionError, WrapWeakPersistent(this)));
 

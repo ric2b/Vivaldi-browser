@@ -22,7 +22,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -70,6 +69,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
+#include "media/media_buildflags.h"
 #include "net/base/network_change_notifier.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/ui_base_switches.h"
@@ -328,6 +328,11 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
 #endif
 #endif
 #endif  // defined(OS_LINUX)
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+    // Force disable new video decoder, since it uses slice H.264, which is
+    // not currently supported on Linux-based Cast devices.
+    {switches::kForceDisableNewAcceleratedVideoDecoder, ""},
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     // It's better to start GPU process on demand. For example, for TV platforms
     // cast starts in background and can't render until TV switches to cast
     // input.
@@ -548,7 +553,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
       std::make_unique<CastBrowserContext>());
 
   cast_browser_process_->SetConnectivityChecker(ConnectivityChecker::Create(
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}),
+      content::GetIOThreadTaskRunner({}),
       content::BrowserContext::GetDefaultStoragePartition(
           cast_browser_process_->browser_context())
           ->GetURLLoaderFactoryForBrowserProcessIOThread(),

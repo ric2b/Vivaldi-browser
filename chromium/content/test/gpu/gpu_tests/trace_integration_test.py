@@ -144,7 +144,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                  finish_js_condition='domAutomationController._finished',
                  success_eval_func='CheckVideoPath',
                  other_args=p.other_args))
-    for p in namespace.LowLatencySwapChainPages('SwapChainTraceTest'):
+    for p in namespace.LowLatencyPages('SwapChainTraceTest'):
       yield (p.name, gpu_relative_path + p.url,
              _TraceTestArguments(
                  browser_args=p.browser_args,
@@ -213,13 +213,14 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   @staticmethod
   def _AddDefaultArgs(browser_args):
     # All tests receive the following options.
-    return [
+    default_args = [
         '--enable-logging',
         '--enable-experimental-web-platform-features',
         # All bots are connected with a power source, however, we want to to
         # test with the code path that's enabled with battery power.
         '--disable_vp_scaling=1'
-    ] + browser_args
+    ]
+    return default_args + (browser_args or [])
 
   def _GetOverlayBotConfigHelper(self):
     system_info = self.browser.GetSystemInfo()
@@ -306,8 +307,10 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         supports_nv12_overlays = True
       assert supports_yuy2_overlays or supports_nv12_overlays
       if expect_yuy2 or not supports_nv12_overlays:
-        expected_pixel_format = "YUY2"
-    if not supports_nv12_overlays:
+        if overlay_bot_config['yuy2_overlay_support'] != 'SOFTWARE':
+          expected_pixel_format = "YUY2"
+    if not supports_nv12_overlays or overlay_bot_config[
+        'nv12_overlay_support'] == 'SOFTWARE':
       zero_copy = False
 
     expect_no_overlay = other_args.get('no_overlay', False)
@@ -354,7 +357,8 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
     expected_presentation_mode = _SWAP_CHAIN_PRESENTATION_MODE_COMPOSED
     if overlay_bot_config.get('supports_overlays', False):
-      expected_presentation_mode = _SWAP_CHAIN_PRESENTATION_MODE_OVERLAY
+      if overlay_bot_config['nv12_overlay_support'] != 'SOFTWARE':
+        expected_presentation_mode = _SWAP_CHAIN_PRESENTATION_MODE_OVERLAY
 
     other_args = other_args if other_args is not None else {}
     expect_no_overlay = other_args.get('no_overlay', False)

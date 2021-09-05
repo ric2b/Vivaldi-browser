@@ -11,6 +11,9 @@
 #include <setupapi.h>
 #include <stdint.h>
 
+#define INITGUID
+#include <devpkey.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -26,45 +29,40 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/win/registry.h"
+#include "base/win/scoped_devinfo.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace device {
 
 namespace {
 
-struct DevInfoScopedTraits {
-  static HDEVINFO InvalidValue() { return INVALID_HANDLE_VALUE; }
-  static void Free(HDEVINFO h) { SetupDiDestroyDeviceInfoList(h); }
-};
+base::Optional<std::string> GetProperty(HDEVINFO dev_info,
+                                        SP_DEVINFO_DATA* dev_info_data,
+                                        const DEVPROPKEY& property) {
+  // SetupDiGetDeviceProperty() makes an RPC which may block.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
-using ScopedDevInfo = base::ScopedGeneric<HDEVINFO, DevInfoScopedTraits>;
-
-// Searches the specified device info for a property with the specified key,
-// assigns the result to value, and returns whether the operation was
-// successful.
-bool GetProperty(HDEVINFO dev_info,
-                 SP_DEVINFO_DATA* dev_info_data,
-                 const int key,
-                 std::string* value) {
-  // We don't know how much space the property's value will take up, so we call
-  // the property retrieval function once to fetch the size of the required
-  // value buffer, then again once we've allocated a sufficiently large buffer.
-  DWORD buffer_size = 0;
-  SetupDiGetDeviceRegistryProperty(dev_info, dev_info_data, key, nullptr,
-                                   nullptr, buffer_size, &buffer_size);
-  if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-    return false;
-
-  base::string16 buffer;
-  if (!SetupDiGetDeviceRegistryProperty(
-          dev_info, dev_info_data, key, nullptr,
-          reinterpret_cast<PBYTE>(base::WriteInto(&buffer, buffer_size)),
-          buffer_size, nullptr)) {
-    return false;
+  DEVPROPTYPE property_type;
+  DWORD required_size;
+  if (SetupDiGetDeviceProperty(dev_info, dev_info_data, &property,
+                               &property_type, /*PropertyBuffer=*/nullptr,
+                               /*PropertyBufferSize=*/0, &required_size,
+                               /*Flags=*/0) ||
+      GetLastError() != ERROR_INSUFFICIENT_BUFFER ||
+      property_type != DEVPROP_TYPE_STRING) {
+    return base::nullopt;
   }
 
-  *value = base::UTF16ToUTF8(buffer);
-  return true;
+  base::string16 buffer;
+  if (!SetupDiGetDeviceProperty(
+          dev_info, dev_info_data, &property, &property_type,
+          reinterpret_cast<PBYTE>(base::WriteInto(&buffer, required_size)),
+          required_size, /*RequiredSize=*/nullptr, /*Flags=*/0)) {
+    return base::nullopt;
+  }
+
+  return base::UTF16ToUTF8(buffer);
 }
 
 base::FilePath FixUpPortName(base::StringPiece port_name) {
@@ -84,19 +82,19 @@ bool GetDisplayName(const std::string friendly_name,
                            display_name);
 }
 
-// Searches for the vendor ID in the device's hardware ID, assigns its value to
+// Searches for the vendor ID in the device's instance ID, assigns its value to
 // vendor_id, and returns whether the operation was successful.
-bool GetVendorID(const std::string hardware_id, uint32_t* vendor_id) {
+bool GetVendorID(const std::string& instance_id, uint32_t* vendor_id) {
   std::string vendor_id_str;
-  return RE2::PartialMatch(hardware_id, "VID_([0-9a-fA-F]+)", &vendor_id_str) &&
+  return RE2::PartialMatch(instance_id, "VID_([0-9a-fA-F]+)", &vendor_id_str) &&
          base::HexStringToUInt(vendor_id_str, vendor_id);
 }
 
-// Searches for the product ID in the device's product ID, assigns its value to
+// Searches for the product ID in the device's instance ID, assigns its value to
 // product_id, and returns whether the operation was successful.
-bool GetProductID(const std::string hardware_id, uint32_t* product_id) {
+bool GetProductID(const std::string& instance_id, uint32_t* product_id) {
   std::string product_id_str;
-  return RE2::PartialMatch(hardware_id, "PID_([0-9a-fA-F]+)",
+  return RE2::PartialMatch(instance_id, "PID_([0-9a-fA-F]+)",
                            &product_id_str) &&
          base::HexStringToUInt(product_id_str, product_id);
 }
@@ -179,7 +177,8 @@ base::Optional<base::FilePath> SerialDeviceEnumeratorWin::GetPath(
 }
 
 void SerialDeviceEnumeratorWin::OnPathAdded(const base::string16& device_path) {
-  ScopedDevInfo dev_info(SetupDiCreateDeviceInfoList(nullptr, nullptr));
+  base::win::ScopedDevInfo dev_info(
+      SetupDiCreateDeviceInfoList(nullptr, nullptr));
   if (!dev_info.is_valid())
     return;
 
@@ -198,7 +197,8 @@ void SerialDeviceEnumeratorWin::OnPathAdded(const base::string16& device_path) {
 
 void SerialDeviceEnumeratorWin::OnPathRemoved(
     const base::string16& device_path) {
-  ScopedDevInfo dev_info(SetupDiCreateDeviceInfoList(nullptr, nullptr));
+  base::win::ScopedDevInfo dev_info(
+      SetupDiCreateDeviceInfoList(nullptr, nullptr));
   if (!dev_info.is_valid())
     return;
 
@@ -212,16 +212,15 @@ void SerialDeviceEnumeratorWin::OnPathRemoved(
   if (!SetupDiEnumDeviceInfo(dev_info.get(), 0, &dev_info_data))
     return;
 
-  std::string friendly_name;
-  // SPDRP_FRIENDLYNAME looks like "USB_SERIAL_PORT (COM3)".
+  // The friendly name looks like "USB_SERIAL_PORT (COM3)".
   // In Windows, the COM port is the path used to uniquely identify the
   // serial device. If the COM can't be found, ignore the device.
-  if (!GetProperty(dev_info.get(), &dev_info_data, SPDRP_FRIENDLYNAME,
-                   &friendly_name)) {
+  base::Optional<std::string> friendly_name =
+      GetProperty(dev_info.get(), &dev_info_data, DEVPKEY_Device_FriendlyName);
+  if (!friendly_name)
     return;
-  }
 
-  base::Optional<base::FilePath> path = GetPath(friendly_name);
+  base::Optional<base::FilePath> path = GetPath(*friendly_name);
   if (!path)
     return;
 
@@ -239,7 +238,7 @@ void SerialDeviceEnumeratorWin::DoInitialEnumeration() {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   // Make a device interface query to find all serial devices.
-  ScopedDevInfo dev_info(
+  base::win::ScopedDevInfo dev_info(
       SetupDiGetClassDevs(&GUID_DEVINTERFACE_COMPORT, nullptr, 0,
                           DIGCF_DEVICEINTERFACE | DIGCF_PRESENT));
   if (!dev_info.is_valid())
@@ -255,40 +254,43 @@ void SerialDeviceEnumeratorWin::DoInitialEnumeration() {
 
 void SerialDeviceEnumeratorWin::EnumeratePort(HDEVINFO dev_info,
                                               SP_DEVINFO_DATA* dev_info_data) {
-  std::string friendly_name;
-  // SPDRP_FRIENDLYNAME looks like "USB_SERIAL_PORT (COM3)".
+  // The friendly name looks like "USB_SERIAL_PORT (COM3)".
   // In Windows, the COM port is the path used to uniquely identify the
   // serial device. If the COM can't be found, ignore the device.
-  if (!GetProperty(dev_info, dev_info_data, SPDRP_FRIENDLYNAME,
-                   &friendly_name)) {
+  base::Optional<std::string> friendly_name =
+      GetProperty(dev_info, dev_info_data, DEVPKEY_Device_FriendlyName);
+  if (!friendly_name)
     return;
-  }
 
-  base::Optional<base::FilePath> path = GetPath(friendly_name);
+  base::Optional<base::FilePath> path = GetPath(*friendly_name);
   if (!path)
     return;
 
-  auto info = mojom::SerialPortInfo::New();
-  info->path = *path;
-  base::UnguessableToken token = base::UnguessableToken::Create();
-  info->token = token;
+  base::Optional<std::string> instance_id =
+      GetProperty(dev_info, dev_info_data, DEVPKEY_Device_InstanceId);
+  if (!instance_id)
+    return;
 
+  base::UnguessableToken token = base::UnguessableToken::Create();
+  auto info = mojom::SerialPortInfo::New();
+  info->token = token;
+  info->path = *path;
+  info->persistent_id = instance_id;
+
+  // TODO(https://crbug.com/1015074): Read the real USB strings here.
   std::string display_name;
-  if (GetDisplayName(friendly_name, &display_name))
+  if (GetDisplayName(*friendly_name, &display_name))
     info->display_name = std::move(display_name);
 
-  std::string hardware_id;
-  // SPDRP_HARDWAREID looks like "FTDIBUS\COMPORT&VID_0403&PID_6001".
-  if (GetProperty(dev_info, dev_info_data, SPDRP_HARDWAREID, &hardware_id)) {
-    uint32_t vendor_id, product_id;
-    if (GetVendorID(hardware_id, &vendor_id)) {
-      info->has_vendor_id = true;
-      info->vendor_id = vendor_id;
-    }
-    if (GetProductID(hardware_id, &product_id)) {
-      info->has_product_id = true;
-      info->product_id = product_id;
-    }
+  // The instance ID looks like "FTDIBUS\VID_0403+PID_6001+A703X87GA\0000".
+  uint32_t vendor_id, product_id;
+  if (GetVendorID(*instance_id, &vendor_id)) {
+    info->has_vendor_id = true;
+    info->vendor_id = vendor_id;
+  }
+  if (GetProductID(*instance_id, &product_id)) {
+    info->has_product_id = true;
+    info->product_id = product_id;
   }
 
   paths_.insert(std::make_pair(*path, token));

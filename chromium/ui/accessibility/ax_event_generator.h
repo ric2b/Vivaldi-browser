@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/scoped_observer.h"
+#include "ui/accessibility/ax_event_intent.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_observer.h"
@@ -90,9 +91,13 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   };
 
   struct EventParams {
-    EventParams(Event event, ax::mojom::EventFrom event_from);
+    EventParams(Event event,
+                ax::mojom::EventFrom event_from,
+                const std::vector<AXEventIntent>& event_intents);
+    ~EventParams();
     Event event;
     ax::mojom::EventFrom event_from;
+    std::vector<AXEventIntent> event_intents;
 
     bool operator==(const EventParams& rhs);
     bool operator<(const EventParams& rhs) const;
@@ -165,6 +170,10 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   // same order they were added.
   void AddEvent(ui::AXNode* node, Event event);
 
+  void set_always_fire_load_complete(bool val) {
+    always_fire_load_complete_ = val;
+  }
+
  protected:
   // AXTreeObserver overrides.
   void OnNodeDataChanged(AXTree* tree,
@@ -235,6 +244,8 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   // Valid between the call to OnIntAttributeChanged and the call to
   // OnAtomicUpdateFinished. List of nodes whose active descendant changed.
   std::vector<AXNode*> active_descendant_changed_;
+
+  bool always_fire_load_complete_ = false;
 
   // Please make sure that this ScopedObserver is always declared last in order
   // to prevent any use-after-free.

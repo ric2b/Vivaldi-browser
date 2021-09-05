@@ -127,7 +127,7 @@ Err JSONToInputs(const Label& default_toolchain,
   std::string error_msg_out;
   int error_line_out;
   int error_column_out;
-  std::unique_ptr<base::Value> value = base::JSONReader().ReadAndReturnError(
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadAndReturnError(
       input, base::JSONParserOptions::JSON_PARSE_RFC, &error_code_out,
       &error_msg_out, &error_line_out, &error_column_out);
   if (!value)
@@ -299,11 +299,7 @@ std::string Analyzer::Analyze(const std::string& input, Err* err) const {
       GetAllAffectedItems(inputs.source_files);
   std::set<const Target*> affected_targets;
   for (const Item* affected_item : affected_items) {
-    // Only handles targets in the default toolchain.
-    // TODO(crbug.com/667989): Expand analyzer to non-default toolchains when
-    // the bug is fixed.
-    if (affected_item->AsTarget() &&
-        affected_item->label().GetToolchainLabel() == default_toolchain_)
+    if (affected_item->AsTarget())
       affected_targets.insert(affected_item->AsTarget());
   }
 

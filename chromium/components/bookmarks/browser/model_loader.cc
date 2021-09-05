@@ -11,6 +11,8 @@
 #include "components/bookmarks/browser/bookmark_storage.h"
 #include "components/bookmarks/browser/url_index.h"
 
+#include "components/bookmarks/vivaldi_partners.h"
+
 namespace bookmarks {
 
 namespace {
@@ -64,6 +66,7 @@ void ModelLoader::DoLoadOnBackgroundThread(
     LoadCallback callback) {
   LoadBookmarks(profile_path, emit_experimental_uma, details.get());
   history_bookmark_model_ = details->url_index();
+  vivaldi_partners::LoadOnWorkerThread(main_sequenced_task_runner);
   loaded_signal_.Signal();
   main_sequenced_task_runner->PostTask(
       FROM_HERE, base::BindOnce(&ModelLoader::OnFinishedLoad, this,

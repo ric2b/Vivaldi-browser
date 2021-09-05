@@ -12,7 +12,6 @@ import org.chromium.chrome.browser.paint_preview.services.PaintPreviewDemoServic
 import org.chromium.chrome.browser.paint_preview.services.PaintPreviewDemoServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
-import org.chromium.chrome.browser.tab.TabViewManager;
 import org.chromium.chrome.browser.tab.TabViewProvider;
 import org.chromium.components.paintpreview.player.PlayerManager;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -53,23 +52,26 @@ public class PaintPreviewDemoManager implements TabViewProvider {
         if (success) {
             mPlayerManager = new PlayerManager(mTab.getUrl(), mTab.getContext(),
                     mPaintPreviewDemoService, String.valueOf(mTab.getId()),
-                    PaintPreviewDemoManager.this::onLinkClicked, safeToShow -> {
-                        addPlayerView(safeToShow);
-                    }, TabThemeColorHelper.getBackgroundColor(mTab));
+                    PaintPreviewDemoManager.this::onLinkClicked,
+                    PaintPreviewDemoManager.this::removePaintPreviewDemo,
+                    PaintPreviewDemoManager.this::addPlayerView,
+                    TabThemeColorHelper.getBackgroundColor(mTab),
+                    () -> {
+                        Toast.makeText(mTab.getContext(),
+                                     R.string.paint_preview_demo_playback_failure,
+                                     Toast.LENGTH_LONG)
+                                .show();
+                        removePaintPreviewDemo();
+                    },
+                    /*ignoreInitialScrollOffset=*/false);
         }
         int toastStringRes = success ? R.string.paint_preview_demo_capture_success
                                      : R.string.paint_preview_demo_capture_failure;
         Toast.makeText(mTab.getContext(), toastStringRes, Toast.LENGTH_LONG).show();
     }
 
-    private void addPlayerView(boolean safeToShow) {
-        if (!safeToShow) {
-            Toast.makeText(mTab.getContext(), R.string.paint_preview_demo_playback_failure,
-                         Toast.LENGTH_LONG)
-                    .show();
-            return;
-        }
-        TabViewManager.get(mTab).addTabViewProvider(this);
+    private void addPlayerView() {
+        mTab.getTabViewManager().addTabViewProvider(this);
     }
 
     void removePaintPreviewDemo() {
@@ -77,15 +79,14 @@ public class PaintPreviewDemoManager implements TabViewProvider {
             return;
         }
 
-        TabViewManager.get(mTab).removeTabViewProvider(this);
+        mTab.getTabViewManager().removeTabViewProvider(this);
         mPaintPreviewDemoService.cleanUpForTabId(mTab.getId());
         mPlayerManager.destroy();
         mPlayerManager = null;
     }
 
     boolean isShowingPaintPreviewDemo() {
-        return mPlayerManager != null
-                && TabViewManager.get(mTab).getCurrentTabViewProvider() == this;
+        return mPlayerManager != null && mTab.getTabViewManager().isShowing(this);
     }
 
     private void onLinkClicked(GURL url) {

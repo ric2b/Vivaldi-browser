@@ -53,6 +53,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
+import java.util.Locale;
 import org.chromium.chrome.browser.ChromeApplication;
 
 /**
@@ -372,7 +373,7 @@ public class SearchEngineAdapter extends BaseAdapter
             TextView shortcut = view.findViewById(R.id.shortcut);
             assert shortcut != null;
             TemplateUrl tUrl = (TemplateUrl) getItem(position);
-            String text = tUrl.getShortName().substring(0, 1).toLowerCase();
+            String text = tUrl.getShortName().substring(0, 1).toLowerCase(Locale.getDefault());
             shortcut.setText(text);
         }
 

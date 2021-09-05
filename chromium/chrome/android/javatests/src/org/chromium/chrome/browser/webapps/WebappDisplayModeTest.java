@@ -6,10 +6,11 @@ package org.chromium.chrome.browser.webapps;
 
 import android.graphics.Color;
 import android.net.Uri;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.view.View;
 import android.widget.TextView;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -127,9 +128,6 @@ public class WebappDisplayModeTest {
                         .putExtra(ShortcutHelper.EXTRA_URL, url)
                         .putExtra(ShortcutHelper.EXTRA_DISPLAY_MODE, displayMode)
                         .putExtra(ShortcutHelper.EXTRA_THEME_COLOR, (long) Color.CYAN));
-
-        mActivityTestRule.waitUntilSplashscreenHides();
-        mActivityTestRule.waitUntilIdle();
 
         return mActivityTestRule.getActivity();
     }

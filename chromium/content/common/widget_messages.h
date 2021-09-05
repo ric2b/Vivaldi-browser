@@ -13,7 +13,6 @@
 #include "content/common/common_param_traits_macros.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/content_to_visible_time_reporter.h"
-#include "content/common/text_input_state.h"
 #include "content/common/visual_properties.h"
 #include "content/public/common/common_param_traits.h"
 #include "ipc/ipc_message_macros.h"
@@ -57,39 +56,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(base::i18n::TextDirection,
-                          base::i18n::TEXT_DIRECTION_MAX)
-
-IPC_STRUCT_BEGIN(WidgetHostMsg_SelectionBounds_Params)
-  IPC_STRUCT_MEMBER(gfx::Rect, anchor_rect)
-  IPC_STRUCT_MEMBER(base::i18n::TextDirection, anchor_dir)
-  IPC_STRUCT_MEMBER(gfx::Rect, focus_rect)
-  IPC_STRUCT_MEMBER(base::i18n::TextDirection, focus_dir)
-  IPC_STRUCT_MEMBER(bool, is_anchor_first)
-IPC_STRUCT_END()
-
-// Traits for TextInputState.
-IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputAction, ui::TextInputAction::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputMode, ui::TEXT_INPUT_MODE_MAX)
-
-IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(mode)
-  IPC_STRUCT_TRAITS_MEMBER(action)
-  IPC_STRUCT_TRAITS_MEMBER(flags)
-  IPC_STRUCT_TRAITS_MEMBER(value)
-  IPC_STRUCT_TRAITS_MEMBER(selection_start)
-  IPC_STRUCT_TRAITS_MEMBER(selection_end)
-  IPC_STRUCT_TRAITS_MEMBER(composition_start)
-  IPC_STRUCT_TRAITS_MEMBER(composition_end)
-  IPC_STRUCT_TRAITS_MEMBER(can_compose_inline)
-  IPC_STRUCT_TRAITS_MEMBER(show_ime_if_needed)
-  IPC_STRUCT_TRAITS_MEMBER(always_hide_ime)
-  IPC_STRUCT_TRAITS_MEMBER(reply_to_request)
-  IPC_STRUCT_TRAITS_MEMBER(edit_context_control_bounds)
-  IPC_STRUCT_TRAITS_MEMBER(edit_context_selection_bounds)
-IPC_STRUCT_TRAITS_END()
-
 //
 // Browser -> Renderer Messages.
 //
@@ -126,10 +92,6 @@ IPC_MESSAGE_ROUTED3(WidgetMsg_WasShown,
 // accordingly, etc.).
 IPC_MESSAGE_ROUTED1(WidgetMsg_SetActive, bool /* active */)
 
-// Changes the text direction of the currently selected input field (if any).
-IPC_MESSAGE_ROUTED1(WidgetMsg_SetTextDirection,
-                    base::i18n::TextDirection /* direction */)
-
 // Reply to WidgetHostMsg_RequestSetBounds, WidgetHostMsg_ShowWidget, and
 // FrameHostMsg_ShowCreatedWindow, to inform the renderer that the browser has
 // processed the bounds-setting.  The browser may have ignored the new bounds,
@@ -149,11 +111,6 @@ IPC_MESSAGE_ROUTED1(WidgetMsg_UpdateVisualProperties,
 IPC_MESSAGE_ROUTED2(WidgetMsg_UpdateScreenRects,
                     gfx::Rect /* widget_screen_rect */,
                     gfx::Rect /* window_screen_rect */)
-
-// Sent by the browser to ask the renderer to redraw. Robust to events that can
-// happen in renderer (abortion of the commit or draw, loss of output surface
-// etc.).
-IPC_MESSAGE_ROUTED1(WidgetMsg_ForceRedraw, int /* snapshot_id */)
 
 // Sent by a parent frame to notify its child about the state of the child's
 // intersection with the parent's viewport, primarily for use by the
@@ -177,33 +134,14 @@ IPC_MESSAGE_ROUTED1(WidgetMsg_WaitForNextFrameForTests,
 // message to close the widget.
 IPC_MESSAGE_ROUTED0(WidgetHostMsg_Close)
 
-// Notification that the selection bounds have changed.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_SelectionBoundsChanged,
-                    WidgetHostMsg_SelectionBounds_Params)
-
 // Sent in response to a WidgetMsg_UpdateScreenRects so that the renderer can
 // throttle these messages.
 IPC_MESSAGE_ROUTED0(WidgetHostMsg_UpdateScreenRects_ACK)
-
-// Send the tooltip text for the current mouse position to the browser.
-IPC_MESSAGE_ROUTED2(WidgetHostMsg_SetTooltipText,
-                    base::string16 /* tooltip text string */,
-                    base::i18n::TextDirection /* text direction hint */)
-
-// Notifies the browser if the text input state has changed. Primarily useful
-// for IME as they need to know of all changes to update their interpretation
-// of the characters that have been input.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_TextInputStateChanged,
-                    content::TextInputState /* text_input_state */)
 
 // Sent by the renderer process to request that the browser change the bounds of
 // the widget. This corresponds to the window.resizeTo() and window.moveTo()
 // APIs, and the browser may ignore this message.
 IPC_MESSAGE_ROUTED1(WidgetHostMsg_RequestSetBounds, gfx::Rect /* bounds */)
-
-// Sent by the renderer process in response to an earlier WidgetMsg_ForceRedraw
-// message. The reply includes the snapshot-id from the request.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_ForceRedrawComplete, int /* snapshot_id */)
 
 // Sends a set of queued messages that were being held until the next
 // CompositorFrame is being submitted from the renderer. These messages are
@@ -220,9 +158,5 @@ IPC_MESSAGE_CONTROL1(WidgetHostMsg_Close_ACK, int /* old_route_id */)
 
 // Sent in reply to WidgetMsg_WaitForNextFrameForTests.
 IPC_MESSAGE_ROUTED0(WidgetHostMsg_WaitForNextFrameForTests_ACK)
-
-// Sent once a paint happens after the first non empty layout. In other words,
-// after the frame widget has painted something.
-IPC_MESSAGE_ROUTED0(WidgetHostMsg_DidFirstVisuallyNonEmptyPaint)
 
 #endif  //  CONTENT_COMMON_WIDGET_MESSAGES_H_

@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(プライベート)</translation>
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1627276047960621195">ファイル記述子</translation>
-<translation id="1635033183663317347">管理責任者によってインストールされています。</translation>
 <translation id="1682548588986054654">新しいプライベートウィンドウ</translation>
 <translation id="1698122934742150150">現在のシークレット モード セッションのみ</translation>
 <translation id="1706625117072057435">拡大縮小レベル</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">拡張機能: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 画面共有リクエスト</translation>
 <translation id="3711931198657368127">貼り付けて <ph name="URL" /> に移動 (&amp;S)</translation>
-<translation id="3725367690636977613">ページ</translation>
 <translation id="3727187387656390258">ポップアップを検証する</translation>
 <translation id="3744111561329211289">バックグラウンド同期</translation>
 <translation id="3760460896538743390">バックグラウンドページの検証 (&amp;B)</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">グループへの共有を許可</translation>
-<translation id="4091434297613116013">枚</translation>
 <translation id="4096508467498758490">デベロッパーモードの拡張機能を無効にする</translation>
 <translation id="4100839878934973028">パソコン上の別のプログラムにより、Vivaldiの動作方法を変更する可能性のあるアプリが追加されました。</translation>
 <translation id="4109898769411476438">インポートする前にブラウザーを終了してください</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">コントロールを表示 (&amp;C)</translation>
 <translation id="7311079019872751559">サンドボックス化されていないプラグインへのアクセス</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">印刷中に問題が発生しました。プリンターを確認してからもう一度お試しください。</translation>
 <translation id="7412226954991670867">GPUメモリ</translation>
 <translation id="7421925624202799674">ページのソースを表示 (&amp;V)</translation>
@@ -433,7 +429,6 @@
 <translation id="8071432093239591881">画像として印刷する</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">拡張機能の管理</translation>
-<translation id="8180239481735238521">ページ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{ダウンロードが進行中です}other{ダウンロードが進行中です}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> のパスワードを保存しますか？</translation>
 <translation id="8261378640211443080">この拡張機能は<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />で提供されていません。意図せずに追加された可能性があります。</translation>
@@ -465,7 +460,6 @@
 <translation id="8798099450830957504">既定</translation>
 <translation id="8800004011501252845">次のアカウントの送信先を表示しています:</translation>
 <translation id="8808478386290700967">ウェブストア</translation>
-<translation id="8813811964357448561">枚</translation>
 <translation id="8823514049557262177">リンクテキストをコピー (&amp;X)</translation>
 <translation id="8823704566850948458">パスワードを自動生成...</translation>
 <translation id="8859174528519900719">サブフレーム: <ph name="SUBFRAME_SITE" /></translation>

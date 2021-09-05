@@ -73,13 +73,17 @@ void NinjaCopyTargetWriter::WriteCopyRules(
   std::vector<OutputFile> input_deps = WriteInputDepsStampAndGetDep(
       std::vector<const Target*>(), num_stamp_uses);
 
+  std::vector<OutputFile> data_outs;
+  for (const auto& dep : target_->data_deps())
+    data_outs.push_back(dep.ptr->dependency_output_file());
+
   // Note that we don't write implicit deps for copy steps. "copy" only
   // depends on the output files themselves, rather than having includes
   // (the possibility of generated #includes is the main reason for implicit
   // dependencies).
   //
   // It would seem that specifying implicit dependencies on the deps of the
-  // copy command would still be harmeless. But Chrome implements copy tools
+  // copy command would still be harmless. But Chrome implements copy tools
   // as hard links (much faster) which don't change the timestamp. If the
   // ninja rule looks like this:
   //   output: copy input | foo.stamp
@@ -97,8 +101,9 @@ void NinjaCopyTargetWriter::WriteCopyRules(
   //
   // Note that there is the need in some cases for order-only dependencies
   // where a command might need to make sure something else runs before it runs
-  // to avoid conflicts. Such cases should be avoided where possible, but
-  // sometimes that's not possible.
+  // to avoid conflicts. This is also needed for data_deps on a copy target.
+  // Such cases should be avoided where possible, but sometimes that's not
+  // possible.
   for (const auto& input_file : target_->sources()) {
     OutputFile output_file =
         SubstitutionWriter::ApplyPatternToSourceAsOutputFile(
@@ -109,9 +114,10 @@ void NinjaCopyTargetWriter::WriteCopyRules(
     path_output_.WriteFile(out_, output_file);
     out_ << ": " << tool_name << " ";
     path_output_.WriteFile(out_, input_file);
-    if (!input_deps.empty()) {
+    if (!input_deps.empty() || !data_outs.empty()) {
       out_ << " ||";
       path_output_.WriteFiles(out_, input_deps);
+      path_output_.WriteFiles(out_, data_outs);
     }
     out_ << std::endl;
   }

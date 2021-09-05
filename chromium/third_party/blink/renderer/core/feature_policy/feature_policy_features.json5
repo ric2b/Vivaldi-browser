@@ -119,6 +119,14 @@
       depends_on: ["FeaturePolicyForClientHints"],
     },
     {
+      name: "ClipboardRead",
+      feature_policy_name: "clipboard-read",
+    },
+    {
+      name: "ClipboardWrite",
+      feature_policy_name: "clipboard-write",
+    },
+    {
       name: "ConversionMeasurement",
       feature_policy_name: "conversion-measurement",
       depends_on: ["ConversionMeasurement"],
@@ -189,16 +197,6 @@
       depends_on: ["IdleDetection"],
     },
     {
-      name: "LazyLoad",
-      feature_policy_name: "lazyload",
-      depends_on: ["ExperimentalProductivityFeatures"],
-    },
-    {
-      name: "LoadingFrameDefaultEager",
-      feature_policy_name: "loading-frame-default-eager",
-      depends_on: ["ExperimentalProductivityFeatures"]
-    },
-    {
       name: "Magnetometer",
       feature_policy_name: "magnetometer",
     },
@@ -264,6 +262,11 @@
       name: "Serial",
       feature_policy_name: "serial",
       depends_on: ["Serial"],
+    },
+    {
+      name: "StorageAccessAPI",
+      feature_policy_name: "storage-access-api",
+      depends_on: ["StorageAccessAPI"],
     },
     {
       name: "SyncScript",

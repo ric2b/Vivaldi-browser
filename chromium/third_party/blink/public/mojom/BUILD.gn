@@ -45,6 +45,7 @@ mojom("mojom_platform") {
     "devtools/devtools_agent.mojom",
     "devtools/devtools_frontend.mojom",
     "devtools/inspector_issue.mojom",
+    "digital_goods/digital_goods.mojom",
     "disk_allocator.mojom",
     "favicon/favicon_url.mojom",
     "feature_observer/feature_observer.mojom",
@@ -70,6 +71,7 @@ mojom("mojom_platform") {
     "input/pointer_lock_context.mojom",
     "input/pointer_lock_result.mojom",
     "input/scroll_direction.mojom",
+    "input/synchronous_compositor.mojom",
     "input/touch_event.mojom",
     "insecure_input/insecure_input_service.mojom",
     "keyboard_lock/keyboard_lock.mojom",
@@ -165,7 +167,6 @@ mojom("mojom_platform") {
     "websockets/websocket_connector.mojom",
     "webtransport/quic_transport_connector.mojom",
     "window_features/window_features.mojom",
-    "worker/dedicated_worker_host.mojom",
     "worker/shared_worker_client.mojom",
     "worker/shared_worker_creation_context_type.mojom",
     "worker/shared_worker_host.mojom",
@@ -176,7 +177,10 @@ mojom("mojom_platform") {
     "worker/worker_options.mojom",
   ]
 
-  if (!is_android) {
+  if (is_android) {
+    # TODO(crbug.com/1080903): Figure out how to satisfy deps checker properly.
+    enable_bytecode_checks = false
+  } else {
     sources += [ "serial/serial.mojom" ]
   }
 
@@ -216,6 +220,7 @@ mojom("mojom_platform") {
     "//ui/events/mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
+    "//ui/gfx/range/mojom",
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]
@@ -236,6 +241,35 @@ mojom("mojom_platform") {
     enabled_features = [ "renderer_pref_system_font_family_name" ]
   }
 
+  shared_cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "blink.mojom.DragOperation"
+          cpp = "::blink::WebDragOperation"
+          copyable_pass_by_value = true
+        },
+        {
+          mojom = "blink.mojom.AllowedDragOperations"
+          cpp = "::blink::WebDragOperationsMask"
+          copyable_pass_by_value = true
+        },
+      ]
+      traits_headers =
+          [ "//third_party/blink/public/common/page/drag_mojom_traits.h" ]
+      traits_public_deps = [ "//third_party/blink/public/common:headers" ]
+    },
+    {
+      types = [
+        {
+          mojom = "blink.mojom.Event"
+          cpp = "::std::unique_ptr<::blink::WebCoalescedInputEvent>"
+          move_only = true
+        },
+      ]
+      traits_headers = [ "//third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h" ]
+    },
+  ]
   cpp_typemaps = [
     {
       types = [
@@ -248,6 +282,8 @@ mojom("mojom_platform") {
       traits_public_deps = [ "//ui/base/clipboard:clipboard_types" ]
     },
   ]
+  cpp_typemaps += shared_cpp_typemaps
+  blink_cpp_typemaps = shared_cpp_typemaps
 
   export_class_attribute = "BLINK_COMMON_EXPORT"
   export_define = "BLINK_COMMON_IMPLEMENTATION=1"
@@ -385,6 +421,10 @@ mojom("mojom_core") {
     "//url/mojom:url_mojom_origin",
   ]
 
+  if (is_android) {
+    # TODO(crbug.com/1080903): Figure out how to satisfy deps checker properly.
+    enable_bytecode_checks = false
+  }
   if (is_mac) {
     public_deps += [ "//ui/gfx/range/mojom" ]
   }

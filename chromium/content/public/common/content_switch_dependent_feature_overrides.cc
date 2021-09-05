@@ -9,7 +9,6 @@
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
-#include "ui/base/ui_base_features.h"
 
 namespace content {
 
@@ -39,6 +38,9 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
        std::cref(network::features::kCrossOriginOpenerPolicyReporting),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableExperimentalWebPlatformFeatures,
+       std::cref(network::features::kCrossOriginOpenerPolicyAccessReporting),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+      {switches::kEnableExperimentalWebPlatformFeatures,
        std::cref(network::features::kCrossOriginEmbedderPolicy),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableExperimentalWebPlatformFeatures,
@@ -56,11 +58,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
       {switches::kEnableExperimentalWebPlatformFeatures,
        std::cref(features::kOriginIsolationHeader),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-
-      // Overrides for --use-legacy-form-controls.
-      {switches::kUseLegacyFormControls,
-       std::cref(features::kFormControlsRefresh),
-       base::FeatureList::OVERRIDE_DISABLE_FEATURE},
 
       // Overrides for --enable-experimental-cookie-features.
       {switches::kEnableExperimentalCookieFeatures,

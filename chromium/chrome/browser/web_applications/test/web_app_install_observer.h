@@ -16,11 +16,18 @@
 namespace web_app {
 
 class AppRegistrar;
+class WebApp;
 
 class WebAppInstallObserver final : public AppRegistrarObserver {
  public:
   explicit WebAppInstallObserver(AppRegistrar* registrar);
   explicit WebAppInstallObserver(Profile* profile);
+
+  // Restricts this observer to only listen for the given |listen_for_app_id|.
+  explicit WebAppInstallObserver(AppRegistrar* registrar,
+                                 const AppId& listen_for_app_id);
+  explicit WebAppInstallObserver(Profile* profile,
+                                 const AppId& listen_for_app_id);
   ~WebAppInstallObserver() override;
 
   AppId AwaitNextInstall();
@@ -33,16 +40,32 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
       base::RepeatingCallback<void(const AppId& app_id)>;
   void SetWebAppUninstalledDelegate(WebAppUninstalledDelegate delegate);
 
+  using WebAppProfileWillBeDeletedDelegate =
+      base::RepeatingCallback<void(const AppId& app_id)>;
+  void SetWebAppProfileWillBeDeletedDelegate(
+      WebAppProfileWillBeDeletedDelegate delegate);
+
+  using WebAppWillBeUpdatedFromSyncDelegate = base::RepeatingCallback<void(
+      const std::vector<const WebApp*>& new_apps_state)>;
+  void SetWebAppWillBeUpdatedFromSyncDelegate(
+      WebAppWillBeUpdatedFromSyncDelegate delegate);
+
   // AppRegistrarObserver:
   void OnWebAppInstalled(const AppId& app_id) override;
+  void OnWebAppsWillBeUpdatedFromSync(
+      const std::vector<const WebApp*>& new_apps_state) override;
   void OnWebAppUninstalled(const AppId& app_id) override;
+  void OnWebAppProfileWillBeDeleted(const AppId& app_id) override;
 
  private:
   base::RunLoop run_loop_;
   AppId app_id_;
+  AppId listening_for_app_id_;
 
   WebAppInstalledDelegate app_installed_delegate_;
+  WebAppWillBeUpdatedFromSyncDelegate app_will_be_updated_from_sync_delegate_;
   WebAppUninstalledDelegate app_uninstalled_delegate_;
+  WebAppProfileWillBeDeletedDelegate app_profile_will_be_deleted_delegate_;
 
   ScopedObserver<AppRegistrar, AppRegistrarObserver> observer_{this};
 

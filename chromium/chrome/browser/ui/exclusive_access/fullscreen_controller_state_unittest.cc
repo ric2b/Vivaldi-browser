@@ -84,9 +84,7 @@ class FullscreenControllerTestWindow : public TestBrowserWindow,
 };
 
 FullscreenControllerTestWindow::FullscreenControllerTestWindow()
-    : state_(NORMAL),
-      browser_(NULL) {
-}
+    : state_(NORMAL), browser_(nullptr) {}
 
 void FullscreenControllerTestWindow::EnterFullscreen(
     const GURL& url,
@@ -714,6 +712,28 @@ TEST_F(FullscreenControllerStateUnitTest,
   EXPECT_FALSE(wc_delegate->IsFullscreenForTabOrPending(tab));
   EXPECT_FALSE(GetFullscreenController()->IsWindowFullscreenForTabOrPending());
   EXPECT_TRUE(GetFullscreenController()->IsFullscreenForBrowser());
+}
+
+// Tests that the tab doesn't enter Fullscreen-Within-Tab mode for hidden
+// capture (stay_hidden == true).
+TEST_F(FullscreenControllerStateUnitTest, HiddenlyCapturedTabFullscreened) {
+  content::WebContentsDelegate* const wc_delegate =
+      static_cast<content::WebContentsDelegate*>(browser());
+  ASSERT_TRUE(wc_delegate->EmbedsFullscreenWidget());
+
+  AddTab(browser(), GURL(url::kAboutBlankURL));
+  content::WebContents* const tab =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+
+  // Start capturing the tab with stay_hidden==true, and fullscreen it.
+  // The the browser window should enter fullscreen.
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
+  tab->IncrementCapturerCount(gfx::Size(), /* stay_hidden */ true);
+  ASSERT_TRUE(InvokeEvent(TAB_FULLSCREEN_TRUE));
+  EXPECT_TRUE(wc_delegate->IsFullscreenForTabOrPending(tab));
+  EXPECT_TRUE(GetFullscreenController()->IsWindowFullscreenForTabOrPending());
+  EXPECT_FALSE(GetFullscreenController()->IsFullscreenForBrowser());
 }
 
 class FullscreenChangeObserver : public content::WebContentsObserver {

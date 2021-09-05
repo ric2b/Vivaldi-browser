@@ -6,9 +6,9 @@
 
 #include <utility>
 
+#include "ash/public/cpp/external_arc/message_center/arc_notification_surface.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/system/message_center/arc/arc_notification_surface.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
@@ -46,7 +46,10 @@ using ash::ArcNotificationSurfaceManager;
 
 namespace {
 
-constexpr char kToastEventSource[] = "android.widget.Toast$TN";
+// ClassName for toast from ARC++ R onwards.
+constexpr char kToastEventSourceArcR[] = "android.widget.Toast";
+// TODO(sarakato): Remove this once ARC++ P has been deprecated.
+constexpr char kToastEventSourceArcP[] = "android.widget.Toast$TN";
 
 bool ShouldAnnounceEvent(arc::mojom::AccessibilityEventData* event_data) {
   if (event_data->event_type ==
@@ -54,7 +57,7 @@ bool ShouldAnnounceEvent(arc::mojom::AccessibilityEventData* event_data) {
     return true;
   } else if (event_data->event_type ==
              arc::mojom::AccessibilityEventType::NOTIFICATION_STATE_CHANGED) {
-    // Only announce the event from toast (event is from its inner class TN).
+    // Only announce the event from toast.
     if (!event_data->string_properties)
       return false;
 
@@ -63,7 +66,8 @@ bool ShouldAnnounceEvent(arc::mojom::AccessibilityEventData* event_data) {
     if (it == event_data->string_properties->end())
       return false;
 
-    return it->second == kToastEventSource;
+    return (it->second == kToastEventSourceArcP) ||
+           (it->second == kToastEventSourceArcR);
   }
   return false;
 }
@@ -502,7 +506,7 @@ void ArcAccessibilityHelperBridge::OnAction(
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
       arc_bridge_service_->accessibility_helper(), PerformAction);
   if (!instance) {
-    // TODO (b/146809329): This case should probably destroy all trees.
+    // TODO(b/146809329): This case should probably destroy all trees.
     OnActionResult(data, false);
     return;
   }
@@ -511,6 +515,10 @@ void ArcAccessibilityHelperBridge::OnAction(
       std::move(action_data),
       base::BindOnce(&ArcAccessibilityHelperBridge::OnActionResult,
                      base::Unretained(this), data));
+}
+
+bool ArcAccessibilityHelperBridge::IsScreenReaderEnabled() const {
+  return is_screen_reader_enabled_;
 }
 
 void ArcAccessibilityHelperBridge::OnTaskDestroyed(int32_t task_id) {
@@ -539,8 +547,9 @@ void ArcAccessibilityHelperBridge::OnNotificationSurfaceAdded(
   // notification updated. As order of OnNotificationSurfaceAdded call is not
   // guaranteed, we are dispatching the event in both
   // ArcAccessibilityHelperBridge and ArcNotificationContentView. The event
-  // needs to be dispatched after 1. ax tree id is set to the surface, 2 the
-  // surface is attached to the content view.
+  // needs to be dispatched after:
+  // 1. ax_tree_id is set to the surface
+  // 2. the surface is attached to the content view
   if (surface->IsAttached()) {
     surface->GetAttachedHost()->NotifyAccessibilityEvent(
         ax::mojom::Event::kChildrenChanged, false);
@@ -695,11 +704,15 @@ void ArcAccessibilityHelperBridge::UpdateEnabledFeature() {
   if (instance)
     instance->SetFilter(filter_type_);
 
-  if (!chromeos::AccessibilityManager::Get())
+  chromeos::AccessibilityManager* accessibility_manager =
+      chromeos::AccessibilityManager::Get();
+  if (!accessibility_manager)
     return;
+
   is_focus_highlight_enabled_ =
-      filter_type_ != arc::mojom::AccessibilityFilterType::OFF &&
-      chromeos::AccessibilityManager::Get()->IsFocusHighlightEnabled();
+      accessibility_manager->IsFocusHighlightEnabled();
+  is_screen_reader_enabled_ = accessibility_manager->IsSwitchAccessEnabled() ||
+                              accessibility_manager->IsSpokenFeedbackEnabled();
 
   bool add_activation_observer =
       filter_type_ == arc::mojom::AccessibilityFilterType::ALL;
@@ -729,7 +742,7 @@ void ArcAccessibilityHelperBridge::UpdateWindowProperties(
     return;
 
   // Do a lookup for the tree source. A tree source may not exist because the
-  // app isn't whitelisted Android side or no data has been received for the
+  // app isn't allowlisted Android side or no data has been received for the
   // app.
   bool use_talkback = talkback_enabled_task_ids_.count(task_id) > 0;
 

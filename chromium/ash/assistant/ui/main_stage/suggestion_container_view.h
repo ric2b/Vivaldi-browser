@@ -12,13 +12,11 @@
 #include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "ash/assistant/ui/main_stage/animated_container_view.h"
 #include "ash/assistant/ui/main_stage/suggestion_chip_view.h"
-#include "ash/public/cpp/assistant/controller/assistant_suggestions_controller.h"
-#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/scoped_observer.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "ui/views/controls/scroll_view.h"
 
 namespace views {
@@ -38,9 +36,7 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
       public AssistantUiModelObserver,
       public views::ButtonListener {
  public:
-  using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
-  using AssistantSuggestionPtr =
-      chromeos::assistant::mojom::AssistantSuggestionPtr;
+  using AssistantSuggestion = chromeos::assistant::AssistantSuggestion;
 
   explicit SuggestionContainerView(AssistantViewDelegate* delegate);
   ~SuggestionContainerView() override;
@@ -55,8 +51,7 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
 
   // AssistantSuggestionsModelObserver:
   void OnConversationStartersChanged(
-      const std::vector<const AssistantSuggestion*>& conversation_starters)
-      override;
+      const std::vector<AssistantSuggestion>& conversation_starters) override;
 
   // AssistantUiModelObserver:
   void OnUiVisibilityChanged(
@@ -76,11 +71,11 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
 
   // AnimatedContainerView:
   std::unique_ptr<ElementAnimator> HandleSuggestion(
-      const AssistantSuggestion* suggestion) override;
+      const AssistantSuggestion& suggestion) override;
   void OnAllViewsRemoved() override;
 
   std::unique_ptr<ElementAnimator> AddSuggestionChip(
-      const AssistantSuggestion* suggestion);
+      const AssistantSuggestion& suggestion);
 
   views::BoxLayout* layout_manager_;  // Owned by view hierarchy.
 
@@ -89,18 +84,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
 
   // The suggestion chip that was pressed by the user. May be |nullptr|.
   const SuggestionChipView* selected_chip_ = nullptr;
-
-  ScopedObserver<AssistantSuggestionsController,
-                 AssistantSuggestionsModelObserver,
-                 &AssistantSuggestionsController::AddModelObserver,
-                 &AssistantSuggestionsController::RemoveModelObserver>
-      assistant_suggestions_model_observer_{this};
-
-  ScopedObserver<AssistantUiController,
-                 AssistantUiModelObserver,
-                 &AssistantUiController::AddModelObserver,
-                 &AssistantUiController::RemoveModelObserver>
-      assistant_ui_model_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(SuggestionContainerView);
 };

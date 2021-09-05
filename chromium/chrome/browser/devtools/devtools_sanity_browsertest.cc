@@ -24,7 +24,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
@@ -37,6 +36,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -114,7 +114,6 @@
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
-using content::BrowserThread;
 using content::DevToolsAgentHost;
 using content::DevToolsAgentHostObserver;
 using content::NavigationController;
@@ -217,7 +216,7 @@ void SwitchToExtensionPanel(DevToolsWindow* window,
 
 class DevToolsSanityTest : public InProcessBrowserTest {
  public:
-  DevToolsSanityTest() : window_(NULL) {}
+  DevToolsSanityTest() : window_(nullptr) {}
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -256,6 +255,14 @@ class DevToolsSanityTest : public InProcessBrowserTest {
 
     window_ = DevToolsWindowTesting::OpenDevToolsWindowSync(GetInspectedTab(),
                                                             is_docked);
+  }
+
+  void OpenDevToolsWindowOnOffTheRecordTab(const std::string& test_page) {
+    GURL url = spawned_test_server()->GetURL("").Resolve(test_page);
+    auto* otr_browser = OpenURLOffTheRecord(browser()->profile(), url);
+
+    window_ = DevToolsWindowTesting::OpenDevToolsWindowSync(
+        otr_browser->tab_strip_model()->GetWebContentsAt(0), false);
   }
 
   WebContents* GetInspectedTab() {
@@ -611,7 +618,7 @@ class DevToolsExperimentalExtensionTest : public DevToolsExtensionTest {
 
 class WorkerDevToolsSanityTest : public InProcessBrowserTest {
  public:
-  WorkerDevToolsSanityTest() : window_(NULL) {}
+  WorkerDevToolsSanityTest() : window_(nullptr) {}
 
  protected:
   class WorkerCreationObserver : public DevToolsAgentHostObserver {
@@ -632,7 +639,7 @@ class WorkerDevToolsSanityTest : public InProcessBrowserTest {
       if (host->GetType() == DevToolsAgentHost::kTypeSharedWorker &&
           host->GetURL().path().rfind(path_) != std::string::npos) {
         *out_host_ = host;
-        base::PostTask(FROM_HERE, {BrowserThread::UI}, quit_);
+        content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, quit_);
         delete this;
       }
     }
@@ -852,6 +859,25 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
                        TestDevToolsExtensionAPI) {
   LoadExtension("devtools_extension");
   RunTest("waitForTestResultsInConsole", std::string());
+}
+
+// Tests that chrome.devtools extension is correctly exposed.
+IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest, TestExtensionOnNewTab) {
+  // Not really required by this test, but the underlying code happens
+  // to expect it.
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Install the dynamically-generated devtools extension.
+  const Extension* devtools_extension = LoadExtensionForTest(
+      "Devtools Extension", "panel_devtools_page.html", "");
+  ASSERT_TRUE(devtools_extension);
+  extensions::util::SetIsIncognitoEnabled(devtools_extension->id(),
+                                          browser()->profile(), true);
+
+  OpenDevToolsWindowOnOffTheRecordTab(chrome::kChromeUINewTabURL);
+
+  // Wait for the extension's panel to finish loading -- it'll output 'PASS'
+  // when it's installed. waitForTestResultsInConsole waits until that 'PASS'.
+  RunTestFunction(window_, "waitForTestResultsInConsole");
 }
 
 // Tests that http Iframes within the visible devtools panel for the devtools
@@ -1115,8 +1141,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
 // Tests that iframes to a non-devtools extension embedded in a devtools
 // extension will be isolated from devtools and the devtools extension.
 // http://crbug.com/570483
+// Disabled due to flakiness https://crbug.com/1062802
 IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
-                       NonDevToolsExtensionInDevToolsExtension) {
+                       DISABLED_NonDevToolsExtensionInDevToolsExtension) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Install the dynamically-generated non-devtools extension.
@@ -1510,8 +1537,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 
 // Tests that debugger works correctly if pause event occurs when DevTools
 // frontend is being loaded.
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
-                       TestPauseWhenLoadingDevTools) {
+// Flaky on win and linux: crbug.com/1092924.
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_TestPauseWhenLoadingDevTools DISABLED_TestPauseWhenLoadingDevTools
+#else
+#define MAYBE_TestPauseWhenLoadingDevTools TestPauseWhenLoadingDevTools
+#endif
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, MAYBE_TestPauseWhenLoadingDevTools) {
   RunTest("testPauseWhenLoadingDevTools", kPauseWhenLoadingDevTools);
 }
 
@@ -1600,7 +1632,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkPushTime) {
   CloseDevToolsWindow();
 }
 
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDOMWarnings) {
+#if defined(OS_WIN)
+// Flaky on Windows: https://crbug.com/1087320
+#define MAYBE_TestDOMWarnings DISABLED_TestDOMWarnings
+#else
+#define MAYBE_TestDOMWarnings TestDOMWarnings
+#endif
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, MAYBE_TestDOMWarnings) {
   RunTest("testDOMWarnings", kDOMWarningsTestPage);
 }
 
@@ -1684,6 +1722,14 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, testKeyEventUnhandled) {
   OpenDevToolsWindow("about:blank", true);
   RunTestFunction(window_, "testKeyEventUnhandled");
+  CloseDevToolsWindow();
+}
+
+// Tests that the keys that are forwarded from the browser update
+// when their shortcuts change
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, testForwardedKeysChanged) {
+  OpenDevToolsWindow("about:blank", true);
+  RunTestFunction(window_, "testForwardedKeysChanged");
   CloseDevToolsWindow();
 }
 

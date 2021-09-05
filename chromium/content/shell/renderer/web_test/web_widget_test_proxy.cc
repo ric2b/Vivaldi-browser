@@ -10,7 +10,6 @@
 #include "content/shell/renderer/web_test/blink_test_runner.h"
 #include "content/shell/renderer/web_test/test_interfaces.h"
 #include "content/shell/renderer/web_test/test_runner.h"
-#include "content/shell/renderer/web_test/test_runner_for_specific_view.h"
 #include "content/shell/renderer/web_test/web_view_test_proxy.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -50,10 +49,12 @@ void WebWidgetTestProxy::RequestDecode(
     ScheduleAnimationInternal(/*do_raster=*/true);
 }
 
-void WebWidgetTestProxy::RequestPresentation(
-    PresentationTimeCallback callback) {
-  RenderWidget::RequestPresentation(std::move(callback));
+void WebWidgetTestProxy::ScheduleAnimation() {
+  if (GetTestRunner()->TestIsRunning())
+    ScheduleAnimationInternal(GetTestRunner()->animation_requires_raster());
+}
 
+void WebWidgetTestProxy::ScheduleAnimationForWebTests() {
   // Single threaded web tests must explicitly schedule commits.
   //
   // Pass true for |do_raster| to ensure the compositor is actually run, rather
@@ -64,9 +65,10 @@ void WebWidgetTestProxy::RequestPresentation(
     ScheduleAnimationInternal(/*do_raster=*/true);
 }
 
-void WebWidgetTestProxy::ScheduleAnimation() {
-  if (GetTestRunner()->TestIsRunning())
-    ScheduleAnimationInternal(GetTestRunner()->animation_requires_raster());
+void WebWidgetTestProxy::RequestPresentation(
+    PresentationTimeCallback callback) {
+  RenderWidget::RequestPresentation(std::move(callback));
+  ScheduleAnimationForWebTests();
 }
 
 void WebWidgetTestProxy::ScheduleAnimationInternal(bool do_raster) {
@@ -100,24 +102,27 @@ void WebWidgetTestProxy::ScheduleAnimationInternal(bool do_raster) {
 }
 
 bool WebWidgetTestProxy::RequestPointerLock(
-    blink::WebLocalFrame*,
-    blink::WebWidgetClient::PointerLockCallback,
-    bool) {
-  return GetViewTestRunner()->RequestPointerLock();
+    blink::WebLocalFrame* requester_frame,
+    blink::WebWidgetClient::PointerLockCallback callback,
+    bool request_unadjusted_movement) {
+  return event_sender_.RequestPointerLock(requester_frame, std::move(callback));
+}
+
+bool WebWidgetTestProxy::RequestPointerLockChange(
+    blink::WebLocalFrame* requester_frame,
+    blink::WebWidgetClient::PointerLockCallback callback,
+    bool request_unadjusted_movement) {
+  // This isn't implemented yet for web tests.
+  CHECK(false);
+  return false;
 }
 
 void WebWidgetTestProxy::RequestPointerUnlock() {
-  return GetViewTestRunner()->RequestPointerUnlock();
+  event_sender_.RequestPointerUnlock();
 }
 
 bool WebWidgetTestProxy::IsPointerLocked() {
-  return GetViewTestRunner()->isPointerLocked();
-}
-
-void WebWidgetTestProxy::SetToolTipText(const blink::WebString& text,
-                                        base::i18n::TextDirection hint) {
-  RenderWidget::SetToolTipText(text, hint);
-  GetTestRunner()->SetToolTipText(text);
+  return event_sender_.IsPointerLocked();
 }
 
 void WebWidgetTestProxy::StartDragging(network::mojom::ReferrerPolicy policy,
@@ -129,7 +134,7 @@ void WebWidgetTestProxy::StartDragging(network::mojom::ReferrerPolicy policy,
 
   // When running a test, we need to fake a drag drop operation otherwise
   // Windows waits for real mouse events to know when the drag is over.
-  event_sender()->DoDragDrop(data, mask);
+  event_sender_.DoDragDrop(data, mask);
 }
 
 blink::WebScreenInfo WebWidgetTestProxy::GetScreenInfo() {
@@ -167,28 +172,33 @@ WebViewTestProxy* WebWidgetTestProxy::GetWebViewTestProxy() {
   }
 }
 
+blink::WebFrameWidget* WebWidgetTestProxy::GetWebFrameWidget() {
+  return static_cast<blink::WebFrameWidget*>(GetWebWidget());
+}
+
 void WebWidgetTestProxy::Reset() {
   event_sender_.Reset();
-  ClearEditCommands();
-  UseSynchronousResizeModeForTesting(false);
-  SetDeviceScaleFactorForTesting(0);
+  // Ends any synthetic gestures started in |event_sender_|.
+  widget_input_handler_manager()->InvokeInputProcessedCallback();
 
-  // These things are only modified/valid for the main frame's widget.
-  if (delegate()) {
-    DisableAutoResizeForTesting(gfx::Size());
-  }
+  // Reset state in the RenderWidget base class.
+  GetWebFrameWidget()->ClearEditCommands();
+
+  GetTestRunner()->ResetWebWidget(this);
 }
 
 void WebWidgetTestProxy::Install(blink::WebLocalFrame* frame) {
   event_sender_.Install(frame);
 }
 
-void WebWidgetTestProxy::EndSyntheticGestures() {
-  widget_input_handler_manager()->InvokeInputProcessedCallback();
-}
+void WebWidgetTestProxy::SynchronouslyCompositeAfterTest() {
+  // We could DCHECK(!GetTestRunner()->TestIsRunning()) except that frames in
+  // other processes than the main frame do not hear when the test ends.
 
-TestRunnerForSpecificView* WebWidgetTestProxy::GetViewTestRunner() {
-  return GetWebViewTestProxy()->view_test_runner();
+  // This would be very weird and prevent us from producing pixels.
+  DCHECK(!in_synchronous_composite_);
+
+  SynchronouslyComposite(/*do_raster=*/true);
 }
 
 TestRunner* WebWidgetTestProxy::GetTestRunner() {

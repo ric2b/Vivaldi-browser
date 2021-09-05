@@ -6,6 +6,7 @@
 #define WEBLAYER_BROWSER_TAB_IMPL_H_
 
 #include <memory>
+#include <set>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -24,6 +25,10 @@
 #include "base/android/scoped_java_ref.h"
 #include "weblayer/browser/browser_controls_navigation_state_handler_delegate.h"
 #endif
+
+namespace js_injection {
+class JsCommunicationHost;
+}
 
 namespace autofill {
 class AutofillProvider;
@@ -52,10 +57,12 @@ class FullscreenDelegate;
 class NavigationControllerImpl;
 class NewTabDelegate;
 class ProfileImpl;
+class HttpAuthHandlerImpl;
 
 #if defined(OS_ANDROID)
 class BrowserControlsContainerView;
 enum class ControlsVisibilityReason;
+class WebMessageHostFactoryProxy;
 #endif
 
 class TabImpl : public Tab,
@@ -81,6 +88,14 @@ class TabImpl : public Tab,
     kBitmapAllocationFailed,
   };
 
+  class DataObserver {
+   public:
+    // Called when SetData() is called on |tab|.
+    virtual void OnDataChanged(
+        TabImpl* tab,
+        const std::map<std::string, std::string>& data) = 0;
+  };
+
   // TODO(sky): investigate a better way to not have so many ifdefs.
 #if defined(OS_ANDROID)
   TabImpl(ProfileImpl* profile,
@@ -95,6 +110,8 @@ class TabImpl : public Tab,
   // null if |web_contents| was not created by a TabImpl.
   static TabImpl* FromWebContents(content::WebContents* web_contents);
 
+  static std::set<TabImpl*> GetAllTabImpl();
+
   ProfileImpl* profile() { return profile_; }
 
   void set_browser(BrowserImpl* browser) { browser_ = browser; }
@@ -103,6 +120,7 @@ class TabImpl : public Tab,
   content::WebContents* web_contents() const { return web_contents_.get(); }
 
   bool has_new_tab_delegate() const { return new_tab_delegate_ != nullptr; }
+  NewTabDelegate* new_tab_delegate() const { return new_tab_delegate_; }
 
   // Called from Browser when this Tab is losing active status.
   void OnLosingActive();
@@ -110,6 +128,9 @@ class TabImpl : public Tab,
   bool IsActive();
 
   void ShowContextMenu(const content::ContextMenuParams& params);
+
+  void ShowHttpAuthPrompt(HttpAuthHandlerImpl* auth_handler);
+  void CloseHttpAuthPrompt();
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> GetJavaTab() {
@@ -143,22 +164,40 @@ class TabImpl : public Tab,
   void OnAutofillProviderChanged(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& autofill_provider);
-
   void UpdateBrowserControlsState(JNIEnv* env,
                                   jint raw_new_state,
                                   jboolean animate);
 
   base::android::ScopedJavaLocalRef<jstring> GetGuid(JNIEnv* env);
-
   void CaptureScreenShot(
       JNIEnv* env,
       jfloat scale,
       const base::android::JavaParamRef<jobject>& value_callback);
 
+  jboolean SetData(JNIEnv* env,
+                   const base::android::JavaParamRef<jobjectArray>& data);
+  base::android::ScopedJavaLocalRef<jobjectArray> GetData(JNIEnv* env);
   jboolean IsRendererControllingBrowserControlsOffsets(JNIEnv* env);
+  void SetHttpAuth(JNIEnv* env,
+                   const base::android::JavaParamRef<jstring>& username,
+                   const base::android::JavaParamRef<jstring>& password);
+  void CancelHttpAuth(JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jstring> RegisterWebMessageCallback(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jstring>& js_object_name,
+      const base::android::JavaParamRef<jobjectArray>& origins,
+      const base::android::JavaParamRef<jobject>& client);
+  void UnregisterWebMessageCallback(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jstring>& js_object_name);
+  jboolean CanTranslate(JNIEnv* env);
+  void ShowTranslateUi(JNIEnv* env);
 #endif
 
   ErrorPageDelegate* error_page_delegate() { return error_page_delegate_; }
+
+  void AddDataObserver(DataObserver* observer);
+  void RemoveDataObserver(DataObserver* observer);
 
   // Tab:
   void SetErrorPageDelegate(ErrorPageDelegate* delegate) override;
@@ -171,6 +210,14 @@ class TabImpl : public Tab,
                      bool use_separate_isolate,
                      JavaScriptResultCallback callback) override;
   const std::string& GetGuid() override;
+  void SetData(const std::map<std::string, std::string>& data) override;
+  const std::map<std::string, std::string>& GetData() override;
+  base::string16 AddWebMessageHostFactory(
+      std::unique_ptr<WebMessageHostFactory> factory,
+      const base::string16& js_object_name,
+      const std::vector<std::string>& js_origins) override;
+  void RemoveWebMessageHostFactory(
+      const base::string16& js_object_name) override;
 #if !defined(OS_ANDROID)
   void AttachToView(views::WebView* web_view) override;
 #endif
@@ -216,8 +263,7 @@ class TabImpl : public Tab,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type) override;
   void EnterFullscreenModeForTab(
-      content::WebContents* web_contents,
-      const GURL& origin,
+      content::RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
@@ -294,6 +340,8 @@ class TabImpl : public Tab,
 
   void UpdateBrowserVisibleSecurityStateIfNecessary();
 
+  bool SetDataInternal(const std::map<std::string, std::string>& data);
+
   BrowserImpl* browser_ = nullptr;
   ErrorPageDelegate* error_page_delegate_ = nullptr;
   FullscreenDelegate* fullscreen_delegate_ = nullptr;
@@ -314,6 +362,9 @@ class TabImpl : public Tab,
   // Last value supplied to UpdateBrowserControlsState().
   content::BrowserControlsState current_browser_controls_state_ =
       content::BROWSER_CONTROLS_STATE_SHOWN;
+
+  std::map<std::string, std::unique_ptr<WebMessageHostFactoryProxy>>
+      js_name_to_proxy_;
 #endif
 
   bool is_fullscreen_ = false;
@@ -324,7 +375,14 @@ class TabImpl : public Tab,
 
   const std::string guid_;
 
+  std::map<std::string, std::string> data_;
+  base::ObserverList<DataObserver>::Unchecked data_observers_;
+
   base::string16 title_;
+
+  HttpAuthHandlerImpl* auth_handler_ = nullptr;
+
+  std::unique_ptr<js_injection::JsCommunicationHost> js_communication_host_;
 
   base::WeakPtrFactory<TabImpl> weak_ptr_factory_{this};
 

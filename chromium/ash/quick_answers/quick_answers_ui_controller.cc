@@ -14,7 +14,7 @@
 #include "base/optional.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,7 +36,14 @@ void QuickAnswersUiController::CreateQuickAnswersView(
     const gfx::Rect& bounds,
     const std::string& title,
     const std::string& query) {
-  DCHECK(!quick_answers_view_);
+  // Currently there are timing issues that causes the quick answers view is not
+  // dismissed. TODO(updowndota): Remove the special handling after the root
+  // cause is found.
+  if (quick_answers_view_) {
+    LOG(ERROR) << "Quick answers view not dismissed.";
+    CloseQuickAnswersView();
+  }
+
   DCHECK(!user_consent_view_);
   SetActiveQuery(query);
   quick_answers_view_ = new QuickAnswersView(bounds, title, this);
@@ -49,7 +56,7 @@ void QuickAnswersUiController::OnQuickAnswersViewPressed() {
 
   ash::AssistantInteractionController::Get()->StartTextInteraction(
       query_, /*allow_tts=*/false,
-      chromeos::assistant::mojom::AssistantQuerySource::kQuickAnswers);
+      chromeos::assistant::AssistantQuerySource::kQuickAnswers);
   controller_->OnQuickAnswerClick();
 }
 
@@ -98,10 +105,13 @@ void QuickAnswersUiController::UpdateQuickAnswersBounds(
 }
 
 void QuickAnswersUiController::CreateUserConsentView(
-    const gfx::Rect& anchor_bounds) {
+    const gfx::Rect& anchor_bounds,
+    const base::string16& intent_type,
+    const base::string16& intent_text) {
   DCHECK(!quick_answers_view_);
   DCHECK(!user_consent_view_);
-  user_consent_view_ = new quick_answers::UserConsentView(anchor_bounds, this);
+  user_consent_view_ = new quick_answers::UserConsentView(
+      anchor_bounds, intent_type, intent_text, this);
   user_consent_view_->GetWidget()->ShowInactive();
 }
 
@@ -117,6 +127,11 @@ bool QuickAnswersUiController::CloseUserConsentView() {
 void QuickAnswersUiController::OnConsentGrantedButtonPressed() {
   DCHECK(user_consent_view_);
   controller_->OnUserConsentGranted();
+
+  // The Quick-Answer displayed should gain focus if it is created when this
+  // button is pressed.
+  if (quick_answers_view_)
+    quick_answers_view_->RequestFocus();
 }
 
 void QuickAnswersUiController::OnManageSettingsButtonPressed() {

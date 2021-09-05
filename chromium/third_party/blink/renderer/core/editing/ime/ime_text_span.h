@@ -33,15 +33,22 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/base/ime/mojom/ime_types.mojom-blink-forward.h"
 
-namespace blink {
+namespace ui {
+struct ImeTextSpan;
+}  // namespace ui
 
-struct WebImeTextSpan;
+namespace blink {
 
 class CORE_EXPORT ImeTextSpan {
   DISALLOW_NEW();
 
  public:
-  enum class Type { kComposition, kSuggestion, kMisspellingSuggestion };
+  enum class Type {
+    kComposition,
+    kSuggestion,
+    kMisspellingSuggestion,
+    kAutocorrect,
+  };
 
   ImeTextSpan(Type,
               unsigned start_offset,
@@ -53,9 +60,10 @@ class CORE_EXPORT ImeTextSpan {
               const Color& background_color,
               const Color& suggestion_highlight_color = Color::kTransparent,
               bool remove_on_finish_composing = false,
+              bool interim_char_selection_ = false,
               const Vector<String>& suggestions = Vector<String>());
 
-  ImeTextSpan(const WebImeTextSpan&);
+  explicit ImeTextSpan(const ui::ImeTextSpan&);
 
   Type GetType() const { return type_; }
   unsigned StartOffset() const { return start_offset_; }
@@ -73,6 +81,7 @@ class CORE_EXPORT ImeTextSpan {
   bool NeedsRemovalOnFinishComposing() const {
     return remove_on_finish_composing_;
   }
+  bool InterimCharSelection() const { return interim_char_selection_; }
   const Vector<String>& Suggestions() const { return suggestions_; }
 
  private:
@@ -86,6 +95,7 @@ class CORE_EXPORT ImeTextSpan {
   Color background_color_;
   Color suggestion_highlight_color_;
   bool remove_on_finish_composing_;
+  bool interim_char_selection_;
   Vector<String> suggestions_;
 };
 

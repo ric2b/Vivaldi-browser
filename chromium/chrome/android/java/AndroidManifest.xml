@@ -204,17 +204,6 @@ by a child template that "extends" this file.
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density">
-            <!-- TODO(mthiesse, b/72214458): This is a duplication of the icon metadata below.
-                 Daydream will actually ignore the metadata here, and use the metadata on the
-                 activity-alias. However, play store apk validation fails to find the icons on the
-                 alias, so we need to include them here to pass validation. -->
-            {% if enable_vr == "true" %}
-            <meta-data android:name="com.google.android.vr.icon"
-                android:resource="@drawable/daydream_icon_foreground" />
-            <meta-data android:name="com.google.android.vr.icon_background"
-                android:resource="@drawable/daydream_icon_background" />
-            {% endif %}
-            {{ self.supports_vr() }}
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.IntentDispatcher"
             android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
@@ -222,9 +211,6 @@ by a child template that "extends" this file.
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.NOTIFICATION_PREFERENCES" />
-                {% if enable_vr == "true" %}
-                <category android:name="com.google.intent.category.DAYDREAM" />
-                {% endif %}
             </intent-filter>
             <!-- Matches the common case of intents with no MIME type.
                  Make sure to keep in sync with the next filter.  -->
@@ -233,9 +219,6 @@ by a child template that "extends" this file.
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                {% if enable_vr == "true" %}
-                <category android:name="com.google.intent.category.DAYDREAM" />
-                {% endif %}
                 {% if channel in ['stable', 'default'] %}<data android:scheme="googlechrome" />{% endif %}
                 <data android:scheme="http" />
                 <data android:scheme="https" />
@@ -272,9 +255,6 @@ by a child template that "extends" this file.
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                {% if enable_vr == "true" %}
-                <category android:name="com.google.intent.category.DAYDREAM" />
-                {% endif %}
                 <data android:scheme="file"/>
                 <data android:scheme="content"/>
                 <data android:host="*" />
@@ -332,12 +312,6 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
-            {% if enable_vr == "true" %}
-            <meta-data android:name="com.google.android.vr.icon"
-                android:resource="@drawable/daydream_icon_foreground" />
-            <meta-data android:name="com.google.android.vr.icon_background"
-                android:resource="@drawable/daydream_icon_background" />
-            {% endif %}
         </activity-alias>
 
         <activity android:name="org.chromium.chrome.browser.media.MediaLauncherActivity"
@@ -403,6 +377,12 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity android:name="org.chromium.chrome.browser.app.reengagement.ReengagementActivity"
+            android:theme="@android:style/Theme.Translucent"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:exported="false" />
 
         <receiver android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$PhoneUnlockedReceiver" android:exported="true">
             <intent-filter>
@@ -825,7 +805,7 @@ by a child template that "extends" this file.
         <!-- This activity is to expose the print option via the generic Android share action. -->
         <activity
             android:name="org.chromium.chrome.browser.printing.PrintShareActivity"
-            android:icon="@drawable/print"
+            android:icon="@drawable/sharing_print"
             android:label="@string/print_share_activity_title"
             android:enabled="false"
             android:excludeFromRecents="true"
@@ -1191,6 +1171,12 @@ by a child template that "extends" this file.
         <service android:name="org.chromium.chrome.browser.incognito.IncognitoNotificationService"
             android:exported="false"/>
 
+        <!-- service used by payment apps to notify the browser about changes in user selected
+             payment method, shipping address, or shipping option -->
+        <service
+            android:name="org.chromium.components.payments.PaymentDetailsUpdateService"
+            android:exported="true"/>
+
         <!-- The following service entries exist in order to allow us to
              start more than one sandboxed process. -->
 
@@ -1241,10 +1227,6 @@ by a child template that "extends" this file.
         <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$SendTabToSelfNotificationReceiver"
             android:exported="false"/>
 
-        <!-- Save image notification receiver -->
-        <receiver android:name="org.chromium.chrome.browser.share.SaveImageNotificationManager$TapReceiver"
-            android:exported="false"/>
-
         <receiver android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$TapReceiver"
             android:exported="false"/>
         <receiver android:name="org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardMessageHandler$TapReceiver"
@@ -1264,42 +1246,24 @@ by a child template that "extends" this file.
 
         <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"
             android:exported="false"/>
-        <service android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PlaybackListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$PlaybackListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-        <service android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PresentationListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$PresentationListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-        <service android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$CastListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$CastListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-
-
-        <receiver android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PlaybackMediaButtonReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-        <receiver android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PresentationMediaButtonReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-        <receiver android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$CastMediaButtonReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-
 
         <service android:name="org.chromium.chrome.browser.tracing.TracingNotificationService"
             android:exported="false"/>

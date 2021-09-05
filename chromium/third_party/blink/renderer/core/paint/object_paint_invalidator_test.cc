@@ -8,6 +8,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -33,8 +34,7 @@ class ObjectPaintInvalidatorTest : public RenderingTest {
 
 using ::testing::ElementsAre;
 
-TEST_F(ObjectPaintInvalidatorTest,
-       TraverseNonCompositingDescendantsInPaintOrder) {
+TEST_F(ObjectPaintInvalidatorTest, TraverseNonCompositingDescendants) {
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     return;
 
@@ -64,58 +64,51 @@ TEST_F(ObjectPaintInvalidatorTest,
   )HTML");
 
   auto* container = GetLayoutObjectByElementId("container");
-  auto* normal_child = GetLayoutObjectByElementId("normal-child");
+  auto* container_layer = ToLayoutBoxModelObject(container)->Layer();
   auto* stacked_child = GetLayoutObjectByElementId("stacked-child");
+  auto* stacked_child_layer = ToLayoutBoxModelObject(stacked_child)->Layer();
   auto* composited_stacking_context =
       GetLayoutObjectByElementId("composited-stacking-context");
-  auto* normal_child_of_composited_stacking_context =
-      GetLayoutObjectByElementId("normal-child-of-composited-stacking-context");
+  auto* composited_stacking_context_layer =
+      ToLayoutBoxModelObject(composited_stacking_context)->Layer();
   auto* stacked_child_of_composited_stacking_context =
       GetLayoutObjectByElementId(
           "stacked-child-of-composited-stacking-context");
+  auto* stacked_child_of_composited_stacking_context_layer =
+      ToLayoutBoxModelObject(stacked_child_of_composited_stacking_context)
+          ->Layer();
   auto* composited_non_stacking_context =
       GetLayoutObjectByElementId("composited-non-stacking-context");
-  auto* normal_child_of_composited_non_stacking_context =
-      GetLayoutObjectByElementId(
-          "normal-child-of-composited-non-stacking-context");
+  auto* composited_non_stacking_context_layer =
+      ToLayoutBoxModelObject(composited_non_stacking_context)->Layer();
   auto* stacked_child_of_composited_non_stacking_context =
       GetLayoutObjectByElementId(
           "stacked-child-of-composited-non-stacking-context");
+  auto* stacked_child_of_composited_non_stacking_context_layer =
+      ToLayoutBoxModelObject(stacked_child_of_composited_non_stacking_context)
+          ->Layer();
   auto* non_stacked_layered_child_of_composited_non_stacking_context =
       GetLayoutObjectByElementId(
           "non-stacked-layered-child-of-composited-non-stacking-context");
-
-  ValidateDisplayItemClient(container);
-  ValidateDisplayItemClient(normal_child);
-  ValidateDisplayItemClient(stacked_child);
-  ValidateDisplayItemClient(composited_stacking_context);
-  ValidateDisplayItemClient(normal_child_of_composited_stacking_context);
-  ValidateDisplayItemClient(stacked_child_of_composited_stacking_context);
-  ValidateDisplayItemClient(composited_non_stacking_context);
-  ValidateDisplayItemClient(normal_child_of_composited_non_stacking_context);
-  ValidateDisplayItemClient(stacked_child_of_composited_non_stacking_context);
-  ValidateDisplayItemClient(
-      non_stacked_layered_child_of_composited_non_stacking_context);
+  auto* non_stacked_layered_child_of_composited_non_stacking_context_layer =
+      ToLayoutBoxModelObject(
+          non_stacked_layered_child_of_composited_non_stacking_context)
+          ->Layer();
 
   ObjectPaintInvalidator(*container)
-      .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-          PaintInvalidationReason::kSubtree);
+      .InvalidatePaintIncludingNonCompositingDescendants();
 
-  EXPECT_FALSE(IsValidDisplayItemClient(container));
-  EXPECT_FALSE(IsValidDisplayItemClient(normal_child));
-  EXPECT_FALSE(IsValidDisplayItemClient(stacked_child));
-  EXPECT_TRUE(IsValidDisplayItemClient(composited_stacking_context));
-  EXPECT_TRUE(
-      IsValidDisplayItemClient(normal_child_of_composited_stacking_context));
-  EXPECT_TRUE(
-      IsValidDisplayItemClient(stacked_child_of_composited_stacking_context));
-  EXPECT_TRUE(IsValidDisplayItemClient(composited_non_stacking_context));
-  EXPECT_TRUE(IsValidDisplayItemClient(
-      normal_child_of_composited_non_stacking_context));
-  EXPECT_FALSE(IsValidDisplayItemClient(
-      stacked_child_of_composited_non_stacking_context));
-  EXPECT_TRUE(IsValidDisplayItemClient(
-      non_stacked_layered_child_of_composited_non_stacking_context));
+  EXPECT_TRUE(container_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(stacked_child_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(composited_stacking_context_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(
+      stacked_child_of_composited_stacking_context_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(composited_non_stacking_context_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(stacked_child_of_composited_non_stacking_context_layer
+                  ->SelfNeedsRepaint());
+  EXPECT_FALSE(
+      non_stacked_layered_child_of_composited_non_stacking_context_layer
+          ->SelfNeedsRepaint());
 }
 
 TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
@@ -145,11 +138,9 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
       ToLayoutBoxModelObject(composited_container)->Layer();
   auto* span = GetLayoutObjectByElementId("span");
   auto* span_layer = ToLayoutBoxModelObject(span)->Layer();
-  auto* text = span->SlowFirstChild();
-  auto fragments = NGPaintFragment::InlineFragmentsFor(span);
 
   EXPECT_TRUE(span->IsPaintInvalidationContainer());
-  EXPECT_TRUE(span->StyleRef().IsStackingContext());
+  EXPECT_TRUE(span->IsStackingContext());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     EXPECT_EQ(span, &target->ContainerForPaintInvalidation());
     EXPECT_EQ(span_layer, target->PaintingLayer());
@@ -158,23 +149,11 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
     EXPECT_EQ(containing_block_layer, target->PaintingLayer());
   }
 
-  ValidateDisplayItemClient(target);
-  ValidateDisplayItemClient(containing_block);
-  ValidateDisplayItemClient(composited_container);
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments)
-      ValidateDisplayItemClient(fragment);
-  } else {
-    ValidateDisplayItemClient(span);
-    ValidateDisplayItemClient(text);
-  }
-
   // Traversing from target should mark needsRepaint on correct layers.
   EXPECT_FALSE(containing_block_layer->SelfNeedsRepaint());
   EXPECT_FALSE(composited_container_layer->DescendantNeedsRepaint());
   ObjectPaintInvalidator(*target)
-      .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-          PaintInvalidationReason::kSubtree);
+      .InvalidatePaintIncludingNonCompositingDescendants();
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     EXPECT_FALSE(containing_block_layer->SelfOrDescendantNeedsRepaint());
     EXPECT_FALSE(composited_container_layer->SelfOrDescendantNeedsRepaint());
@@ -186,28 +165,15 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
     EXPECT_TRUE(composited_container_layer->DescendantNeedsRepaint());
     EXPECT_FALSE(span_layer->SelfNeedsRepaint());
   }
-  EXPECT_FALSE(IsValidDisplayItemClient(target));
-  ValidateDisplayItemClient(target);
-  EXPECT_TRUE(IsValidDisplayItemClient(containing_block));
-  EXPECT_TRUE(IsValidDisplayItemClient(composited_container));
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments)
-      EXPECT_TRUE(IsValidDisplayItemClient(fragment));
-  } else {
-    EXPECT_TRUE(IsValidDisplayItemClient(span));
-    EXPECT_TRUE(IsValidDisplayItemClient(text));
-  }
 
   composited_container_layer->ClearNeedsRepaintRecursively();
 
   // Traversing from span should mark needsRepaint on correct layers for target.
-  ValidateDisplayItemClient(target);
   EXPECT_FALSE(containing_block_layer->SelfOrDescendantNeedsRepaint());
   EXPECT_FALSE(composited_container_layer->SelfOrDescendantNeedsRepaint());
   EXPECT_FALSE(span_layer->SelfOrDescendantNeedsRepaint());
   ObjectPaintInvalidator(*span)
-      .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-          PaintInvalidationReason::kSubtree);
+      .InvalidatePaintIncludingNonCompositingDescendants();
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     EXPECT_FALSE(containing_block_layer->SelfOrDescendantNeedsRepaint());
     EXPECT_FALSE(composited_container_layer->SelfOrDescendantNeedsRepaint());
@@ -219,22 +185,6 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
   }
   EXPECT_TRUE(span_layer->SelfNeedsRepaint());
 
-  EXPECT_FALSE(IsValidDisplayItemClient(target));
-  ValidateDisplayItemClient(target);
-  EXPECT_TRUE(IsValidDisplayItemClient(containing_block));
-  EXPECT_TRUE(IsValidDisplayItemClient(composited_container));
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments) {
-      EXPECT_FALSE(IsValidDisplayItemClient(fragment));
-      ValidateDisplayItemClient(fragment);
-    }
-  } else {
-    EXPECT_FALSE(IsValidDisplayItemClient(span));
-    ValidateDisplayItemClient(span);
-    EXPECT_FALSE(IsValidDisplayItemClient(text));
-    ValidateDisplayItemClient(text);
-  }
-
   composited_container_layer->ClearNeedsRepaintRecursively();
 
   // Traversing from compositedContainer should not reach target.
@@ -242,25 +192,10 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
   EXPECT_FALSE(composited_container_layer->SelfOrDescendantNeedsRepaint());
   EXPECT_FALSE(span_layer->SelfOrDescendantNeedsRepaint());
   ObjectPaintInvalidator(*composited_container)
-      .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-          PaintInvalidationReason::kSubtree);
+      .InvalidatePaintIncludingNonCompositingDescendants();
   EXPECT_TRUE(containing_block_layer->SelfNeedsRepaint());
   EXPECT_TRUE(composited_container_layer->DescendantNeedsRepaint());
   EXPECT_FALSE(span_layer->SelfNeedsRepaint());
-
-  if (RuntimeEnabledFeatures::LayoutNGEnabled())
-    EXPECT_TRUE(IsValidDisplayItemClient(target));
-  else
-    EXPECT_FALSE(IsValidDisplayItemClient(target));
-  EXPECT_FALSE(IsValidDisplayItemClient(containing_block));
-  EXPECT_FALSE(IsValidDisplayItemClient(composited_container));
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments)
-      EXPECT_TRUE(IsValidDisplayItemClient(fragment));
-  } else {
-    EXPECT_TRUE(IsValidDisplayItemClient(span));
-    EXPECT_TRUE(IsValidDisplayItemClient(text));
-  }
 }
 
 TEST_F(ObjectPaintInvalidatorTest, TraverseStackedFloatUnderCompositedInline) {
@@ -278,17 +213,18 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseStackedFloatUnderCompositedInline) {
   auto* span = GetLayoutObjectByElementId("span");
   auto* span_layer = ToLayoutBoxModelObject(span)->Layer();
   auto* text = span->SlowFirstChild();
-  auto fragments = NGPaintFragment::InlineFragmentsFor(span);
 
   EXPECT_TRUE(span->IsPaintInvalidationContainer());
-  EXPECT_TRUE(span->StyleRef().IsStackingContext());
+  EXPECT_TRUE(span->IsStackingContext());
   EXPECT_EQ(span, &target->ContainerForPaintInvalidation());
   EXPECT_EQ(target_layer, target->PaintingLayer());
 
   ValidateDisplayItemClient(target);
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments)
-      ValidateDisplayItemClient(fragment);
+    NGInlineCursor fragments;
+    for (fragments.MoveTo(*span); fragments;
+         fragments.MoveToNextForSameLayoutObject())
+      ValidateDisplayItemClient(fragments.Current().GetDisplayItemClient());
   } else {
     ValidateDisplayItemClient(span);
     ValidateDisplayItemClient(text);
@@ -297,18 +233,8 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseStackedFloatUnderCompositedInline) {
   // Traversing from span should reach target.
   EXPECT_FALSE(span_layer->SelfNeedsRepaint());
   ObjectPaintInvalidator(*span)
-      .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-          PaintInvalidationReason::kSubtree);
+      .InvalidatePaintIncludingNonCompositingDescendants();
   EXPECT_TRUE(span_layer->SelfNeedsRepaint());
-
-  EXPECT_FALSE(IsValidDisplayItemClient(target));
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    for (auto* fragment : fragments)
-      EXPECT_FALSE(IsValidDisplayItemClient(fragment));
-  } else {
-    EXPECT_FALSE(IsValidDisplayItemClient(span));
-    EXPECT_FALSE(IsValidDisplayItemClient(text));
-  }
 }
 
 TEST_F(ObjectPaintInvalidatorTest, InvalidatePaintRectangle) {

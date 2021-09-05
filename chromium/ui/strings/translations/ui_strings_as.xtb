@@ -17,7 +17,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">চুপাৰিছ কৰা এপ্‌</translation>
 <translation id="1368832886055348810">বাওঁফালৰ পৰা সোঁফাললৈ</translation>
-<translation id="1383876407941801731">সন্ধান</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1398853756734560583">সৰ্বাধিক মাত্ৰালৈ বঢ়াওক</translation>
 <translation id="1414271762428216854"><ph name="APP_NAME" />, ইনষ্টল হৈ থকা এপ্‌</translation>
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> শ্বেয়াৰ কৰিব নোৱাৰি</translation>
@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">কেলিব্ৰে’শ্বন সম্পূৰ্ণ হ’ল</translation>
 <translation id="252373100621549798">অজ্ঞাত ডিছপ্লে’</translation>
 <translation id="2545651323591713692">স্নুজ কৰক</translation>
+<translation id="2570734079541893434">ছেটিংসমূহ পৰিচালনা কৰক</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{১ ঘণ্টাত}one{# ঘণ্টাত}other{# ঘণ্টাত}}</translation>
 <translation id="2583543531130364912">আপোনাৰ টাচ্চ স্ক্ৰীণ কেলিব্ৰেট কৰক</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" />ৰ পৰা শ্বেয়াৰ কৰা হৈছে</translation>
+<translation id="271033894570825754">নতুন</translation>
 <translation id="2743387203779672305">ক্লিপব'ৰ্ডত প্ৰতিলিপি কৰক</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ফ'ল্ডাৰ খোলক</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">ইম’জি &amp;&amp; চিহ্ন</translation>
 <translation id="5476505524087279545">আনচ্চেক কৰক</translation>
 <translation id="547979256943495781">শ্বেল্ফ সোঁফালে আছে</translation>
+<translation id="5528053674512161860">বিকাশকর্তাৰ UI মডিউলটো (dev_ui) ইনষ্টল কৰা নাই বাবে পৃষ্ঠাখন ল'ড হোৱাত বিফল হ'ল</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" /> ছিষ্টেম</translation>
 <translation id="5583640892426849032">বেকস্পেচ</translation>
 <translation id="5613020302032141669">বাওঁমুৱা কাঁড়</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">বন্ধ কৰক</translation>
 <translation id="6119846243427417423">সক্ৰিয় কৰক</translation>
 <translation id="6129953537138746214">স্পেচ</translation>
+<translation id="6134259848159370930">আপোনাৰ ডিভাইচ, এপ্‌, ছেটিংসমূহ আৰু ৱেব সন্ধান কৰক।</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6156262341071374681">সূচীখন সকলো এপ্‌ দেখুৱাকৈ বিস্তাৰ কৰক</translation>
 <translation id="6165508094623778733">অধিক জানক</translation>
+<translation id="6166852626429024716">আপোনাৰ ডিভাইচ, এপ্‌, ছেটিংসমূহ, ৱেব সন্ধান কৰক...</translation>
 <translation id="6264365405983206840">&amp;সকলো বাছনি কৰক</translation>
 <translation id="6351032674660237738">এপৰ পৰামৰ্শ</translation>
 <translation id="6364916375976753737">বাওঁফাললৈ স্ক্ৰ’ল কৰক</translation>
@@ -191,7 +196,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{১ মিনিট বাকী আছে}one{# মিনিট বাকী আছে}other{# মিনিট বাকী আছে}}</translation>
 <translation id="7319740667687257810">লঞ্চাৰ, আংশিক ভিউ</translation>
-<translation id="7352651011704765696">কিবা সমস্যা হৈছে</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{১মিনিট পূৰ্বে}one{#মিনিট পূৰ্বে}other{#মিনিট পূৰ্বে}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{১ মিনিট বাকী আছে}one{# মিনিট বাকী আছে}other{# মিনিট বাকী আছে}}</translation>
@@ -204,6 +208,7 @@
 <translation id="7848989271541991537">পৃষ্ঠা <ph name="PAGE_NUMBER" />, শাৰী <ph name="ROW_NUMBER" />, স্তম্ভ <ph name="COLUMN_NUMBER" />লৈ স্থানান্তৰ কৰা হৈছে।</translation>
 <translation id="7879499977785298635">অৱৰোধ নকৰিব</translation>
 <translation id="7907591526440419938">ফাইল খোলক</translation>
+<translation id="7952747673138230804">Chrome OSএ অন্বেষণ কৰিবৰ বাবে নতুন সমলৰ পৰামৰ্শ দিয়ে। আপুনি ব্যৱহাৰৰ ডেটা শ্বেয়াৰ কৰিবলৈ বাছনি কৰিলেহে পৰামৰ্শিত সমলৰ গুণাগুণ উন্নত কৰিবলৈ পৰিসংখ্যা পঠিয়ায়। <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">নিৰ্দেশনা</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{১টাতকৈ অধিক নপঢ়া জাননী}one{#টাতকৈ অধিক নপঢ়া জাননী}other{#টাতকৈ অধিক নপঢ়া জাননী}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{১ মিনিটত}one{# মিনিটত}other{# মিনিটত}}</translation>
@@ -229,6 +234,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> ফাইল (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">শ্বেল্ফ সদায়েই দেখুওৱা হয়</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> কেবি/ছেকেণ্ড</translation>
+<translation id="8685326675965865247">আপোনাৰ ডিভাইচ, এপ্‌, ছেটিংসমূহ আৰু ৱেব সন্ধান কৰক। আপোনাৰ এপ্‌সমূহ নেভিগে’ট কৰিবলৈ এৰ’ কীসমূহ ব্যৱহাৰ কৰক।</translation>
 <translation id="8725488761726303204">আৰু +<ph name="NUMBER" />টা</translation>
 <translation id="8730621377337864115">হ’ল</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{১ঘ}one{#ঘ}other{#ঘ}}</translation>

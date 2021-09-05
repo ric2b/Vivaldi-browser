@@ -234,8 +234,6 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
 
 #if !defined(OS_ANDROID)
 void OffTheRecordProfileImpl::TrackZoomLevelsFromParent() {
-  DCHECK(!profile_->IsIncognitoProfile());
-
   // Here we only want to use zoom levels stored in the main-context's default
   // storage partition. We're not interested in zoom levels in special
   // partitions, e.g. those used by WebViewGuests.
@@ -262,16 +260,6 @@ void OffTheRecordProfileImpl::TrackZoomLevelsFromParent() {
 std::string OffTheRecordProfileImpl::GetProfileUserName() const {
   // Incognito profile should not return the username.
   return std::string();
-}
-
-Profile::ProfileType OffTheRecordProfileImpl::GetProfileType() const {
-#if !defined(OS_CHROMEOS)
-  return profile_->IsGuestSession() ? GUEST_PROFILE : INCOGNITO_PROFILE;
-#else
-  // GuestSessionProfile is used for guest sessions on ChromeOS.
-  DCHECK(!profile_->IsGuestSession());
-  return INCOGNITO_PROFILE;
-#endif
 }
 
 base::FilePath OffTheRecordProfileImpl::GetPath() {
@@ -369,7 +357,8 @@ bool OffTheRecordProfileImpl::IsLegacySupervised() const {
 }
 
 bool OffTheRecordProfileImpl::AllowsBrowserWindows() const {
-  return profile_->AllowsBrowserWindows();
+  return profile_->AllowsBrowserWindows() &&
+         otr_profile_id_.AllowsBrowserWindows();
 }
 
 PrefService* OffTheRecordProfileImpl::GetPrefs() {
@@ -538,7 +527,7 @@ OffTheRecordProfileImpl::GetNativeFileSystemPermissionContext() {
   return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
-bool OffTheRecordProfileImpl::IsSameProfile(Profile* profile) {
+bool OffTheRecordProfileImpl::IsSameOrParent(Profile* profile) {
   return (profile == this) || (profile == profile_);
 }
 
@@ -618,8 +607,6 @@ class GuestSessionProfile : public OffTheRecordProfileImpl {
       : OffTheRecordProfileImpl(real_profile, OTRProfileID::PrimaryID()) {
     set_is_guest_profile(true);
   }
-
-  ProfileType GetProfileType() const override { return GUEST_PROFILE; }
 
   void InitChromeOSPreferences() override {
     chromeos_preferences_.reset(new chromeos::Preferences());

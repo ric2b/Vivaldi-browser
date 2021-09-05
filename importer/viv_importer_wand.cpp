@@ -468,11 +468,11 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
   password.scheme = autofill::PasswordForm::Scheme::kHtml;
 
   password.submit_element = submit_button;
-  password.origin = GURL(url).ReplaceComponents(rep);
-  if (!password.origin.is_valid())
+  password.url = GURL(url).ReplaceComponents(rep);
+  if (!password.url.is_valid())
     return true;  // Ignore this entry, no URL
 
-  password.signon_realm = password.origin.GetOrigin().spec();
+  password.signon_realm = password.url.GetOrigin().spec();
   password.blacklisted_by_user = (field_count == 0);
 
   if (first_field >= 0) {
@@ -567,8 +567,8 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
     password.scheme = autofill::PasswordForm::Scheme::kOther;
     */
 
-  password.origin = GURL(url8).ReplaceComponents(rep);
-  password.signon_realm = password.origin.GetOrigin().spec();
+  password.url = GURL(url8).ReplaceComponents(rep);
+  password.signon_realm = password.url.GetOrigin().spec();
   password.blacklisted_by_user = (field_count == 0);
 
   if (first_field >= 0) {

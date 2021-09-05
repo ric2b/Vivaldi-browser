@@ -130,6 +130,8 @@ if (is_win) {
 if (is_android) {
   update_template_instance("//chrome/android:chrome_public_apk") {
     apk_name = "Vivaldi.${vivaldi_version_full}"
+    lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
+    lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
   }
 }
 

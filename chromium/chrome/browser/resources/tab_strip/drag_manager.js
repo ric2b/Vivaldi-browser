@@ -9,7 +9,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {isTabElement, TabElement} from './tab.js';
 import {isTabGroupElement, TabGroupElement} from './tab_group.js';
-import {TabData, TabNetworkState, TabsApiProxy} from './tabs_api_proxy.js';
+import {TabData, TabNetworkState, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
 
 /** @const {number} */
 export const PLACEHOLDER_TAB_ID = -1;
@@ -107,7 +107,7 @@ class DragSession {
     this.srcGroup = srcGroup;
 
     /** @private @const {!TabsApiProxy} */
-    this.tabsProxy_ = TabsApiProxy.getInstance();
+    this.tabsProxy_ = TabsApiProxyImpl.getInstance();
   }
 
   /**
@@ -359,7 +359,8 @@ class DragSession {
 
     const dragOverTabElement =
         /** @type {!TabElement|undefined} */ (composedPath.find(isTabElement));
-    if (dragOverTabElement && !dragOverTabElement.tab.pinned) {
+    if (dragOverTabElement && !dragOverTabElement.tab.pinned &&
+        dragOverTabElement.isValidDragOverTarget) {
       let dragOverIndex = this.delegate_.getIndexOfTab(dragOverTabElement);
       dragOverIndex +=
           this.shouldOffsetIndexForGroup_(dragOverTabElement) ? 1 : 0;
@@ -369,7 +370,7 @@ class DragSession {
 
     const dragOverGroupElement = /** @type {!TabGroupElement|undefined} */ (
         composedPath.find(isTabGroupElement));
-    if (dragOverGroupElement) {
+    if (dragOverGroupElement && dragOverGroupElement.isValidDragOverTarget) {
       let dragOverIndex = this.delegate_.getIndexOfTab(
           /** @type {!TabElement} */ (dragOverGroupElement.firstElementChild));
       dragOverIndex +=
@@ -388,8 +389,9 @@ class DragSession {
     const dragOverTabElement =
         /** @type {?TabElement} */ (composedPath.find(isTabElement));
     if (dragOverTabElement &&
-        dragOverTabElement.tab.pinned !== tabElement.tab.pinned) {
-      // Can only drag between the same pinned states.
+        (dragOverTabElement.tab.pinned !== tabElement.tab.pinned ||
+         !dragOverTabElement.isValidDragOverTarget)) {
+      // Can only drag between the same pinned states and valid TabElements.
       return;
     }
 
@@ -401,7 +403,8 @@ class DragSession {
     const dragOverTabGroup =
         /** @type {?TabGroupElement} */ (composedPath.find(isTabGroupElement));
     if (dragOverTabGroup &&
-        dragOverTabGroup.dataset.groupId !== previousGroupId) {
+        dragOverTabGroup.dataset.groupId !== previousGroupId &&
+        dragOverTabGroup.isValidDragOverTarget) {
       this.delegate_.placeTabElement(
           tabElement, this.dstIndex, false, dragOverTabGroup.dataset.groupId);
       return;
@@ -433,7 +436,7 @@ export class DragManager {
     this.dragSession_ = null;
 
     /** @private {!TabsApiProxy} */
-    this.tabsProxy_ = TabsApiProxy.getInstance();
+    this.tabsProxy_ = TabsApiProxyImpl.getInstance();
   }
 
   /** @private */

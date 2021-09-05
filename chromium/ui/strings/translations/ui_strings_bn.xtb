@@ -7,7 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{১ মিনিট আগে}one{# মিনিট আগে}other{# মিনিট আগে}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{১ মিনিট}one{# মিনিট}other{# মিনিট}}</translation>
 <translation id="1181037720776840403">সরান</translation>
-<translation id="1201402288615127009">পরবর্তী</translation>
+<translation id="1201402288615127009">পরের</translation>
 <translation id="1218444235442067213"><ph name="APP_NAME" />, Play Store অ্যাপ</translation>
 <translation id="1243314992276662751">আপলোড</translation>
 <translation id="1266864766717917324"><ph name="CONTENT_TYPE" /> শেয়ার করা যায়নি</translation>
@@ -17,7 +17,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">প্রস্তাবিত অ্যাপ</translation>
 <translation id="1368832886055348810">বাঁ থেকে ডান</translation>
-<translation id="1383876407941801731">সার্চ করুন</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1398853756734560583">বড় করুন</translation>
 <translation id="1414271762428216854"><ph name="APP_NAME" />, ইনস্টল করা অ্যাপ</translation>
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> শেয়ার করা যাচ্ছে না</translation>
@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">ক্রমাঙ্কন সম্পূর্ণ হয়েছে</translation>
 <translation id="252373100621549798">অজানা প্রদর্শন</translation>
 <translation id="2545651323591713692">স্নুজ করুন</translation>
+<translation id="2570734079541893434">সেটিংস ম্যানেজ করুন</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{১ ঘণ্টার মধ্যে}one{# ঘণ্টার মধ্যে}other{# ঘণ্টার মধ্যে}}</translation>
 <translation id="2583543531130364912">আপনার টাচস্ক্রীন ক্যালিব্রেট করুন</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> থেকে শেয়ার করা হয়েছে</translation>
+<translation id="271033894570825754">নতুন</translation>
 <translation id="2743387203779672305">ক্লিপবোর্ডে কপি করুন</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ফোল্ডার খুলুন</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">ইমোজি ও প্রতীকগুলি</translation>
 <translation id="5476505524087279545">আনচেক</translation>
 <translation id="547979256943495781">শেল্ফ ডান দিকে দেখানো হচ্ছে</translation>
+<translation id="5528053674512161860">পৃষ্ঠা লোড করা যায়নি কারণ UI মডিউল (dev_ui) ইনস্টল করা নেই</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" /> সিস্টেম</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Left Arrow</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">বন্ধ</translation>
 <translation id="6119846243427417423">সক্রিয় করুন</translation>
 <translation id="6129953537138746214">ব্যবধান</translation>
+<translation id="6134259848159370930">আপনার ডিভাইস, অ্যাপ, সেটিংস এবং ওয়েবে সার্চ করুন।</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6156262341071374681">সমস্ত অ্যাপ দেখুন</translation>
 <translation id="6165508094623778733">আরও জানুন</translation>
+<translation id="6166852626429024716">আপনার ডিভাইস, অ্যাপ, সেটিংস, ওয়েবে সার্চ করুন...</translation>
 <translation id="6264365405983206840">&amp;সকল বেছে নিন</translation>
 <translation id="6351032674660237738">অ্যাপের প্রস্তাবনা</translation>
 <translation id="6364916375976753737">বাঁ দিকে স্ক্রল করুন</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{১ মিনিট বাকি}one{# মিনিট বাকি}other{# মিনিট বাকি}}</translation>
 <translation id="7319740667687257810">লঞ্চার, আংশিক দেখুন</translation>
-<translation id="7352651011704765696">কিছু সমস্যা হয়েছে</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{১ মিনিট পূর্বে}one{# মিনিট পূর্বে}other{# মিনিট পূর্বে}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{১ মিনিট বাকি}one{# মিনিট বাকি}other{# মিনিট বাকি}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537"><ph name="PAGE_NUMBER" /> নম্বর পৃষ্ঠার <ph name="ROW_NUMBER" /> নম্বর সারির <ph name="COLUMN_NUMBER" /> নম্বর কলামে সরানো হয়েছে।</translation>
 <translation id="7879499977785298635">ব্লক করবেন না</translation>
 <translation id="7907591526440419938">খোলা ফাইল</translation>
+<translation id="7952747673138230804">Chrome OS নতুন কন্টেন্ট দেখার সাজেশন দেয়। আপনি ব্যবহারের ডেটা শেয়ার করার বিকল্প বেছে নিলে তবেই এটি সাজেশন আরও উন্নত করার উদ্দেশ্যে পরিসংখ্যান পাঠায়। <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">কমান্ড</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{১টির বেশি অপঠিত বিজ্ঞপ্তি}one{#টির বেশি অপঠিত বিজ্ঞপ্তি}other{#টির বেশি অপঠিত বিজ্ঞপ্তি}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{১ মিনিটের মধ্যে}one{# মিনিটের মধ্যে}other{# মিনিটের মধ্যে}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> ফাইল (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">শেল্ফ সবসময় দেখানো হয়</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> কেবি/সেকেণ্ড</translation>
+<translation id="8685326675965865247">আপনার ডিভাইস, অ্যাপ, সেটিংস এবং ওয়েবে সার্চ করুন। আপনার অ্যাপগুলি নেভিগেট করতে তীরচিহ্ন কী ব্যবহার করুন।</translation>
 <translation id="8725488761726303204">আরও <ph name="NUMBER" />টি</translation>
 <translation id="8730621377337864115">হয়ে গেছে</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{১ ঘণ্টা}one{# ঘণ্টা}other{# ঘণ্টা}}</translation>

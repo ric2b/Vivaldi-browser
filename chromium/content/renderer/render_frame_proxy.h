@@ -97,7 +97,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   static RenderFrameProxy* CreateFrameProxy(
       int routing_id,
       int render_view_routing_id,
-      blink::WebFrame* opener,
+      const base::UnguessableToken& opener_frame_token,
       int parent_routing_id,
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& frame_token,
@@ -139,6 +139,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // a result.
   void OnScreenInfoChanged(const ScreenInfo& screen_info);
   void OnZoomLevelChanged(double zoom_level);
+  void OnRootWindowSegmentsChanged(
+      std::vector<gfx::Rect> root_widget_window_segments);
   void OnPageScaleFactorChanged(float page_scale_factor,
                                 bool is_pinch_gesture_active);
   void OnVisibleViewportSizeChanged(const gfx::Size& visible_viewport_size);
@@ -177,10 +179,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   // blink::WebRemoteFrameClient implementation:
   void FrameDetached(DetachType type) override;
-  void ForwardPostMessage(blink::WebLocalFrame* sourceFrame,
-                          blink::WebRemoteFrame* targetFrame,
-                          blink::WebSecurityOrigin target,
-                          blink::WebDOMMessageEvent event) override;
+  blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
+
   void Navigate(
       const blink::WebURLRequest& request,
       blink::WebLocalFrame* initiator_frame,
@@ -189,15 +189,13 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       bool initiator_frame_has_download_sandbox_flag,
       bool blocking_downloads_in_sandbox_enabled,
       bool initiator_frame_is_ad,
-      mojo::ScopedMessagePipeHandle blob_url_token,
+      blink::CrossVariantMojoRemote<blink::mojom::BlobURLTokenInterfaceBase>
+          blob_url_token,
       const base::Optional<blink::WebImpression>& impression) override;
   void FrameRectsChanged(const blink::WebRect& local_frame_rect,
                          const blink::WebRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(
       const blink::ViewportIntersectionState& intersection_state) override;
-  void DidChangeOpener(blink::WebFrame* opener) override;
-  void AdvanceFocus(blink::mojom::FocusType type,
-                    blink::WebLocalFrame* source) override;
   base::UnguessableToken GetDevToolsFrameToken() override;
   uint32_t Print(const blink::WebRect& rect, cc::PaintCanvas* canvas) override;
 
@@ -223,16 +221,13 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void ResendVisualProperties();
 
   mojom::RenderFrameProxyHost* GetFrameProxyHost();
-  blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces();
 
   // IPC handlers
   void OnDeleteProxy();
   void OnCompositorFrameSwapped(const IPC::Message& message);
-  void OnUpdateOpener(int opener_routing_id);
   void OnDidUpdateName(const std::string& name, const std::string& unique_name);
   void OnEnforceInsecureRequestPolicy(
       blink::mojom::InsecureRequestPolicy policy);
-  void OnTransferUserActivationFrom(int32_t source_routing_id);
 
   // mojom::RenderFrameProxy implementation:
   void EnableAutoResize(const gfx::Size& min_size,

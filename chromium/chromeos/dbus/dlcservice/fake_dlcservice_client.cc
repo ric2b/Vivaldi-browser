@@ -5,6 +5,7 @@
 #include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 
 namespace chromeos {
@@ -48,8 +49,24 @@ void FakeDlcserviceClient::GetExistingDlcs(GetExistingDlcsCallback callback) {
                                 dlcs_with_content_));
 }
 
-void FakeDlcserviceClient::OnInstallStatusForTest(dbus::Signal* signal) {
+void FakeDlcserviceClient::DlcStateChangedForTest(dbus::Signal* signal) {
   NOTREACHED();
+}
+
+void FakeDlcserviceClient::NotifyObserversForTest(
+    const dlcservice::DlcState& dlc_state) {
+  // Notify all observers with the state change |dlc_state|.
+  for (Observer& observer : observers_) {
+    observer.OnDlcStateChanged(dlc_state);
+  }
+}
+
+void FakeDlcserviceClient::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void FakeDlcserviceClient::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace chromeos

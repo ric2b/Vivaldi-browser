@@ -34,12 +34,15 @@
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/services/app_service/public/cpp/stub_icon_loader.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/crx_file/id_util.h"
+#include "components/services/app_service/public/cpp/stub_icon_loader.h"
 #include "components/sessions/content/content_test_helper.h"
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "components/sessions/core/session_id.h"
@@ -56,6 +59,8 @@
 #include "extensions/common/extension_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using web_app::ProviderType;
 
 namespace app_list {
 namespace test {
@@ -83,6 +88,9 @@ constexpr char kRankingNormalAppName[] = "testRankingAppNormal";
 constexpr char kRankingNormalAppPackageName[] = "test.ranking.app.normal";
 
 constexpr char kSettingsInternalName[] = "Settings";
+
+constexpr char kWebAppUrl[] = "https://webappone.com/";
+constexpr char kWebAppName[] = "WebApp1";
 
 // Waits for base::Time::Now() is updated.
 void WaitTimeUpdated() {
@@ -693,7 +701,55 @@ TEST_F(AppSearchProviderTest, FetchInternalApp) {
   EXPECT_EQ(kSettingsInternalName, RunQuery("Set"));
 }
 
-TEST_F(AppSearchProviderTest, CrostiniTerminal) {
+class AppSearchProviderWebAppTest : public AppSearchProviderTest {
+ public:
+  AppSearchProviderWebAppTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDesktopPWAsWithoutExtensions);
+  }
+
+  ~AppSearchProviderWebAppTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AppSearchProviderWebAppTest, WebApp) {
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(testing_profile());
+  proxy->FlushMojoCallsForTesting();
+
+  const web_app::AppId app_id = web_app::InstallDummyWebApp(
+      testing_profile(), kWebAppName, GURL(kWebAppUrl));
+
+  // Allow async callbacks to run.
+  base::RunLoop().RunUntilIdle();
+
+  CreateSearch();
+  EXPECT_EQ("WebApp1", RunQuery("WebA"));
+}
+
+class AppSearchProviderCrostiniTest
+    : public AppSearchProviderTest,
+      public ::testing::WithParamInterface<ProviderType> {
+ protected:
+  AppSearchProviderCrostiniTest() {
+    if (GetParam() == ProviderType::kWebApps) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    } else if (GetParam() == ProviderType::kBookmarkApps) {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    }
+  }
+
+  ~AppSearchProviderCrostiniTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_P(AppSearchProviderCrostiniTest, CrostiniTerminal) {
   CreateSearch();
 
   // Crostini UI is not allowed yet.
@@ -726,7 +782,7 @@ TEST_F(AppSearchProviderTest, CrostiniTerminal) {
   EXPECT_EQ("Terminal", RunQuery("cros"));
 }
 
-TEST_F(AppSearchProviderTest, CrostiniApp) {
+TEST_P(AppSearchProviderCrostiniTest, CrostiniApp) {
   // This both allows Crostini UI and enables Crostini.
   crostini::CrostiniTestHelper crostini_test_helper(testing_profile());
   crostini_test_helper.ReInitializeAppServiceIntegration();
@@ -935,14 +991,6 @@ TEST_P(AppSearchProviderWithExtensionInstallType, OemResultsOnFirstBoot) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    AppSearchProviderWithExtensionInstallType,
-    ::testing::ValuesIn({TestExtensionInstallType::CONTROLLED_BY_POLICY,
-                         TestExtensionInstallType::CHROME_COMPONENT,
-                         TestExtensionInstallType::INSTALLED_BY_DEFAULT,
-                         TestExtensionInstallType::INSTALLED_BY_OEM}));
-
 enum class TestArcAppInstallType {
   CONTROLLED_BY_POLICY,
   INSTALLED_BY_DEFAULT,
@@ -1028,9 +1076,23 @@ TEST_P(AppSearchProviderWithArcAppInstallType,
 
 INSTANTIATE_TEST_SUITE_P(
     All,
+    AppSearchProviderWithExtensionInstallType,
+    ::testing::ValuesIn({TestExtensionInstallType::CONTROLLED_BY_POLICY,
+                         TestExtensionInstallType::CHROME_COMPONENT,
+                         TestExtensionInstallType::INSTALLED_BY_DEFAULT,
+                         TestExtensionInstallType::INSTALLED_BY_OEM}));
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
     AppSearchProviderWithArcAppInstallType,
     ::testing::ValuesIn({TestArcAppInstallType::CONTROLLED_BY_POLICY,
                          TestArcAppInstallType::INSTALLED_BY_DEFAULT}));
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppSearchProviderCrostiniTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         web_app::ProviderTypeParamToString);
 
 }  // namespace test
 }  // namespace app_list

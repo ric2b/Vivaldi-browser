@@ -31,7 +31,6 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
@@ -42,6 +41,8 @@ import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SearchUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.text.SpanApplier;
 
 import java.util.Locale;
@@ -68,6 +69,7 @@ public class PasswordSettings
 
     public static final String PREF_SAVE_PASSWORDS_SWITCH = "save_passwords_switch";
     public static final String PREF_AUTOSIGNIN_SWITCH = "autosignin_switch";
+    public static final String PREF_CHECK_PASSWORDS = "check_passwords";
     public static final String PREF_KEY_MANAGE_ACCOUNT_LINK = "manage_account_link";
     public static final String PREF_KEY_SECURITY_KEY_LINK = "security_key_link";
 
@@ -82,11 +84,12 @@ public class PasswordSettings
 
     private static final int ORDER_SWITCH = 0;
     private static final int ORDER_AUTO_SIGNIN_CHECKBOX = 1;
-    private static final int ORDER_MANAGE_ACCOUNT_LINK = 2;
-    private static final int ORDER_SECURITY_KEY = 3;
-    private static final int ORDER_SAVED_PASSWORDS = 4;
-    private static final int ORDER_EXCEPTIONS = 5;
-    private static final int ORDER_SAVED_PASSWORDS_NO_TEXT = 6;
+    private static final int ORDER_CHECK_PASSWORDS = 2;
+    private static final int ORDER_MANAGE_ACCOUNT_LINK = 3;
+    private static final int ORDER_SECURITY_KEY = 4;
+    private static final int ORDER_SAVED_PASSWORDS = 5;
+    private static final int ORDER_EXCEPTIONS = 6;
+    private static final int ORDER_SAVED_PASSWORDS_NO_TEXT = 7;
 
     private boolean mNoPasswords;
     private boolean mNoPasswordExceptions;
@@ -99,6 +102,7 @@ public class PasswordSettings
     private Preference mSecurityKey;
     private ChromeSwitchPreference mSavePasswordsSwitch;
     private ChromeBaseCheckBoxPreference mAutoSignInSwitch;
+    private ChromeBasePreference mCheckPasswords;
     private TextMessagePreference mEmptyView;
     private boolean mSearchRecorded;
     private Menu mMenu;
@@ -235,6 +239,9 @@ public class PasswordSettings
         if (mSearchQuery == null) {
             createSavePasswordsSwitch();
             createAutoSignInCheckbox();
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_CHECK)) {
+                createCheckPasswords();
+            }
         }
         PasswordManagerHandlerProvider.getInstance()
                 .getPasswordManagerHandler()
@@ -429,14 +436,12 @@ public class PasswordSettings
         mSavePasswordsSwitch.setSummaryOn(R.string.text_on);
         mSavePasswordsSwitch.setSummaryOff(R.string.text_off);
         mSavePasswordsSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-            PrefServiceBridge.getInstance().setBoolean(
-                    Pref.REMEMBER_PASSWORDS_ENABLED, (boolean) newValue);
+            getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, (boolean) newValue);
             return true;
         });
         mSavePasswordsSwitch.setManagedPreferenceDelegate(
                 (ChromeManagedPreferenceDelegate) preference
-                -> PrefServiceBridge.getInstance().isManagedPreference(
-                        Pref.REMEMBER_PASSWORDS_ENABLED));
+                -> getPrefService().isManagedPreference(Pref.CREDENTIALS_ENABLE_SERVICE));
 
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
             getPreferenceScreen().addPreference(mSavePasswordsSwitch);
@@ -447,7 +452,7 @@ public class PasswordSettings
         // (e.g. the switch will say "On" when save passwords is really turned off), so
         // .setChecked() should be called after .addPreference()
         mSavePasswordsSwitch.setChecked(
-                PrefServiceBridge.getInstance().getBoolean(Pref.REMEMBER_PASSWORDS_ENABLED));
+                getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
     }
 
     private void createAutoSignInCheckbox() {
@@ -457,16 +462,25 @@ public class PasswordSettings
         mAutoSignInSwitch.setOrder(ORDER_AUTO_SIGNIN_CHECKBOX);
         mAutoSignInSwitch.setSummary(R.string.passwords_auto_signin_description);
         mAutoSignInSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-            PrefServiceBridge.getInstance().setBoolean(
-                    Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED, (boolean) newValue);
+            getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, (boolean) newValue);
             return true;
         });
         mAutoSignInSwitch.setManagedPreferenceDelegate((ChromeManagedPreferenceDelegate) preference
-                -> PrefServiceBridge.getInstance().isManagedPreference(
-                        Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED));
+                -> getPrefService().isManagedPreference(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
         getPreferenceScreen().addPreference(mAutoSignInSwitch);
-        mAutoSignInSwitch.setChecked(PrefServiceBridge.getInstance().getBoolean(
-                Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED));
+        mAutoSignInSwitch.setChecked(
+                getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
+    }
+
+    private void createCheckPasswords() {
+        mCheckPasswords = new ChromeBasePreference(getStyledContext(), null);
+        mCheckPasswords.setKey(PREF_CHECK_PASSWORDS);
+        mCheckPasswords.setTitle(R.string.passwords_check_title);
+        mCheckPasswords.setOrder(ORDER_CHECK_PASSWORDS);
+        mCheckPasswords.setSummary(R.string.passwords_check_description);
+        // Add a stub listener which returns true to notify the click was handled
+        mCheckPasswords.setOnPreferenceClickListener(preference -> true);
+        getPreferenceScreen().addPreference(mCheckPasswords);
     }
 
     private void displayManageAccountLink() {
@@ -515,6 +529,10 @@ public class PasswordSettings
 
     private Context getStyledContext() {
         return getPreferenceManager().getContext();
+    }
+
+    private PrefService getPrefService() {
+        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
     @VisibleForTesting

@@ -4,6 +4,8 @@
 
 #include "weblayer/browser/navigation_controller_impl.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -145,6 +147,11 @@ ScopedJavaLocalRef<jstring> NavigationControllerImpl::GetNavigationEntryTitle(
   return ScopedJavaLocalRef<jstring>(base::android::ConvertUTF8ToJavaString(
       env, GetNavigationEntryTitle(index)));
 }
+
+bool NavigationControllerImpl::IsNavigationEntrySkippable(JNIEnv* env,
+                                                          int index) {
+  return IsNavigationEntrySkippable(index);
+}
 #endif
 
 void NavigationControllerImpl::WillRedirectRequest(
@@ -257,6 +264,10 @@ std::string NavigationControllerImpl::GetNavigationEntryTitle(int index) {
   return base::UTF16ToUTF8(entry->GetTitle());
 }
 
+bool NavigationControllerImpl::IsNavigationEntrySkippable(int index) {
+  return web_contents()->GetController().IsEntryMarkedToBeSkipped(index);
+}
+
 void NavigationControllerImpl::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame())
@@ -353,6 +364,14 @@ void NavigationControllerImpl::DidFinishNavigation(
       observer.NavigationFailed(navigation);
   }
 
+  // Note InsertVisualStateCallback currently does not take into account
+  // any delays from surface sync, ie a frame submitted by renderer may not
+  // be displayed immediately. Such situations should be rare however, so
+  // this should be good enough for the purposes needed.
+  web_contents()->GetMainFrame()->InsertVisualStateCallback(base::BindOnce(
+      &NavigationControllerImpl::OldPageNoLongerRendered,
+      weak_ptr_factory_.GetWeakPtr(), navigation_handle->GetURL()));
+
   navigation_map_.erase(navigation_map_.find(navigation_handle));
 }
 
@@ -387,6 +406,20 @@ void NavigationControllerImpl::DidFirstVisuallyNonEmptyPaint() {
 
   for (auto& observer : observers_)
     observer.OnFirstContentfulPaint();
+}
+
+void NavigationControllerImpl::OldPageNoLongerRendered(const GURL& url,
+                                                       bool success) {
+#if defined(OS_ANDROID)
+  TRACE_EVENT0("weblayer",
+               "Java_NavigationControllerImpl_onOldPageNoLongerRendered");
+  JNIEnv* env = AttachCurrentThread();
+  Java_NavigationControllerImpl_onOldPageNoLongerRendered(
+      env, java_controller_,
+      base::android::ConvertUTF8ToJavaString(env, url.spec()));
+#endif
+  for (auto& observer : observers_)
+    observer.OnOldPageNoLongerRendered(url);
 }
 
 void NavigationControllerImpl::NotifyLoadStateChanged() {

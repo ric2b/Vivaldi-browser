@@ -80,6 +80,7 @@ Polymer({
   /** Overridden from LoginScreenBehavior. */
   EXTERNAL_API: [
     'onInputMethodIdSetFromBackend',
+    'refreshA11yInfo',
   ],
 
   /**
@@ -94,7 +95,6 @@ Polymer({
       resetAllowed: true,
       enableDebuggingAllowed: true,
       enterDemoModeAllowed: true,
-      noAnimatedTransition: true,
       postponeEnrollmentAllowed: true,
     });
     this.updateLocalizedContent();
@@ -106,21 +106,13 @@ Polymer({
    * @param {Object} data Screen init payload.
    */
   onBeforeShow(data) {
-    this.behaviors.forEach((behavior) => {
-      if (behavior.onBeforeShow)
-        behavior.onBeforeShow.call(this);
-    });
-
     this.debuggingLinkVisible_ =
         data && 'isDeveloperMode' in data && data['isDeveloperMode'];
 
     if (this.fullScreenDialog)
       this.$.welcomeScreen.fullScreenDialog = true;
 
-    this.$.welcomeScreen.onBeforeShow();
-    let dialogs = Polymer.dom(this.root).querySelectorAll('oobe-dialog');
-    for (let dialog of dialogs)
-      dialog.onBeforeShow();
+    cr.ui.login.invokePolymerMethod(this.$.welcomeScreen, 'onBeforeShow');
 
     let activeScreen = this.getActiveScreen_();
     if (activeScreen.show)
@@ -400,6 +392,15 @@ Polymer({
     this.onKeyboardsChanged_();
   },
 
+  /**
+   * Refreshes a11y menu state.
+   * @param {!OobeTypes.A11yStatuses} data New dictionary with a11y features
+   *     state.
+   */
+  refreshA11yInfo(data) {
+    this.a11yStatus = data;
+  },
+
   onKeyboardsChanged_() {
     this.currentKeyboard = getSelectedTitle(this.keyboards);
   },
@@ -435,7 +436,8 @@ Polymer({
   onA11yOptionChanged_(event) {
     var a11ytarget = /** @type {{chromeMessage: string, checked: boolean}} */ (
         event.currentTarget);
-    chrome.send(a11ytarget.chromeMessage, [a11ytarget.checked]);
+    chrome.send(
+        'WelcomeScreen.' + a11ytarget.chromeMessage, [a11ytarget.checked]);
   },
 
   /** ******************** Timezone section ******************* */

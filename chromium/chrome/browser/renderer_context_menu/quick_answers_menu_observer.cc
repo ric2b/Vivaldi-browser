@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
-#include "ash/public/cpp/quick_answers_controller.h"
+#include "ash/public/cpp/quick_answers/controller/quick_answers_controller.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -19,7 +19,7 @@
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_metrics.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
@@ -82,7 +82,8 @@ QuickAnswersMenuObserver::QuickAnswersMenuObserver(
             .get(),
         assistant_state, /*delegate=*/this);
     quick_answers_controller_ = ash::QuickAnswersController::Get();
-    DCHECK(quick_answers_controller_);
+    if (!quick_answers_controller_)
+      return;
     quick_answers_controller_->SetClient(std::make_unique<QuickAnswersClient>(
         content::BrowserContext::GetDefaultStoragePartition(browser_context)
             ->GetURLLoaderFactoryForBrowserProcess()
@@ -101,8 +102,7 @@ void QuickAnswersMenuObserver::InitMenu(
   if (!is_eligible_ || !proxy_ || !quick_answers_client_)
     return;
 
-  if (params.input_field_type ==
-      blink::ContextMenuDataInputFieldType::kPassword)
+  if (params.is_editable)
     return;
 
   auto selected_text = base::UTF16ToUTF8(SanitizeText(params.selection_text));
@@ -134,14 +134,15 @@ void QuickAnswersMenuObserver::InitMenu(
 void QuickAnswersMenuObserver::OnContextMenuShown(
     const content::ContextMenuParams& params,
     const gfx::Rect& bounds_in_screen) {
+  is_context_menu_showing_ = true;
+
   if (!IsRichUiEnabled())
     return;
 
-  if (!is_eligible_ || !quick_answers_controller_)
+  if (!quick_answers_controller_)
     return;
 
-  if (params.input_field_type ==
-      blink::ContextMenuDataInputFieldType::kPassword)
+  if (params.is_editable)
     return;
 
   auto selected_text = base::UTF16ToUTF8(params.selection_text);
@@ -164,16 +165,18 @@ void QuickAnswersMenuObserver::OnContextMenuShown(
 void QuickAnswersMenuObserver::OnContextMenuViewBoundsChanged(
     const gfx::Rect& bounds_in_screen) {
   bounds_in_screen_ = bounds_in_screen;
-  if (!quick_answers_controller_)
+  if (!quick_answers_controller_ || !is_context_menu_showing_)
     return;
   quick_answers_controller_->UpdateQuickAnswersAnchorBounds(bounds_in_screen);
 }
 
 void QuickAnswersMenuObserver::OnMenuClosed() {
+  is_context_menu_showing_ = false;
+
   if (!IsRichUiEnabled())
     return;
 
-  if (!is_eligible_ || !quick_answers_controller_)
+  if (!quick_answers_controller_)
     return;
 
   quick_answers_controller_->DismissQuickAnswers(!is_other_command_executed_);
@@ -257,7 +260,7 @@ void QuickAnswersMenuObserver::SetQuickAnswerClientForTesting(
 void QuickAnswersMenuObserver::SendAssistantQuery(const std::string& query) {
   ash::AssistantInteractionController::Get()->StartTextInteraction(
       query, /*allow_tts=*/false,
-      chromeos::assistant::mojom::AssistantQuerySource::kQuickAnswers);
+      chromeos::assistant::AssistantQuerySource::kQuickAnswers);
 }
 
 std::string QuickAnswersMenuObserver::GetDeviceLanguage() {
@@ -269,6 +272,9 @@ void QuickAnswersMenuObserver::OnTextSurroundingSelectionAvailable(
     const base::string16& surrounding_text,
     uint32_t start_offset,
     uint32_t end_offset) {
+  if (!is_context_menu_showing_)
+    return;
+
   Context context;
   context.surrounding_text = base::UTF16ToUTF8(surrounding_text);
   context.device_properties.language = GetDeviceLanguage();

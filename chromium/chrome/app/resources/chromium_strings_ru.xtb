@@ -123,6 +123,7 @@
 <translation id="5903106910045431592">"<ph name="PAGE_TITLE" />" – вход в сеть</translation>
 <translation id="5987687638152509985">Чтобы начать синхронизацию, обновите Chromium</translation>
 <translation id="6013050204643758987">Chromium OS, как и <ph name="BEGIN_LINK_LINUX_OSS" />Linux (бета-версия)<ph name="END_LINK_LINUX_OSS" />, работает благодаря дополнительному <ph name="BEGIN_LINK_CROS_OSS" />программному обеспечению с открытым исходным кодом<ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6039377483953237732">Версия Chromium OS</translation>
 <translation id="6055895534982063517">Доступна новая версия Chromium, которая стала еще быстрее.</translation>
 <translation id="6063093106622310249">&amp;Открыть в Chromium</translation>
 <translation id="6072279588547424923">Расширение "<ph name="EXTENSION_NAME" />" добавлено в Chromium</translation>
@@ -217,7 +218,6 @@
 <translation id="8586442755830160949">© The Chromium Authors, <ph name="YEAR" /> . Все права защищены.</translation>
 <translation id="8619360774459241877">Запуск Chromium...</translation>
 <translation id="8621669128220841554">В процессе установки произошла неизвестная ошибка. Скачайте Chromium ещё раз.</translation>
-<translation id="8682540261359803721">Если нужного параметра нет на этой странице, откройте <ph name="LINK_BEGIN" />настройки браузера Chromium<ph name="LINK_END" />.</translation>
 <translation id="8697124171261953979">Кроме того, расширение изменило стартовую страницу Chromium и поисковую систему, используемую по умолчанию при вводе запроса в омнибокс.</translation>
 <translation id="8704119203788522458">Ваш персональный Chromium</translation>
 <translation id="8796602469536043152">Для этого сайта Chromium запрашивает доступ к камере и микрофону.</translation>

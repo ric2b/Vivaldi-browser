@@ -38,9 +38,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
-#include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
-#include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -70,20 +68,11 @@ PaintLayerCompositor::PaintLayerCompositor(LayoutView& layout_view)
   DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
 }
 
-PaintLayerCompositor::~PaintLayerCompositor() {
-  DCHECK_EQ(root_layer_attachment_, kRootLayerUnattached);
-}
+PaintLayerCompositor::~PaintLayerCompositor() = default;
 
 void PaintLayerCompositor::CleanUp() {
   if (InCompositingMode())
-    DetachRootLayer();
-}
-
-void PaintLayerCompositor::DidLayout() {
-  // FIXME: Technically we only need to do this when the LocalFrameView's
-  // isScrollable method would return a different value.
-  root_should_always_composite_dirty_ = true;
-  EnableCompositingModeIfNeeded();
+    SetOwnerNeedsCompositingUpdate();
 }
 
 bool PaintLayerCompositor::InCompositingMode() const {
@@ -100,77 +89,12 @@ bool PaintLayerCompositor::StaleInCompositingMode() const {
 void PaintLayerCompositor::SetCompositingModeEnabled(bool enable) {
   if (enable == compositing_)
     return;
-
   compositing_ = enable;
-
-  if (compositing_)
-    AttachRootLayer();
-  else
-    DetachRootLayer();
-
-  // Schedule an update in the parent frame so the <iframe>'s layer in the owner
-  // document matches the compositing state here.
-  if (HTMLFrameOwnerElement* owner_element =
-          layout_view_.GetDocument().LocalOwner())
-    owner_element->SetNeedsCompositingUpdate();
-}
-
-void PaintLayerCompositor::EnableCompositingModeIfNeeded() {
-  if (!root_should_always_composite_dirty_)
-    return;
-
-  root_should_always_composite_dirty_ = false;
-  if (compositing_)
-    return;
-
-  if (RootShouldAlwaysComposite()) {
-    // FIXME: Is this needed? It was added in
-    // https://bugs.webkit.org/show_bug.cgi?id=26651.
-    // No tests fail if it's deleted.
-    SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
-    SetCompositingModeEnabled(true);
-  }
-}
-
-bool PaintLayerCompositor::RootShouldAlwaysComposite() const {
-  // If compositing is disabled for the WebView, then nothing composites.
-  if (!layout_view_.GetDocument()
-           .GetSettings()
-           ->GetAcceleratedCompositingEnabled())
-    return false;
-  // Local roots composite always, when compositing is enabled globally.
-  if (layout_view_.GetFrame()->IsLocalRoot())
-    return true;
-  // Some non-local roots of embedded content do not have a LocalFrameView
-  // so they are not visible and should not get compositor layers.
-  if (!layout_view_.GetFrameView())
-    return false;
-  // Non-local root frames will composite only if needed for scrolling.
-  return CompositingReasonFinder::RequiresCompositingForScrollableFrame(
-      layout_view_);
 }
 
 void PaintLayerCompositor::UpdateAcceleratedCompositingSettings() {
-  root_should_always_composite_dirty_ = true;
-  if (root_layer_attachment_ != kRootLayerUnattached)
-    RootLayer()->SetNeedsCompositingInputsUpdate();
-}
-
-static LayoutVideo* FindFullscreenVideoLayoutObject(Document& document) {
-  // Recursively find the document that is in fullscreen.
-  Element* fullscreen_element = Fullscreen::FullscreenElementFrom(document);
-  Document* content_document = &document;
-  while (auto* frame_owner =
-             DynamicTo<HTMLFrameOwnerElement>(fullscreen_element)) {
-    content_document = frame_owner->contentDocument();
-    if (!content_document)
-      return nullptr;
-    fullscreen_element = Fullscreen::FullscreenElementFrom(*content_document);
-  }
-  if (!IsA<HTMLVideoElement>(fullscreen_element))
-    return nullptr;
-  LayoutObject* layout_object = fullscreen_element->GetLayoutObject();
-  return To<LayoutVideo>(layout_object);
+  if (auto* root_layer = RootLayer())
+    root_layer->SetNeedsCompositingInputsUpdate();
 }
 
 void PaintLayerCompositor::UpdateIfNeededRecursive(
@@ -231,11 +155,6 @@ void PaintLayerCompositor::UpdateIfNeededRecursiveInternal(
 
   ScriptForbiddenScope forbid_script;
 
-  // FIXME: EnableCompositingModeIfNeeded() can trigger a
-  // CompositingUpdateRebuildTree, which asserts that it's not
-  // InCompositingUpdate().
-  EnableCompositingModeIfNeeded();
-
 #if DCHECK_IS_ON()
   view->SetIsUpdatingDescendantDependentFlags(true);
 #endif
@@ -277,7 +196,6 @@ void PaintLayerCompositor::UpdateIfNeededRecursiveInternal(
 #if DCHECK_IS_ON()
 void PaintLayerCompositor::AssertNoUnresolvedDirtyBits() {
   DCHECK_EQ(pending_update_type_, kCompositingUpdateNone);
-  DCHECK(!root_should_always_composite_dirty_);
 }
 #endif
 
@@ -292,18 +210,6 @@ void PaintLayerCompositor::SetNeedsCompositingUpdate(
     return;
 
   Lifecycle().EnsureStateAtMost(DocumentLifecycle::kLayoutClean);
-}
-
-GraphicsLayer* PaintLayerCompositor::OverlayFullscreenVideoGraphicsLayer()
-    const {
-  LayoutVideo* video =
-      FindFullscreenVideoLayoutObject(layout_view_.GetDocument());
-  if (!video || !video->Layer()->HasCompositedLayerMapping() ||
-      !video->VideoElement()->UsesOverlayFullscreenVideo()) {
-    return nullptr;
-  }
-
-  return video->Layer()->GetCompositedLayerMapping()->MainGraphicsLayer();
 }
 
 void PaintLayerCompositor::UpdateWithoutAcceleratedCompositing(
@@ -426,9 +332,8 @@ void PaintLayerCompositor::UpdateIfNeeded(
   // Save off our current parent. We need this in subframes, because our
   // parent attached us to itself via AttachFrameContentLayersToIframeLayer().
   if (!IsMainFrame() && update_root->GetCompositedLayerMapping()) {
-    current_parent = update_root->GetCompositedLayerMapping()
-                         ->ChildForSuperlayers()
-                         ->Parent();
+    current_parent =
+        update_root->GetCompositedLayerMapping()->MainGraphicsLayer()->Parent();
   }
 
 #if DCHECK_IS_ON()
@@ -459,11 +364,10 @@ void PaintLayerCompositor::UpdateIfNeeded(
     if (!child_list.IsEmpty()) {
       CHECK(compositing_);
       DCHECK_EQ(1u, child_list.size());
-      // If this is a popup, don't hook into the layer tree.
-      if (layout_view_.GetDocument().GetPage()->GetChromeClient().IsPopup())
-        current_parent = nullptr;
-      if (current_parent)
-        current_parent->SetChildren(child_list);
+      // Schedule an update in the parent frame so the <iframe>'s layer in the
+      // owner document matches the compositing state here.
+      SetOwnerNeedsCompositingUpdate();
+      root_layer_attachment_dirty_ = true;
     }
   }
 
@@ -545,13 +449,6 @@ bool PaintLayerCompositor::AllocateOrClearCompositedLayerMapping(
   if (!composited_layer_mapping_changed)
     return false;
 
-  if (layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
-    PaintLayerCompositor* inner_compositor = FrameContentsCompositor(
-        ToLayoutEmbeddedContent(layer->GetLayoutObject()));
-    if (inner_compositor && inner_compositor->StaleInCompositingMode())
-      inner_compositor->AttachRootLayer();
-  }
-
   layer->ClearClipRects(kPaintingClipRects);
 
   // Compositing state affects whether to create paint offset translation of
@@ -579,8 +476,9 @@ void PaintLayerCompositor::PaintInvalidationOnCompositingChange(
 }
 
 PaintLayerCompositor* PaintLayerCompositor::FrameContentsCompositor(
-    LayoutEmbeddedContent& layout_object) {
-  auto* element = DynamicTo<HTMLFrameOwnerElement>(layout_object.GetNode());
+    const LayoutEmbeddedContent& layout_object) {
+  const auto* element =
+      DynamicTo<HTMLFrameOwnerElement>(layout_object.GetNode());
   if (!element)
     return nullptr;
 
@@ -591,31 +489,9 @@ PaintLayerCompositor* PaintLayerCompositor::FrameContentsCompositor(
   return nullptr;
 }
 
-bool PaintLayerCompositor::AttachFrameContentLayersToIframeLayer(
-    LayoutEmbeddedContent& layout_object) {
-  PaintLayerCompositor* inner_compositor =
-      FrameContentsCompositor(layout_object);
-  if (!inner_compositor || !inner_compositor->StaleInCompositingMode() ||
-      inner_compositor->root_layer_attachment_ !=
-          kRootLayerAttachedViaEnclosingFrame)
-    return false;
-
-  PaintLayer* layer = layout_object.Layer();
-  if (!layer->HasCompositedLayerMapping())
-    return false;
-
-  DisableCompositingQueryAsserts disabler;
-  inner_compositor->RootLayer()->EnsureCompositedLayerMapping();
-  layer->GetCompositedLayerMapping()->SetSublayers(
-      GraphicsLayerVector(1, inner_compositor->RootGraphicsLayer()));
-  return true;
-}
-
 static void FullyInvalidatePaintRecursive(PaintLayer* layer) {
-  if (layer->GetCompositingState() == kPaintsIntoOwnBacking) {
-    layer->GetCompositedLayerMapping()->SetContentsNeedDisplay();
-    layer->GetCompositedLayerMapping()->SetSquashingContentsNeedDisplay();
-  }
+  if (layer->GetCompositingState() == kPaintsIntoOwnBacking)
+    layer->GetCompositedLayerMapping()->SetAllLayersNeedDisplay();
 
   for (PaintLayer* child = layer->FirstChild(); child;
        child = child->NextSibling())
@@ -637,38 +513,8 @@ PaintLayer* PaintLayerCompositor::RootLayer() const {
 
 GraphicsLayer* PaintLayerCompositor::RootGraphicsLayer() const {
   if (CompositedLayerMapping* clm = RootLayer()->GetCompositedLayerMapping())
-    return clm->ChildForSuperlayers();
+    return clm->MainGraphicsLayer();
   return nullptr;
-}
-
-GraphicsLayer* PaintLayerCompositor::GetXrOverlayLayer() const {
-  // immersive-ar DOM overlay mode is very similar to fullscreen video, using
-  // the AR camera image instead of a video element as a background that's
-  // separately composited in the browser. The fullscreened DOM content is shown
-  // on top of that, same as HTML video controls.
-  DCHECK(IsMainFrame());
-  if (!layout_view_.GetDocument().IsXrOverlay())
-    return nullptr;
-
-  Element* fullscreen_element =
-      Fullscreen::FullscreenElementFrom(layout_view_.GetDocument());
-  if (!fullscreen_element)
-    return nullptr;
-
-  LayoutBoxModelObject* box = fullscreen_element->GetLayoutBoxModelObject();
-  if (!box) {
-    // Currently, only HTML fullscreen elements are supported for this mode,
-    // not others such as SVG or MathML.
-    DVLOG(1) << "no LayoutBoxModelObject for element " << fullscreen_element;
-    return nullptr;
-  }
-
-  // The fullscreen element will be in its own layer due to
-  // CompositingReasonFinder treating this scenario as a direct_reason.
-  PaintLayer* layer = box->Layer();
-  DCHECK(layer);
-  GraphicsLayer* full_screen_layer = layer->GraphicsLayerBacking(box);
-  return full_screen_layer;
 }
 
 GraphicsLayer* PaintLayerCompositor::PaintRootGraphicsLayer() const {
@@ -678,10 +524,11 @@ GraphicsLayer* PaintLayerCompositor::PaintRootGraphicsLayer() const {
 
   // Start from the full screen overlay layer if exists. Other layers will be
   // skipped during painting.
-  if (auto* layer = GetXrOverlayLayer())
-    return layer;
-  if (auto* layer = OverlayFullscreenVideoGraphicsLayer())
-    return layer;
+  if (PaintLayer* layer =
+          layout_view_.GetFrameView()->GetFullScreenOverlayLayer()) {
+    if (layer->HasCompositedLayerMapping())
+      return layer->GetCompositedLayerMapping()->MainGraphicsLayer();
+  }
 
   return RootGraphicsLayer();
 }
@@ -733,9 +580,6 @@ static void UpdateTrackingRasterInvalidationsRecursive(
 
   for (wtf_size_t i = 0; i < graphics_layer->Children().size(); ++i)
     UpdateTrackingRasterInvalidationsRecursive(graphics_layer->Children()[i]);
-
-  if (GraphicsLayer* mask_layer = graphics_layer->MaskLayer())
-    UpdateTrackingRasterInvalidationsRecursive(mask_layer);
 }
 
 void PaintLayerCompositor::UpdateTrackingRasterInvalidations() {
@@ -748,47 +592,11 @@ void PaintLayerCompositor::UpdateTrackingRasterInvalidations() {
     UpdateTrackingRasterInvalidationsRecursive(root_layer);
 }
 
-void PaintLayerCompositor::AttachRootLayer() {
-  if (root_layer_attachment_ != kRootLayerUnattached)
-    return;
-
-  // With CompositeAfterPaint, PaintArtifactCompositor is responsible for the
-  // root layer.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
-  // The root layer of local frame root doesn't need to attach to anything.
-  if (layout_view_.GetFrame()->IsLocalRoot()) {
-    root_layer_attachment_ = kRootLayerOfLocalFrameRoot;
-    return;
+void PaintLayerCompositor::SetOwnerNeedsCompositingUpdate() {
+  if (HTMLFrameOwnerElement* owner_element =
+          layout_view_.GetDocument().LocalOwner()) {
+    owner_element->SetNeedsCompositingUpdate();
   }
-
-  HTMLFrameOwnerElement* owner_element =
-      layout_view_.GetDocument().LocalOwner();
-  DCHECK(owner_element);
-  // The layer will get hooked up via
-  // CompositedLayerMapping::updateGraphicsLayerConfiguration() for the
-  // frame's layoutObject in the parent document.
-  owner_element->SetNeedsCompositingUpdate();
-  if (owner_element->GetLayoutObject()) {
-    ToLayoutBoxModelObject(owner_element->GetLayoutObject())
-        ->Layer()
-        ->SetNeedsCompositingInputsUpdate();
-  }
-  root_layer_attachment_ = kRootLayerAttachedViaEnclosingFrame;
-}
-
-void PaintLayerCompositor::DetachRootLayer() {
-  if (root_layer_attachment_ == kRootLayerAttachedViaEnclosingFrame) {
-    // The layer will get unhooked up via
-    // CompositedLayerMapping::updateGraphicsLayerConfiguration() for the
-    // frame's layoutObject in the parent document.
-    if (HTMLFrameOwnerElement* owner_element =
-            layout_view_.GetDocument().LocalOwner())
-      owner_element->SetNeedsCompositingUpdate();
-  }
-
-  root_layer_attachment_ = kRootLayerUnattached;
 }
 
 ScrollingCoordinator* PaintLayerCompositor::GetScrollingCoordinator() const {

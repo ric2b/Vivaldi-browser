@@ -4,6 +4,7 @@
 
 package org.chromium.weblayer_private;
 
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -321,11 +322,27 @@ public final class WebLayerImpl extends IWebLayer.Stub {
     public void onReceivedBroadcast(IObjectWrapper appContextWrapper, Intent intent) {
         StrictModeWorkaround.apply();
         Context context = ObjectWrapper.unwrap(appContextWrapper, Context.class);
+
+        if (IntentUtils.handleIntent(intent)) return;
+
         if (intent.getAction().startsWith(DownloadImpl.getIntentPrefix())) {
             DownloadImpl.forwardIntent(context, intent, mProfileManager);
         } else if (intent.getAction().startsWith(MediaStreamManager.getIntentPrefix())) {
             MediaStreamManager.forwardIntent(intent);
         }
+    }
+
+    @Override
+    public void onMediaSessionServiceStarted(IObjectWrapper sessionService, Intent intent) {
+        StrictModeWorkaround.apply();
+        MediaSessionManager.serviceStarted(
+                ObjectWrapper.unwrap(sessionService, Service.class), intent);
+    }
+
+    @Override
+    public void onMediaSessionServiceDestroyed() {
+        StrictModeWorkaround.apply();
+        MediaSessionManager.serviceDestroyed();
     }
 
     @Override
@@ -375,6 +392,30 @@ public final class WebLayerImpl extends IWebLayer.Stub {
 
         try {
             return sClient.createIntent();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    public static Intent createMediaSessionServiceIntent() {
+        if (sClient == null) {
+            throw new IllegalStateException("WebLayer should have been initialized already.");
+        }
+
+        try {
+            return sClient.createMediaSessionServiceIntent();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    public static int getMediaSessionNotificationId() {
+        if (sClient == null) {
+            throw new IllegalStateException("WebLayer should have been initialized already.");
+        }
+
+        try {
+            return sClient.getMediaSessionNotificationId();
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

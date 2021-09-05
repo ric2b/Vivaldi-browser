@@ -5,6 +5,9 @@
 #ifndef CC_METRICS_FRAME_SEQUENCE_TRACKER_H_
 #define CC_METRICS_FRAME_SEQUENCE_TRACKER_H_
 
+#include <memory>
+#include <sstream>
+
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -101,6 +104,10 @@ class CC_EXPORT FrameSequenceTracker {
 
   std::unique_ptr<FrameSequenceMetrics> TakeMetrics();
 
+  // Called by the destructor of FrameSequenceTrackerCollection, asking its
+  // |metrics_| to report.
+  void CleanUp();
+
  private:
   friend class FrameSequenceTrackerCollection;
   friend class FrameSequenceTrackerTest;
@@ -157,6 +164,8 @@ class CC_EXPORT FrameSequenceTracker {
   bool ShouldIgnoreBeginFrameSource(uint64_t source_id) const;
 
   bool ShouldIgnoreSequence(uint64_t sequence_number) const;
+
+  bool IsExpectingMainFrame() const;
 
   const int custom_sequence_id_;
 
@@ -246,16 +255,6 @@ class CC_EXPORT FrameSequenceTracker {
   uint64_t previous_begin_main_sequence_ = 0;
   // TODO(xidachen): remove this one.
   uint64_t current_begin_main_sequence_ = 0;
-
-  // Tracks some data to generate useful trace events.
-  struct TraceData {
-    explicit TraceData(const void* trace_id);
-    const void* trace_id;
-    base::TimeTicks last_timestamp = base::TimeTicks::Now();
-    int frame_count = 0;
-
-    void Advance(base::TimeTicks new_timestamp);
-  } trace_data_;
 
   // True when an impl-impl is not ended. A tracker is ready for termination
   // only when the last impl-frame is ended (ReportFrameEnd).

@@ -57,6 +57,7 @@ std::ostream& operator<<(std::ostream& output, const RequestAction& action);
 std::ostream& operator<<(std::ostream& output, const ParseResult& result);
 std::ostream& operator<<(std::ostream& output,
                          const base::Optional<RequestAction>& action);
+std::ostream& operator<<(std::ostream& output, LoadRulesetResult result);
 
 // Returns true if the given extension's indexed static rulesets are all valid.
 // Should be called on a sequence where file IO is allowed.
@@ -77,7 +78,8 @@ RulesetSource CreateTemporarySource(RulesetID id = kMinValidStaticRulesetID,
 
 api::declarative_net_request::ModifyHeaderInfo CreateModifyHeaderInfo(
     api::declarative_net_request::HeaderOperation operation,
-    std::string header);
+    std::string header,
+    base::Optional<std::string> value);
 
 bool EqualsForTesting(
     const api::declarative_net_request::ModifyHeaderInfo& lhs,

@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/android/chrome_jni_headers/AutocompleteController_jni.h"
+#include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
@@ -150,12 +151,15 @@ void ZeroSuggestPrefetcher::SelfDestruct() {
 
 }  // namespace
 
-AutocompleteControllerAndroid::AutocompleteControllerAndroid(Profile* profile)
-    : autocomplete_controller_(new AutocompleteController(
-          std::make_unique<ChromeAutocompleteProviderClient>(profile),
-          AutocompleteClassifier::DefaultOmniboxProviders())),
-      inside_synchronous_start_(false),
-      profile_(profile) {
+AutocompleteControllerAndroid::AutocompleteControllerAndroid(Profile* profile) {
+  std::unique_ptr<ChromeAutocompleteProviderClient> provider_client =
+      std::make_unique<ChromeAutocompleteProviderClient>(profile);
+  provider_client_ = provider_client.get();
+  autocomplete_controller_ = std::make_unique<AutocompleteController>(
+      std::move(provider_client),
+      AutocompleteClassifier::DefaultOmniboxProviders());
+  inside_synchronous_start_ = false;
+  profile_ = profile;
   autocomplete_controller_->AddObserver(this);
 
   OmniboxControllerEmitter* emitter =
@@ -176,7 +180,8 @@ void AutocompleteControllerAndroid::Start(
     bool prefer_keyword,
     bool allow_exact_keyword_match,
     bool want_asynchronous_matches,
-    const JavaRef<jstring>& j_query_tile_id) {
+    const JavaRef<jstring>& j_query_tile_id,
+    bool is_query_started_from_tiles) {
   if (!autocomplete_controller_)
     return;
 
@@ -199,6 +204,7 @@ void AutocompleteControllerAndroid::Start(
   input_.set_want_asynchronous_matches(want_asynchronous_matches);
   if (!j_query_tile_id.is_null())
     input_.set_query_tile_id(ConvertJavaStringToUTF8(env, j_query_tile_id));
+  is_query_started_from_tiles_ = is_query_started_from_tiles;
   autocomplete_controller_->Start(input_);
 }
 
@@ -243,6 +249,7 @@ void AutocompleteControllerAndroid::OnOmniboxFocused(
   input_.set_current_url(current_url);
   input_.set_current_title(current_title);
   input_.set_from_omnibox_focus(true);
+  is_query_started_from_tiles_ = false;
   autocomplete_controller_->Start(input_);
 }
 
@@ -264,6 +271,7 @@ void AutocompleteControllerAndroid::OnSuggestionSelected(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint selected_index,
+    const jint j_window_open_disposition,
     jint hash_code,
     const JavaParamRef<jstring>& j_current_url,
     jint j_page_classification,
@@ -308,13 +316,14 @@ void AutocompleteControllerAndroid::OnSuggestionSelected(
       false,                /* don't know */
       input_.type(), false, /* not keyword mode */
       OmniboxEventProto::INVALID, true, selected_index,
-      WindowOpenDisposition::CURRENT_TAB, false,
+      static_cast<WindowOpenDisposition>(j_window_open_disposition), false,
       sessions::SessionTabHelper::IdForTab(web_contents),
       OmniboxEventProto::PageClassification(j_page_classification),
       base::TimeDelta::FromMilliseconds(elapsed_time_since_first_modified),
       completed_length,
       now - autocomplete_controller_->last_time_default_match_changed(),
       autocomplete_controller_->result());
+  log.is_query_started_from_tile = is_query_started_from_tiles_;
   autocomplete_controller_->AddProvidersInfo(&log.providers_info);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
@@ -353,6 +362,17 @@ ScopedJavaLocalRef<jobject> AutocompleteControllerAndroid::
       base::TimeDelta::FromMilliseconds(elapsed_time_since_input_change),
       &match);
   return url::GURLAndroid::FromNativeGURL(env, match.destination_url);
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+AutocompleteControllerAndroid::FindMatchingTabWithUrl(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_gurl) {
+  TabAndroid* tab = provider_client_->GetTabOpenWithURL(
+      *url::GURLAndroid::ToNativeGURL(env, j_gurl), nullptr);
+
+  return tab ? tab->GetJavaObject() : nullptr;
 }
 
 void AutocompleteControllerAndroid::Shutdown() {
@@ -592,7 +612,8 @@ AutocompleteControllerAndroid::BuildOmniboxSuggestion(
       ToJavaByteArray(env, post_content),
       match.suggestion_group_id.value_or(
           SearchSuggestionParser::kNoSuggestionGroupId),
-      j_query_tiles, ToJavaByteArray(env, clipboard_image_data));
+      j_query_tiles, ToJavaByteArray(env, clipboard_image_data),
+      match.has_tab_match);
 }
 
 void AutocompleteControllerAndroid::PopulateOmniboxGroupHeaders(
@@ -618,7 +639,7 @@ AutocompleteControllerAndroid::GetTopSynchronousResult(
 
   inside_synchronous_start_ = true;
   Start(env, obj, j_text, -1, nullptr, nullptr, prevent_inline_autocomplete,
-        false, false, false, focused_from_fakebox, JavaRef<jstring>());
+        false, false, false, focused_from_fakebox, JavaRef<jstring>(), false);
   inside_synchronous_start_ = false;
   DCHECK(autocomplete_controller_->done());
   const AutocompleteResult& result = autocomplete_controller_->result();

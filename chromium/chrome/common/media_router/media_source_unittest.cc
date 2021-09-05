@@ -54,25 +54,34 @@ TEST(MediaSourceTest, ConstructorWithURLString) {
   EXPECT_EQ(test_url, source1.url());
 }
 
-TEST(MediaSourceTest, ForTab) {
-  auto source = MediaSource::ForTab(123);
-  EXPECT_EQ("urn:x-org.chromium.media:source:tab:123", source.id());
-  EXPECT_EQ(123, source.TabId());
-  EXPECT_TRUE(source.IsValid());
+TEST(MediaSourceTest, ForAnyTab) {
+  auto source = MediaSource::ForAnyTab();
+  EXPECT_EQ("urn:x-org.chromium.media:source:tab:*", source.id());
+  EXPECT_EQ(-1, source.TabId());
   EXPECT_FALSE(source.IsDesktopMirroringSource());
   EXPECT_TRUE(source.IsTabMirroringSource());
-  EXPECT_TRUE(source.IsMirroringSource());
+  EXPECT_FALSE(source.IsLocalFileSource());
   EXPECT_FALSE(source.IsCastPresentationUrl());
   EXPECT_FALSE(source.IsDialSource());
 }
 
-TEST(MediaSourceTest, ForTabContentRemoting) {
-  auto source = MediaSource::ForTabContentRemoting(123);
+TEST(MediaSourceTest, ForTab) {
+  auto source = MediaSource::ForTab(123);
+  EXPECT_EQ("urn:x-org.chromium.media:source:tab:123", source.id());
   EXPECT_EQ(123, source.TabId());
-  EXPECT_TRUE(source.IsValid());
+  EXPECT_FALSE(source.IsDesktopMirroringSource());
+  EXPECT_TRUE(source.IsTabMirroringSource());
+  EXPECT_FALSE(source.IsLocalFileSource());
+  EXPECT_FALSE(source.IsCastPresentationUrl());
+  EXPECT_FALSE(source.IsDialSource());
+}
+
+TEST(MediaSourceTest, ForLocalFile) {
+  auto source = MediaSource::ForLocalFile();
+  EXPECT_EQ("urn:x-org.chromium.media:source:tab:0", source.id());
   EXPECT_FALSE(source.IsDesktopMirroringSource());
   EXPECT_FALSE(source.IsTabMirroringSource());
-  EXPECT_FALSE(source.IsMirroringSource());
+  EXPECT_TRUE(source.IsLocalFileSource());
   EXPECT_FALSE(source.IsCastPresentationUrl());
   EXPECT_FALSE(source.IsDialSource());
 }
@@ -81,10 +90,9 @@ TEST(MediaSourceTest, ForDesktop) {
   std::string media_id = "fakeMediaId";
   auto source = MediaSource::ForDesktop(media_id);
   EXPECT_EQ("urn:x-org.chromium.media:source:desktop:" + media_id, source.id());
-  EXPECT_TRUE(source.IsValid());
   EXPECT_TRUE(source.IsDesktopMirroringSource());
   EXPECT_FALSE(source.IsTabMirroringSource());
-  EXPECT_TRUE(source.IsMirroringSource());
+  EXPECT_FALSE(source.IsLocalFileSource());
   EXPECT_FALSE(source.IsCastPresentationUrl());
   EXPECT_FALSE(source.IsDialSource());
 }
@@ -94,21 +102,11 @@ TEST(MediaSourceTest, ForPresentationUrl) {
       "https://www.example.com/presentation.html";
   auto source = MediaSource::ForPresentationUrl(GURL(kPresentationUrl));
   EXPECT_EQ(kPresentationUrl, source.id());
-  EXPECT_TRUE(source.IsValid());
   EXPECT_FALSE(source.IsDesktopMirroringSource());
   EXPECT_FALSE(source.IsTabMirroringSource());
-  EXPECT_FALSE(source.IsMirroringSource());
+  EXPECT_FALSE(source.IsLocalFileSource());
   EXPECT_FALSE(source.IsCastPresentationUrl());
   EXPECT_FALSE(source.IsDialSource());
-}
-
-TEST(MediaSourceTest, IsValid) {
-  // Disallowed scheme
-  EXPECT_FALSE(MediaSource::ForPresentationUrl(GURL("file:///some/local/path"))
-                   .IsValid());
-  // Not a URL
-  EXPECT_FALSE(
-      MediaSource::ForPresentationUrl(GURL("totally not a url")).IsValid());
 }
 
 TEST(MediaSourceTest, IsCastPresentationUrl) {

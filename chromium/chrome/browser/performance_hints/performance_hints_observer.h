@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
+#include "chrome/browser/performance_hints/performance_hints_rewrite_handler.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/performance_hints_metadata.pb.h"
@@ -34,13 +35,6 @@ class PerformanceHint;
 
 class GURL;
 
-// If enabled, PerformanceHintsObserver will be added as a tab helper and will
-// fetch performance hints.
-extern const base::Feature kPerformanceHintsObserver;
-// If enabled, hints of PERFORMANCE_UNKNOWN will be overridden to
-// PERFORMANCE_FAST. This does not affect the value that is recorded via UMA.
-extern const base::Feature kPerformanceHintsTreatUnknownAsFast;
-
 // Provides an interface to access PerformanceHints for the associated
 // WebContents and links within it.
 class PerformanceHintsObserver
@@ -53,20 +47,20 @@ class PerformanceHintsObserver
 
   // Returns the PerformanceClass for |url|, or PERFORMANCE_UNKNOWN if could not
   // be determined.
+  //
+  // UMA metrics are only recorded when |record_metrics| is true. Callers should
+  // record metrics only once per badging decision, e.g. once per context menu
+  // shown. If the same PerformanceClass is needed again, |record_metrics|
+  // should be set to false.
   static optimization_guide::proto::PerformanceClass PerformanceClassForURL(
       content::WebContents* web_contents,
-      const GURL& url);
+      const GURL& url,
+      bool record_metrics);
 
   // Used only on Android since the java API can be called repeatedly and is
   // not appropriate to record metrics.
   static void RecordPerformanceUMAForURL(content::WebContents* web_contents,
                                          const GURL& url);
-
-  // Public so is accessible by Android JNI.
-  static optimization_guide::proto::PerformanceClass
-  PerformanceClassForURLInternal(content::WebContents* web_contents,
-                                 const GURL& url,
-                                 bool record_metrics);
 
  private:
   explicit PerformanceHintsObserver(content::WebContents* web_contents);
@@ -84,15 +78,59 @@ class PerformanceHintsObserver
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& optimization_metadata);
 
+  // SourceLookupStatus represents the result of a querying a single source
+  // (page hints or link hints) for performance information. Tracking this
+  // separately from the overall HintForURLStatus (below) allows us to determine
+  // individual source coverage and how often each source is ready to respond.
+  //
+  // These values are logged to UMA. Entries should not be renumbered and
+  // numeric values should never be reused. Please keep in sync with
+  // "PerformanceHintsObserverSourceLookupStatus" in
+  // src/tools/metrics/histograms/enums.xml.
+  enum class SourceLookupStatus {
+    // The source was not queried for a given URL lookup (i.e. a hint was found
+    // in a preceding source).
+    kNotQueried = 0,
+    // The source didn't have an answer in time.
+    kNotReady = 1,
+    // The source was ready but no matching hint was found.
+    kNoMatch = 2,
+    // A matching hint was found for the URL.
+    kHintFound = 3,
+    kMaxValue = kHintFound,
+  };
+
+  // Attempts to retrieve a PerformanceHint for |url| from the link hints of the
+  // current page.
+  std::tuple<SourceLookupStatus,
+             base::Optional<optimization_guide::proto::PerformanceHint>>
+  LinkHintForURL(const GURL& url) const;
+
+  // Attempts to retrieve a PerformanceHint for |url| from the OptimizationGuide
+  // metadata for that URL.
+  std::tuple<SourceLookupStatus,
+             base::Optional<optimization_guide::proto::PerformanceHint>>
+  PageHintForURL(const GURL& url) const;
+
+  // Attempts to retrieve a PerformanceHint for |url| from the fast host bloom
+  // filter.
+  std::tuple<SourceLookupStatus,
+             base::Optional<optimization_guide::proto::PerformanceHint>>
+  FastHostHintForURL(const GURL& url) const;
+
+  // HintForURLStatus represents the overall lookup result for a given URL.
+  // Exactly one sample will be recorded for each call to HintForURL.
+  //
   // These values are logged to UMA. Entries should not be renumbered and
   // numeric values should never be reused. Please keep in sync with
   // "PerformanceHintsObserverHintForURLResult" in
   // src/tools/metrics/histograms/enums.xml.
-  enum class HintForURLResult {
+  enum class HintForURLStatus {
     // Hints for the current page have been processed and no hint for the URL
     // was found.
     kHintNotFound = 0,
-    // Hints have not yet been processed. The call may be attempted again.
+    // One or more sources could not answer in time. The call may be attempted
+    // again.
     kHintNotReady = 1,
     // An invalid URL was passed.
     kInvalidURL = 2,
@@ -101,13 +139,32 @@ class PerformanceHintsObserver
     kMaxValue = kHintFound,
   };
 
+  struct HintForURLResult {
+    HintForURLResult();
+    HintForURLResult(const HintForURLResult&);
+    ~HintForURLResult();
+
+    // Describes the fetch outcome. See HintForURLStatus for details.
+    HintForURLStatus status = HintForURLStatus::kHintNotFound;
+    // True if the URL was rewritten before lookups were done. False otherwise.
+    bool rewritten = false;
+    // If status == kHintFound, this will contain the matching hint.
+    base::Optional<optimization_guide::proto::PerformanceHint> hint =
+        base::nullopt;
+  };
+
   // Fetches a PerformanceHint for the given |url|.
   //
-  // Returns an enum describing the fetch outcome and, if that outcome is
-  // kHintFound, the matching PerformanceHint. See HintForURLResult, above.
-  std::tuple<HintForURLResult,
-             base::Optional<optimization_guide::proto::PerformanceHint>>
-  HintForURL(const GURL& url) const;
+  // See HintForURLResult for details on the return value.
+  HintForURLResult HintForURL(const GURL& url, bool record_metrics) const;
+
+  // If kPerformanceHintsHandleRewrites is enabled, URLs that match one of the
+  // configured rewrite patterns will have the inner URL extracted and used for
+  // hint matching.
+  //
+  // Configuration is controlled by kRewriteConfig in
+  // performance_hints_observer.cc.
+  PerformanceHintsRewriteHandler rewrite_handler_;
 
   // Initialized in constructor. It may be null if !IsOptimizationHintsEnabled.
   optimization_guide::OptimizationGuideDecider* optimization_guide_decider_ =

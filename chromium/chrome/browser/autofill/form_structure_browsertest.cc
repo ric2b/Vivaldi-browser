@@ -29,6 +29,7 @@
 #include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "net/http/http_status_code.h"
@@ -91,12 +92,12 @@ std::vector<base::FilePath> GetTestFiles() {
 }
 
 std::string FormStructuresToString(
-    const AutofillManager::FormStructureMap& forms) {
-  std::map<base::TimeTicks, const FormStructure*> sorted_forms;
+    const std::map<FormRendererId, std::unique_ptr<FormStructure>>& forms) {
+  std::map<uint32_t, const FormStructure*> sorted_forms;
   for (const auto& form_kv : forms) {
     const auto* form = form_kv.second.get();
-    EXPECT_TRUE(
-        sorted_forms.emplace(form->form_parsed_timestamp(), form).second);
+    uint32_t renderer_id = form->unique_renderer_id().value();
+    EXPECT_TRUE(sorted_forms.emplace(renderer_id, form).second);
   }
 
   std::string forms_string;
@@ -161,8 +162,7 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout});
 }
 
-FormStructureBrowserTest::~FormStructureBrowserTest() {
-}
+FormStructureBrowserTest::~FormStructureBrowserTest() {}
 
 void FormStructureBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {

@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(tryb prywatny)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskryptory plików</translation>
-<translation id="1635033183663317347">Zainstalowane przez twojego opiekuna.</translation>
 <translation id="1682548588986054654">Nowe okno prywatne</translation>
 <translation id="1698122934742150150">Tylko w bieżącej sesji prywatnej</translation>
 <translation id="1706625117072057435">Poziomy powiększenia</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Żądanie udostępnienia ekranu od <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Wklej i &amp;przejdź <ph name="URL" /></translation>
-<translation id="3725367690636977613">strony</translation>
 <translation id="3727187387656390258">Zbadaj wyskakujące okno</translation>
 <translation id="3744111561329211289">Synchronizacja w tle</translation>
 <translation id="3760460896538743390">Zbadaj &amp;stronę tła</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Akceptuj dla grupy</translation>
-<translation id="4091434297613116013">kartki</translation>
 <translation id="4096508467498758490">Wyłącz rozszerzenia trybu programisty</translation>
 <translation id="4100839878934973028">Inny program na twoim komputerze dodał aplikację, która może zmienić działanie Vivaldi.</translation>
 <translation id="4109898769411476438">Zamknij przeglądarkę przed rozpoczęciem importu</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
 <translation id="7311079019872751559">Dostęp przez wtyczkę spoza piaskownicy</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7412226954991670867">Pamięć GPU</translation>
 <translation id="7421925624202799674">&amp;Wyświetl źródło strony</translation>
@@ -433,7 +429,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8071432093239591881">Drukuj jako obraz</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Zarządzaj rozszerzeniami</translation>
-<translation id="8180239481735238521">strona</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Trwa pobieranie pliku}few{Trwa pobieranie plików}many{Trwa pobieranie plików}other{Trwa pobieranie plików}}</translation>
 <translation id="8230134520748321204">Zapisać hasło do: <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">To rozszerzenie nie jest oferowane w <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i mogło zostać dodane bez twojej wiedzy.</translation>
@@ -465,7 +460,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8798099450830957504">Domyślne</translation>
 <translation id="8800004011501252845">Pokaż drukarki dla</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">kartka</translation>
 <translation id="8823514049557262177">Kopiuj te&amp;kst linku</translation>
 <translation id="8823704566850948458">Zaproponuj hasło…</translation>
 <translation id="8859174528519900719">Ramka iframe: <ph name="SUBFRAME_SITE" /></translation>

@@ -4,6 +4,8 @@
 
 #include "ios/chrome/browser/ui/settings/password/passwords_settings_app_interface.h"
 
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -17,7 +19,6 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/password_test_util.h"
-#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -121,8 +122,8 @@ PasswordForm CreateSampleFormWithIndex(int index) {
       base::ASCIIToUTF16(base::StringPrintf("concrete username %02d", index));
   form.password_value =
       base::ASCIIToUTF16(base::StringPrintf("concrete password %02d", index));
-  form.origin = GURL(base::StringPrintf("https://www%02d.example.com", index));
-  form.signon_realm = form.origin.spec();
+  form.url = GURL(base::StringPrintf("https://www%02d.example.com", index));
+  form.signon_realm = form.url.spec();
   return form;
 }
 
@@ -177,16 +178,16 @@ static MockReauthenticationModule* _mockReauthenticationModule;
   PasswordForm example;
   example.username_value = base::SysNSStringToUTF16(userName);
   example.password_value = base::SysNSStringToUTF16(password);
-  example.origin = GURL(base::SysNSStringToUTF16(origin));
-  example.signon_realm = example.origin.spec();
+  example.url = GURL(base::SysNSStringToUTF16(origin));
+  example.signon_realm = example.url.spec();
   return SaveToPasswordStore(example);
 }
 
 + (BOOL)saveExampleBlockedOrigin:(NSString*)origin {
   PasswordForm example;
-  example.origin = GURL(base::SysNSStringToUTF16(origin));
+  example.url = GURL(base::SysNSStringToUTF16(origin));
   example.blacklisted_by_user = true;
-  example.signon_realm = example.origin.spec();
+  example.signon_realm = example.url.spec();
   return SaveToPasswordStore(example);
 }
 
@@ -195,8 +196,8 @@ static MockReauthenticationModule* _mockReauthenticationModule;
                             origin:(NSString*)origin {
   PasswordForm federated;
   federated.username_value = base::SysNSStringToUTF16(userName);
-  federated.origin = GURL(base::SysNSStringToUTF16(origin));
-  federated.signon_realm = federated.origin.spec();
+  federated.url = GURL(base::SysNSStringToUTF16(origin));
+  federated.signon_realm = federated.url.spec();
   federated.federation_origin =
       url::Origin::Create(GURL(base::SysNSStringToUTF16(federatedOrigin)));
   return SaveToPasswordStore(federated);

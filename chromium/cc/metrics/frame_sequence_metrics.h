@@ -5,6 +5,8 @@
 #ifndef CC_METRICS_FRAME_SEQUENCE_METRICS_H_
 #define CC_METRICS_FRAME_SEQUENCE_METRICS_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/trace_event/traced_value.h"
@@ -44,7 +46,8 @@ class CC_EXPORT FrameSequenceMetrics {
   struct ThroughputData {
     static std::unique_ptr<base::trace_event::TracedValue> ToTracedValue(
         const ThroughputData& impl,
-        const ThroughputData& main);
+        const ThroughputData& main,
+        ThreadType effective_thred);
 
     // Returns the throughput in percent, a return value of base::nullopt
     // indicates that no throughput metric is reported.
@@ -60,6 +63,13 @@ class CC_EXPORT FrameSequenceMetrics {
       frames_processed += data.frames_processed;
       frames_received += data.frames_received;
 #endif
+    }
+
+    int DroppedFramePercent() const {
+      if (frames_expected == 0)
+        return 0;
+      return std::ceil(100 * (frames_expected - frames_produced) /
+                       static_cast<double>(frames_expected));
     }
 
     // Tracks the number of frames that were expected to be shown during this
@@ -113,9 +123,30 @@ class CC_EXPORT FrameSequenceMetrics {
     return throughput_ukm_reporter_;
   }
 
+  // Must be called before destructor.
+  void ReportLeftoverData();
+
+  void AdoptTrace(FrameSequenceMetrics* adopt_from);
+  void AdvanceTrace(base::TimeTicks timestamp);
+
  private:
   void ComputeAggregatedThroughput();
+
   const FrameSequenceTrackerType type_;
+
+  // Tracks some data to generate useful trace events.
+  struct TraceData {
+    explicit TraceData(FrameSequenceMetrics* metrics);
+    ~TraceData();
+    FrameSequenceMetrics* metrics;
+    base::TimeTicks last_timestamp = base::TimeTicks::Now();
+    int frame_count = 0;
+    bool enabled = false;
+    void* trace_id = nullptr;
+
+    void Advance(base::TimeTicks new_timestamp);
+    void Terminate();
+  } trace_data_{this};
 
   // Pointer to the reporter owned by the FrameSequenceTrackerCollection.
   ThroughputUkmReporter* const throughput_ukm_reporter_;

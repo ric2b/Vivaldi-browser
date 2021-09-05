@@ -9,7 +9,9 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -235,34 +237,69 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   return std::move(v.value);
 }
 
-namespace {
-
-}  // namespace
-
 PartnerDetails::PartnerDetails() = default;
 PartnerDetails::PartnerDetails(PartnerDetails&&) = default;
 PartnerDetails::~PartnerDetails() = default;
 PartnerDetails& PartnerDetails::operator=(PartnerDetails&&) = default;
 
-PartnerDatabase::PartnerDatabase() = default;
-PartnerDatabase::~PartnerDatabase() = default;
+namespace {
 
-const PartnerDetails* PartnerDatabase::FindDetailsByName(
-    base::StringPiece name) const {
-  auto i = name_index_.find(name);
-  if (i == name_index_.end())
-    return nullptr;
-  return i->second;
-}
+class PartnerDatabase {
+public:
+  PartnerDatabase() = default;
+  ~PartnerDatabase()= default;
 
-bool PartnerDatabase::MapLocaleIdToGUID(std::string& id) const {
-  auto i = locale_id_guid_map_.find(id);
-  if (i == locale_id_guid_map_.end())
-    return false;
-  base::StringPiece guid = i->second;
-  id.assign(guid.data(), guid.length());
-  return true;
-}
+  static std::unique_ptr<PartnerDatabase> Read();
+
+  const PartnerDetails* FindDetailsByName(base::StringPiece name) const {
+    auto i = name_index_.find(name);
+    if (i == name_index_.end())
+      return nullptr;
+    return i->second;
+  }
+
+  const PartnerDetails* FindDetailsByPartner(
+      base::StringPiece partner_id) const {
+    auto i = locale_id_guid_map_.find(partner_id);
+    if (i != locale_id_guid_map_.end()) {
+      partner_id = i->second;
+    }
+    auto i2 = guid_index_.find(partner_id);
+    if (i2 == guid_index_.end())
+      return nullptr;
+    return i2->second;
+  }
+
+  bool MapLocaleIdToGUID(std::string& id) const {
+    auto i = locale_id_guid_map_.find(id);
+    if (i == locale_id_guid_map_.end())
+      return false;
+    base::StringPiece guid = i->second;
+    id.assign(guid.data(), guid.length());
+    return true;
+  }
+
+private:
+ bool ParseJson(base::Value root, base::Value partners_locale_value);
+
+ std::vector<PartnerDetails> details_list_;
+
+ // Map partner details name to its details.
+ base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
+
+ // Map locale-independent guid or guid2 to its details.
+ base::flat_map<base::StringPiece, const PartnerDetails*> guid_index_;
+
+ // Map old locale-based partner id to the guid or guid2 if the old id is for
+ // an url under Bookmarks folder.
+ base::flat_map<std::string, base::StringPiece> locale_id_guid_map_;
+
+ // The maps above contains references, so prevent copy/assignment for safety.
+ DISALLOW_COPY_AND_ASSIGN(PartnerDatabase);
+};
+
+// Global singleton.
+const PartnerDatabase* g_partner_db = nullptr;
 
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
@@ -315,13 +352,13 @@ bool PartnerDatabase::ParseJson(
   // for unique values.
   std::vector<std::pair<base::StringPiece, const PartnerDetails*>> names;
   names.reserve(details_list_.size());
-  std::vector<base::StringPiece> guids;
+  std::vector<std::pair<base::StringPiece, const PartnerDetails*>> guids;
   guids.reserve(details_list_.size() * 2);
   for (const PartnerDetails& details : details_list_) {
     names.emplace_back(details.name, &details);
-    guids.push_back(details.guid);
+    guids.emplace_back(details.guid, &details);
     if (!details.guid2.empty()) {
-      guids.push_back(details.guid2);
+      guids.emplace_back(details.guid2, &details);
     }
   }
   name_index_ = base::flat_map<base::StringPiece, const PartnerDetails*>(
@@ -329,8 +366,9 @@ bool PartnerDatabase::ParseJson(
   if (name_index_.size() != details_list_.size())
     return error("duplicatd names");
   size_t added_guids = guids.size();
-  base::flat_set<base::StringPiece> guid_set(std::move(guids));
-  if (guid_set.size() != added_guids)
+  guid_index_ = base::flat_map<base::StringPiece, const PartnerDetails*>(
+      std::move(guids));
+  if (guid_index_.size() != added_guids)
     return error("duplicatd GUIDs");
 
   // Parse mapping from old locale-based ids to the new universal ids.
@@ -381,6 +419,49 @@ bool PartnerDatabase::ParseJson(
   locale_id_guid_map_ = base::flat_map<std::string, base::StringPiece>(
       std::move(locale_id_guid_list));
   return true;
+}
+
+}  // namespace
+
+const PartnerDetails* FindDetailsByName(base::StringPiece name) {
+  if (!g_partner_db)
+    return nullptr;
+  return g_partner_db->FindDetailsByName(name);
+}
+
+bool MapLocaleIdToGUID(std::string& id) {
+  if (!g_partner_db)
+    return false;
+  return g_partner_db->MapLocaleIdToGUID(id);
+}
+
+const std::string& GetThumbnailUrl(const std::string& partner_id) {
+  if (!g_partner_db)
+    return base::EmptyString();
+  const PartnerDetails* details =
+      g_partner_db->FindDetailsByPartner(partner_id);
+  if (!details)
+    return base::EmptyString();
+  return details->thumbnail;
+}
+
+void LoadOnWorkerThread(
+    const scoped_refptr<base::SequencedTaskRunner>& main_thread_task_runner) {
+  DCHECK(main_thread_task_runner);
+  if (g_partner_db)
+    return;
+  std::unique_ptr<PartnerDatabase> db = PartnerDatabase::Read();
+  if (!db)
+    return;
+  auto task = [](std::unique_ptr<PartnerDatabase> db) {
+    // When loading several profiles g_partner_db can be initialized on the main
+    // thread from another profile even after the above g_partner_db check.
+    if (g_partner_db)
+      return;
+    g_partner_db = db.release();
+  };
+  main_thread_task_runner->PostTask(FROM_HERE,
+                                    base::BindOnce(task, std::move(db)));
 }
 
 }  // namespace vivaldi_partners

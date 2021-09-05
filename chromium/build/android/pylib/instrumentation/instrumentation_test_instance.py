@@ -61,6 +61,23 @@ _PARAMETERIZED_COMMAND_LINE_FLAGS_SWITCHES = (
 _NATIVE_CRASH_RE = re.compile('(process|native) crash', re.IGNORECASE)
 _PICKLE_FORMAT_VERSION = 12
 
+# The ID of the bundle value Instrumentation uses to report which test index the
+# results are for in a collection of tests. Note that this index is 1-based.
+_BUNDLE_CURRENT_ID = 'current'
+# The ID of the bundle value Instrumentation uses to report the test class.
+_BUNDLE_CLASS_ID = 'class'
+# The ID of the bundle value Instrumentation uses to report the test name.
+_BUNDLE_TEST_ID = 'test'
+# The ID of the bundle value Instrumentation uses to report if a test was
+# skipped.
+_BUNDLE_SKIPPED_ID = 'test_skipped'
+# The ID of the bundle value Instrumentation uses to report the crash stack, if
+# the test crashed.
+_BUNDLE_STACK_ID = 'stack'
+
+# The ID of the bundle value Chrome uses to report the test duration.
+_BUNDLE_DURATION_ID = 'duration_ms'
+
 
 class MissingSizeAnnotationError(test_exception.TestException):
   def __init__(self, class_name):
@@ -103,9 +120,8 @@ def ParseAmInstrumentRawOutput(raw_output):
   return (code, bundle, statuses)
 
 
-def GenerateTestResults(
-    result_code, result_bundle, statuses, start_ms, duration_ms, device_abi,
-    symbolizer):
+def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
+                        device_abi, symbolizer):
   """Generate test results from |statuses|.
 
   Args:
@@ -116,7 +132,6 @@ def GenerateTestResults(
       - the bundle dump as a dict mapping string keys to string values
       Note that this is the same as the third item in the 3-tuple returned by
       |_ParseAmInstrumentRawOutput|.
-    start_ms: The start time of the test in milliseconds.
     duration_ms: The duration of the test in milliseconds.
     device_abi: The device_abi, which is needed for symbolization.
     symbolizer: The symbolizer used to symbolize stack.
@@ -129,10 +144,21 @@ def GenerateTestResults(
   results = []
 
   current_result = None
+  cumulative_duration = 0
 
   for status_code, bundle in statuses:
-    test_class = bundle.get('class', '')
-    test_method = bundle.get('test', '')
+    if status_code == instrumentation_parser.STATUS_CODE_TEST_DURATION:
+      # For the first result, duration will be set below to the difference
+      # between the reported and actual durations to account for overhead like
+      # starting instrumentation.
+      if len(results) > 1:
+        current_duration = int(bundle.get(_BUNDLE_DURATION_ID, duration_ms))
+        current_result.SetDuration(current_duration)
+        cumulative_duration += current_duration
+      continue
+
+    test_class = bundle.get(_BUNDLE_CLASS_ID, '')
+    test_method = bundle.get(_BUNDLE_TEST_ID, '')
     if test_class and test_method:
       test_name = '%s#%s' % (test_class, test_method)
     else:
@@ -142,10 +168,10 @@ def GenerateTestResults(
       if current_result:
         results.append(current_result)
       current_result = test_result.InstrumentationTestResult(
-          test_name, base_test_result.ResultType.UNKNOWN, start_ms, duration_ms)
+          test_name, base_test_result.ResultType.UNKNOWN, duration_ms)
     else:
       if status_code == instrumentation_parser.STATUS_CODE_OK:
-        if bundle.get('test_skipped', '').lower() in ('true', '1', 'yes'):
+        if bundle.get(_BUNDLE_SKIPPED_ID, '').lower() in ('true', '1', 'yes'):
           current_result.SetType(base_test_result.ResultType.SKIP)
         elif current_result.GetType() == base_test_result.ResultType.UNKNOWN:
           current_result.SetType(base_test_result.ResultType.PASS)
@@ -159,15 +185,13 @@ def GenerateTestResults(
           logging.error('Unrecognized status code %d. Handling as an error.',
                         status_code)
         current_result.SetType(base_test_result.ResultType.FAIL)
-    if 'stack' in bundle:
+    if _BUNDLE_STACK_ID in bundle:
       if symbolizer and device_abi:
-        current_result.SetLog(
-            '%s\n%s' % (
-              bundle['stack'],
-              '\n'.join(symbolizer.ExtractAndResolveNativeStackTraces(
-                  bundle['stack'], device_abi))))
+        current_result.SetLog('%s\n%s' % (bundle[_BUNDLE_STACK_ID], '\n'.join(
+            symbolizer.ExtractAndResolveNativeStackTraces(
+                bundle[_BUNDLE_STACK_ID], device_abi))))
       else:
-        current_result.SetLog(bundle['stack'])
+        current_result.SetLog(bundle[_BUNDLE_STACK_ID])
 
   if current_result:
     if current_result.GetType() == base_test_result.ResultType.UNKNOWN:
@@ -178,6 +202,9 @@ def GenerateTestResults(
         current_result.SetType(base_test_result.ResultType.CRASH)
 
     results.append(current_result)
+
+  if results:
+    results[0].SetDuration(duration_ms - cumulative_duration)
 
   return results
 
@@ -521,6 +548,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._skia_gold_properties = None
     self._initializeSkiaGoldAttributes(args)
 
+    self._wpr_enable_record = args.wpr_enable_record
+
     self._external_shard_index = args.test_launcher_shard_index
     self._total_external_shards = args.test_launcher_total_shards
 
@@ -731,7 +760,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._use_webview_provider = args.use_webview_provider
 
   def _initializeSkiaGoldAttributes(self, args):
-    self._skia_gold_properties = gold_utils.SkiaGoldProperties(args)
+    self._skia_gold_properties = gold_utils.AndroidSkiaGoldProperties(args)
 
   @property
   def additional_apks(self):
@@ -865,6 +894,14 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def wait_for_java_debugger(self):
     return self._wait_for_java_debugger
 
+  @property
+  def wpr_record_mode(self):
+    return self._wpr_enable_record
+
+  @property
+  def wpr_replay_mode(self):
+    return not self._wpr_enable_record
+
   #override
   def TestType(self):
     return 'instrumentation'
@@ -930,7 +967,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
             'class': c['class'],
             'method': m['method'],
             'annotations': a,
-            'is_junit4': c['superclass'] == 'java.lang.Object'
+            # TODO(https://crbug.com/1084729): Remove is_junit4.
+            'is_junit4': True
         })
     return inflated_tests
 
@@ -1005,11 +1043,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return ParseAmInstrumentRawOutput(raw_output)
 
   @staticmethod
-  def GenerateTestResults(
-      result_code, result_bundle, statuses, start_ms, duration_ms,
-      device_abi, symbolizer):
+  def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
+                          device_abi, symbolizer):
     return GenerateTestResults(result_code, result_bundle, statuses,
-                               start_ms, duration_ms, device_abi, symbolizer)
+                               duration_ms, device_abi, symbolizer)
 
   #override
   def TearDown(self):

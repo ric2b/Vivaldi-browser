@@ -5,11 +5,11 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_ITEM_VIEW_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_ITEM_VIEW_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -148,6 +148,7 @@ class VIEWS_EXPORT MenuItemView : public View {
   MenuItemView* AddMenuItemAt(int index,
                               int item_id,
                               const base::string16& label,
+                              const base::string16& secondary_label,
                               const base::string16& minor_text,
                               const ui::ThemedVectorIcon& minor_icon,
                               const gfx::ImageSkia& icon,
@@ -214,6 +215,11 @@ class VIEWS_EXPORT MenuItemView : public View {
   void SetTitle(const base::string16& title);
   const base::string16& title() const { return title_; }
 
+  // Sets/Gets the secondary title. When not empty, they are shown in the line
+  // below the title.
+  void SetSecondaryTitle(const base::string16& secondary_title);
+  const base::string16& secondary_title() const { return secondary_title_; }
+
   // Sets the minor text.
   void SetMinorText(const base::string16& minor_text);
 
@@ -263,6 +269,9 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // Returns the command id of this item.
   int GetCommand() const { return command_; }
+
+  void set_is_new(bool is_new) { is_new_ = is_new; }
+  bool is_new() const { return is_new_; }
 
   // Paints the menu item.
   void OnPaint(gfx::Canvas* canvas) override;
@@ -444,6 +453,13 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Get the horizontal position at which to draw the menu item's label.
   int GetLabelStartForThisItem() const;
 
+  // Draws the "new" badge on |canvas|. |unmirrored_badge_start| is the
+  // upper-left corner of the badge, not mirrored for RTL.
+  void DrawNewBadge(gfx::Canvas* canvas,
+                    const gfx::Point& unmirrored_badge_start,
+                    const gfx::FontList& primary_font,
+                    int text_render_flags);
+
   // Used by MenuController to cache the menu position in use by the
   // active menu.
   MenuPosition actual_menu_position() const { return actual_menu_position_; }
@@ -475,6 +491,10 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Returns true if the menu has items with a checkbox or a radio button.
   bool HasChecksOrRadioButtons() const;
 
+  // Returns whether or not a "new" badge should be shown on this menu item.
+  // Takes into account whether the badging feature is enabled.
+  bool ShouldShowNewBadge() const;
+
   void invalidate_dimensions() { dimensions_.height = 0; }
   bool is_dimensions_valid() const { return dimensions_.height > 0; }
 
@@ -505,16 +525,16 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Command id.
   int command_ = 0;
 
+  // Whether the menu item should be badged as "New" (if badging is enabled) as
+  // a way to highlight a new feature for users.
+  bool is_new_ = false;
+
   // Submenu, created via CreateSubmenu.
   SubmenuView* submenu_ = nullptr;
 
-  // Title.
   base::string16 title_;
-
-  // Minor text.
+  base::string16 secondary_title_;
   base::string16 minor_text_;
-
-  // Minor icon.
   ui::ThemedVectorIcon minor_icon_;
 
   // The icon used for |icon_view_| when a vector icon has been set instead of a

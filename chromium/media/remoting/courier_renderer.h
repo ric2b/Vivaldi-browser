@@ -5,8 +5,6 @@
 #ifndef MEDIA_REMOTING_COURIER_RENDERER_H_
 #define MEDIA_REMOTING_COURIER_RENDERER_H_
 
-#include <stdint.h>
-
 #include <memory>
 
 #include "base/callback.h"
@@ -20,6 +18,7 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer.h"
 #include "media/mojo/mojom/remoting.mojom.h"
+#include "media/remoting/media_remoting_rpc.pb.h"
 #include "media/remoting/metrics.h"
 #include "media/remoting/rpc_broker.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -74,7 +73,6 @@ class CourierRenderer : public Renderer {
   void Initialize(MediaResource* media_resource,
                   RendererClient* client,
                   PipelineStatusCallback init_cb) final;
-  void SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb) final;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) final;
   void Flush(base::OnceClosure flush_cb) final;
   void StartPlayingFrom(base::TimeDelta time) final;

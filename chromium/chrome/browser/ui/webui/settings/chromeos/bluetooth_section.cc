@@ -17,6 +17,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/bluetooth_device.h"
+#include "device/bluetooth/chromeos/bluetooth_utils.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/strings/grit/bluetooth_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -28,37 +30,12 @@ namespace {
 
 const std::vector<SearchConcept>& GetBluetoothSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_BLUETOOTH_PAIR,
-       mojom::kBluetoothDevicesSubpagePath,
-       mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kBluetoothPairDevice}},
-      {IDS_OS_SETTINGS_TAG_BLUETOOTH_CONNECT,
-       mojom::kBluetoothDevicesSubpagePath,
-       mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kBluetoothConnectToDevice}},
       {IDS_OS_SETTINGS_TAG_BLUETOOTH,
        mojom::kBluetoothDevicesSubpagePath,
        mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kBluetoothDevices}},
-      {IDS_OS_SETTINGS_TAG_BLUETOOTH_DISCONNECT,
-       mojom::kBluetoothDevicesSubpagePath,
-       mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kBluetoothDisconnectFromDevice}},
-      {IDS_OS_SETTINGS_TAG_BLUETOOTH_UNPAIR,
-       mojom::kBluetoothDevicesSubpagePath,
-       mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kBluetoothUnpairDevice},
-       {IDS_OS_SETTINGS_TAG_BLUETOOTH_UNPAIR_ALT1, SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -68,7 +45,7 @@ const std::vector<SearchConcept>& GetBluetoothOnSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_BLUETOOTH_TURN_OFF,
        mojom::kBluetoothDevicesSubpagePath,
        mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kBluetoothOnOff},
        {IDS_OS_SETTINGS_TAG_BLUETOOTH_TURN_OFF_ALT1,
@@ -82,10 +59,59 @@ const std::vector<SearchConcept>& GetBluetoothOffSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_BLUETOOTH_TURN_ON,
        mojom::kBluetoothDevicesSubpagePath,
        mojom::SearchResultIcon::kBluetooth,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kBluetoothOnOff},
        {IDS_OS_SETTINGS_TAG_BLUETOOTH_TURN_ON_ALT1, SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetBluetoothConnectableSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_BLUETOOTH_CONNECT,
+       mojom::kBluetoothDevicesSubpagePath,
+       mojom::SearchResultIcon::kBluetooth,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kBluetoothConnectToDevice}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetBluetoothConnectedSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_BLUETOOTH_DISCONNECT,
+       mojom::kBluetoothDevicesSubpagePath,
+       mojom::SearchResultIcon::kBluetooth,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kBluetoothDisconnectFromDevice}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetBluetoothPairableSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_BLUETOOTH_PAIR,
+       mojom::kBluetoothDevicesSubpagePath,
+       mojom::SearchResultIcon::kBluetooth,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kBluetoothPairDevice}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetBluetoothPairedSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_BLUETOOTH_UNPAIR,
+       mojom::kBluetoothDevicesSubpagePath,
+       mojom::SearchResultIcon::kBluetooth,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kBluetoothUnpairDevice},
+       {IDS_OS_SETTINGS_TAG_BLUETOOTH_UNPAIR_ALT1, SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -165,6 +191,40 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   chromeos::bluetooth_dialog::AddLocalizedStrings(html_source);
 }
 
+int BluetoothSection::GetSectionNameMessageId() const {
+  return IDS_SETTINGS_BLUETOOTH;
+}
+
+mojom::Section BluetoothSection::GetSection() const {
+  return mojom::Section::kBluetooth;
+}
+
+mojom::SearchResultIcon BluetoothSection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kBluetooth;
+}
+
+std::string BluetoothSection::GetSectionPath() const {
+  return mojom::kBluetoothSectionPath;
+}
+
+void BluetoothSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSubpage(IDS_SETTINGS_BLUETOOTH,
+                                     mojom::Subpage::kBluetoothDevices,
+                                     mojom::SearchResultIcon::kBluetooth,
+                                     mojom::SearchResultDefaultRank::kMedium,
+                                     mojom::kBluetoothDevicesSubpagePath);
+  static constexpr mojom::Setting kBluetoothDevicesSettings[] = {
+      mojom::Setting::kBluetoothOnOff,
+      mojom::Setting::kBluetoothConnectToDevice,
+      mojom::Setting::kBluetoothDisconnectFromDevice,
+      mojom::Setting::kBluetoothPairDevice,
+      mojom::Setting::kBluetoothUnpairDevice,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kBluetoothDevices,
+                            kBluetoothDevicesSettings, generator);
+  generator->RegisterTopLevelAltSetting(mojom::Setting::kBluetoothOnOff);
+}
+
 void BluetoothSection::AdapterPresentChanged(device::BluetoothAdapter* adapter,
                                              bool present) {
   UpdateSearchTags();
@@ -172,6 +232,21 @@ void BluetoothSection::AdapterPresentChanged(device::BluetoothAdapter* adapter,
 
 void BluetoothSection::AdapterPoweredChanged(device::BluetoothAdapter* adapter,
                                              bool powered) {
+  UpdateSearchTags();
+}
+
+void BluetoothSection::DeviceAdded(device::BluetoothAdapter* adapter,
+                                   device::BluetoothDevice* device) {
+  UpdateSearchTags();
+}
+
+void BluetoothSection::DeviceChanged(device::BluetoothAdapter* adapter,
+                                     device::BluetoothDevice* device) {
+  UpdateSearchTags();
+}
+
+void BluetoothSection::DeviceRemoved(device::BluetoothAdapter* adapter,
+                                     device::BluetoothDevice* device) {
   UpdateSearchTags();
 }
 
@@ -183,20 +258,60 @@ void BluetoothSection::OnFetchBluetoothAdapter(
 }
 
 void BluetoothSection::UpdateSearchTags() {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // Start with no search tags, then add them below if appropriate.
-  registry()->RemoveSearchTags(GetBluetoothSearchConcepts());
-  registry()->RemoveSearchTags(GetBluetoothOnSearchConcepts());
-  registry()->RemoveSearchTags(GetBluetoothOffSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothOnSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothOffSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothConnectableSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothPairableSearchConcepts());
+  updater.RemoveSearchTags(GetBluetoothPairedSearchConcepts());
 
   if (!bluetooth_adapter_->IsPresent())
     return;
 
-  registry()->AddSearchTags(GetBluetoothSearchConcepts());
+  updater.AddSearchTags(GetBluetoothSearchConcepts());
 
-  if (bluetooth_adapter_->IsPowered())
-    registry()->AddSearchTags(GetBluetoothOnSearchConcepts());
-  else
-    registry()->AddSearchTags(GetBluetoothOffSearchConcepts());
+  if (!bluetooth_adapter_->IsPowered()) {
+    updater.AddSearchTags(GetBluetoothOffSearchConcepts());
+    return;
+  }
+
+  updater.AddSearchTags(GetBluetoothOnSearchConcepts());
+
+  // Filter devices so that only those shown in the UI are returned. Note that
+  // passing |max_devices| of 0 indicates that there is no maximum.
+  device::BluetoothAdapter::DeviceList devices =
+      device::FilterBluetoothDeviceList(bluetooth_adapter_->GetDevices(),
+                                        device::BluetoothFilterType::KNOWN,
+                                        /*max_devices=*/0);
+
+  bool connectable_device_exists = false;
+  bool connected_device_exists = false;
+  bool pairable_device_exists = false;
+  bool paired_device_exists = false;
+  for (const device::BluetoothDevice* device : devices) {
+    // Note: Device must be paired to be connectable.
+    if (device->IsPaired() && device->IsConnectable() && !device->IsConnected())
+      connectable_device_exists = true;
+    if (device->IsConnected())
+      connected_device_exists = true;
+    if (device->IsPairable() && !device->IsPaired())
+      pairable_device_exists = true;
+    if (device->IsPaired())
+      paired_device_exists = true;
+  }
+
+  if (connectable_device_exists)
+    updater.AddSearchTags(GetBluetoothConnectableSearchConcepts());
+  if (connected_device_exists)
+    updater.AddSearchTags(GetBluetoothConnectedSearchConcepts());
+  if (pairable_device_exists)
+    updater.AddSearchTags(GetBluetoothPairableSearchConcepts());
+  if (paired_device_exists)
+    updater.AddSearchTags(GetBluetoothPairedSearchConcepts());
 }
 
 }  // namespace settings

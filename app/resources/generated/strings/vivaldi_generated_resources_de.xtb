@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Dateideskriptoren</translation>
-<translation id="1635033183663317347">Von Deinem Erziehungsberechtigten installiert.</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
 <translation id="1698122934742150150">Nur aktuelle private Sitzung</translation>
 <translation id="1706625117072057435">Zoomstufen</translation>
@@ -94,7 +93,7 @@
 <translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
 <translation id="2476578072172137802">Website-Einstellungen</translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
-<translation id="2498539833203011245">Im Dock ablegen ***</translation>
+<translation id="2498539833203011245">Im Dock ablegen</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="253557089021624350">Keepalive-Zahl</translation>
 <translation id="2546283357679194313">Cookies und Websitedaten</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Einfügen und <ph name="URL" /> aufrufen</translation>
-<translation id="3725367690636977613">Seiten</translation>
 <translation id="3727187387656390258">Pop-up prüfen</translation>
 <translation id="3744111561329211289">Hintergrundsynchronisation</translation>
 <translation id="3760460896538743390">&amp;Hintergrundseite prüfen</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Für Gruppe akzeptieren</translation>
-<translation id="4091434297613116013">Blatt Papier</translation>
 <translation id="4096508467498758490">Erweiterungen im Entwicklermodus deaktivieren</translation>
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
 <translation id="7311079019872751559">Plug-in-Zugriff ohne Sandbox</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
@@ -433,7 +429,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8071432093239591881">Als Bild drucken</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Erweiterungen verwalten</translation>
-<translation id="8180239481735238521">Seite</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1 {Download wird ausgeführt} other {Downloads werden ausgeführt}}</translation>
 <translation id="8230134520748321204">Passwort für <ph name="ORIGIN" /> speichern?</translation>
 <translation id="8261378640211443080">Diese Erweiterung ist nicht im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> aufgeführt und wurde möglicherweise ohne Ihr Wissen hinzugefügt.</translation>
@@ -465,7 +460,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8798099450830957504">Standardeinstellung</translation>
 <translation id="8800004011501252845">Ziele werden angezeigt für</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">Blatt Papier</translation>
 <translation id="8823514049557262177">Linkte&amp;xt kopieren</translation>
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>

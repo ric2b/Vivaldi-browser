@@ -105,7 +105,7 @@ class SetCookieCallback : public CookieTestCallback {
   }
 
  private:
-  void Run(CanonicalCookie::CookieInclusionStatus status) {
+  void Run(CookieInclusionStatus status) {
     EXPECT_TRUE(status.IsInclude());
     CookieTestCallback::Run();
   }
@@ -123,9 +123,9 @@ class GetCookieListCallback : public CookieTestCallback {
   }
 
  private:
-  void Run(const CookieStatusList& cookie_list,
-           const CookieStatusList& excluded_cookies) {
-    cookie_list_ = cookie_util::StripStatuses(cookie_list);
+  void Run(const CookieAccessResultList& cookie_list,
+           const CookieAccessResultList& excluded_cookies) {
+    cookie_list_ = cookie_util::StripAccessResults(cookie_list);
     CookieTestCallback::Run();
   }
   CookieList cookie_list_;

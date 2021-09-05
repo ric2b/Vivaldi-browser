@@ -213,7 +213,7 @@ class Cache::FetchResolvedForAdd final : public ScriptFunction {
     return ScriptValue(GetScriptState()->GetIsolate(), put_promise.V8Value());
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(cache_);
     visitor->Trace(requests_);
     ScriptFunction::Trace(visitor);
@@ -326,7 +326,7 @@ class Cache::BarrierCallbackForPut final
         MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError));
   }
 
-  virtual void Trace(Visitor* visitor) {
+  virtual void Trace(Visitor* visitor) const {
     visitor->Trace(cache_);
     visitor->Trace(resolver_);
   }
@@ -412,7 +412,7 @@ class Cache::BlobHandleCallbackForPut final
 
   void Abort() override { barrier_callback_->Abort(); }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(barrier_callback_);
     FetchDataLoader::Client::Trace(visitor);
   }
@@ -495,7 +495,7 @@ class Cache::CodeCacheHandleCallbackForPut final
 
   void Abort() override { barrier_callback_->Abort(); }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(script_state_);
     visitor->Trace(barrier_callback_);
     FetchDataLoader::Client::Trace(visitor);
@@ -678,7 +678,7 @@ Cache::Cache(GlobalFetch::ScopedFetcher* fetcher,
   cache_remote_.Bind(std::move(cache_pending_remote), std::move(task_runner));
 }
 
-void Cache::Trace(Visitor* visitor) {
+void Cache::Trace(Visitor* visitor) const {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
   ScriptWrappable::Trace(visitor);
@@ -989,16 +989,8 @@ ScriptPromise Cache::PutImpl(ScriptState* script_state,
           "Partial response (status code 206) is unsupported");
       return promise;
     }
-    if (responses[i]->IsBodyLocked(exception_state) ==
-            Body::BodyLocked::kLocked ||
-        responses[i]->IsBodyUsed(exception_state) == Body::BodyUsed::kUsed) {
-      DCHECK(!exception_state.HadException());
+    if (responses[i]->IsBodyLocked() || responses[i]->IsBodyUsed()) {
       barrier_callback->OnError("Response body is already used");
-      return promise;
-    }
-    if (exception_state.HadException()) {
-      // TODO(ricea): Reject the promise with the actual exception.
-      barrier_callback->OnError("Could not inspect response body state");
       return promise;
     }
 
@@ -1101,7 +1093,7 @@ ScriptPromise Cache::KeysImpl(ScriptState* script_state,
               requests.ReserveInitialCapacity(result->get_keys().size());
               for (auto& request : result->get_keys()) {
                 requests.push_back(Request::Create(
-                    resolver->GetScriptState(), *request,
+                    resolver->GetScriptState(), std::move(request),
                     Request::ForServiceWorkerFetchEvent::kFalse));
               }
               resolver->Resolve(requests);

@@ -6,9 +6,9 @@
 #define BASE_THREADING_THREAD_RESTRICTIONS_H_
 
 #include "base/base_export.h"
+#include "base/check_op.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/macros.h"
 
 // -----------------------------------------------------------------------------
@@ -112,6 +112,7 @@ namespace audio {
 class OutputDevice;
 }
 namespace blink {
+class DiskDataAllocator;
 class RTCVideoDecoderAdapter;
 class RTCVideoEncoder;
 class SourceStream;
@@ -200,6 +201,9 @@ class IPCFactory;
 }
 namespace memory_instrumentation {
 class OSMetrics;
+}
+namespace metrics {
+class AndroidMetricsServiceClient;
 }
 namespace midi {
 class TaskService;  // https://crbug.com/796830
@@ -373,6 +377,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class AdjustOOMScoreHelper;
   friend class StackSamplingProfiler;
   friend class android_webview::ScopedAllowInitGLBindings;
+  friend class blink::DiskDataAllocator;
   friend class chromeos::MojoUtils;  // http://crbug.com/1055467
   friend class content::BrowserProcessSubThread;
   friend class content::PepperPrintSettingsManagerImpl;
@@ -382,6 +387,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class cronet::CronetPrefsManager;
   friend class cronet::CronetURLRequestContext;
   friend class memory_instrumentation::OSMetrics;
+  friend class metrics::AndroidMetricsServiceClient;
   friend class module_installer::ScopedAllowModulePakLoad;
   friend class mojo::CoreLibraryInitializer;
   friend class printing::LocalPrinterHandlerDefault;

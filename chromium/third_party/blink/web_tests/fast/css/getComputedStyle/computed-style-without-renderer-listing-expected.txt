@@ -213,8 +213,6 @@ margin-top: 0px
 marker-end: none
 marker-mid: none
 marker-start: none
-mask: none
-mask-source-type: alpha
 mask-type: luminance
 math-style: inline
 math-superscript-shift-style: display
@@ -281,6 +279,7 @@ scroll-padding-block-end: auto
 scroll-padding-block-start: auto
 scroll-padding-inline-end: auto
 scroll-padding-inline-start: auto
+scrollbar-gutter: auto
 shape-image-threshold: 0
 shape-margin: 0px
 shape-outside: none

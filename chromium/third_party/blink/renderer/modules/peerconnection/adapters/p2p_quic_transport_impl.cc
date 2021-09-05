@@ -116,11 +116,11 @@ class P2PQuicPacketWriter : public quic::QuicPacketWriter,
     return false;
   }
 
-  char* GetNextWriteLocation(
+  quic::QuicPacketBuffer GetNextWriteLocation(
       const quic::QuicIpAddress& self_address,
       const quic::QuicSocketAddress& peer_address) override {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-    return nullptr;
+    return {nullptr, nullptr};
   }
 
   quic::WriteResult Flush() override {
@@ -403,8 +403,7 @@ void P2PQuicTransportImpl::SendDatagram(Vector<uint8_t> datagram) {
 bool P2PQuicTransportImpl::CanSendDatagram() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return IsEncryptionEstablished() &&
-         (connection()->transport_version() > quic::QUIC_VERSION_43) &&
-         !IsClosed();
+         (connection()->version().SupportsMessageFrames()) && !IsClosed();
 }
 
 P2PQuicStreamImpl* P2PQuicTransportImpl::CreateOutgoingBidirectionalStream() {
@@ -610,7 +609,7 @@ void P2PQuicTransportImpl::OnConnectionClosed(
 }
 
 bool P2PQuicTransportImpl::ShouldKeepConnectionAlive() const {
-  return GetNumOpenDynamicStreams() > 0;
+  return GetNumActiveStreams() > 0;
 }
 
 bool P2PQuicTransportImpl::IsClosed() {

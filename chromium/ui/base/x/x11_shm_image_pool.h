@@ -19,6 +19,7 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/x/event.h"
 #include "ui/gfx/x/x11.h"
 
 namespace ui {
@@ -34,7 +35,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XShmImagePool
   XShmImagePool(scoped_refptr<base::SequencedTaskRunner> host_task_runner,
                 scoped_refptr<base::SequencedTaskRunner> event_task_runner,
                 XDisplay* display,
-                XID drawable,
+                x11::Drawable drawable,
                 Visual* visual,
                 int depth,
                 std::size_t max_frames_pending);
@@ -66,7 +67,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XShmImagePool
 
   void DispatchShmCompletionEvent(XShmCompletionEvent event);
 
-  bool CanDispatchXEvent(XEvent* xev);
+  bool CanDispatchXEvent(x11::Event* xev);
 
   const scoped_refptr<base::SequencedTaskRunner> host_task_runner_;
   const scoped_refptr<base::SequencedTaskRunner> event_task_runner_;
@@ -98,7 +99,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XShmImagePool
   };
 
   // XEventDispatcher:
-  bool DispatchXEvent(XEvent* xev) override;
+  bool DispatchXEvent(x11::Event* xev) override;
 
   void InitializeOnGpu();
   void TeardownOnGpu();
@@ -106,7 +107,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XShmImagePool
   void Cleanup();
 
   XDisplay* const display_;
-  const XID drawable_;
+  const x11::Drawable drawable_;
   Visual* const visual_;
   const int depth_;
 

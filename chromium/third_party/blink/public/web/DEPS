@@ -1,5 +1,4 @@
 include_rules = [
-    "+base/callback.h",
     "+base/containers/span.h",
     "+base/files/file_path.h",
     "+base/i18n/rtl.h",
@@ -24,6 +23,7 @@ include_rules = [
     "+cc/trees/layer_tree_host_client.h",
     "+cc/trees/viewport_layers.h",
     "+components/viz/common/surfaces/frame_sink_id.h",
+    "+media/base",
     "+mojo/public",
     "+net/cookies/site_for_cookies.h",
     "+printing/mojom/print.mojom-shared.h",
@@ -38,7 +38,9 @@ include_rules = [
     "+services/network/public/mojom/ip_address_space.mojom-shared.h",
     "+services/network/public/mojom/referrer_policy.mojom-shared.h",
     "+services/network/public/mojom/url_loader.mojom-shared.h",
+    "+services/network/public/mojom/url_loader_factory.mojom-shared.h",
     "+services/service_manager/public",
+    "+ui/base/ime/ime_text_span.h",
     "+ui/events/types",
     "+ui/gfx/geometry",
     # Enforce to use mojom-shared.h in blink/public so that it can compile
@@ -48,6 +50,7 @@ include_rules = [
     "+ui/accessibility/ax_enums.mojom-shared.h",
     "+ui/accessibility/ax_event.h",
     "+ui/base/ime/mojom/ime_types.mojom-shared.h",
+    "+ui/base/ime/mojom/virtual_keyboard_types.mojom-shared.h",
 
     # Allowed only inside INSIDE_BLINK
     "+third_party/blink/renderer/core",

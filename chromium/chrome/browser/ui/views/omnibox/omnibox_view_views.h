@@ -20,10 +20,13 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
+#include "ui/gfx/animation/multi_animation.h"
 #include "ui/gfx/range/range.h"
+#include "ui/views/animation/animation_delegate_views.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
@@ -56,7 +59,8 @@ class OmniboxViewViews : public OmniboxView,
 #endif
                          public views::TextfieldController,
                          public ui::CompositorObserver,
-                         public TemplateURLServiceObserver {
+                         public TemplateURLServiceObserver,
+                         public content::WebContentsObserver {
  public:
   // The internal view class name.
   static const char kViewClassName[];
@@ -89,7 +93,7 @@ class OmniboxViewViews : public OmniboxView,
   void SaveStateToTab(content::WebContents* tab);
 
   // Called when the window's active tab changes.
-  void OnTabChanged(const content::WebContents* web_contents);
+  void OnTabChanged(content::WebContents* web_contents);
 
   // Called to clear the saved state for |web_contents|.
   void ResetTabState(content::WebContents* web_contents);
@@ -107,6 +111,8 @@ class OmniboxViewViews : public OmniboxView,
   // Returns the width in pixels needed to display the current text. The
   // returned value includes margins.
   int GetTextWidth() const;
+  // Returns the width in pixels needed to display the current text unelided.
+  int GetUnelidedTextWidth() const;
 
   // Returns the omnibox's width in pixels.
   int GetWidth() const;
@@ -122,10 +128,12 @@ class OmniboxViewViews : public OmniboxView,
                                 size_t caret_pos,
                                 bool update_popup,
                                 bool notify_text_changed) override;
+  void SetAdditionalText(const base::string16& additional_text) override;
   void EnterKeywordModeForDefaultSearchProvider() override;
   bool IsSelectAll() const override;
   void GetSelectionBounds(base::string16::size_type* start,
                           base::string16::size_type* end) const override;
+  size_t GetAllSelectionsLength() const override;
   void SelectAll(bool reversed) override;
   void RevertAll() override;
   void SetFocus(bool is_user_initiated) override;
@@ -135,19 +143,29 @@ class OmniboxViewViews : public OmniboxView,
 
   // views::Textfield:
   gfx::Size GetMinimumSize() const override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void ExecuteCommand(int command_id, int event_flags) override;
-  ui::TextInputType GetTextInputType() const override;
+  void OnInputMethodChanged() override;
   void AddedToWidget() override;
   void RemovedFromWidget() override;
-  bool ShouldDoLearning() override;
   base::string16 GetLabelForCommandId(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
+
+  // content::WebContentsObserver:
+  void DidFinishNavigation(content::NavigationHandle* navigation) override;
+  void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
 
   // For testing only.
   OmniboxPopupContentsView* GetPopupContentsViewForTesting() const {
     return popup_view_.get();
   }
+
+  // Applies |color| to the URL's path. Callers should ensure that the URL is
+  // valid before calling. Virtual for testing.
+  virtual void SetPathColor(SkColor color);
 
  protected:
   // views::Textfield:
@@ -155,13 +173,77 @@ class OmniboxViewViews : public OmniboxView,
   bool IsDropCursorForInsertion() const override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest, HoverAndExit);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+      UserInteractionAndHover);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+      HideOnInteractionAfterFocusAndBlur);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest, AfterBlur);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+      PathChangeDuringAnimation);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,
+                           SameDocNavigations);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,
+                           SubframeNavigations);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest,
+                           AlwaysShowFullURLs);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,
+                           AlwaysShowFullURLs);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest,
+      UnsetAlwaysShowFullURLs);
   // TODO(tommycli): Remove the rest of these friends after porting these
   // browser tests to unit tests.
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, DoNotNavigateOnDrop);
 
-  class PathFadeAnimation;
+  // Animates the path from |starting_color| to |ending_color|. The fading
+  // starts after |delay_ms| ms. Declared here for testing.
+  class PathFadeAnimation : public views::AnimationDelegateViews {
+   public:
+    PathFadeAnimation(OmniboxViewViews* view,
+                      SkColor starting_color,
+                      SkColor ending_color,
+                      uint32_t delay_ms);
+
+    // Starts the animation over |path_bounds|. The caller is responsible for
+    // calling Stop() if the text changes and |path_bounds| is no longer valid.
+    void Start(const gfx::Range& path_bounds);
+
+    void Stop();
+
+    bool IsAnimating();
+
+    // Stops the animation if currently running and sets the starting color to
+    // |starting_color|.
+    void ResetStartingColor(SkColor starting_color);
+
+    SkColor GetCurrentColor();
+
+    // views::AnimationDelegateViews:
+    void AnimationProgressed(const gfx::Animation* animation) override;
+
+    bool HasStarted();
+
+    gfx::MultiAnimation* GetAnimationForTesting();
+
+   private:
+    // Non-owning pointer. |view_| must always outlive this class.
+    OmniboxViewViews* view_;
+    SkColor starting_color_;
+    SkColor ending_color_;
+
+    // The path text range we are fading.
+    gfx::Range path_bounds_;
+
+    gfx::MultiAnimation animation_;
+
+    bool has_started_ = false;
+  };
 
   enum class UnelisionGesture {
     HOME_KEY_PRESSED,
@@ -169,9 +251,13 @@ class OmniboxViewViews : public OmniboxView,
     OTHER,
   };
 
-  // Update the field with |text| and set the selection.
-  void SetTextAndSelectedRange(const base::string16& text,
-                               const gfx::Range& range);
+  // Update the field with |text| and set the selection. |ranges| should not be
+  // empty; even text with no selections must have at least 1 empty range in
+  // |ranges| to indicate the cursor position.
+  void SetTextAndSelectedRanges(const base::string16& text,
+                                const std::vector<gfx::Range>& ranges);
+
+  void SetSelectedRanges(const std::vector<gfx::Range>& ranges);
 
   // Returns the selected text.
   base::string16 GetSelectedText() const;
@@ -181,7 +267,7 @@ class OmniboxViewViews : public OmniboxView,
   // as is. We want to strip whitespace and other things (see GetClipboardText()
   // for details). The function invokes OnBefore/AfterPossibleChange() as
   // necessary.
-  void OnPaste();
+  void OnOmniboxPaste();
 
   // Handle keyword hint tab-to-search and tabbing through dropdown results.
   bool HandleEarlyTabActions(const ui::KeyEvent& event);
@@ -218,7 +304,8 @@ class OmniboxViewViews : public OmniboxView,
                                    const AutocompleteMatch& match,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
-  bool OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+  void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+                                            size_t user_text_start,
                                             size_t user_text_length) override;
   void OnInlineAutocompleteTextCleared() override;
   void OnRevertTemporaryText(const base::string16& display_text,
@@ -239,9 +326,6 @@ class OmniboxViewViews : public OmniboxView,
   // views::Textfield:
   bool IsItemForCommandIdDynamic(int command_id) const override;
   const char* GetClassName() const override;
-  bool OnMousePressed(const ui::MouseEvent& event) override;
-  bool OnMouseDragged(const ui::MouseEvent& event) override;
-  void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
@@ -292,21 +376,90 @@ class OmniboxViewViews : public OmniboxView,
   // TemplateURLServiceObserver:
   void OnTemplateURLServiceChanged() override;
 
+  // Returns the bounds from the end of the currently displayed URL's host to
+  // the end of the URL.
+  gfx::Range GetPathBounds();
+
+  // Returns true if the currently displayed URL's path is eligible for fading.
+  // This takes into account the omnibox's current state (e.g. the path
+  // shouldn't fade if the user is currently editing it) as well as properties
+  // of the current text (e.g. extension URLs or non-URLs shouldn't have their
+  // paths faded).
+  //
+  // This method does NOT take field trials into account or the "Always show
+  // full URLs" option. Calling code should check field trial state and
+  // model()->ShouldPreventElision() if applicable.
+  bool IsURLEligibleForFading();
+
+  // When certain field trials are enabled, the URL's path is shown on page load
+  // and faded out when the user interacts with the page. This method resets
+  // back to the on-page-load state. That is, it unhides the path (if currently
+  // hidden) and resets state so that the path will show until user interaction.
+  void ResetToHideOnInteraction();
+
+  // This method recreates the path fade-in animation. Each incarnation of the
+  // fade-in animation should only be run once, so this method should be called
+  // when the path is eligible to be faded in again (e.g., on mouse exit after a
+  // hover that faded the path in).
+  void ResetPathFadeInAnimation();
+
+  // Called when the "Always show full URLs" preference is toggled. Updates the
+  // state to hide the path on user interaction and/or reveal the path on hover,
+  // depending on field trial configuration.
+  void OnShouldPreventElisionChanged();
+
+  PathFadeAnimation* GetPathFadeInAnimationForTesting();
+  PathFadeAnimation* GetPathFadeOutAfterHoverAnimationForTesting();
+  PathFadeAnimation* GetPathFadeOutAfterInteractionAnimationForTesting();
+
   // When true, the location bar view is read only and also is has a slightly
   // different presentation (smaller font size). This is used for popups.
   bool popup_window_mode_;
 
   std::unique_ptr<OmniboxPopupContentsView> popup_view_;
 
-  // Animation used to fade out the path under some elision settings.
-  std::unique_ptr<PathFadeAnimation> path_fade_animation_;
+  // Animations are used to fade in/out the path under some elision settings.
+  // These animations are created at different times depending on the field
+  // trial configuration, so don't assume they are non-null.
+  //
+  // These animations are used by different field trials as described below.
+
+  // When ShouldRevealPathQueryRefOnHover() is enabled but not
+  // ShouldHidePathQueryRefOnInteraction(), then the path is hidden in
+  // EmphasizeUrlComponents() and |path_fade_in_animation_| and
+  // |path_fade_out_hover_animation_| are created in OnThemeChanged(). These
+  // animations are used to show or hide the path when the mouse hovers or exits
+  // the omnibox. |path_fade_in_animation_| is created afresh every time the
+  // mouse exits. The invariant is that each incarnation of the fade-in
+  // animation is run exactly once; this allows us to avoid flickering by fading
+  // the path in multiple times as the user hovers over the omnibox for a long
+  // period of time.
+  std::unique_ptr<PathFadeAnimation> path_fade_in_animation_;
+  std::unique_ptr<PathFadeAnimation> path_fade_out_after_hover_animation_;
+  // Finally, when ShouldHidePathQueryRefOnInteraction() is enabled, we don't
+  // create any animations until a navigation finishes. At that point, we show
+  // the path if it was a full cross-document navigation, and create
+  // |path_fade_out_after_interaction_animation_| to fade the path out once the
+  // user interacts with the page. If ShouldRevealPathQueryRefOnHover() is also
+  // enabled, we defer the creation of |path_fade_in_animation_| and
+  // |path_fade_out_animation_| until the user interacts with the page; their
+  // creation is deferred to avoid flickering the path in and out as the user
+  // hovers over the omnibox before they've interacted with the page. After the
+  // first user interaction, |path_fade_out_after_interaction_| animation
+  // doesn't run again until it's re-created for the next navigation, and
+  // |path_fade_in_animation_| and |path_fade_out_after_hover_animation_| behave
+  // as described above for the rest of the navigation. There are 2 separate
+  // fade-out animations (one for after-interaction and one for after-hover) so
+  // that the state of the after-interaction animation can be queried to avoid
+  // flickering the path after multiple user interactions.
+  std::unique_ptr<PathFadeAnimation> path_fade_out_after_interaction_animation_;
 
   // Selection persisted across temporary text changes, like popup suggestions.
-  gfx::Range saved_temporary_selection_;
+  std::vector<gfx::Range> saved_temporary_selection_;
 
   // Holds the user's selection across focus changes.  There is only a saved
   // selection if this range IsValid().
-  gfx::Range saved_selection_for_focus_change_;
+  std::vector<gfx::Range> saved_selection_for_focus_change_;
 
   // Tracking state before and after a possible change.
   State state_before_change_;

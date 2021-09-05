@@ -1,0 +1,26 @@
+{
+{%if key is defined %}
+  "key": "{{key}}",
+{% endif %}
+  "manifest_version": 2,
+  "name": "Accessibility Common",
+  "version": "{{set_version}}",
+  "description": "Accessibility Common extension to communicate with the Automation API",
+{% if is_guest_manifest == '1' %}
+  "incognito": "split",
+{% endif %}
+  "background": {
+    "scripts": [
+      "accessibility_common/autoclick/autoclick.js",
+      "accessibility_common/accessibility_common_loader.js"
+    ]
+  },
+  "permissions": [
+    "accessibilityPrivate",
+    "accessibilityFeatures.read"
+  ],
+  "automation": {
+    "desktop": true
+  },
+  "default_locale": "en"
+}

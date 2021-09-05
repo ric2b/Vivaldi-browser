@@ -7,14 +7,15 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
@@ -35,6 +36,7 @@
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -111,9 +113,7 @@ std::vector<std::string> TranslateStringArray(const base::ListValue* list) {
 
 std::string ComputeAcceptLanguageFromPref(const std::string& language_pref) {
   std::string accept_languages_str =
-      base::FeatureList::IsEnabled(features::kUseNewAcceptLanguageHeader)
-          ? net::HttpUtil::ExpandLanguageList(language_pref)
-          : language_pref;
+      net::HttpUtil::ExpandLanguageList(language_pref);
   return net::HttpUtil::GenerateAcceptLanguageHeader(accept_languages_str);
 }
 
@@ -166,8 +166,14 @@ void InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
 // TODO(https://crbug.com/458508): Currently, this is determined by OR of the
 // feature flag and policy. Next steps would be changing the feature value to
 // false after enough heads up and then removing the feature.
-bool IsAmbientAuthAllowedForProfile(const Profile* profile) {
+bool IsAmbientAuthAllowedForProfile(Profile* profile) {
   if (profile->IsRegularProfile())
+    return true;
+
+  // Non-primary OTR profiles are not used to create browser windows and are
+  // only technical means for a task that does not need to leave state after
+  // it's completed.
+  if (!profile->IsPrimaryOTRProfile())
     return true;
 
   PrefService* local_state = g_browser_process->local_state();
@@ -195,6 +201,53 @@ bool IsAmbientAuthAllowedForProfile(const Profile* profile) {
   NOTREACHED();
 
   return false;
+}
+
+void UpdateCookieSettings(Profile* profile) {
+  ContentSettingsForOneType settings;
+  HostContentSettingsMapFactory::GetForProfile(profile)->GetSettingsForOneType(
+      ContentSettingsType::COOKIES, std::string(), &settings);
+  content::BrowserContext::ForEachStoragePartition(
+      profile, base::BindRepeating(
+                   [](ContentSettingsForOneType settings,
+                      content::StoragePartition* storage_partition) {
+                     storage_partition->GetCookieManagerForBrowserProcess()
+                         ->SetContentSettings(settings);
+                   },
+                   settings));
+}
+
+void UpdateLegacyCookieSettings(Profile* profile) {
+  ContentSettingsForOneType settings;
+  HostContentSettingsMapFactory::GetForProfile(profile)->GetSettingsForOneType(
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(), &settings);
+  content::BrowserContext::ForEachStoragePartition(
+      profile, base::BindRepeating(
+                   [](ContentSettingsForOneType settings,
+                      content::StoragePartition* storage_partition) {
+                     storage_partition->GetCookieManagerForBrowserProcess()
+                         ->SetContentSettingsForLegacyCookieAccess(settings);
+                   },
+                   settings));
+}
+
+void UpdateStorageAccessSettings(Profile* profile) {
+  if (base::FeatureList::IsEnabled(blink::features::kStorageAccessAPI)) {
+    ContentSettingsForOneType settings;
+    HostContentSettingsMapFactory::GetForProfile(profile)
+        ->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS,
+                                std::string(), &settings);
+
+    content::BrowserContext::ForEachStoragePartition(
+        profile, base::BindRepeating(
+                     [](ContentSettingsForOneType settings,
+                        content::StoragePartition* storage_partition) {
+                       storage_partition->GetCookieManagerForBrowserProcess()
+                           ->SetStorageAccessGrantSettings(settings,
+                                                           base::DoNothing());
+                     },
+                     settings));
+  }
 }
 
 }  // namespace
@@ -280,8 +333,8 @@ void ProfileNetworkContextService::ConfigureNetworkContextParams(
         FROM_HERE,
         {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), media_cache_path,
-                       true /* recursive */));
+        base::BindOnce(base::GetDeletePathRecursivelyCallback(),
+                       media_cache_path));
   }
 }
 
@@ -360,6 +413,10 @@ void ProfileNetworkContextService::OnThirdPartyCookieBlockingChanged(
 }
 
 std::string ProfileNetworkContextService::ComputeAcceptLanguage() const {
+  if (profile_->IsOffTheRecord()) {
+    return ComputeAcceptLanguageFromPref(
+        g_browser_process->GetApplicationLocale());
+  }
   return ComputeAcceptLanguageFromPref(pref_accept_language_.GetValue());
 }
 
@@ -474,6 +531,11 @@ ProfileNetworkContextService::CreateCookieManagerParams(
   auto out = network::mojom::CookieManagerParams::New();
   out->block_third_party_cookies =
       cookie_settings.ShouldBlockThirdPartyCookies();
+  // This allows cookies to be sent on https requests from chrome:// pages,
+  // ignoring SameSite attribute rules. For example, this is needed for browser
+  // UI to interact with SameSite cookies on accounts.google.com, which are used
+  // for logging into Cloud Print from chrome://print, for displaying a list
+  // of available accounts on the NTP (chrome://new-tab-page), etc.
   out->secure_origin_cookies_allowed_schemes.push_back(
       content::kChromeUIScheme);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -855,41 +917,22 @@ void ProfileNetworkContextService::OnContentSettingChanged(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
     const std::string& resource_identifier) {
-  if (content_type != ContentSettingsType::COOKIES &&
-      content_type != ContentSettingsType::LEGACY_COOKIE_ACCESS &&
-      content_type != ContentSettingsType::DEFAULT) {
-    return;
-  }
-
-  if (content_type == ContentSettingsType::COOKIES ||
-      content_type == ContentSettingsType::DEFAULT) {
-    ContentSettingsForOneType cookies_settings;
-    HostContentSettingsMapFactory::GetForProfile(profile_)
-        ->GetSettingsForOneType(ContentSettingsType::COOKIES, std::string(),
-                                &cookies_settings);
-    content::BrowserContext::ForEachStoragePartition(
-        profile_, base::BindRepeating(
-                      [](ContentSettingsForOneType settings,
-                         content::StoragePartition* storage_partition) {
-                        storage_partition->GetCookieManagerForBrowserProcess()
-                            ->SetContentSettings(settings);
-                      },
-                      cookies_settings));
-  }
-
-  if (content_type == ContentSettingsType::LEGACY_COOKIE_ACCESS ||
-      content_type == ContentSettingsType::DEFAULT) {
-    ContentSettingsForOneType legacy_cookie_access_settings;
-    HostContentSettingsMapFactory::GetForProfile(profile_)
-        ->GetSettingsForOneType(ContentSettingsType::LEGACY_COOKIE_ACCESS,
-                                std::string(), &legacy_cookie_access_settings);
-    content::BrowserContext::ForEachStoragePartition(
-        profile_, base::BindRepeating(
-                      [](ContentSettingsForOneType settings,
-                         content::StoragePartition* storage_partition) {
-                        storage_partition->GetCookieManagerForBrowserProcess()
-                            ->SetContentSettingsForLegacyCookieAccess(settings);
-                      },
-                      legacy_cookie_access_settings));
+  switch (content_type) {
+    case ContentSettingsType::COOKIES:
+      UpdateCookieSettings(profile_);
+      break;
+    case ContentSettingsType::LEGACY_COOKIE_ACCESS:
+      UpdateLegacyCookieSettings(profile_);
+      break;
+    case ContentSettingsType::STORAGE_ACCESS:
+      UpdateStorageAccessSettings(profile_);
+      break;
+    case ContentSettingsType::DEFAULT:
+      UpdateCookieSettings(profile_);
+      UpdateLegacyCookieSettings(profile_);
+      UpdateStorageAccessSettings(profile_);
+      break;
+    default:
+      return;
   }
 }

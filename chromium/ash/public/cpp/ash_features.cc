@@ -4,32 +4,14 @@
 
 #include "ash/public/cpp/ash_features.h"
 
-#include <vector>
-
 #include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/strings/string_split.h"
-#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "chromeos/constants/chromeos_switches.h"
 
 namespace ash {
 namespace features {
-
-namespace {
-
-bool ShouldHideShelfButtonsForBoard() {
-  std::vector<std::string> board =
-      base::SplitString(base::SysInfo::GetLsbReleaseBoard(), "-",
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  if (board.empty())
-    return false;
-  return board[0] == "kukui" || board[0] == "eve" || board[0] == "nocturne" ||
-         board[0] == "hatch";
-}
-
-}  // namespace
 
 const base::Feature kAllowAmbientEQ{"AllowAmbientEQ",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -37,17 +19,11 @@ const base::Feature kAllowAmbientEQ{"AllowAmbientEQ",
 const base::Feature kAutoNightLight{"AutoNightLight",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kCornerShortcuts{"CornerShortcuts",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kContextualNudges{"ContextualNudges",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDisplayAlignAssist{"DisplayAlignAssist",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kDisplayChangeModal{"DisplayChangeModal",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDisplayIdentification{"DisplayIdentification",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -66,6 +42,9 @@ const base::Feature kEnableOverviewRoundedCorners{
 
 const base::Feature kLimitAltTabToActiveDesk{"LimitAltTabToActiveDesk",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPerDeskShelf{"PerDeskShelf",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLockScreenNotifications{"LockScreenNotifications",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -115,9 +94,6 @@ const base::Feature kSeparateNetworkIcons{"SeparateNetworkIcons",
 const base::Feature kTrilinearFiltering{"TrilinearFiltering",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kUnlockWithExternalBinary{
-    "UnlockWithExternalBinary", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kUseBluetoothSystemInAsh{"UseBluetoothSystemInAsh",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -126,9 +102,6 @@ const base::Feature kSupervisedUserDeprecationNotice{
 
 const base::Feature kSwapSideVolumeButtonsForOrientation{
     "SwapSideVolumeButtonsForOrientation", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kUnifiedMessageCenterRefactor{
-    "UnifiedMessageCenterRefactor", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
@@ -140,16 +113,23 @@ const base::Feature kDragFromShelfToHomeOrOverview{
     "DragFromShelfToHomeOrOverview", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kHideShelfControlsInTabletMode{
-    "HideShelfControlsInTabletMode", base::FEATURE_DISABLED_BY_DEFAULT};
+    "HideShelfControlsInTabletMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSystemTrayMicGainSetting{
-    "SystemTrayMicGainSetting", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSystemTrayMicGainSetting{"SystemTrayMicGainSetting",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebUITabStripTabDragIntegration{
     "WebUITabStripTabDragIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kShelfAppScaling{"ShelfAppScaling",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kNotificationsInContextMenu{
+    "NotificationsInContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMaintainShelfStateWhenEnteringOverview{
+    "MaintainShelfStateWhenEnteringOverview",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAllowAmbientEQEnabled() {
   return base::FeatureList::IsEnabled(kAllowAmbientEQ);
@@ -157,6 +137,10 @@ bool IsAllowAmbientEQEnabled() {
 
 bool IsAltTabLimitedToActiveDesk() {
   return base::FeatureList::IsEnabled(kLimitAltTabToActiveDesk);
+}
+
+bool IsPerDeskShelfEnabled() {
+  return base::FeatureList::IsEnabled(kPerDeskShelf);
 }
 
 bool IsAutoNightLightEnabled() {
@@ -219,11 +203,6 @@ bool IsSwapSideVolumeButtonsForOrientationEnabled() {
   return base::FeatureList::IsEnabled(kSwapSideVolumeButtonsForOrientation);
 }
 
-bool IsUnifiedMessageCenterRefactorEnabled() {
-  return base::FeatureList::IsEnabled(kUnifiedMessageCenterRefactor) ||
-         chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsBackgroundBlurEnabled() {
   bool enabled_by_feature_flag =
       base::FeatureList::IsEnabled(kEnableBackgroundBlur);
@@ -255,29 +234,14 @@ bool IsReduceDisplayNotificationsEnabled() {
 }
 
 bool IsHideShelfControlsInTabletModeEnabled() {
-  if (!IsDragFromShelfToHomeOrOverviewEnabled())
-    return false;
-
-  // Enable shelf navigation buttons by default on select number of boards.
-  static const bool hide_shelf_buttons = ShouldHideShelfButtonsForBoard();
-  if (hide_shelf_buttons)
-    return true;
-
-  return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode);
-}
-
-bool IsDisplayChangeModalEnabled() {
-  return base::FeatureList::IsEnabled(kDisplayChangeModal);
+  return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode) &&
+         IsDragFromShelfToHomeOrOverviewEnabled();
 }
 
 bool AreContextualNudgesEnabled() {
   if (!IsHideShelfControlsInTabletModeEnabled())
     return false;
   return base::FeatureList::IsEnabled(kContextualNudges);
-}
-
-bool IsCornerShortcutsEnabled() {
-  return base::FeatureList::IsEnabled(kCornerShortcuts);
 }
 
 bool IsSystemTrayMicGainSettingEnabled() {
@@ -303,6 +267,14 @@ bool IsMovablePartialScreenshotEnabled() {
 bool IsAppScalingEnabled() {
   return base::FeatureList::IsEnabled(kShelfAppScaling) &&
          chromeos::switches::ShouldShowShelfHotseat();
+}
+
+bool IsNotificationsInContextMenuEnabled() {
+  return base::FeatureList::IsEnabled(kNotificationsInContextMenu);
+}
+
+bool IsMaintainShelfStateWhenEnteringOverviewEnabled() {
+  return base::FeatureList::IsEnabled(kMaintainShelfStateWhenEnteringOverview);
 }
 
 namespace {

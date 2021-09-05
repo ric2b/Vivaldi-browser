@@ -5,9 +5,14 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WIDGET_WIDGET_BASE_CLIENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WIDGET_WIDGET_BASE_CLIENT_H_
 
+#include <vector>
+
 #include "base/time/time.h"
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
+#include "third_party/blink/public/platform/input/input_handler_proxy.h"
+#include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/web/web_lifecycle_update.h"
 
 namespace cc {
@@ -17,6 +22,10 @@ class RenderFrameMetadataObserver;
 }  // namespace cc
 
 namespace blink {
+
+class FrameWidget;
+class WebGestureEvent;
+class WebMouseEvent;
 
 // This class is part of the foundation of all widgets. It provides
 // callbacks from the compositing infrastructure that the individual widgets
@@ -93,6 +102,10 @@ class WidgetBaseClient {
   virtual void DidBeginMainFrame() {}
   virtual void DidCommitAndDrawCompositorFrame() {}
 
+  virtual void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) {}
+
   virtual void OnDeferMainFrameUpdatesChanged(bool defer) {}
   virtual void OnDeferCommitsChanged(bool defer) {}
 
@@ -106,6 +119,52 @@ class WidgetBaseClient {
 
   virtual void WillBeginMainFrame() {}
   virtual void DidCompletePageScaleAnimation() {}
+
+  virtual void SubmitThroughputData(ukm::SourceId source_id,
+                                    int aggregated_percent,
+                                    int impl_percent,
+                                    base::Optional<int> main_percent) {}
+  virtual void FocusChangeComplete() {}
+
+  virtual WebInputEventResult DispatchBufferedTouchEvents() = 0;
+  virtual WebInputEventResult HandleInputEvent(
+      const WebCoalescedInputEvent&) = 0;
+  virtual bool SupportsBufferedTouchEvents() = 0;
+
+  virtual void DidHandleKeyEvent() {}
+  virtual bool WillHandleGestureEvent(const WebGestureEvent& event) = 0;
+  virtual bool WillHandleMouseEvent(const WebMouseEvent& event) = 0;
+  virtual void ObserveGestureEventAndResult(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) = 0;
+  virtual void QueueSyntheticEvent(std::unique_ptr<WebCoalescedInputEvent>) = 0;
+
+  virtual WebTextInputType GetTextInputType() {
+    return WebTextInputType::kWebTextInputTypeNone;
+  }
+
+  virtual void GetWidgetInputHandler(
+      mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+      mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) = 0;
+
+  // The FrameWidget interface if this is a FrameWidget.
+  virtual FrameWidget* FrameWidget() { return nullptr; }
+
+  // Send the composition change to the browser.
+  virtual void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) = 0;
+
+  // Determine if there is a IME guard.
+  virtual bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) = 0;
+
+  // Called to inform the Widget that it has gained or lost keyboard focus.
+  virtual void FocusChanged(bool) = 0;
+
+  // Test-specific methods below this point.
+  virtual void ScheduleAnimationForWebTests() {}
 };
 
 }  // namespace blink

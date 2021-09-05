@@ -15,7 +15,7 @@ VivaldiAppWindowDesktopNativeWidgetAuraWin::VivaldiAppWindowDesktopNativeWidgetA
     VivaldiNativeAppWindowViewsWin* app_window)
     : views::DesktopNativeWidgetAura(app_window->widget()),
       app_window_(app_window) {
-  GetNativeWindow()->SetName("AppWindowAura");
+  GetNativeWindow()->SetName("VivaldiWindowAura");
 }
 
 VivaldiAppWindowDesktopNativeWidgetAuraWin::

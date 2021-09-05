@@ -112,6 +112,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="1771761307086386028">دائیں اسکرول کریں</translation>
 <translation id="1781173782405573156">آگے جانے کی کلید</translation>
 <translation id="1787176709638001873">پاس ورڈ میں ترمیم کا متن</translation>
+<translation id="180203835522132923">‏Search + O، پھر W</translation>
 <translation id="1810107444790159527">فہرست باکس</translation>
 <translation id="1812527064848182527">لینڈ اسکیپ</translation>
 <translation id="1829244130665387512">صفحہ پر تلاش کریں</translation>
@@ -256,6 +257,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="297825089465017871">دو انگلیوں سے بائیں طرف سوائپ کریں</translation>
 <translation id="2998131015536248178">پچھلا حرف</translation>
 <translation id="2999559350546931576">پچ کم کریں</translation>
+<translation id="3009352964623081324">‏Search + O، پھر S۔ آوازوں کو انسٹال، ان کا نظم کرنے اور حسب ضرورت بنانے کے لیے استعمال کریں</translation>
 <translation id="3014130421870723208">@ والے 8 ڈاٹ</translation>
 <translation id="3030432017085518523">مینو آئٹم کا ریڈیو بٹن</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{اپوسٹرافی}other{# اپوسٹروفیز}}</translation>
@@ -454,6 +456,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="4505167975768625962">داخل کرنا</translation>
 <translation id="4511186779140817916">بلیچ کردہ بادامی</translation>
 <translation id="451510441928265982">سطح 2 کی کوئی پچھلی ہیڈنگ نہیں ہے</translation>
+<translation id="4515799157838123044">پس منظر کے مواد کا شیڈ</translation>
 <translation id="4517854969512651305">قدر بڑھائیں</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{سلیش}other{# سلیشز}}</translation>
 <translation id="4537277403911487429">اگلا مماثل آئٹم</translation>
@@ -705,6 +708,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="6628427060004938651">حصہ</translation>
 <translation id="6637586476836377253">لاگ</translation>
 <translation id="6657128831881431364">پیشرفت بار</translation>
+<translation id="6660819301598582123">تیز بھوری لومڑی نے سست کتے پر چھلانگ لگائی۔</translation>
 <translation id="667999046851023355">دستاویز</translation>
 <translation id="6688209025607531203">ایک غیر موڈل الرٹ</translation>
 <translation id="6689672606256159458">گہرا سرخی مائل نارنجی</translation>
@@ -740,7 +744,6 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="6951482098621102657">اگلی سطح 5 کی کوئی ہیڈنگ نہیں ہے</translation>
 <translation id="6955705049214951590">دھندلا گلابی</translation>
 <translation id="696356426651109308">شروعات پر جائیں</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">فرہنگ کا حوالہ</translation>
 <translation id="6996566555547746822">اگلا کامبو باکس</translation>
 <translation id="6997224546856374593">بڑے حروف پڑھتے ہوئے:</translation>
@@ -809,6 +812,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="743783356331413498">مثال</translation>
 <translation id="7439060726180460871">ڈائریکٹری</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">عنصر کی اقسام اور حوالہ شدہ، حذف کردہ، بولڈ کردہ، قوسین یا بڑے حروف والا ٹیکسٹ بولنے پر پِچ کو تبدیل کریں۔</translation>
 <translation id="7491962110804786152">ٹیب</translation>
 <translation id="7505149250476994901">حرف سے پہلے "بڑا حرف" بولیں</translation>
 <translation id="7518543783849163354">‏ChromeVox کو عارضی طور پر بولنے سے روکنے کیلئے، Control کلید دبائیں۔</translation>

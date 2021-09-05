@@ -39,8 +39,6 @@
 <translation id="1873233029667955273">Google Chrome നിങ്ങളുടെ ഡിഫോൾട്ട് ബ്രൗസറല്ല</translation>
 <translation id="1874309113135274312">Google Chrome ബീറ്റ (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome കാലഹരണപ്പെട്ടതാണ്</translation>
-<translation id="1900795423379050516">ഈ പേജിൽ ക്രമീകരണം കാണിക്കുന്നില്ലെങ്കിൽ <ph name="LINK_BEGIN" />
-      Chrome ബ്രൗസർ ക്രമീകരണത്തിൽ<ph name="LINK_END" /> പരിശോധിക്കുക</translation>
 <translation id="1919130412786645364">Chrome-ലേക്ക് സൈൻ ഇൻ ചെയ്യാൻ അനുവദിക്കുക</translation>
 <translation id="2063848847527508675">അപ്‌ഡേറ്റ് ബാധകമാക്കാൻ Chrome റീസ്റ്റാർട്ട് ചെയ്യേണ്ടതുണ്ട്.</translation>
 <translation id="2094919256425865063">എന്തായാലും Chrome-ൽ നിന്ന് പുറത്തുകടക്കണോ?</translation>
@@ -116,6 +114,7 @@
 <translation id="4251615635259297716">നിങ്ങളുടെ Chrome ഡാറ്റ ഈ അക്കൗണ്ടുമായി ലിങ്ക് ചെയ്യണോ?</translation>
 <translation id="4281844954008187215">സേവന നിബന്ധനകൾ</translation>
 <translation id="4293420128516039005">നിങ്ങളുടെ ഉപകരണങ്ങളിലുടനീളം Chrome സമന്വയിപ്പിച്ച് വ്യക്തിഗതമാക്കാൻ സൈൻ ഇൻ ചെയ്യുക</translation>
+<translation id="4325083532956419387">Chrome OS പതിപ്പ്</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">ഡാറ്റാ ലംഘനങ്ങൾ, മോശം വിപുലീകരണങ്ങൾ എന്നിവയിൽ നിന്നും മറ്റും നിങ്ങളെ സുരക്ഷിതമായി നിലനിർത്താൻ Chrome സഹായിക്കും</translation>

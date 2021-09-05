@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Posunúť doprava</translation>
 <translation id="1781173782405573156">Preskočiť kláves</translation>
 <translation id="1787176709638001873">Text úpravy hesla</translation>
+<translation id="180203835522132923">Tlačidlo vyhľadávania + O, potom W</translation>
 <translation id="1810107444790159527">Zoznamové pole</translation>
 <translation id="1812527064848182527">na šírku</translation>
 <translation id="1829244130665387512">Nájsť na stránke</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Potiahnite dvoma prstami doľava</translation>
 <translation id="2998131015536248178">Predchádzajúci znak</translation>
 <translation id="2999559350546931576">Znížiť výšku hlasu</translation>
+<translation id="3009352964623081324">Tlačidlo vyhľadávania + O, potom S. Používa sa na inštaláciu, správu a prispôsobenie hlasov.</translation>
 <translation id="3014130421870723208">@upr osembodové</translation>
 <translation id="3030432017085518523">Prepínač položky ponuky</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}few{# apostrofy}many{# apostrophes}other{# apostrofov}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Vloženie</translation>
 <translation id="4511186779140817916">Mandľová</translation>
 <translation id="451510441928265982">Žiadny predchádzajúci nadpis druhej úrovne</translation>
+<translation id="4515799157838123044">Zatieniť obsah na pozadí</translation>
 <translation id="4517854969512651305">Zvýšiť hodnotu</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{lomka}few{# lomky}many{# slashes}other{# lomiek}}</translation>
 <translation id="4537277403911487429">Ďalšia podobná položka</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Časť</translation>
 <translation id="6637586476836377253">denník</translation>
 <translation id="6657128831881431364">Panel priebehu</translation>
+<translation id="6660819301598582123">Kŕdeľ ďatľov učil koňa žrať kôru.</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6688209025607531203">Upozornenie netýkajúce sa režimu</translation>
 <translation id="6689672606256159458">Tmavolososová</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Žiadny ďalší nadpis piatej úrovne</translation>
 <translation id="6955705049214951590">Zahmlená ružová</translation>
 <translation id="696356426651109308">Preskočiť na začiatok</translation>
-<translation id="699159175332639490">Hľadať + O + W</translation>
 <translation id="6994042831499278539">Glosárový termín</translation>
 <translation id="6996566555547746822">Ďalšie rozbaľovacie pole</translation>
 <translation id="6997224546856374593">Pri čítaní veľkých písmen:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">Príklad</translation>
 <translation id="7439060726180460871">Adresár</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Zmeňte výšku hlasu pri vyslovovaní typov prvkov a citovaného, odstráneného a tučného textu, ako aj takého, ktorý je v zátvorkách alebo napísaný veľkými písmenami.</translation>
 <translation id="7491962110804786152">karta</translation>
 <translation id="7505149250476994901">Povedať pred písmenom „veľké“</translation>
 <translation id="7518543783849163354">Ak chcete ChromeVox dočasne zastaviť, stlačte kláves Ctrl.</translation>

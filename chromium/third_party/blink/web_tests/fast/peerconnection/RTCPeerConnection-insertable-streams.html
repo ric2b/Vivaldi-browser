@@ -68,11 +68,14 @@ async function testVideoFlow(t, negotiationFunction) {
 
   // Pass frames as they come from the encoder.
   for (let i = 0; i < numFramesPassthrough; i++) {
-    const result = await senderReader.read()
+    const result = await senderReader.read();
+    const metadata = result.value.getMetadata();
+    assert_true(containsVideoMetadata(metadata));
     frameInfos.push({
       timestamp: result.value.timestamp,
+      type: result.value.type,
       data: result.value.data,
-      metadata: result.value.getMetadata(),
+      metadata: metadata,
       getMetadata() { return this.metadata; }
     });
     senderWriter.write(result.value);
@@ -80,7 +83,9 @@ async function testVideoFlow(t, negotiationFunction) {
 
   // Replace frame data with arbitrary buffers.
   for (let i = 0; i < numFramesReplaceData; i++) {
-    const result = await senderReader.read()
+    const result = await senderReader.read();
+    const metadata = result.value.getMetadata();
+    assert_true(containsVideoMetadata(metadata));
     const buffer = new ArrayBuffer(100);
     const int8View = new Int8Array(buffer);
     int8View.fill(i);
@@ -88,8 +93,9 @@ async function testVideoFlow(t, negotiationFunction) {
     result.value.data = buffer;
     frameInfos.push({
       timestamp: result.value.timestamp,
+      type: result.value.type,
       data: result.value.data,
-      metadata: result.value.getMetadata(),
+      metadata: metadata,
       getMetadata() { return this.metadata; }
     });
     senderWriter.write(result.value);
@@ -97,14 +103,17 @@ async function testVideoFlow(t, negotiationFunction) {
 
   // Modify frame data.
   for (let i = 0; i < numFramesReplaceData; i++) {
-    const result = await senderReader.read()
+    const result = await senderReader.read();
+    const metadata = result.value.getMetadata();
+    assert_true(containsVideoMetadata(metadata));
     const int8View = new Int8Array(result.value.data);
     int8View.fill(i);
 
     frameInfos.push({
       timestamp: result.value.timestamp,
+      type: result.value.type,
       data: result.value.data,
-      metadata: result.value.getMetadata(),
+      metadata: metadata,
       getMetadata() { return this.metadata; }
     });
     senderWriter.write(result.value);
@@ -114,11 +123,11 @@ async function testVideoFlow(t, negotiationFunction) {
 }
 
 promise_test(async t => {
-  return testVideoFlow(t, doSignalingHandshake);
+  return testVideoFlow(t, exchangeOfferAnswer);
 }, 'Frames flow correctly using insertable streams');
 
 promise_test(async t => {
-  return testVideoFlow(t, doInverseSignalingHandshake);
+  return testVideoFlow(t, exchangeOfferAnswerReverse);
 }, 'Frames flow correctly using insertable streams when receiver starts negotiation');
 
 promise_test(async t => {
@@ -131,7 +140,7 @@ promise_test(async t => {
   t.add_cleanup(() => videoTrack.stop());
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   const videoSender = caller.addTrack(videoTrack);
   assert_throws_dom("InvalidStateError", () => videoSender.createEncodedStreams());
@@ -157,7 +166,7 @@ promise_test(async t => {
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
   return ontrackPromise;
 }, 'RTCRtpReceiver.createEncodedStream() throws if not requested in PC configuration');
 
@@ -207,7 +216,7 @@ promise_test(async t => {
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   return onmessagePromise;
 }, 'RTCRtpSender readable stream transferred to a Worker and the Worker sends an RTCEncodedVideoFrame back');
@@ -252,7 +261,7 @@ async function testNormalDataFlowWithInsertableStreamsForOtherKind(t, normalKind
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   return ontrackPromise;
 }
@@ -304,7 +313,7 @@ promise_test(async t => {
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   let numSentKeyFrames = 0;
   let numSentDeltaFrames = 0;
@@ -348,7 +357,7 @@ promise_test(async t => {
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   await promise_rejects_dom(
       t, 'OperationError',
@@ -385,12 +394,13 @@ promise_test(async t => {
   });
 
   exchangeIceCandidates(caller, callee);
-  await doSignalingHandshake(caller, callee);
+  await exchangeOfferAnswer(caller, callee);
 
   // Pass frames as they come from the encoder.
   const result = await senderReader.read()
   sentFrameInfo = {
     timestamp: result.value.timestamp,
+    type: result.value.type,
     data: result.value.data,
     metadata: result.value.getMetadata(),
     getMetadata() { return this.metadata; }

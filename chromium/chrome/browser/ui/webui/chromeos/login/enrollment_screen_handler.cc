@@ -27,7 +27,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
 #include "chrome/browser/policy/enrollment_status.h"
 #include "chrome/browser/profiles/profile.h"
@@ -412,6 +412,12 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
               IDS_ENTERPRISE_ENROLLMENT_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE,
               true);
           break;
+        case policy::
+            DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL:
+          ShowError(
+              IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL,
+              true);
+          break;
         case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
           ShowError(
               IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED,
@@ -772,12 +778,12 @@ void EnrollmentScreenHandler::HandleCompleteLogin(const std::string& user) {
 
 void EnrollmentScreenHandler::OnGetCookiesForCompleteLogin(
     const std::string& user,
-    const net::CookieStatusList& cookies,
-    const net::CookieStatusList& excluded_cookies) {
+    const net::CookieAccessResultList& cookies,
+    const net::CookieAccessResultList& excluded_cookies) {
   std::string auth_code;
-  for (const auto& cookie_with_status : cookies) {
-    if (cookie_with_status.cookie.Name() == "oauth_code") {
-      auth_code = cookie_with_status.cookie.Value();
+  for (const auto& cookie_with_access_result : cookies) {
+    if (cookie_with_access_result.cookie.Name() == "oauth_code") {
+      auth_code = cookie_with_access_result.cookie.Value();
       break;
     }
   }
@@ -882,11 +888,7 @@ void EnrollmentScreenHandler::DoShowWithPartition(
   if (!app_locale.empty())
     screen_data.SetString("hl", app_locale);
 
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-  const bool cfm = policy_manager && policy_manager->IsRemoraRequisition();
+  const bool cfm = policy::EnrollmentRequisitionManager::IsRemoraRequisition();
   screen_data.SetString("flow", cfm ? "cfm" : "enterprise");
 
   ShowScreenWithData(EnrollmentScreenView::kScreenId, &screen_data);

@@ -23,9 +23,6 @@
 #import "net/base/mac/url_conversions.h"
 #include "url/gurl.h"
 
-const NSString* kHeaderEtag = @"ETag";
-const NSString* kHeaderXRetryAfter = @"X-Retry-After";
-
 using ResponseStartedCallback =
     update_client::NetworkFetcher::ResponseStartedCallback;
 using ProgressCallback = update_client::NetworkFetcher::ProgressCallback;
@@ -151,23 +148,33 @@ using DownloadToFileCompleteCallback =
 
   NSHTTPURLResponse* response = (NSHTTPURLResponse*)task.response;
   NSDictionary* headers = response.allHeaderFields;
+
+  NSString* headerEtag =
+      base::SysUTF8ToNSString(update_client::NetworkFetcher::kHeaderEtag);
   NSString* etag = @"";
-  if ([headers objectForKey:kHeaderEtag]) {
-    etag = [headers objectForKey:kHeaderEtag];
+  if ([headers objectForKey:headerEtag]) {
+    etag = [headers objectForKey:headerEtag];
   }
   int64_t retryAfterResult = -1;
-  NSString* xRetryAfter = [headers objectForKey:kHeaderXRetryAfter];
+  NSString* xRetryAfter = [headers
+      objectForKey:base::SysUTF8ToNSString(
+                       update_client::NetworkFetcher::kHeaderXRetryAfter)];
   if (xRetryAfter) {
     retryAfterResult = [xRetryAfter intValue];
   }
 
+  NSString* dataToUse =
+      _downloadedData ? [[NSString alloc] initWithData:_downloadedData
+                                              encoding:NSUTF8StringEncoding]
+                      : response.description;
+
   _callbackRunner->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(_postRequestCompleteCallback),
-                     std::make_unique<std::string>(
-                         base::SysNSStringToUTF8(response.description)),
-                     error.code, std::string(base::SysNSStringToUTF8(etag)),
-                     retryAfterResult));
+      base::BindOnce(
+          std::move(_postRequestCompleteCallback),
+          std::make_unique<std::string>(base::SysNSStringToUTF8(dataToUse)),
+          error.code, std::string(base::SysNSStringToUTF8(etag)),
+          retryAfterResult));
 }
 
 @end
@@ -246,9 +253,10 @@ using DownloadToFileCompleteCallback =
                                                        error:nil];
   NSNumber* fileSizeAttribute = attributes[NSFileSize];
   int64_t fileSize = [fileSizeAttribute integerValue];
+  NSInteger statusCode = response.statusCode == 200 ? 0 : response.statusCode;
   _callbackRunner->PostTask(
       FROM_HERE, base::BindOnce(std::move(_downloadToFileCompleteCallback),
-                                response.statusCode, fileSize));
+                                statusCode, fileSize));
 }
 
 @end
@@ -266,6 +274,7 @@ NetworkFetcher::~NetworkFetcher() = default;
 void NetworkFetcher::PostRequest(
     const GURL& url,
     const std::string& post_data,
+    const std::string& content_type,
     const base::flat_map<std::string, std::string>& post_additional_headers,
     ResponseStartedCallback response_started_callback,
     ProgressCallback progress_callback,
@@ -290,6 +299,8 @@ void NetworkFetcher::PostRequest(
   [urlRequest setHTTPMethod:@"POST"];
   [urlRequest setHTTPBody:[base::SysUTF8ToNSString(post_data)
                               dataUsingEncoding:NSUTF8StringEncoding]];
+  [urlRequest addValue:base::SysUTF8ToNSString(content_type)
+      forHTTPHeaderField:@"Content-Type"];
   VLOG(1) << "Posting data: " << post_data.c_str();
 
   NSURLSessionDataTask* dataTask = [session dataTaskWithRequest:urlRequest];

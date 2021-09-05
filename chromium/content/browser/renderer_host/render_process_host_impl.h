@@ -28,7 +28,6 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/threading/sequence_bound.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
@@ -97,7 +96,7 @@
 namespace base {
 class CommandLine;
 class PersistentMemoryAllocator;
-}
+}  // namespace base
 
 namespace url {
 class Origin;
@@ -125,6 +124,7 @@ class RenderProcessHostFactory;
 class RenderProcessHostTest;
 class RenderWidgetHelper;
 class ResolveProxyHelper;
+class SiteInfo;
 class SiteInstance;
 class SiteInstanceImpl;
 class StoragePartition;
@@ -173,7 +173,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static RenderProcessHost* CreateRenderProcessHost(
       BrowserContext* browser_context,
       StoragePartitionImpl* storage_partition_impl,
-      SiteInstance* site_instance);
+      SiteInstanceImpl* site_instance);
+
+  // Returns whether the process-per-site model is in use (globally or just for
+  // the current site), in which case we should ensure there is only one
+  // RenderProcessHost per site for the entire browser context.
+  static bool ShouldUseProcessPerSite(BrowserContext* browser_context,
+                                      const SiteInfo& site_info);
 
   ~RenderProcessHostImpl() override;
 
@@ -255,6 +261,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool HostHasNotBeenUsed() override;
   void LockToOrigin(const IsolationContext& isolation_context,
                     const GURL& lock_url) override;
+  bool IsLockedToOriginForTesting() override;
   void BindCacheStorage(
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
@@ -302,16 +309,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
     child_process_activity_time_ = base::TimeTicks::Now();
   }
 
-  // TODO(https://crbug.com/1006814): Delete this.
-  bool GetWithinProcessDiedObserverForCrbug1006814() {
-    return within_process_died_observer_;
-  }
-
-  // TODO(https://crbug.com/1006814): Delete this.
-  bool GetWithinCleanupProcessDiedObserverForCrbug1006814() {
-    return within_cleanup_process_died_observer_;
-  }
-
   // Used to extend the lifetime of the sessions until the render view
   // in the renderer is fully closed. This is static because its also called
   // with mock hosts as input in test cases. The RenderWidget routing associated
@@ -341,6 +338,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // not the actual site that the process is locked to, which happens for
   // hosted apps. |is_guest| should be set to true if the call is being made
   // for a <webview> guest SiteInstance.
+  // TODO(wjmaclean): Rethink |how site_url|/|lock_url| parameters are passed.
+  // |site_url| will probably become a SiteInfo, but whether we want to combine
+  // |lock_url| into that or keep it separate needs to be decided.
   static bool IsSuitableHost(RenderProcessHost* host,
                              const IsolationContext& isolation_context,
                              const GURL& site_url,
@@ -353,7 +353,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // This should only be used for process-per-site mode, which can be enabled
   // globally with a command line flag or per-site, as determined by
   // SiteInstanceImpl::ShouldUseProcessPerSite.
-  // Important: |url| should be a full URL and *not* a site URL.
+  // Important: |url| should be a full URL and *not* a SiteInfo.
   static RenderProcessHost* GetSoleProcessHostForURL(
       const IsolationContext& isolation_context,
       const GURL& url);
@@ -363,7 +363,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // to true if the call is being made for a <webview> guest SiteInstance.
   static RenderProcessHost* GetSoleProcessHostForSite(
       const IsolationContext& isolation_context,
-      const GURL& site_url,
+      const SiteInfo& site_info,
       const GURL& lock_url,
       const bool is_guest);
 
@@ -504,25 +504,25 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static RenderProcessHostFactory*
   get_render_process_host_factory_for_testing();
 
-  // Tracks which sites frames are hosted in which RenderProcessHosts.
+  // Tracks which sites' frames are hosted in which RenderProcessHosts.
   // TODO(ericrobinson): These don't need to be static.
   static void AddFrameWithSite(BrowserContext* browser_context,
                                RenderProcessHost* render_process_host,
-                               const GURL& site_url);
+                               const SiteInfo& site_info);
   static void RemoveFrameWithSite(BrowserContext* browser_context,
                                   RenderProcessHost* render_process_host,
-                                  const GURL& site_url);
+                                  const SiteInfo& site_info);
 
   // Tracks which sites navigations are expected to commit in which
   // RenderProcessHosts.
   static void AddExpectedNavigationToSite(
       BrowserContext* browser_context,
       RenderProcessHost* render_process_host,
-      const GURL& site_url);
+      const SiteInfo& site_info);
   static void RemoveExpectedNavigationToSite(
       BrowserContext* browser_context,
       RenderProcessHost* render_process_host,
-      const GURL& site_url);
+      const SiteInfo& site_info);
 
   // Discards the spare RenderProcessHost.  After this call,
   // GetSpareRenderProcessHostForTesting will return nullptr.
@@ -924,7 +924,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
         base::BindRepeating(
             &InterfaceGetter<CallbackType>::GetInterfaceOnUIThread,
             instance_weak_factory_->GetWeakPtr(), std::move(callback)),
-        base::CreateSingleThreadTaskRunner({BrowserThread::UI}));
+        GetUIThreadTaskRunner({}));
   }
 
   // Callback to unblock process shutdown after waiting for unload handlers to
@@ -1121,11 +1121,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // and calling through RenderProcessHostObserver::RenderProcessExited.
   bool within_process_died_observer_;
 
-  // Indicates whether RenderProcessHostImpl::Cleanup is currently iterating and
-  // calling through RenderProcessHostObserver::RenderProcessExited.
-  // TODO(https://crbug.com/1006814): Delete this.
-  bool within_cleanup_process_died_observer_ = false;
-
   std::unique_ptr<P2PSocketDispatcherHost> p2p_socket_dispatcher_host_;
 
   // Must be accessed on UI thread.
@@ -1218,6 +1213,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
   class IOThreadHostImpl;
   friend class IOThreadHostImpl;
   base::Optional<base::SequenceBound<IOThreadHostImpl>> io_thread_host_impl_;
+
+  // Representing agent cluster's "cross-origin isolated" concept.
+  // TODO(yhirano): Have the spec URL.
+  // This property is renderer process global because we ensure that a
+  // renderer process host only cross-origin isolated agents or only
+  // non-cross-origin isolated agents, not both.
+  const bool cross_origin_isolated_ = false;
 
   base::WeakPtrFactory<RenderProcessHostImpl> weak_factory_{this};
 

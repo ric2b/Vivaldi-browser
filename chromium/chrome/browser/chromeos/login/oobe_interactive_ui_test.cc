@@ -115,9 +115,7 @@ void RunWelcomeScreenChecks() {
 }
 
 void RunNetworkSelectionScreenChecks() {
-  test::OobeJS().ExpectTrue(
-      "!$('oobe-network-md').$.networkDialog.querySelector('oobe-next-button'"
-      ").disabled");
+  test::OobeJS().ExpectEnabledPath({"network-selection", "nextButton"});
 
   EXPECT_TRUE(ash::LoginScreenTestApi::IsShutdownButtonShown());
   EXPECT_FALSE(ash::LoginScreenTestApi::IsGuestButtonShown());
@@ -130,7 +128,7 @@ void RunEulaScreenChecks() {
   test::OobeJS()
       .CreateVisibilityWaiter(true, {"oobe-eula-md", "eulaDialog"})
       ->Wait();
-  test::OobeJS().ExpectTrue("!$('oobe-eula-md').$.acceptButton.disabled");
+  test::OobeJS().ExpectEnabledPath({"oobe-eula-md", "acceptButton"});
 
   EXPECT_TRUE(ash::LoginScreenTestApi::IsShutdownButtonShown);
   EXPECT_FALSE(ash::LoginScreenTestApi::IsGuestButtonShown());
@@ -169,17 +167,13 @@ void LogInAsRegularUser() {
 
 void RunFingerprintScreenChecks() {
   test::OobeJS().ExpectVisible("fingerprint-setup");
-  test::OobeJS().ExpectVisible("fingerprint-setup-impl");
-  test::OobeJS().ExpectVisiblePath(
-      {"fingerprint-setup-impl", "setupFingerprint"});
-  test::OobeJS().TapOnPath(
-      {"fingerprint-setup-impl", "showSensorLocationButton"});
-  test::OobeJS().ExpectHiddenPath(
-      {"fingerprint-setup-impl", "setupFingerprint"});
+  test::OobeJS().ExpectVisiblePath({"fingerprint-setup", "setupFingerprint"});
+  test::OobeJS().TapOnPath({"fingerprint-setup", "next"});
+  test::OobeJS().ExpectHiddenPath({"fingerprint-setup", "setupFingerprint"});
   LOG(INFO) << "OobeInteractiveUITest: Waiting for fingerprint setup "
                "to switch to placeFinger.";
   test::OobeJS()
-      .CreateVisibilityWaiter(true, {"fingerprint-setup-impl", "placeFinger"})
+      .CreateVisibilityWaiter(true, {"fingerprint-setup", "placeFinger"})
       ->Wait();
 
   EXPECT_FALSE(ash::LoginScreenTestApi::IsShutdownButtonShown());
@@ -190,12 +184,9 @@ void RunFingerprintScreenChecks() {
 void RunDiscoverScreenChecks() {
   test::OobeJS().ExpectVisible("discover");
   test::OobeJS().ExpectVisible("discover-impl");
-  test::OobeJS().ExpectTrue(
-      "!$('discover-impl').root.querySelector('discover-pin-setup-module')."
-      "hidden");
-  test::OobeJS().ExpectTrue(
-      "!$('discover-impl').root.querySelector('discover-pin-setup-module').$."
-      "setup.hidden");
+  test::OobeJS().ExpectVisiblePath({"discover-impl", "pin-setup-impl"});
+  test::OobeJS().ExpectVisiblePath(
+      {"discover-impl", "pin-setup-impl", "setup"});
 
   EXPECT_FALSE(ash::LoginScreenTestApi::IsShutdownButtonShown());
   EXPECT_FALSE(ash::LoginScreenTestApi::IsGuestButtonShown());
@@ -244,8 +235,10 @@ void HandleRecommendAppsScreen() {
   EXPECT_FALSE(ash::LoginScreenTestApi::IsAddUserButtonShown());
 
   test::OobeJS()
-      .CreateDisplayedWaiter(true, {"recommend-apps-screen", "app-list-view"})
+      .CreateVisibilityWaiter(true, {"recommend-apps", "appsDialog"})
       ->Wait();
+
+  test::OobeJS().ExpectPathDisplayed(true, {"recommend-apps", "appView"});
 
   std::string toggle_apps_script = base::StringPrintf(
       "(function() {"
@@ -263,7 +256,7 @@ void HandleRecommendAppsScreen() {
       "test.package");
 
   const std::string webview_path =
-      test::GetOobeElementPath({"recommend-apps-screen", "app-list-view"});
+      test::GetOobeElementPath({"recommend-apps", "appView"});
   const std::string script = base::StringPrintf(
       "(function() {"
       "  var toggleApp = function() {"
@@ -285,7 +278,7 @@ void HandleRecommendAppsScreen() {
   EXPECT_TRUE(result);
 
   const std::initializer_list<base::StringPiece> install_button = {
-      "recommend-apps-screen", "recommend-apps-install-button"};
+      "recommend-apps", "installButton"};
   test::OobeJS().CreateEnabledWaiter(true, install_button)->Wait();
   test::OobeJS().TapOnPath(install_button);
 

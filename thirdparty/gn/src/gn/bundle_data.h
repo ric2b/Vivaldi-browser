@@ -154,6 +154,13 @@ class BundleData {
     return bundle_deps_filter_;
   }
 
+  SubstitutionList& xcasset_compiler_flags() {
+    return xcasset_compiler_flags_;
+  }
+  const SubstitutionList& xcasset_compiler_flags() const {
+    return xcasset_compiler_flags_;
+  }
+
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
 
@@ -199,6 +206,7 @@ class BundleData {
   std::vector<SourceFile> code_signing_sources_;
   SubstitutionList code_signing_outputs_;
   SubstitutionList code_signing_args_;
+  SubstitutionList xcasset_compiler_flags_;
 
   DISALLOW_COPY_AND_ASSIGN(BundleData);
 };

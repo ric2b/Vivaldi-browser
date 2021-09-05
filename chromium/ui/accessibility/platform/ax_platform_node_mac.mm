@@ -497,6 +497,8 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
     return nil;
 
   for (id child in [[self AXChildren] reverseObjectEnumerator]) {
+    if (!NSPointInRect(point, [child accessibilityFrame]))
+      continue;
     if (id foundChild = [child accessibilityHitTest:point])
       return foundChild;
   }
@@ -744,7 +746,7 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
   if (ui::IsNameExposedInAXValueForRole(role))
     return [self getName];
 
-  if (_node->HasIntAttribute(ax::mojom::IntAttribute::kCheckedState)) {
+  if (_node->IsPlatformCheckable()) {
     // Mixed checkbox state not currently supported in views, but could be.
     // See browser_accessibility_cocoa.mm for details.
     const auto checkedState = static_cast<ax::mojom::CheckedState>(
@@ -844,8 +846,10 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
 - (NSValue*)AXSelectedTextRange {
   // Selection might not be supported. Return (NSRange){0,0} in that case.
   int start = 0, end = 0;
-  _node->GetIntAttribute(ax::mojom::IntAttribute::kTextSelStart, &start);
-  _node->GetIntAttribute(ax::mojom::IntAttribute::kTextSelEnd, &end);
+  if (_node->IsPlainTextField()) {
+    start = _node->GetIntAttribute(ax::mojom::IntAttribute::kTextSelStart);
+    end = _node->GetIntAttribute(ax::mojom::IntAttribute::kTextSelEnd);
+  }
 
   // NSRange cannot represent the direction the text was selected in.
   return [NSValue valueWithRange:{std::min(start, end), abs(end - start)}];
@@ -1207,6 +1211,17 @@ void AXPlatformNodeMac::Destroy() {
   if (native_node_)
     [native_node_ detach];
   AXPlatformNodeBase::Destroy();
+}
+
+// On Mac, the checked state is mapped to AXValue.
+bool AXPlatformNodeMac::IsPlatformCheckable() const {
+  if (GetData().role == ax::mojom::Role::kTab) {
+    // On Mac, tabs are exposed as radio buttons, and are treated as checkable.
+    // Also, the internal State::kSelected is be mapped to checked via AXValue.
+    return true;
+  }
+
+  return AXPlatformNodeBase::IsPlatformCheckable();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeMac::GetNativeViewAccessible() {

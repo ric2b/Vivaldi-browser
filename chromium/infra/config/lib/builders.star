@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 """Library for defining builders.
 
 The `builder` function defined in this module simplifies setting all of the
@@ -129,11 +133,14 @@ def xcode_enum(cache_name, cache_path):
 xcode_cache = struct(
    x10e1001 = xcode_enum('xcode_ios_10e1001', 'xcode_ios_10e1001.app'),
    x11a1027 = xcode_enum('xcode_ios_11a1027', 'xcode_ios_11a1027.app'),
-   x11c505wk = xcode_enum('xcode_ios_11c505wk', 'xcode_ios_11c505wk.app'),
    x11c29 = xcode_enum('xcode_ios_11c29', 'xcode_ios_11c29.app'),
    x11m382q = xcode_enum('xcode_ios_11m382q', 'xcode_ios_11m382q.app'),
    x11e146 = xcode_enum('xcode_ios_11e146', 'xcode_ios_11e146.app'),
-   x11n605cwk = xcode_enum('xcode_ios_11n605cwk', 'xcode_ios_11n605cwk.app'),
+   x11e608c = xcode_enum('xcode_ios_11e608c', 'xcode_ios_11e608c.app'),
+   x11e608cwk = xcode_enum('xcode_ios_11e608cwk', 'xcode_ios_11e608cwk.app'),
+   x11n700h = xcode_enum('xcode_ios_11n700h', 'xcode_ios_11n700h.app'),
+   # xcode12
+   x12a6159 = xcode_enum('xcode_ios_12a6159', 'xcode_ios_12a6159.app'),
 )
 
 
@@ -182,7 +189,12 @@ def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs, os):
   return goma_properties or None
 
 
-def _code_coverage_property(*, use_clang_coverage, use_java_coverage):
+def _code_coverage_property(
+    *,
+    use_clang_coverage,
+    use_java_coverage,
+    coverage_exclude_sources,
+    coverage_test_types):
   code_coverage = {}
 
   use_clang_coverage = defaults.get_value(
@@ -193,6 +205,16 @@ def _code_coverage_property(*, use_clang_coverage, use_java_coverage):
   use_java_coverage = defaults.get_value('use_java_coverage', use_java_coverage)
   if use_java_coverage:
     code_coverage['use_java_coverage'] = True
+
+  coverage_exclude_sources = defaults.get_value('coverage_exclude_sources',
+      coverage_exclude_sources)
+  if coverage_exclude_sources:
+    code_coverage['coverage_exclude_sources'] = coverage_exclude_sources
+
+  coverage_test_types = defaults.get_value('coverage_test_types',
+      coverage_test_types)
+  if coverage_test_types:
+    code_coverage['coverage_test_types'] = coverage_test_types
 
   return code_coverage or None
 
@@ -222,6 +244,8 @@ defaults = args.defaults(
     ssd = args.COMPUTE,
     use_clang_coverage = False,
     use_java_coverage = False,
+    coverage_exclude_sources = None,
+    coverage_test_types = None,
     resultdb_bigquery_exports = [],
 
     # Provide vars for bucket and executable so users don't have to
@@ -256,6 +280,8 @@ def builder(
     goma_jobs=args.DEFAULT,
     use_clang_coverage=args.DEFAULT,
     use_java_coverage=args.DEFAULT,
+    coverage_exclude_sources=args.DEFAULT,
+    coverage_test_types=args.DEFAULT,
     resultdb_bigquery_exports=args.DEFAULT,
     **kwargs):
   """Define a builder.
@@ -330,6 +356,12 @@ def builder(
     * use_java_coverage - a boolean indicating whether java coverage should be
       used. If True, the 'use_java_coverage" field will be set in the
       '$build/code_coverage' property. By default, considered False.
+    * coverage_exclude_sources - a string as the key to find the source file
+      exclusion pattern in code_coverage recipe module. Will be copied to
+      '$build/code_coverage' property if set. By default, considered None.
+    * coverage_test_types - a list of string as test types to process data for
+      in code_coverage recipe module. Will be copied to '$build/code_coverage'
+      property. By default, considered None.
     * resultdb_bigquery_exports - a list of resultdb.export_test_results(...)
       specifying parameters for exporting test results to BigQuery. By default,
       do not export.
@@ -352,7 +384,8 @@ def builder(
          + 'use goma_backend, goma_dbug, goma_enable_ats and goma_jobs instead')
   if '$build/code_coverage' in properties:
     fail('Setting "$build/code_coverage" property is not supported: '
-         + 'use use_clang_coverage and use_java_coverage instead')
+         + 'use use_clang_coverage, use_java_coverage, coverage_exclude_sources'
+         + ' and/or coverage_test_types instead')
   properties = dict(properties)
 
   os = defaults.get_value('os', os)
@@ -420,6 +453,8 @@ def builder(
   code_coverage = _code_coverage_property(
       use_clang_coverage = use_clang_coverage,
       use_java_coverage = use_java_coverage,
+      coverage_exclude_sources = coverage_exclude_sources,
+      coverage_test_types = coverage_test_types,
   )
   if code_coverage != None:
     properties['$build/code_coverage'] = code_coverage

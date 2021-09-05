@@ -60,7 +60,6 @@
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
@@ -93,6 +92,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
@@ -300,7 +300,7 @@ class PercentWaiter : public download::DownloadItem::Observer {
   void OnDownloadDestroyed(download::DownloadItem* item) override {
     DCHECK_EQ(item_, item);
     item_->RemoveObserver(this);
-    item_ = NULL;
+    item_ = nullptr;
   }
 
   download::DownloadItem* item_;
@@ -359,18 +359,18 @@ class DownloadsHistoryDataCollector {
   explicit DownloadsHistoryDataCollector(Profile* profile)
       : profile_(profile) {}
 
-  bool WaitForDownloadInfo(std::vector<history::DownloadRow>* results) {
-    EXPECT_TRUE(results);
+  std::vector<history::DownloadRow> WaitForDownloadInfo() {
+    std::vector<history::DownloadRow> results;
     HistoryServiceFactory::GetForProfile(profile_,
                                          ServiceAccessType::EXPLICIT_ACCESS)
         ->QueryDownloads(base::BindLambdaForTesting(
             [&](std::vector<history::DownloadRow> rows) {
-              *results = std::move(rows);
+              results = std::move(rows);
               base::RunLoop::QuitCurrentWhenIdleDeprecated();
             }));
 
     content::RunMessageLoop();
-    return true;
+    return results;
   }
 
  private:
@@ -811,7 +811,7 @@ class DownloadTest : public InProcessBrowserTest {
     EXPECT_EQ(0, manager->NonMaliciousInProgressCount());
     EXPECT_EQ(0, manager->InProgressCount());
     if (manager->InProgressCount() != 0)
-      return NULL;
+      return nullptr;
 
     ui_test_utils::NavigateToURL(browser(), slow_download_url);
 
@@ -821,11 +821,11 @@ class DownloadTest : public InProcessBrowserTest {
     DownloadManager::DownloadVector items;
     manager->GetAllDownloads(&items);
 
-    DownloadItem* new_item = NULL;
+    DownloadItem* new_item = nullptr;
     for (auto iter = items.begin(); iter != items.end(); ++iter) {
       if ((*iter)->GetState() == DownloadItem::IN_PROGRESS) {
         // There should be only one IN_PROGRESS item.
-        EXPECT_EQ(NULL, new_item);
+        EXPECT_FALSE(new_item);
         new_item = *iter;
       }
     }
@@ -1078,7 +1078,7 @@ class DownloadTest : public InProcessBrowserTest {
         base::FilePath destination_folder = GetDownloadDirectory(browser());
         base::FilePath my_downloaded_file = item->GetTargetFilePath();
         EXPECT_TRUE(base::PathExists(my_downloaded_file));
-        EXPECT_TRUE(base::DeleteFile(my_downloaded_file, false));
+        EXPECT_TRUE(base::DeleteFile(my_downloaded_file));
         item->Remove();
 
         EXPECT_EQ(download_info.should_redirect_to_documents ?
@@ -1198,7 +1198,7 @@ class DownloadTest : public InProcessBrowserTest {
     EXPECT_EQ(1u, downloads.size());
 
     if (downloads.size() != 1)
-      return NULL;
+      return nullptr;
 
     error_injector->ClearError();
     DownloadItem* download = downloads[0];
@@ -2011,7 +2011,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CloseNewTab4) {
   manager->GetAllDownloads(&items);
   ASSERT_NE(0u, items.size());
   DownloadItem* item = items[0];
-  EXPECT_TRUE(item != nullptr);
+  ASSERT_TRUE(item);
 
   // When the download is canceled, the second tab should close.
   EXPECT_EQ(item->GetState(), DownloadItem::CANCELLED);
@@ -2116,9 +2116,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadHistoryCheck) {
   // Get what was stored in the history.
   observer.WaitForStored();
   // Get the details on what was stored into the history.
-  std::vector<history::DownloadRow> downloads_in_database;
-  ASSERT_TRUE(DownloadsHistoryDataCollector(
-      browser()->profile()).WaitForDownloadInfo(&downloads_in_database));
+  std::vector<history::DownloadRow> downloads_in_database =
+      DownloadsHistoryDataCollector(browser()->profile()).WaitForDownloadInfo();
   ASSERT_EQ(1u, downloads_in_database.size());
 
   // Confirm history storage is what you expect for an interrupted slow download
@@ -2181,9 +2180,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadHistoryDangerCheck) {
 
   // Get history details and confirm it's what you expect.
   observer.WaitForStored();
-  std::vector<history::DownloadRow> downloads_in_database;
-  ASSERT_TRUE(DownloadsHistoryDataCollector(
-      browser()->profile()).WaitForDownloadInfo(&downloads_in_database));
+  std::vector<history::DownloadRow> downloads_in_database =
+      DownloadsHistoryDataCollector(browser()->profile()).WaitForDownloadInfo();
   ASSERT_EQ(1u, downloads_in_database.size());
   history::DownloadRow& row1(downloads_in_database[0]);
   base::FilePath file(FILE_PATH_LITERAL("downloads/dangerous/dangerous.swf"));
@@ -2696,7 +2694,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTestWithHistogramTester,
   ASSERT_EQ(url, download_items[0]->GetOriginalUrl());
   ASSERT_EQ(url, download_items[1]->GetOriginalUrl());
 
-  SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
   // Assert that the NIK is populated for 4 requests:
   // - Navigation: image.jpg
   // - favicon.ico
@@ -2808,13 +2806,13 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, SavePageNonHTMLViaPost) {
   ASSERT_TRUE(jpeg_url.is_valid());
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(web_contents != NULL);
+  ASSERT_TRUE(web_contents);
   content::WindowedNotificationObserver observer(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::Source<content::NavigationController>(
           &web_contents->GetController()));
   content::RenderFrameHost* render_frame_host = web_contents->GetMainFrame();
-  ASSERT_TRUE(render_frame_host != NULL);
+  ASSERT_TRUE(render_frame_host);
   render_frame_host->ExecuteJavaScriptForTests(
       base::ASCIIToUTF16("SubmitForm()"), base::NullCallback());
   observer.Wait();
@@ -4102,7 +4100,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FileExistenceCheckOpeningDownloadsPage) {
   DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
   DownloadItem* item = downloads[0];
-  base::DeleteFile(item->GetTargetFilePath(), false);
+  base::DeleteFile(item->GetTargetFilePath());
   ASSERT_FALSE(item->GetFileExternallyRemoved());
 
   // Open the downloads tab.
@@ -4150,9 +4148,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrossOriginDownloadNavigatesIframe) {
 
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(web_contents != NULL);
+  ASSERT_TRUE(web_contents);
   content::RenderFrameHost* render_frame_host = web_contents->GetMainFrame();
-  ASSERT_TRUE(render_frame_host != NULL);
+  ASSERT_TRUE(render_frame_host);
 
   // Clicking the <a download> in the iframe should navigate the iframe,
   // not the main frame.
@@ -4289,7 +4287,7 @@ IN_PROC_BROWSER_TEST_F(InProgressDownloadTest,
           false /* allow_metered */, false /* opened */, current_time,
           false /* transient */,
           std::vector<download::DownloadItem::ReceivedSlice>(),
-          nullptr /* download_entry */));
+          base::nullopt /*download_schedule*/, nullptr /* download_entry */));
 
   download::DownloadItem* download = coordinator->GetDownloadByGuid(guid);
   content::DownloadManager* manager = DownloadManagerForBrowser(browser());
@@ -4510,7 +4508,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, SafeSupportedFile) {
 IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceDiscardDownload) {
   PrefService* prefs = browser()->profile()->GetPrefs();
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, true);
-  safe_browsing::SetExtendedReportingPref(prefs, true);
+  safe_browsing::SetExtendedReportingPrefForTests(prefs, true);
 
   // Make a dangerous file.
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
@@ -4564,7 +4562,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceDiscardDownload) {
 IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceKeepDownload) {
   PrefService* prefs = browser()->profile()->GetPrefs();
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, true);
-  safe_browsing::SetExtendedReportingPref(prefs, true);
+  safe_browsing::SetExtendedReportingPrefForTests(prefs, true);
 
   // Make a dangerous file.
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
@@ -4729,14 +4727,13 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, PerWindowShelf) {
   EXPECT_TRUE(browser()->window()->IsDownloadShelfVisible());
 
   // Open a second tab and wait.
-  EXPECT_NE(static_cast<WebContents*>(NULL),
-            chrome::AddSelectedTabWithURL(browser(), GURL(url::kAboutBlankURL),
-                                          ui::PAGE_TRANSITION_TYPED));
+  EXPECT_TRUE(chrome::AddSelectedTabWithURL(
+      browser(), GURL(url::kAboutBlankURL), ui::PAGE_TRANSITION_TYPED));
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_TRUE(browser()->window()->IsDownloadShelfVisible());
 
   // Hide the download shelf.
-  browser()->window()->GetDownloadShelf()->Close(DownloadShelf::AUTOMATIC);
+  browser()->window()->GetDownloadShelf()->Close();
   EXPECT_FALSE(browser()->window()->IsDownloadShelfVisible());
 
   // Go to the first tab.
@@ -4825,7 +4822,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, NewWindow) {
   original_browsers.insert(browser());
   Browser* download_browser =
       ui_test_utils::GetBrowserNotInSet(original_browsers);
-  ASSERT_TRUE(download_browser != NULL);
+  ASSERT_TRUE(download_browser);
   EXPECT_NE(download_browser, browser());
   EXPECT_EQ(1, download_browser->tab_strip_model()->count());
   EXPECT_TRUE(download_browser->window()->IsDownloadShelfVisible());

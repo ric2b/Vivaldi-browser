@@ -46,10 +46,11 @@
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
+#include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_text_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/list/list_marker.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_image.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_inline.h"
@@ -282,7 +283,7 @@ void LayoutTreeAsText::WriteLayoutObject(WTF::TextStream& ts,
     }
   }
 
-  if (o.IsListMarker()) {
+  if (o.IsListMarkerForNormalContent()) {
     String text = ToLayoutListMarker(o).GetText();
     if (!text.IsEmpty()) {
       if (text.length() != 1) {

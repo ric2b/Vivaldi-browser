@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privaat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Lêerbeskrywers</translation>
-<translation id="1635033183663317347">Deur u voog geïnstalleer.</translation>
 <translation id="1682548588986054654">Nuwe Privaat Venster</translation>
 <translation id="1698122934742150150">Slegs huidige incognito-sessie</translation>
 <translation id="1706625117072057435">Zoemvlakke</translation>
@@ -55,6 +54,7 @@
 <translation id="1886996562706621347">Laat werwe toe om te vra om verstekhanteerders vir protokolle te word (aanbeveel)</translation>
 <translation id="1901303067676059328">Kies &amp;alles</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Gebruik ’n syfer om aan te dui hoeveel kopieë gedruk moet word (1 tot <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Verwyder Alles</translation>
 <translation id="1994173015038366702">Werfbronadres</translation>
 <translation id="2019718679933488176">&amp;Open Oudio in Nuwe Oortjie</translation>
@@ -169,7 +169,6 @@
 <translation id="3678156199662914018">Uitbreiding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skermdeelversoek</translation>
 <translation id="3711931198657368127">Pl&amp;ak en Gaan na <ph name="URL" /></translation>
-<translation id="3725367690636977613">bladsye</translation>
 <translation id="3727187387656390258">Inspekteer opwip</translation>
 <translation id="3744111561329211289">Agtergrondsinchronisering</translation>
 <translation id="3760460896538743390">Inspekteer &amp;Agtergrondblad</translation>
@@ -197,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Aanvaar vir groep</translation>
-<translation id="4091434297613116013">velle papier</translation>
 <translation id="4096508467498758490">Deaktiveer uitbreidings in ontwikkelaarsmodus</translation>
 <translation id="4100839878934973028">’n Ander program op u rekenaar het ’n toep toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
 <translation id="4109898769411476438">Sluit Blaaier Voor Ingevoer Word</translation>
@@ -431,7 +429,6 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8071432093239591881">Druk af as beeld</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Bestuur uitbreidings</translation>
-<translation id="8180239481735238521">bladsy</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Aflaai is besig} other {Aflaaie is besig}}</translation>
 <translation id="8230134520748321204">Bewaar wagwoord vir <ph name="ORIGIN" />?</translation>
@@ -464,7 +461,6 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8798099450830957504">Verstek</translation>
 <translation id="8800004011501252845">Toon tans bestemmings vir</translation>
 <translation id="8808478386290700967">Webwinkel</translation>
-<translation id="8813811964357448561">vel papier</translation>
 <translation id="8823514049557262177">Kopieer skakelte&amp;ks</translation>
 <translation id="8823704566850948458">Stel wagwoord voor…</translation>
 <translation id="8859174528519900719">Subraam: <ph name="SUBFRAME_SITE" /></translation>

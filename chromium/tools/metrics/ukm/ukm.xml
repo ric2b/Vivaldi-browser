@@ -80,6 +80,26 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Accessibility.Renderer">
+  <owner>dmazzoni@chromium.org</owner>
+  <summary>
+    Tracks the amount of time sending accessibility events from web renderers.
+  </summary>
+  <metric name="CpuTime.SendPendingAccessibilityEvents">
+    <summary>
+      The amount of time spent in
+      RenderAccessibilityImpl.SendPendingAccessibilityEvents
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="AdFrameLoad">
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
@@ -362,6 +382,12 @@ be describing additional metrics about the same event.
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints content, in the AMP subframe.
       A contentful paint includes a paint of text, image, SVG, or canvas.
+    </summary>
+  </metric>
+  <metric name="SubFrame.PaintTiming.NavigationToFirstPaint">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time the first paint is performed, in the AMP subframe.
     </summary>
   </metric>
   <metric name="SubFrame.PaintTiming.NavigationToLargestContentfulPaint">
@@ -979,6 +1005,33 @@ be describing additional metrics about the same event.
     <summary>
       True for credit card forms, false for address/profile forms. See
       |FormStructure::IsCompleteCreditCardForm()|.
+    </summary>
+  </metric>
+</event>
+
+<event name="Autofill.EditedAutofilledFieldAtSubmission">
+  <owner>koerber@google.com</owner>
+  <owner>battre@google.com</owner>
+  <summary>
+    Records when a user edits a value that was filled by autofill.
+  </summary>
+  <metric name="FieldSignature">
+    <summary>
+      The signature of the field. This is the hash identifier used to denote
+      this field for query and voting purposes. See
+      components/autofill/core/common/signatures_util.cc for more details.
+    </summary>
+  </metric>
+  <metric name="FormSignature">
+    <summary>
+      The signature of the form. This is the hash identifier used to denote this
+      form for query and voting purposes. See
+      components/autofill/core/common/signatures_util.cc for more details.
+    </summary>
+  </metric>
+  <metric name="OverallType" enum="AutofillServerFieldType">
+    <summary>
+      Field's overall |ServerFieldType|. See: autofill::ServerFieldType
     </summary>
   </metric>
 </event>
@@ -1790,11 +1843,13 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ProxyCommit">
+    <obsolete>
+      Removed in M84 in favor of separate ImplCompositorCommit and WaitForCommit
+      metrics.
+    </obsolete>
     <summary>
       The time spent committing main thread to impl layer tree information,
       between navigation and First Contentful Paint, in microseconds.
-      TODO(crbug.com/1058065): Should be obsolete. Removed February 2020 in
-      favor of separate metrics for the wait time and the actual commit time.
     </summary>
   </metric>
   <metric name="ScrollingCoordinator">
@@ -1829,6 +1884,21 @@ be describing additional metrics about the same event.
     <summary>
       The time spent waiting for the compositor thread to begin processing a
       commit, between navigation and First Contentful Paint, in microseconds.
+    </summary>
+  </metric>
+</event>
+
+<event name="Blink.Script.AsyncScripts" singular="True">
+  <owner>dom@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Metrics associated with the async script count associated with a document,
+    recorded when the HTML parsing of a mainframe has completed.
+  </summary>
+  <metric name="AsyncScriptCount">
+    <summary>
+      The total number of async scripts associated with a document at the time
+      parsing has finished.
     </summary>
   </metric>
 </event>
@@ -2488,11 +2558,13 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ProxyCommit">
+    <obsolete>
+      Removed in M84 in favor of separate ImplCompositorCommit and WaitForCommit
+      metrics.
+    </obsolete>
     <summary>
       The time taken for the proxy to commit to the impl thread in microseconds
-      during the sampled frame. TODO(crbug.com/1058065): Should be obsolete.
-      Removed February 2020 in favor of separate metrics for the wait time and
-      the actual commit time.
+      during the sampled frame.
     </summary>
     <aggregation>
       <history>
@@ -2504,11 +2576,13 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="ProxyCommitPercentage">
+    <obsolete>
+      Removed in M84 in favor of separate ImplCompositorCommit and WaitForCommit
+      metrics.
+    </obsolete>
     <summary>
       The percentage of the main frame time used to commit to the impl thread.
-      An int in the range [0,100]. TODO(crbug.com/1058065): Should be obsolete.
-      Removed February 2020 in favor of separate metrics for the wait time and
-      the actual commit time.
+      An int in the range [0,100].
     </summary>
   </metric>
   <metric name="ScrollingCoordinator">
@@ -2922,6 +2996,12 @@ be describing additional metrics about the same event.
     <summary>
       Recorded when the context menu is constructed and logged if the lens
       option was displayed.
+    </summary>
+  </metric>
+  <metric name="ShopWithGoogleLens" enum="Boolean">
+    <summary>
+      Recorded when the context menu is constructed and logged if the lens
+      shopping option was displayed.
     </summary>
   </metric>
 </event>
@@ -3732,6 +3812,20 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Extensions.WebRequest.KeepaliveRequestFinished">
+  <owner>yhirano@chromium.org</owner>
+  <owner>kinuko@chromium.org</owner>
+  <summary>
+    Whether and how keepalive requests are blocked. Recorded when a keepalive
+    request finishes.
+  </summary>
+  <metric name="State" enum="ExtensionInProgressRequestState">
+    <summary>
+      The final state of the request.
+    </summary>
+  </metric>
+</event>
+
 <event name="FontMatchAttempts">
   <owner>caraitto@chromium.org</owner>
   <owner>pauljensen@chromium.org</owner>
@@ -3879,6 +3973,183 @@ be describing additional metrics about the same event.
       <history>
         <statistics>
           <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Graphics.Smoothness.EventLatency">
+  <owner>mohsen@chromium.org</owner>
+  <owner>sadrul@chromium.org</owner>
+  <summary>
+    Tracks the duration of stages in the rendering pipeline when processing a
+    single frame in response to an input event. To meet UKM goals for data
+    volume, a Poisson process with an exponential decay multipler is used to
+    sample events for recporting. It will sample many reandomly distributed
+    events early during page load and initial interaction, then samples at an
+    exponentially decreasing rate to effectively cap the number of samples. All
+    times are in microseconds.
+  </summary>
+  <metric name="Activation">
+    <summary>
+      The duration of the activation stage.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="BeginImplFrameToSendBeginMainFrame">
+    <summary>
+      The time from when the Impl frame is started to when BeginMainFrame is
+      sent.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="BrowserToRendererCompositor">
+    <summary>
+      The time from when the event is created in the browser until the first
+      compositor stage after the event arrives in the renderer.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="Commit">
+    <summary>
+      The duration of the commit stage.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EndActivateToSubmitCompositorFrame">
+    <summary>
+      The time from when an activation is complete to the next
+      SubmitCompositorFrame.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EndCommitToActivation">
+    <summary>
+      The time from when a commit is complete to the beginning of the next
+      activation.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EventType" enum="EventLatencyEventType">
+    <summary>
+      Type of the input event.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ScrollInputType" enum="EventLatencyScrollInputType">
+    <summary>
+      Type of the input device for scroll and pinch events.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit">
+    <summary>
+      The time from when the BeginMainFrame is sent to the beginning of the
+      commit.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SubmitCompositorFrameToPresentationCompositorFrame">
+    <summary>
+      The time from when a compositor frame is submitted to the display
+      compositor to when it is presented.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="TotalLatency">
+    <summary>
+      The total time from when the event is created in the browser to when the
+      frame is presented.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="TotalLatencyToSwapEnd">
+    <summary>
+      The time from when the event is created in the browser to when the
+      gpu-swap is completed, for scroll and pinch events.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
         </statistics>
       </history>
     </aggregation>
@@ -4673,7 +4944,7 @@ be describing additional metrics about the same event.
       partition the results.
 
       The name suffix (.626) was chosen so that the resulting metric hash as
-      determined by base::DigestForMetrics() has all 8 LSBs set to 0. Such a
+      determined by base::HashMetricName() has all 8 LSBs set to 0. Such a
       metric hash does not collide with any other metric hash generated by
       blink::IdentifiabilityMetricBuilder().
     </summary>
@@ -4693,6 +4964,24 @@ be describing additional metrics about the same event.
       Measures Input Delay, the duration between the hardware timestamp and the
       start of event processing on the main thread for the meaningful input. In
       ms. (go/FirstInputDelay)
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="InteractiveTiming.ProcessingTime">
+    <summary>
+      Measures Input Event processing time, the duration of event handlers
+      processing the input event. In ms.
     </summary>
     <aggregation>
       <history>
@@ -4892,6 +5181,34 @@ be describing additional metrics about the same event.
       triggered the event. This is stored as a ViewportFit enum (see
       display_cutout.mojom). It can never be kAuto as we ignore events when the
       page is not trying to use the viewport fit API.
+    </summary>
+  </metric>
+</event>
+
+<event name="LiteVideo">
+  <owner>mcrouse@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    Metrics that capture the state and result of the LiteVideo optimization.
+    This will be recorded once per frame when the associated render process
+    ends. Only for Lite mode users on Android.
+  </summary>
+  <metric name="BlocklistReason" enum="LiteVideoBlocklistReason">
+    <summary>
+      The reason that a navigation was blocklisted and will not have media
+      requests throttled.
+    </summary>
+  </metric>
+  <metric name="ThrottlingResult" enum="LiteVideoThrottleResult">
+    <summary>
+      The result for whether media requests associated with this navigation were
+      successfully throttled or stopped due to an opt-out event.
+    </summary>
+  </metric>
+  <metric name="ThrottlingStartDecision" enum="LiteVideoDecision">
+    <summary>
+      The decision for whether media requests associated with this frame will be
+      potentially throttled.
     </summary>
   </metric>
 </event>
@@ -6076,6 +6393,43 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="MediaRouter.CastWebSenderExtensionLoadUrl" singular="True">
+  <owner>rwkeane@chromium.org</owner>
+  <owner>openscreen-eng@google.com</owner>
+  <summary>
+    Records that the a resource has been loaded from the Media Router Component
+    Extension.
+  </summary>
+  <metric name="HasOccurred" enum="Boolean">
+    <summary>
+      A boolean signaling that the event has occurred; only records true values.
+    </summary>
+  </metric>
+</event>
+
+<event name="MediaRouter.SiteInitiatedMirroringStarted">
+  <owner>muyaoxu@google.com</owner>
+  <owner>openscreen-eng@google.com</owner>
+  <summary>
+    Recorded whenever user starts a site-initiated mirroring session via Media
+    Router.
+  </summary>
+  <metric name="AllowAudioCapture" enum="BooleanAllowed">
+    <summary>
+      Whether audio capture is allowed in the cast session. If allowed, audio
+      playback will happen on the receiver side. If not allowed, audio playback
+      will happen on the sender side.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="MediaRouter.TabMirroringStarted">
   <owner>takumif@chromium.org</owner>
   <owner>openscreen-eng@google.com</owner>
@@ -6116,6 +6470,11 @@ be describing additional metrics about the same event.
   <metric name="BlinkGC.AllocatedObjects">
     <summary>
       Measure of memory consumed by live allocations made from Oilpan.
+    </summary>
+  </metric>
+  <metric name="CanvasResourceProvider.SkSurface">
+    <summary>
+      Measure of memory used due to CanvasResourceProvider's SkSurface.
     </summary>
   </metric>
   <metric name="CommandBuffer">
@@ -6493,11 +6852,27 @@ be describing additional metrics about the same event.
     <summary>
       Measure of memory consumed by V8.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="metrics.ProcessType"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="V8.AllocatedObjects">
     <summary>
       Measure of memory consumed by live objects in V8.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="metrics.ProcessType"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="V8.Main">
     <summary>
@@ -6963,6 +7338,74 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="NavigationTiming" singular="True">
+  <owner>nhiroki@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Metrics associated with main frame navigation.
+  </summary>
+  <metric name="EarlyHintsForFinalRequest">
+    <owner>nhiroki@chromium.org</owner>
+    <owner>chrome-loading@google.com</owner>
+    <summary>
+      The time relative to navigation start that the headers of the 103 Early
+      Hints response are received in reply to the final HTTP request for the
+      main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="EarlyHintsForFirstRequest">
+    <owner>nhiroki@chromium.org</owner>
+    <owner>chrome-loading@google.com</owner>
+    <summary>
+      The time relative to navigation start that the headers of the 103 Early
+      Hints response are received in reply to the first HTTP request for the
+      main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FinalLoaderCallback">
+    <summary>
+      The time relative to navigation start that a callback for the navigation
+      loader is last invoked for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FinalRequestStart">
+    <summary>
+      The time relative to navigation start that the final HTTP request is sent
+      for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FinalResponseStart">
+    <summary>
+      The time relative to navigation start that the headers of the final HTTP
+      response are received for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FirstLoaderCallback">
+    <summary>
+      The time relative to navigation start that a callback for the navigation
+      loader is first invoked for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FirstRequestStart">
+    <summary>
+      The time relative to navigation start that the first HTTP request is sent
+      for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="FirstResponseStart">
+    <summary>
+      The time relative to navigation start that the headers of the first HTTP
+      response are received for the main resource of a main frame navigation.
+    </summary>
+  </metric>
+  <metric name="NavigationCommitSent">
+    <summary>
+      The time relative to navigation start that navigation commit message for a
+      main frame navigation is sent to a renderer process.
+    </summary>
+  </metric>
+</event>
+
 <event name="Net.LegacyTLSVersion">
   <owner>davidben@chromium.org</owner>
   <summary>
@@ -7302,7 +7745,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="ForegroundNumInputEvents">
     <summary>
-      The number of Input Events, recorded each time the page is backgrounded.
+      The number of Input Events, including click, tap, key press, cancellable
+      touchstart, or pointer down followed by apointer up. This metric gets
+      recorded each time the page is backgrounded.
     </summary>
     <aggregation>
       <history>
@@ -7628,6 +8073,24 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="InteractiveTiming.FirstInputProcessingTimes">
+    <summary>
+      Measures First Input Processing Time, the duration of event handlers
+      processing the first input event. In ms.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="InteractiveTiming.FirstInputTimestamp">
     <obsolete>
       Deprecated on January 2019 in favor of
@@ -7681,6 +8144,13 @@ be describing additional metrics about the same event.
       The duration between navigation start and the hardware timestamp of the
       first meaningful input per navigation. See https://goo.gl/tr1oTZ for a
       detailed explanation. In ms.
+    </summary>
+  </metric>
+  <metric name="InteractiveTiming.FirstScrollDelay">
+    <summary>
+      Measures the time, in milliseconds, from when a user starts scrolling
+      until the result shows up on screen if the scroll was the first scroll
+      since navigation.
     </summary>
   </metric>
   <metric name="InteractiveTiming.LongestInputDelay">
@@ -7781,7 +8251,8 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="InteractiveTiming.NumInputEvents">
     <summary>
-      The number of Input Events.
+      The number of Input Events, including click, tap, key press, cancellable
+      touchstart, or pointer down followed by a pointer up.
     </summary>
     <aggregation>
       <history>
@@ -7999,9 +8470,21 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="Navigation.PageEndReason">
+    <obsolete>
+      Deprecated May 2020 in favor of Navigation.PageEndReason2.
+    </obsolete>
     <summary>
       The |page_load_metrics::PageEndReason| for the main frame navigation of
       this page load.
+    </summary>
+  </metric>
+  <metric name="Navigation.PageEndReason2" enum="PageEndReason">
+    <summary>
+      The |page_load_metrics::PageEndReason| for the main frame navigation of
+      this page load. Replaced Navigation.PageEndReason at the end of May 2020
+      to reduce occurrences of page_load_metrics::PageEndReason::END_NONE by
+      setting the value to page_load_metrics::PageEndReason::END_HIDDEN when the
+      metric is recorded due to the page becoming hidden.
     </summary>
   </metric>
   <metric name="Navigation.PageTransition">
@@ -8018,12 +8501,13 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="Net.CacheBytes">
+    <obsolete>
+      Deprecated 06/2019 in favor of Net.CacheBytes2.
+    </obsolete>
     <summary>
       The total number of body bytes loaded from cache for all resources on the
       page. This is rounded down to the nearest exponential bucket (with a
-      bucket spacing factor of 1.3). TODO(crbug.com/1058065): Should be
-      obsolete. Deprecated 06/2019 in favor of Net.CacheBytes2. (seems to be
-      used in Clang)
+      bucket spacing factor of 1.3).
     </summary>
   </metric>
   <metric name="Net.CacheBytes2">
@@ -8157,6 +8641,37 @@ be describing additional metrics about the same event.
       loads that failed in the foreground.
     </summary>
   </metric>
+  <metric name="PaintTiming.NavigationToExperimentalLargestContentfulPaint">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the largest content (text or
+      image) within viewport, across all frames. Differs from
+      PaintTiming.NavigationToLargestContentfulPaint in that this experimental
+      version includes content that has been removed.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="PaintTiming.NavigationToExperimentalLargestContentfulPaint.MainFrame">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the largest content (text or
+      image) within viewport, in the main frame. Differs from
+      PaintTiming.NavigationToLargestContentfulPaint.MainFrame in that this
+      experimental version includes content that has been removed.
+    </summary>
+  </metric>
   <metric name="PaintTiming.NavigationToFirstContentfulPaint">
     <summary>
       Measures the time in milliseconds from navigation timing's navigation
@@ -8267,6 +8782,63 @@ be describing additional metrics about the same event.
   <summary>
     Recorded for page loads that were navigated to via Google Search.
   </summary>
+</event>
+
+<event name="PageLoad.Internal" singular="True">
+  <owner>npm@chromium.org</owner>
+  <owner>speed-metrics-dev@chromium.org</owner>
+  <summary>
+    Debugging metrics for the PageLoad event that do not require the same amount
+    of sampling.
+  </summary>
+  <metric name="PaintTiming.ExperimentalLargestContentfulPaint.ContentType"
+      enum="LargestContentType">
+    <summary>
+      Records whether the page's experimental version of largest contentful
+      paint, whose timestamp is measured by
+      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint, comes
+      from text or image. This value is sampled and not on the PageLoad event,
+      so it is not always recorded whenever
+      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint is
+      recorded.
+    </summary>
+  </metric>
+  <metric
+      name="PaintTiming.ExperimentalLargestContentfulPaint.TerminationState"
+      enum="LargestContentfulPaint.TerminationState">
+    <summary>
+      Records the state of the experimental largest contentful paint algorithm
+      at the time in which the browser attempts to record
+      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint. This
+      state depends on whether there was an experimental largest contentful
+      paint candidate or not and the foreground state of the page. This value is
+      sampled and not on the PageLoad event, so it is not always recorded
+      whenever the browser attempts to record
+      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint.
+    </summary>
+  </metric>
+  <metric name="PaintTiming.LargestContentfulPaint.ContentType"
+      enum="LargestContentType">
+    <summary>
+      Records whether the page's largest contentful paint, whose timestamp is
+      measured by PageLoad.PaintTiming.NavigationToLargestContentfulPaint, comes
+      from text or image. This value is sampled and not on the PageLoad event,
+      so it is not always recorded whenever
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint is recorded.
+    </summary>
+  </metric>
+  <metric name="PaintTiming.LargestContentfulPaint.TerminationState"
+      enum="LargestContentfulPaint.TerminationState">
+    <summary>
+      Records the state of the largest contentful paint algorithm at the time in
+      which the browser attempts to record
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint. This state
+      depends on whether there was a largest contentful paint candidate or not
+      and the foreground state of the page. This value is sampled and not on the
+      PageLoad event, so it is not always recorded whenever the browser attempts
+      to record PageLoad.PaintTiming.NavigationToLargestContentfulPaint.
+    </summary>
+  </metric>
 </event>
 
 <event name="PageLoad.ServiceWorkerControlled" singular="True">
@@ -8391,6 +8963,13 @@ be describing additional metrics about the same event.
       fields renderer ids, bit 2 - changes in autocomplete attributes, bit 3 -
       changes in form control types.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="Fill.FirstFillingResultInRenderer"
       enum="PasswordManagerFirstRendererFillingResult">
@@ -8401,6 +8980,13 @@ be describing additional metrics about the same event.
 
       This is replicated as PasswordManager.FirstFillingResultInRenderer in UMA.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="Fill.FirstWaitForUsernameReason"
       enum="PasswordManagerFirstWaitForUsernameReason">
@@ -8412,6 +8998,13 @@ be describing additional metrics about the same event.
 
       This is replicated as PasswordManager.FirstWaitForUsernameReason in UMA.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="FillOnLoad">
     <summary>
@@ -8422,21 +9015,41 @@ be describing additional metrics about the same event.
       password_manager::PasswordFormMetricsRecorder::FillOnLoad.
     </summary>
   </metric>
-  <metric name="Generation.GeneratedPassword">
+  <metric name="Generation.GeneratedPassword" enum="Boolean">
     <summary>
       Records '1' if the user has generated a password on this form.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Generation.GeneratedPasswordModified">
+  <metric name="Generation.GeneratedPasswordModified" enum="Boolean">
     <summary>
       Records '1' if the user has modified a generated a password on this form.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Generation.PopupShown">
+  <metric name="Generation.PopupShown" enum="PasswordGenerationPopupShown">
     <summary>
-      Records a PasswordFormMetricsRecorder::PasswordGenerationPopupShown entry
-      if (and only if) a popup was shown.
+      Records an entry if (and only if) a popup was shown.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="Generation.SpecPriority">
     <obsolete>
@@ -8510,27 +9123,45 @@ be describing additional metrics about the same event.
       for ReadonlyWhenFilling.
     </summary>
   </metric>
-  <metric name="Saving.Prompt.Interaction">
+  <metric name="Saving.Prompt.Interaction" enum="PasswordBubbleDismissalReason">
     <summary>
-      Records how the user interacted with a saving prompt. Recorded values
-      correspond to the enum PasswordFormMetricsRecorder::BubbleDismissalReason.
+      Records how the user interacted with a saving prompt.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Saving.Prompt.Shown">
+  <metric name="Saving.Prompt.Shown" enum="Boolean">
     <summary>
       Records, for each password form seen by the password manager, whether the
       user was shown a prompt that asked for permission to save new credentials.
       In case a store() via the Credential Management API, a virtual password
-      form is created, for which this metric is recorded. Recorded values are 0
-      and 1 for false and true.
+      form is created, for which this metric is recorded.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Saving.Prompt.Trigger">
+  <metric name="Saving.Prompt.Trigger" enum="PasswordBubbleTrigger">
     <summary>
       Records the trigger of each password save bubble that was shown to the
-      user to ask for permission to save new credentials. Recorded values
-      correspond to the enum PasswordFormMetricsRecorder::BubbleTrigger.
+      user to ask for permission to save new credentials.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="Saving.ShowedManualFallbackForSaving">
     <summary>
@@ -8541,33 +9172,58 @@ be describing additional metrics about the same event.
       update.
     </summary>
   </metric>
-  <metric name="Submission.Indicator">
+  <metric name="Submission.Indicator" enum="SubmissionIndicatorEvent">
     <summary>
       Records the event that led the password manager to believe the submission
       was successful. Metrics is recorded only when the password is saved.
-      Recorded values correspond to the enum
-      autofill::mojom::SubmissionIndicatorEvent.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Submission.Observed">
+  <metric name="Submission.Observed" enum="Boolean">
     <summary>
       Records whether a submission of a password form has been observered. The
       values 0 and 1 correspond to false and true respectively.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Submission.SubmissionResult">
+  <metric name="Submission.SubmissionResult"
+      enum="PasswordFormSubmissionResult">
     <summary>
-      Records the outcome of a password form submission. The values are numbered
-      according to PasswordFormMetricsRecorder::SubmitResult. Note that no
-      metric is recorded for kSubmitResultNotSubmitted.
+      Records the outcome of a password form submission.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Submission.SubmittedFormType">
+  <metric name="Submission.SubmittedFormType" enum="PasswordFormType">
     <summary>
-      Records the classification of a form at submission time. The values
-      correspond to PasswordFormMetricsRecorder::SubmittedFormType. Note that no
-      metric is recorded for kSubmittedFormTypeUnspecified.
+      Records the classification of a form at submission time.
+
+      This is replicated as PasswordManager.SubmittedFormType in UMA.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="SuppressedAccount.Generated.HTTPSNotHTTP">
     <obsolete>
@@ -8667,25 +9323,45 @@ be describing additional metrics about the same event.
       enum SuppressedAccountExistence.
     </summary>
   </metric>
-  <metric name="Updating.Prompt.Interaction">
+  <metric name="Updating.Prompt.Interaction"
+      enum="PasswordBubbleDismissalReason">
     <summary>
-      Records how the user interacted with an updating prompt. Recorded values
-      correspond to the enum PasswordFormMetricsRecorder::BubbleDismissalReason.
+      Records how the user interacted with an updating prompt.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Updating.Prompt.Shown">
+  <metric name="Updating.Prompt.Shown" enum="Boolean">
     <summary>
       Records, for each password form seen by the password manager, whether the
       user was shown a prompt that asked for permission to update existing
-      credentials. Recorded values are 0 and 1 for false and true.
+      credentials.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Updating.Prompt.Trigger">
+  <metric name="Updating.Prompt.Trigger" enum="PasswordBubbleTrigger">
     <summary>
       Records the trigger of each password update bubble that was shown to the
-      user to ask for permission to update existing credentials. Recorded values
-      correspond to the enum PasswordFormMetricsRecorder::BubbleTrigger.
+      user to ask for permission to update existing credentials.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="User.Action">
     <obsolete>
@@ -8919,6 +9595,14 @@ be describing additional metrics about the same event.
       permission prompt, if any.
     </summary>
   </metric>
+  <metric name="SatisfiedAdaptiveTriggers">
+    <summary>
+      A bitmask consisting of flags defined in enum type AdaptiveTriggers. A bit
+      is set if the corresponding adaptive triggering condition has been
+      satisfied at least once in the past for the user. This metric is not
+      recorded for users who don't have the activation dry run enabled.
+    </summary>
+  </metric>
   <metric name="Source">
     <summary>
       An enum of type PermissionSourceUI. The UI surface for this action.
@@ -9001,6 +9685,34 @@ be describing additional metrics about the same event.
       url of a page. The user's site level popup content setting is queried when
       a page that opened a popup is destroyed. Only emitted when at least one
       popup has been opened and the last committed page url is valid.
+    </summary>
+  </metric>
+</event>
+
+<event name="Portal.Activate">
+  <owner>lfg@chromium.org</owner>
+  <summary>
+    A portal was activated. A portal activation enables a seamless transition
+    between different pages. See the portals explainer for more details:
+    https://github.com/WICG/portals/blob/master/README.md.
+  </summary>
+  <metric name="PaintTiming.PortalActivationToFirstPaint">
+    <summary>
+      When this page load happened inside a Portal, this metrics records the
+      time in milliseconds between the portal activation and the first paint
+      after activation.
+    </summary>
+  </metric>
+  <metric name="PortalActivation">
+    <summary>
+      Measures the time between LCP and the portal activation. Uses exponential
+      bucketing with a spacing of 2, with the units in milliseconds.
+    </summary>
+  </metric>
+  <metric name="PortalActivationBeforeLCP" enum="Boolean">
+    <summary>
+      Indicates whether the portal activation happened before or after the
+      largest contentful paint.
     </summary>
   </metric>
 </event>
@@ -9479,6 +10191,14 @@ be describing additional metrics about the same event.
     <summary>
       Whether the user activated Reader Mode via the omnibox badge.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -9495,6 +10215,14 @@ be describing additional metrics about the same event.
       Whether the distillability service determined the page to be distillable,
       i.e. likely to render well in Reader Mode.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -10596,9 +11324,18 @@ be describing additional metrics about the same event.
     attempted, and information about the outcome of the attempt.
   </summary>
   <metric name="FailureGlobalBlacklist" enum="Boolean">
+    <obsolete>
+      Deprecated 06/2020. Replaced with FailureGlobalDisallowlist.
+    </obsolete>
     <summary>
       Boolean indicating that the tab was explicitly opted out of the
-      intervention via the global blacklist.
+      intervention via the global disallowlist.
+    </summary>
+  </metric>
+  <metric name="FailureGlobalDisallowlist" enum="Boolean">
+    <summary>
+      Boolean indicating that the tab was explicitly opted out of the
+      intervention via the global disallowlist.
     </summary>
   </metric>
   <metric name="FailureHeuristicAudio" enum="Boolean">
@@ -10793,10 +11530,19 @@ be describing additional metrics about the same event.
       success bits are present the outcome is positive.
     </summary>
   </metric>
-  <metric name="SuccessGlobalWhitelist" enum="Boolean">
+  <metric name="SuccessGlobalAllowlist" enum="Boolean">
     <summary>
       Boolean indicating that the tab was explicitly opted in to the
-      intervention via the global whitelist.
+      intervention via the global allowlist.
+    </summary>
+  </metric>
+  <metric name="SuccessGlobalWhitelist" enum="Boolean">
+    <obsolete>
+      Deprecated 06/2020. Replaced with SuccessGlobalAllowlist.
+    </obsolete>
+    <summary>
+      Boolean indicating that the tab was explicitly opted in to the
+      intervention via the global allowlist.
     </summary>
   </metric>
   <metric name="SuccessHeuristic" enum="Boolean">

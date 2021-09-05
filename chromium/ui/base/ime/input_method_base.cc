@@ -9,7 +9,6 @@
 #include "base/check.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/input_method_keyboard_controller_stub.h"
 #include "ui/base/ime/input_method_observer.h"
@@ -17,11 +16,6 @@
 #include "ui/events/event.h"
 
 namespace ui {
-
-ui::IMEEngineHandlerInterface* InputMethodBase::GetEngine() {
-  auto* bridge = ui::IMEBridge::Get();
-  return bridge ? bridge->GetCurrentEngineHandler() : nullptr;
-}
 
 InputMethodBase::InputMethodBase(internal::InputMethodDelegate* delegate)
     : InputMethodBase(delegate, nullptr) {}
@@ -35,9 +29,6 @@ InputMethodBase::InputMethodBase(
 InputMethodBase::~InputMethodBase() {
   for (InputMethodObserver& observer : observer_list_)
     observer.OnInputMethodDestroyed(this);
-  if (ui::IMEBridge::Get() &&
-      ui::IMEBridge::Get()->GetInputContextHandler() == this)
-    ui::IMEBridge::Get()->SetInputContextHandler(nullptr);
 }
 
 void InputMethodBase::SetDelegate(internal::InputMethodDelegate* delegate) {
@@ -45,17 +36,9 @@ void InputMethodBase::SetDelegate(internal::InputMethodDelegate* delegate) {
 }
 
 void InputMethodBase::OnFocus() {
-  ui::IMEBridge* bridge = ui::IMEBridge::Get();
-  if (bridge) {
-    bridge->SetInputContextHandler(this);
-    bridge->MaybeSwitchEngine();
-  }
 }
 
 void InputMethodBase::OnBlur() {
-  if (ui::IMEBridge::Get() &&
-      ui::IMEBridge::Get()->GetInputContextHandler() == this)
-    ui::IMEBridge::Get()->SetInputContextHandler(nullptr);
 }
 
 #if defined(OS_WIN)
@@ -251,6 +234,13 @@ bool InputMethodBase::SetCompositionRange(
   return false;
 }
 
+bool InputMethodBase::SetAutocorrectRange(
+    const base::string16& autocorrect_text,
+    uint32_t start,
+    uint32_t end) {
+  return false;
+}
+
 bool InputMethodBase::SetSelectionRange(uint32_t start, uint32_t end) {
   return false;
 }
@@ -275,9 +265,6 @@ SurroundingTextInfo InputMethodBase::GetSurroundingTextInfo() {
 }
 
 void InputMethodBase::SendKeyEvent(KeyEvent* event) {
-  if (track_key_events_for_testing_) {
-    key_events_for_testing_.push_back(std::make_unique<KeyEvent>(*event));
-  }
   ui::EventDispatchDetails details = DispatchKeyEvent(event);
   DCHECK(!details.dispatcher_destroyed);
 }
@@ -296,11 +283,6 @@ void InputMethodBase::ConfirmCompositionText(bool reset_engine,
 bool InputMethodBase::HasCompositionText() {
   TextInputClient* client = GetTextInputClient();
   return client && client->HasCompositionText();
-}
-
-const std::vector<std::unique_ptr<ui::KeyEvent>>&
-InputMethodBase::GetKeyEventsForTesting() {
-  return key_events_for_testing_;
 }
 
 }  // namespace ui

@@ -6,7 +6,6 @@ assert(is_fuchsia)
 
 import("//build/config/fuchsia/generate_runner_scripts.gni")
 import("//build/config/fuchsia/symbol_archive.gni")
-import("//fuchsia/release_channel.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
@@ -28,10 +27,12 @@ declare_args() {
 
 mojom("mojom") {
   sources = [
+    "cast_streaming_session.mojom",
     "on_load_script_injector.mojom",
     "url_request_rewrite.mojom",
   ]
   public_deps = [
+    "//media/mojo/mojom",
     "//mojo/public/mojom/base",
     "//services/network/public/mojom",
   ]
@@ -106,6 +107,7 @@ component("web_engine_core") {
     "//media",
     "//media/fuchsia/cdm/service",
     "//media/fuchsia/mojom",
+    "//media/mojo/common",
     "//media/mojo/services",
     "//mojo/public/cpp/bindings",
     "//services/media_session/public/mojom",
@@ -145,6 +147,8 @@ component("web_engine_core") {
     "browser/accessibility_bridge.h",
     "browser/ax_tree_converter.cc",
     "browser/ax_tree_converter.h",
+    "browser/cast_streaming_session_client.cc",
+    "browser/cast_streaming_session_client.h",
     "browser/content_directory_loader_factory.cc",
     "browser/content_directory_loader_factory.h",
     "browser/context_impl.cc",
@@ -185,6 +189,8 @@ component("web_engine_core") {
     "browser/web_engine_net_log_observer.h",
     "browser/web_engine_permission_delegate.cc",
     "browser/web_engine_permission_delegate.h",
+    "common/cast_streaming.cc",
+    "common/cast_streaming.h",
     "common/cors_exempt_headers.cc",
     "common/cors_exempt_headers.h",
     "common/web_engine_content_client.cc",
@@ -195,12 +201,18 @@ component("web_engine_core") {
     "context_provider_impl.h",
     "context_provider_main.cc",
     "context_provider_main.h",
+    "renderer/cast_streaming_demuxer.cc",
+    "renderer/cast_streaming_demuxer.h",
+    "renderer/cast_streaming_receiver.cc",
+    "renderer/cast_streaming_receiver.h",
     "renderer/on_load_script_injector.cc",
     "renderer/on_load_script_injector.h",
     "renderer/url_request_rules_receiver.cc",
     "renderer/url_request_rules_receiver.h",
     "renderer/web_engine_content_renderer_client.cc",
     "renderer/web_engine_content_renderer_client.h",
+    "renderer/web_engine_render_frame_observer.cc",
+    "renderer/web_engine_render_frame_observer.h",
     "renderer/web_engine_url_loader_throttle_provider.cc",
     "renderer/web_engine_url_loader_throttle_provider.h",
     "url_request_rewrite_type_converters.cc",
@@ -234,8 +246,6 @@ cr_fuchsia_package("web_engine") {
   binary = ":web_engine_exe"
   manifest = "context_provider.cmx"
   component_name_override = "context_provider"
-  package_name_override = "web_engine${release_channel_suffix}"
-  archive_name_override = "web_engine"
 
   excluded_files = [
     "lib/libswiftshader_libEGL.so",
@@ -272,6 +282,7 @@ source_set("browsertest_core") {
 test("web_engine_browsertests") {
   sources = [
     "browser/accessibility_bridge_browsertest.cc",
+    "browser/cast_streaming_browsertest.cc",
     "browser/content_directory_browsertest.cc",
     "browser/context_impl_browsertest.cc",
     "browser/frame_impl_browsertest.cc",
@@ -381,7 +392,6 @@ executable("web_engine_shell_exec") {
   deps = [
     "//base",
     "//fuchsia/base",
-    "//fuchsia/base:release_channel_buildflags",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.policy",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",

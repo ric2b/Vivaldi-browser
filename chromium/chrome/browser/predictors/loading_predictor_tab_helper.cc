@@ -14,6 +14,8 @@
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/predictors_enums.h"
 #include "chrome/browser/predictors/predictors_features.h"
+#include "chrome/browser/prerender/prerender_manager.h"
+#include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -67,6 +69,16 @@ net::RequestPriority GetRequestPriority(
 }
 
 bool IsHandledNavigation(content::NavigationHandle* navigation_handle) {
+  content::WebContents* web_contents = navigation_handle->GetWebContents();
+
+  prerender::PrerenderManager* prerender_manager =
+      prerender::PrerenderManagerFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext());
+  if (prerender_manager &&
+      prerender_manager->IsWebContentsPrerendering(web_contents, nullptr)) {
+    return false;
+  }
+
   return navigation_handle->IsInMainFrame() &&
          !navigation_handle->IsSameDocument() &&
          navigation_handle->GetURL().SchemeIsHTTPOrHTTPS();
@@ -344,12 +356,23 @@ void LoadingPredictorTabHelper::OnOptimizationGuideDecision(
     if (!subresource_url.is_valid())
       continue;
     predicted_subresources.push_back(subresource_url);
-    url::Origin subresource_origin = url::Origin::Create(subresource_url);
-    if (predicted_origins.find(subresource_origin) != predicted_origins.end())
-      continue;
-    predicted_origins.insert(subresource_origin);
-    prediction.requests.emplace_back(subresource_origin, 1,
-                                     network_isolation_key);
+    if (base::FeatureList::IsEnabled(features::kLoadingPredictorPrefetch)) {
+      // TODO(falken): Detect duplicates.
+      prediction.prefetch_requests.emplace_back(subresource_url,
+                                                network_isolation_key);
+    } else {
+      url::Origin subresource_origin = url::Origin::Create(subresource_url);
+      if (subresource_origin == main_frame_origin) {
+        // We are already connecting to the main frame origin by default, so
+        // don't include this in the prediction.
+        continue;
+      }
+      if (predicted_origins.find(subresource_origin) != predicted_origins.end())
+        continue;
+      predicted_origins.insert(subresource_origin);
+      prediction.requests.emplace_back(subresource_origin, 1,
+                                       network_isolation_key);
+    }
   }
 
   last_optimization_guide_prediction_->preconnect_prediction = prediction;

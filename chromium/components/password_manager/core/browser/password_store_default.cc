@@ -22,8 +22,7 @@ PasswordStoreDefault::PasswordStoreDefault(
     std::unique_ptr<LoginDatabase> login_db)
     : login_db_(std::move(login_db)) {}
 
-PasswordStoreDefault::~PasswordStoreDefault() {
-}
+PasswordStoreDefault::~PasswordStoreDefault() = default;
 
 void PasswordStoreDefault::ShutdownOnUIThread() {
   PasswordStore::ShutdownOnUIThread();
@@ -40,6 +39,11 @@ bool PasswordStoreDefault::InitOnBackgroundSequence() {
     // has to be initialized even if database initialization failed.
     success = false;
     LOG(ERROR) << "Could not create/open login database.";
+  }
+  if (success) {
+    login_db_->SetDeletionsHaveSyncedCallback(
+        base::BindRepeating(&PasswordStoreDefault::NotifyDeletionsHaveSynced,
+                            base::Unretained(this)));
   }
   return PasswordStore::InitOnBackgroundSequence() && success;
 }
@@ -102,7 +106,7 @@ PasswordStoreChangeList PasswordStoreDefault::RemoveLoginsByURLAndTimeImpl(
     for (const auto& pair : key_to_form_map) {
       PasswordForm* form = pair.second.get();
       PasswordStoreChangeList remove_changes;
-      if (url_filter.Run(form->origin) &&
+      if (url_filter.Run(form->url) &&
           login_db_->RemoveLogin(*form, &remove_changes)) {
         std::move(remove_changes.begin(), remove_changes.end(),
                   std::back_inserter(changes));
@@ -132,8 +136,8 @@ PasswordStoreChangeList PasswordStoreDefault::DisableAutoSignInForOriginsImpl(
 
   std::set<GURL> origins_to_update;
   for (const auto& pair : key_to_form_map) {
-    if (origin_filter.Run(pair.second->origin))
-      origins_to_update.insert(pair.second->origin);
+    if (origin_filter.Run(pair.second->url))
+      origins_to_update.insert(pair.second->url);
   }
 
   std::set<GURL> origins_updated;
@@ -143,7 +147,7 @@ PasswordStoreChangeList PasswordStoreDefault::DisableAutoSignInForOriginsImpl(
   }
 
   for (const auto& pair : key_to_form_map) {
-    if (origins_updated.count(pair.second->origin)) {
+    if (origins_updated.count(pair.second->url)) {
       changes.emplace_back(PasswordStoreChange::UPDATE, *pair.second,
                            /*primary_key=*/pair.first);
     }

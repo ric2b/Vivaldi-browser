@@ -37,14 +37,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     Config& operator=(const Config&);
     ~Config();
 
+    base::flat_set<Ctap2Version> ctap2_versions = {Ctap2Version::kCtap2_0};
     // u2f_support, if true, makes this device a dual-protocol (i.e. CTAP2 and
     // U2F) device.
     bool u2f_support = false;
     bool pin_support = false;
     bool is_platform_authenticator = false;
     bool internal_uv_support = false;
-    // Ignored if |internal_uv_support| is false.
-    bool uv_token_support = false;
+    bool pin_uv_auth_token_support = false;
     bool resident_key_support = false;
     bool credential_management_support = false;
     bool bio_enrollment_support = false;
@@ -52,6 +52,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     uint8_t bio_enrollment_capacity = 10;
     uint8_t bio_enrollment_samples_required = 4;
     bool cred_protect_support = false;
+    bool hmac_secret_support = false;
 
     // force_cred_protect, if set and if |cred_protect_support| is true, is a
     // credProtect level that will be forced for all registrations. This
@@ -131,6 +132,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     // unhashed client data for the authenticator to assemble and hash instead
     // of using the regular, already hashed value.
     bool send_unsolicited_android_client_data_extension = false;
+
+    // support_invalid_for_testing_algorithm causes the
+    // |CoseAlgorithmIdentifier::kInvalidForTesting| public-key algorithm to be
+    // advertised and supported to aid testing of unknown public-key types.
+    bool support_invalid_for_testing_algorithm = false;
   };
 
   VirtualCtap2Device();
@@ -144,11 +150,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
   base::WeakPtr<FidoDevice> GetWeakPtr() override;
 
  private:
+  // Init performs initialization that's common across the constructors.
+  void Init(std::vector<ProtocolVersion> versions);
+
   // CheckUserVerification implements the first, common steps of
   // makeCredential and getAssertion from the CTAP2 spec.
   base::Optional<CtapDeviceResponseCode> CheckUserVerification(
       bool is_make_credential,
       const AuthenticatorSupportedOptions& options,
+      const std::string& rp_id,
       const base::Optional<std::vector<uint8_t>>& pin_auth,
       const base::Optional<uint8_t>& pin_protocol,
       base::span<const uint8_t> pin_token,
@@ -181,12 +191,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
   AttestedCredentialData ConstructAttestedCredentialData(
       base::span<const uint8_t> key_handle,
       std::unique_ptr<PublicKey> public_key);
-  AuthenticatorData ConstructAuthenticatorData(
-      base::span<const uint8_t, kRpIdHashLength> rp_id_hash,
-      bool user_verified,
-      uint32_t current_signature_count,
-      base::Optional<AttestedCredentialData> attested_credential_data,
-      base::Optional<cbor::Value> extensions);
 
   std::unique_ptr<VirtualU2fDevice> u2f_device_;
 

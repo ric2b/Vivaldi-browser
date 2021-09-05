@@ -4,18 +4,18 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.pressImeActionButton;
-import static android.support.test.espresso.action.ViewActions.typeText;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withClassName;
-import static android.support.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.pressImeActionButton;
+import static androidx.test.espresso.action.ViewActions.typeText;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withClassName;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -28,11 +28,13 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilKeyboardMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewAssertionTrue;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
+import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.Espresso;
-import android.support.test.espresso.matcher.ViewMatchers.Visibility;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.matcher.ViewMatchers.Visibility;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -41,15 +43,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
-import org.chromium.chrome.browser.autofill_assistant.proto.ElementReferenceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.StopProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
@@ -62,6 +65,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,7 +116,8 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "https://crbug.com/1070272")
+    // Restricted to phones due to https://crbug.com/429671
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     public void newTabButtonHidesAndRecoversAutofillAssistant() {
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
@@ -138,7 +143,7 @@ public class AutofillAssistantChromeTabIntegrationTest {
                 .check(matches(withEffectiveVisibility(Visibility.VISIBLE)));
 
         onView(withId(org.chromium.chrome.R.id.tab_switcher_button)).perform(click());
-        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
         onView(withClassName(is(ScrimView.class.getName()))).check(doesNotExist());
 
         Espresso.pressBack();
@@ -174,7 +179,7 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),
                 mTestRule.getActivity(), getURL(TEST_PAGE_B), false);
-        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
 
         ChromeTabUtils.switchTabInCurrentTabModel(mTestRule.getActivity(),
                 TabModelUtils.getTabIndexById(
@@ -205,7 +210,7 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),
                 mTestRule.getActivity(), getURL(TEST_PAGE_B), false);
-        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
 
         ChromeTabUtils.closeCurrentTab(
                 InstrumentationRegistry.getInstrumentation(), mTestRule.getActivity());
@@ -255,7 +260,7 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),
                 mTestRule.getActivity(), getURL(TEST_PAGE_B), false);
-        waitUntilViewAssertionTrue(withText("Prompt A"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt A"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
 
         startAutofillAssistantOnTab(TEST_PAGE_B);
         waitUntilViewMatchesCondition(withText("Prompt B"), isCompletelyDisplayed());
@@ -263,7 +268,7 @@ public class AutofillAssistantChromeTabIntegrationTest {
         ChromeTabUtils.switchTabInCurrentTabModel(mTestRule.getActivity(),
                 TabModelUtils.getTabIndexById(
                         mTestRule.getActivity().getCurrentTabModel(), initialTabId));
-        waitUntilViewAssertionTrue(withText("Prompt B"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt B"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
         waitUntilViewMatchesCondition(withText("Prompt A"), isCompletelyDisplayed());
     }
 
@@ -306,14 +311,14 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),
                 mTestRule.getActivity(), getURL(TEST_PAGE_B), false);
-        waitUntilViewAssertionTrue(withText("Prompt A"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt A"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
 
         startAutofillAssistantOnTab(TEST_PAGE_B);
         waitUntilViewMatchesCondition(withText("Prompt B"), isCompletelyDisplayed());
 
         ChromeTabUtils.closeCurrentTab(
                 InstrumentationRegistry.getInstrumentation(), mTestRule.getActivity());
-        waitUntilViewAssertionTrue(withText("Prompt B"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt B"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
         waitUntilViewMatchesCondition(withText("Prompt A"), isCompletelyDisplayed());
     }
 
@@ -323,9 +328,11 @@ public class AutofillAssistantChromeTabIntegrationTest {
         ChromeTabUtils.loadUrlOnUiThread(
                 mTestRule.getActivity().getActivityTab(), getURL(TEST_PAGE_B));
 
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#profile_name")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#profile_name"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(
@@ -403,7 +410,8 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         // First press on back button fully destroys Autofill Assistant UI, without Undo.
         Espresso.pressBack();
-        waitUntilViewAssertionTrue(withId(R.id.autofill_assistant), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(
+                withId(R.id.autofill_assistant), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
         onView(withText("Shutdown")).check(doesNotExist());
         onView(withText(R.string.undo)).check(doesNotExist());
         assertThat(mTestRule.getActivity().getActivityTab().getUrl().getSpec(),
@@ -480,9 +488,14 @@ public class AutofillAssistantChromeTabIntegrationTest {
 
         waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
 
-        // Clicking location bar hides UI.
+        // Clicking location bar hides UI and shows the keyboard.
         onView(withId(org.chromium.chrome.R.id.url_bar)).perform(click());
-        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), 3000L);
+        waitUntilViewAssertionTrue(withText("Prompt"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
+
+        ChromeTabbedActivity activity = mTestRule.getActivity();
+        assertThat(activity.getWindowAndroid().getKeyboardDelegate().isKeyboardShowing(
+                           activity, activity.getCompositorViewHolder()),
+                is(true));
 
         // Closing keyboard brings it back.
         Espresso.pressBack();
@@ -492,5 +505,8 @@ public class AutofillAssistantChromeTabIntegrationTest {
         onView(withId(org.chromium.chrome.R.id.url_bar))
                 .perform(click(), typeText(getURL(TEST_PAGE_B)), pressImeActionButton());
         waitUntilViewMatchesCondition(withText(containsString("Sorry")), isCompletelyDisplayed());
+        waitUntil(()
+                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
+                                  getURL(TEST_PAGE_B)));
     }
 }

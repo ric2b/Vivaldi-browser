@@ -139,6 +139,7 @@ class AppShimManager : public AppShimHostBootstrap::Client,
       base::OnceClosure terminated_callback) override;
   void OnShimProcessDisconnected(AppShimHost* host) override;
   void OnShimFocus(AppShimHost* host) override;
+  void OnShimReopen(AppShimHost* host) override;
   void OnShimOpenedFiles(AppShimHost* host,
                          const std::vector<base::FilePath>& files) override;
   void OnShimSelectedProfile(AppShimHost* host,
@@ -179,6 +180,11 @@ class AppShimManager : public AppShimHostBootstrap::Client,
   // Load a profile and call |callback| when completed or failed.
   virtual void LoadProfileAsync(const base::FilePath& path,
                                 base::OnceCallback<void(Profile*)> callback);
+
+  // Wait for |profile|'s WebAppProvider registry to be started.
+  virtual void WaitForAppRegistryReadyAsync(
+      Profile* profile,
+      base::OnceCallback<void()> callback);
 
   // Return true if the specified path is for a valid profile that is also
   // locked.
@@ -272,6 +278,9 @@ class AppShimManager : public AppShimHostBootstrap::Client,
                        const web_app::AppId& app_id,
                        LoadProfileAppCallback callback,
                        Profile* profile);
+  void OnProfileAppRegistryReady(const base::FilePath& profile_path,
+                                 const web_app::AppId& app_id,
+                                 LoadProfileAppCallback callback);
   void OnAppEnabled(const base::FilePath& profile_path,
                     const web_app::AppId& app_id,
                     LoadProfileAppCallback callback);

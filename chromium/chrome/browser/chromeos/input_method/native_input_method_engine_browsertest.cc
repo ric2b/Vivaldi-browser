@@ -6,17 +6,20 @@
 
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
-#include "chrome/browser/chromeos/input_method/ime_service_connector.h"
 #include "chrome/browser/chromeos/input_method/textinput_test_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/services/ime/decoder/decoder_engine.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -26,9 +29,9 @@
 #include "content/public/test/test_utils.h"
 #include "mojo/core/embedder/embedder.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/chromeos/input_method_chromeos.h"
 #include "ui/base/ime/dummy_text_input_client.h"
-#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/text_input_flags.h"
@@ -36,9 +39,11 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 
+using chromeos::InputMethodEngineBase;
+
 namespace {
 
-using input_method::InputMethodEngineBase;
+constexpr char kEmojiData[] = "happy,😀;😃;😄";
 
 class TestObserver : public InputMethodEngineBase::Observer {
  public:
@@ -73,6 +78,8 @@ class TestObserver : public InputMethodEngineBase::Observer {
       const std::vector<gfx::Rect>& bounds) override {}
   void OnScreenProjectionChanged(bool is_projected) override {}
   void OnReset(const std::string& engine_id) override {}
+  void OnSuggestionsChanged(
+      const std::vector<std::string>& suggestions) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
@@ -123,13 +130,14 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
  public:
   NativeInputMethodEngineTest() : input_method_(this) {
     feature_list_.InitWithFeatures({chromeos::features::kNativeRuleBasedTyping,
-                                    chromeos::features::kAssistPersonalInfo},
+                                    chromeos::features::kAssistPersonalInfo,
+                                    chromeos::features::kEmojiSuggestAddition},
                                    {});
   }
 
  protected:
   void SetUp() override {
-    chromeos::input_method::DisableImeSandboxForTesting();
+    chromeos::ime::FakeEngineMainEntryForTesting();
     mojo::core::Init();
     InProcessBrowserTest::SetUp();
     ui::IMEBridge::Initialize();
@@ -143,6 +151,9 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
 
     profile_ = browser()->profile();
     engine_.Initialize(std::move(observer), "", profile_);
+    engine_.get_assistive_suggester_for_testing()
+        ->get_emoji_suggester_for_testing()
+        ->LoadEmojiMapForTesting(kEmojiData);
     InProcessBrowserTest::SetUpOnMainThread();
   }
 
@@ -301,6 +312,8 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, NoActiveController) {
 }
 
 IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserEmail) {
+  base::HistogramTester histogram_tester;
+
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfileIfExists(profile_);
   signin::SetPrimaryAccount(identity_manager, "johnwayne@me.xyz");
@@ -316,16 +329,28 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserEmail) {
 
   helper.GetTextInputClient()->InsertText(prefix_text);
   helper.WaitForSurroundingTextChanged(prefix_text);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Match",
+                                      chromeos::AssistiveType::kPersonalEmail,
+                                      1);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Coverage",
+                                      chromeos::AssistiveType::kPersonalEmail,
+                                      1);
 
-  DispatchKeyPress(ui::VKEY_TAB, false);
+  DispatchKeyPress(ui::VKEY_DOWN, false);
+  DispatchKeyPress(ui::VKEY_RETURN, false);
   helper.WaitForSurroundingTextChanged(expected_result_text);
 
   EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Success",
+                                      chromeos::AssistiveType::kPersonalEmail,
+                                      1);
 
   SetFocus(nullptr);
 }
 
 IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, DismissSuggestion) {
+  base::HistogramTester histogram_tester;
+
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfileIfExists(profile_);
   signin::SetPrimaryAccount(identity_manager, "johnwayne@me.xyz");
@@ -343,17 +368,23 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, DismissSuggestion) {
   helper.WaitForSurroundingTextChanged(prefix_text);
 
   DispatchKeyPress(ui::VKEY_ESCAPE, false);
-  // This tab should make no effect.
-  DispatchKeyPress(ui::VKEY_TAB, false);
+  // This down and enter should make no effect.
+  DispatchKeyPress(ui::VKEY_DOWN, false);
+  DispatchKeyPress(ui::VKEY_RETURN, false);
   helper.GetTextInputClient()->InsertText(base::UTF8ToUTF16("john@abc.com"));
   helper.WaitForSurroundingTextChanged(expected_result_text);
 
   EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Success",
+                                      chromeos::AssistiveType::kPersonalEmail,
+                                      0);
 
   SetFocus(nullptr);
 }
 
 IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserName) {
+  base::HistogramTester histogram_tester;
+
   TestPersonalDataManagerObserver personal_data_observer(profile_);
   autofill::AutofillProfile autofill_profile(base::GenerateGUID(),
                                              autofill::test::kEmptyOrigin);
@@ -374,15 +405,83 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserName) {
 
   helper.GetTextInputClient()->InsertText(prefix_text);
   helper.WaitForSurroundingTextChanged(prefix_text);
+  histogram_tester.ExpectUniqueSample(
+      "InputMethod.Assistive.Match", chromeos::AssistiveType::kPersonalName, 1);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Coverage",
+                                      chromeos::AssistiveType::kPersonalName,
+                                      1);
 
   // Keep typing
   helper.GetTextInputClient()->InsertText(base::UTF8ToUTF16("jo"));
   helper.WaitForSurroundingTextChanged(base::UTF8ToUTF16("my name is jo"));
 
-  DispatchKeyPress(ui::VKEY_TAB, false);
+  DispatchKeyPress(ui::VKEY_DOWN, false);
+  DispatchKeyPress(ui::VKEY_RETURN, false);
   helper.WaitForSurroundingTextChanged(expected_result_text);
 
   EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
 
+  // Make sure we do not emit multiple Coverage metrics when users keep typing.
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Coverage",
+                                      chromeos::AssistiveType::kPersonalName,
+                                      1);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Success",
+                                      chromeos::AssistiveType::kPersonalName,
+                                      1);
+
   SetFocus(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestEmoji) {
+  base::HistogramTester histogram_tester;
+  engine_.Enable(kEngineIdUs);
+  chromeos::TextInputTestHelper helper(GetBrowserInputMethod());
+  SetUpTextInput(helper);
+  const base::string16 prefix_text = base::UTF8ToUTF16("happy ");
+  const base::string16 expected_result_text = base::UTF8ToUTF16("happy 😀");
+
+  helper.GetTextInputClient()->InsertText(prefix_text);
+  helper.WaitForSurroundingTextChanged(prefix_text);
+  // Selects first emoji.
+  DispatchKeyPress(ui::VKEY_DOWN, false);
+  DispatchKeyPress(ui::VKEY_RETURN, false);
+  helper.WaitForSurroundingTextChanged(expected_result_text);
+
+  EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Match",
+                                      chromeos::AssistiveType::kEmoji, 1);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Coverage",
+                                      chromeos::AssistiveType::kEmoji, 1);
+  histogram_tester.ExpectUniqueSample("InputMethod.Assistive.Success",
+                                      chromeos::AssistiveType::kEmoji, 1);
+
+  SetFocus(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeInputMethodEngineTest,
+    OnLearnMoreButtonClickedOpensEmojiSuggestionSettingsPage) {
+  base::UserActionTester user_action_tester;
+  ui::ime::AssistiveWindowButton button;
+  button.id = ui::ime::ButtonId::kLearnMore;
+  button.window_type = ui::ime::AssistiveWindowType::kEmojiSuggestion;
+
+  engine_.AssistiveWindowButtonClicked(button);
+
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "ChromeOS.Settings.SmartInputs.EmojiSuggestions.Open"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeInputMethodEngineTest,
+    OnSettingLinkButtonClickedOpensPersonalInfoSuggestionSettingsPage) {
+  base::UserActionTester user_action_tester;
+  ui::ime::AssistiveWindowButton button;
+  button.id = ui::ime::ButtonId::kSmartInputsSettingLink;
+
+  engine_.AssistiveWindowButtonClicked(button);
+
+  EXPECT_EQ(1,
+            user_action_tester.GetActionCount(
+                "ChromeOS.Settings.SmartInputs.PersonalInfoSuggestions.Open"));
 }

@@ -4,7 +4,6 @@
 
 #include "chrome/browser/safe_browsing/cloud_content_scanning/test_binary_upload_service.h"
 
-#include "base/task/post_task.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_fcm_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -19,10 +18,25 @@ TestBinaryUploadService::TestBinaryUploadService()
 void TestBinaryUploadService::MaybeUploadForDeepScanning(
     std::unique_ptr<Request> request) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&Request::FinishRequest, std::move(request),
-                                saved_result_, saved_response_));
+  if (request->use_legacy_proto()) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&Request::FinishLegacyRequest, std::move(request),
+                       saved_result_, saved_response_));
+  } else {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&Request::FinishConnectorRequest, std::move(request),
+                       saved_result_, saved_content_analysis_response_));
+  }
   was_called_ = true;
+}
+
+void TestBinaryUploadService::SetResponse(
+    Result result,
+    enterprise_connectors::ContentAnalysisResponse response) {
+  saved_result_ = result;
+  saved_content_analysis_response_ = response;
 }
 
 void TestBinaryUploadService::SetResponse(Result result,

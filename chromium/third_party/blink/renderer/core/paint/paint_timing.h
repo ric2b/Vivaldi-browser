@@ -55,11 +55,25 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   // contentful paint hasn't been recorded yet.
   void MarkFirstImagePaint();
 
+  // MarkFirstEligibleToPaint records the first time that the frame is not
+  // throttled and so is eligible to paint. A null value indicates throttling.
+  void MarkFirstEligibleToPaint();
+
+  // MarkIneligibleToPaint resets the paint eligibility timestamp to null.
+  // A null value indicates throttling. This call is ignored if a first
+  // contentful paint has already been recorded.
+  void MarkIneligibleToPaint();
+
   void SetFirstMeaningfulPaintCandidate(base::TimeTicks timestamp);
   void SetFirstMeaningfulPaint(
       base::TimeTicks swap_stamp,
       FirstMeaningfulPaintDetector::HadUserInput had_input);
   void NotifyPaint(bool is_first_paint, bool text_painted, bool image_painted);
+
+  // Notifies the PaintTiming that this Document received the onPortalActivate
+  // event.
+  void OnPortalActivate();
+  void SetPortalActivatedPaint(base::TimeTicks stamp);
 
   // The getters below return monotonically-increasing seconds, or zero if the
   // given paint event has not yet occurred. See the comments for
@@ -68,6 +82,13 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   // FirstPaint returns the first time that anything was painted for the
   // current document.
   base::TimeTicks FirstPaint() const { return first_paint_swap_; }
+
+  // Times when the first paint happens after the page is restored from the
+  // back-forward cache. If the element value is zero time tick, the first paint
+  // event did not happen for that navigation.
+  WTF::Vector<base::TimeTicks> FirstPaintsAfterBackForwardCacheRestore() const {
+    return first_paints_after_back_forward_cache_restore_swap_;
+  }
 
   // FirstContentfulPaint returns the first time that 'contentful' content was
   // painted. For instance, the first time that text or image content was
@@ -79,10 +100,21 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   // FirstImagePaint returns the first time that image content was painted.
   base::TimeTicks FirstImagePaint() const { return first_image_paint_swap_; }
 
+  // FirstEligibleToPaint returns the first time that the frame is not
+  // throttled and is eligible to paint. A null value indicates throttling.
+  base::TimeTicks FirstEligibleToPaint() const {
+    return first_eligible_to_paint_;
+  }
+
   // FirstMeaningfulPaint returns the first time that page's primary content
   // was painted.
   base::TimeTicks FirstMeaningfulPaint() const {
     return first_meaningful_paint_swap_;
+  }
+
+  // The time that the first paint happened after a portal activation.
+  base::TimeTicks LastPortalActivatedPaint() const {
+    return last_portal_activated_swap_;
   }
 
   // FirstMeaningfulPaintCandidate indicates the first time we considered a
@@ -105,7 +137,9 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   // The caller owns the |clock| which must outlive the PaintTiming.
   void SetTickClockForTesting(const base::TickClock* clock);
 
-  void Trace(Visitor*) override;
+  void OnRestoredFromBackForwardCache();
+
+  void Trace(Visitor*) const override;
 
  private:
   LocalFrame* GetFrame() const;
@@ -132,6 +166,8 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   void SetFirstContentfulPaintSwap(base::TimeTicks stamp);
   void SetFirstImagePaintSwap(base::TimeTicks stamp);
 
+  void SetFirstPaintAfterBackForwardCacheRestoreSwap(base::TimeTicks stamp);
+
   void RegisterNotifySwapTime(PaintEvent);
 
   base::TimeTicks FirstPaintRendered() const { return first_paint_; }
@@ -145,12 +181,17 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   // confirm the deltas and discrepancies look reasonable.
   base::TimeTicks first_paint_;
   base::TimeTicks first_paint_swap_;
+  WTF::Vector<base::TimeTicks>
+      first_paints_after_back_forward_cache_restore_swap_;
   base::TimeTicks first_image_paint_;
   base::TimeTicks first_image_paint_swap_;
   base::TimeTicks first_contentful_paint_;
   base::TimeTicks first_contentful_paint_swap_;
   base::TimeTicks first_meaningful_paint_swap_;
   base::TimeTicks first_meaningful_paint_candidate_;
+  base::TimeTicks first_eligible_to_paint_;
+
+  base::TimeTicks last_portal_activated_swap_;
 
   Member<FirstMeaningfulPaintDetector> fmp_detector_;
 

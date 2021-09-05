@@ -39,8 +39,6 @@ Neke funkcije su možda nedostupne i promene podešavanja neće biti sačuvane.
 <translation id="1873233029667955273">Google Chrome nije podrazumevani pregledač</translation>
 <translation id="1874309113135274312">Google Chrome beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome je zastareo</translation>
-<translation id="1900795423379050516">Ako se podešavanje ne prikazuje na ovoj stranici, potražite ga u <ph name="LINK_BEGIN" />
-      podešavanjima Chrome pregledača<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Dozvoli prijavljivanje u Chrome</translation>
 <translation id="2063848847527508675">Treba da restartujete Chrome OS da biste primenili ažuriranje.</translation>
 <translation id="2094919256425865063">Želite li ipak da zatvorite Chrome?</translation>
@@ -116,6 +114,7 @@ Neke funkcije su možda nedostupne i promene podešavanja neće biti sačuvane.
 <translation id="4251615635259297716">Želite li da povežete Chrome podatke sa ovim nalogom?</translation>
 <translation id="4281844954008187215">Uslovi korišćenja usluge</translation>
 <translation id="4293420128516039005">Prijavite se da biste sinhronizovali i personalizovali Chrome na svim uređajima</translation>
+<translation id="4325083532956419387">Verzija Chrome OS-a</translation>
 <translation id="4328355335528187361">Programerska verzija Google Chrome-a (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome može da vas štiti od upada u podatke, neispravnih dodataka i drugih problema</translation>

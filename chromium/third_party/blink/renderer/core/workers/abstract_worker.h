@@ -66,17 +66,12 @@ class CORE_EXPORT AbstractWorker
   AbstractWorker(ExecutionContext*);
   ~AbstractWorker() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  protected:
   // Helper function that converts a URL to an absolute URL and checks the
   // result for validity.
-  static KURL ResolveURL(
-      ExecutionContext*,
-      const String& url,
-      ExceptionState&,
-      mojom::RequestContextType,
-      network::mojom::RequestDestination request_destination);
+  static KURL ResolveURL(ExecutionContext*, const String& url, ExceptionState&);
 };
 
 }  // namespace blink

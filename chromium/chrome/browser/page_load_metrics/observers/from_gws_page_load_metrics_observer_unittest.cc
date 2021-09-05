@@ -8,6 +8,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
@@ -151,9 +152,9 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
   timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(20);
   timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(40);
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(50);
-  timing.paint_timing->largest_text_paint_size = 20u;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 20u;
   timing.paint_timing->first_image_paint =
       base::TimeDelta::FromMilliseconds(160);
   timing.parse_timing->parse_stop = base::TimeDelta::FromMilliseconds(320);
@@ -170,6 +171,12 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
   NavigateAndCommit(GURL(kExampleUrl));
 
   tester()->SimulateTimingUpdate(timing);
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
+                                                              0);
+  tester()->SimulateRenderDataUpdate(render_data);
+  render_data.layout_shift_delta = 1.5;
+  render_data.layout_shift_delta_before_input_or_scroll = 0.0;
+  tester()->SimulateRenderDataUpdate(render_data);
 
   // Navigate again to force logging.
   tester()->NavigateToUntrackedUrl();
@@ -196,7 +203,9 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
       internal::kHistogramFromGWSLargestContentfulPaint, 1);
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSLargestContentfulPaint,
-      timing.paint_timing->largest_text_paint.value().InMilliseconds(), 1);
+      timing.paint_timing->largest_contentful_paint->largest_text_paint.value()
+          .InMilliseconds(),
+      1);
 
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSParseStartToFirstContentfulPaint, 1);
@@ -241,6 +250,11 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstInputDelay,
       timing.interactive_timing->first_input_delay.value().InMilliseconds(), 1);
+
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFromGWSCumulativeLayoutShiftMainFrame, 1);
+  tester()->histogram_tester().ExpectBucketCount(
+      internal::kHistogramFromGWSCumulativeLayoutShiftMainFrame, 25, 1);
 
   auto entries = tester()->test_ukm_recorder().GetEntriesByName(
       ukm::builders::PageLoad_FromGoogleSearch::kEntryName);
@@ -573,9 +587,15 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
 
   NavigateAndCommit(GURL("https://www.google.com/search#q=test"));
   NavigateAndCommit(GURL(kExampleUrl));
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
+                                                              0);
+  tester()->SimulateRenderDataUpdate(render_data);
 
   web_contents()->WasHidden();
   tester()->SimulateTimingUpdate(timing);
+  render_data.layout_shift_delta = 1.5;
+  render_data.layout_shift_delta_before_input_or_scroll = 0.0;
+  tester()->SimulateRenderDataUpdate(render_data);
 
   // If the system clock is low resolution PageLoadTracker's background_time_
   // may be < timing.first_image_paint.
@@ -591,9 +611,24 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
     tester()->histogram_tester().ExpectTotalCount(
         internal::kHistogramFromGWSFirstImagePaint, 0);
   }
+
+  // Navigate again to force logging layout shift score.
+  tester()->NavigateToUntrackedUrl();
+
+  // Layout shift score should still be updated after tab was hidden.
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFromGWSCumulativeLayoutShiftMainFrame, 1);
+  tester()->histogram_tester().ExpectBucketCount(
+      internal::kHistogramFromGWSCumulativeLayoutShiftMainFrame, 25, 1);
 }
 
-TEST_F(FromGWSPageLoadMetricsObserverTest, NewNavigationBeforeCommit) {
+// Disabled due to flakiness: https://crbug.com/1092018
+#if defined(OS_LINUX)
+#define MAYBE_NewNavigationBeforeCommit DISABLED_NewNavigationBeforeCommit
+#else
+#define MAYBE_NewNavigationBeforeCommit NewNavigationBeforeCommit
+#endif
+TEST_F(FromGWSPageLoadMetricsObserverTest, MAYBE_NewNavigationBeforeCommit) {
   NavigateAndCommit(GURL(kGoogleSearchResultsUrl));
   tester()->StartNavigation(GURL("http://example.test"));
 

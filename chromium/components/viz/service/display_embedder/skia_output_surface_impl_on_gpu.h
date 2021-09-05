@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
@@ -153,7 +152,7 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
   void RemoveRenderPassResource(
       std::vector<RenderPassId> ids,
       std::vector<std::unique_ptr<ImageContextImpl>> image_contexts);
-  void CopyOutput(RenderPassId id,
+  bool CopyOutput(RenderPassId id,
                   copy_output::RenderPassGeometry geometry,
                   const gfx::ColorSpace& color_space,
                   std::unique_ptr<CopyOutputRequest> request,
@@ -162,7 +161,7 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
   void BeginAccessImages(const std::vector<ImageContextImpl*>& image_contexts,
                          std::vector<GrBackendSemaphore>* begin_semaphores,
                          std::vector<GrBackendSemaphore>* end_semaphores);
-  void EndAccessImages(const std::vector<ImageContextImpl*>& image_contexts);
+  void EndAccessImages(const base::flat_set<ImageContextImpl*>& image_contexts);
 
   sk_sp<GrContextThreadSafeProxy> GetGrContextThreadSafeProxy();
   const gl::GLVersionInfo* gl_version_info() const { return gl_version_info_; }
@@ -211,7 +210,6 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
   gpu::MemoryTracker* GetMemoryTracker() { return memory_tracker_.get(); }
 
  private:
-  class ScopedPromiseImageAccess;
   class OffscreenSurface;
   class DisplayContext;
 
@@ -219,6 +217,12 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
   bool InitializeForGL();
   bool InitializeForVulkan();
   bool InitializeForDawn();
+
+  // Provided as a callback to |device_|.
+  void DidSwapBuffersCompleteInternal(gpu::SwapBuffersCompleteParams params,
+                                      const gfx::Size& pixel_size);
+
+  DidSwapBufferCompleteCallback GetDidSwapBuffersCompleteCallback();
 
   // Make context current for GL, and return false if the context is lost.
   // It will do nothing when Vulkan is used.
@@ -286,6 +290,7 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
   // readback using GLRendererCopier.
   // TODO(samans): Remove |sequence_id| once readback always uses Skia.
   const gpu::SequenceId sequence_id_;
+  // Should only be run on the client thread with PostTaskToClientThread().
   DidSwapBufferCompleteCallback did_swap_buffer_complete_callback_;
   BufferPresentedCallback buffer_presented_callback_;
   ContextLostCallback context_lost_callback_;
@@ -307,6 +312,24 @@ class SkiaOutputSurfaceImplOnGpu : public gpu::ImageTransportSurfaceDelegate {
 
   std::unique_ptr<DisplayContext> display_context_;
   bool context_is_lost_ = false;
+
+  class PromiseImageAccessHelper {
+   public:
+    explicit PromiseImageAccessHelper(SkiaOutputSurfaceImplOnGpu* impl_on_gpu);
+    ~PromiseImageAccessHelper();
+
+    void BeginAccess(std::vector<ImageContextImpl*> image_contexts,
+                     std::vector<GrBackendSemaphore>* begin_semaphores,
+                     std::vector<GrBackendSemaphore>* end_semaphores);
+    void EndAccess();
+
+   private:
+    SkiaOutputSurfaceImplOnGpu* const impl_on_gpu_;
+    base::flat_set<ImageContextImpl*> image_contexts_;
+
+    DISALLOW_COPY_AND_ASSIGN(PromiseImageAccessHelper);
+  };
+  PromiseImageAccessHelper promise_image_access_helper_{this};
 
   std::unique_ptr<SkiaOutputDevice> output_device_;
   base::Optional<SkiaOutputDevice::ScopedPaint> scoped_output_device_paint_;

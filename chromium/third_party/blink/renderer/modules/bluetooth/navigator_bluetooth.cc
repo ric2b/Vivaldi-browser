@@ -29,15 +29,15 @@ Bluetooth* NavigatorBluetooth::bluetooth() {
   if (bluetooth_)
     return bluetooth_.Get();
 
-  if (!GetSupplementable()->GetFrame())
+  if (!GetSupplementable()->DomWindow())
     return nullptr;
 
-  bluetooth_ = MakeGarbageCollected<Bluetooth>(
-      GetSupplementable()->GetFrame()->GetDocument()->GetExecutionContext());
+  bluetooth_ =
+      MakeGarbageCollected<Bluetooth>(GetSupplementable()->DomWindow());
   return bluetooth_.Get();
 }
 
-void NavigatorBluetooth::Trace(Visitor* visitor) {
+void NavigatorBluetooth::Trace(Visitor* visitor) const {
   visitor->Trace(bluetooth_);
   Supplement<Navigator>::Trace(visitor);
 }

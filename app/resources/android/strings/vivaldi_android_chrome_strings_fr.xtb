@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
-<translation id="1169602411434249000">Bloquer les traqueurs</translation>
 <translation id="1397811292916898096">Rechercher avec <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Basculer entre les onglets privés et normaux</translation>
 <translation id="1644574205037202324">Historique</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Onglets privés</translation>
 <translation id="4883379392681899581">Quitter le mode navigation privée</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
+<translation id="49576331685473090">Bloqueur de contenus</translation>
+<translation id="4960569554487356883">Veuillez activer les permissions de Vivaldi dans <ph name="BEGIN_LINK" />les paramètres d’Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Stockage <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Nouvel onglet</translation>
 <translation id="5495228542153126976">Vous êtes passé en mode navigation privée</translation>
+<translation id="5553467336321715093">Veuillez activer les permissions de Vivaldi dans <ph name="BEGIN_LINK" />les paramètres d’Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Onglets récents</translation>
 <translation id="5840488417521835756">Découvrez les thèmes abordés sur les sites Web sans quitter la page. La fonctionnalité « Appuyer pour rechercher » n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi et transmet un mot et son contexte à la recherche Google, qui renvoie à son tour des définitions, des images, des résultats de recherche et d’autres informations.
 

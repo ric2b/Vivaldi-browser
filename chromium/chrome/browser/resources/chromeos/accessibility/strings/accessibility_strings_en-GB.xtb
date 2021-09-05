@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Scroll right</translation>
 <translation id="1781173782405573156">Pass through key</translation>
 <translation id="1787176709638001873">Password edit text</translation>
+<translation id="180203835522132923">Search + O, then W</translation>
 <translation id="1810107444790159527">List box</translation>
 <translation id="1812527064848182527">landscape</translation>
 <translation id="1829244130665387512">Find in page</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Swipe two fingers left</translation>
 <translation id="2998131015536248178">Previous Character</translation>
 <translation id="2999559350546931576">Decrease pitch</translation>
+<translation id="3009352964623081324">Search + O, then S. Use to install, manage and customise voices.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">Menu item radio button</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrophe}other{# apostrophes}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Insertion</translation>
 <translation id="4511186779140817916">Blanched Almond</translation>
 <translation id="451510441928265982">No previous level 2 heading</translation>
+<translation id="4515799157838123044">Shade background content</translation>
 <translation id="4517854969512651305">Increase value</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{slash}other{# slashes}}</translation>
 <translation id="4537277403911487429">Next similar item</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Part</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Progress bar</translation>
+<translation id="6660819301598582123">The quick brown fox jumped over the lazy dog.</translation>
 <translation id="667999046851023355">Document</translation>
 <translation id="6688209025607531203">A non-modal alert</translation>
 <translation id="6689672606256159458">Dark Salmon</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">No next level 5 heading</translation>
 <translation id="6955705049214951590">Misty Rose</translation>
 <translation id="696356426651109308">Jump to beginning</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">Glossary reference</translation>
 <translation id="6996566555547746822">Next combo box</translation>
 <translation id="6997224546856374593">When reading capitals:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Salmon</translation>
 <translation id="7140168702531682811">Superscript</translation>
 <translation id="7143034430156387447">Toggle between 6 and 8 dot braille</translation>
-<translation id="7143207342074048698">Connecting ...</translation>
+<translation id="7143207342074048698">Connecting</translation>
 <translation id="7153618581592392745">Lavender</translation>
 <translation id="7157306005867877619">Abstract</translation>
 <translation id="7161771961008409533">Pop-up button</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Example</translation>
 <translation id="7439060726180460871">Directory</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Change pitch when speaking element types and quoted, deleted, bolded, parenthesised or capitalised text.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">Say 'cap' before letter</translation>
 <translation id="7518543783849163354">To temporarily stop ChromeVox from speaking, press the Control key.</translation>

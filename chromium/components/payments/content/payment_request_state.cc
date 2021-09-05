@@ -18,19 +18,19 @@
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
+#include "components/payments/content/autofill_payment_app.h"
 #include "components/payments/content/autofill_payment_app_factory.h"
 #include "components/payments/content/content_payment_request_delegate.h"
+#include "components/payments/content/payment_app.h"
 #include "components/payments/content/payment_app_service.h"
 #include "components/payments/content/payment_app_service_factory.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_response_helper.h"
 #include "components/payments/content/service_worker_payment_app.h"
 #include "components/payments/core/autofill_card_validation.h"
-#include "components/payments/core/autofill_payment_app.h"
 #include "components/payments/core/error_strings.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/method_strings.h"
-#include "components/payments/core/payment_app.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payments_experimental_features.h"
 #include "content/public/browser/render_frame_host.h"
@@ -66,7 +66,6 @@ PaymentRequestState::PaymentRequestState(
     const std::string& app_locale,
     autofill::PersonalDataManager* personal_data_manager,
     ContentPaymentRequestDelegate* payment_request_delegate,
-    const ServiceWorkerPaymentApp::IdentityCallback& sw_identity_callback,
     JourneyLogger* journey_logger)
     : web_contents_(web_contents),
       initiator_render_frame_host_(initiator_render_frame_host),
@@ -81,7 +80,6 @@ PaymentRequestState::PaymentRequestState(
       are_requested_methods_supported_(
           !spec_->supported_card_networks().empty()),
       payment_request_delegate_(payment_request_delegate),
-      sw_identity_callback_(sw_identity_callback),
       profile_comparator_(app_locale, *spec) {
   PopulateProfileCache();
 
@@ -103,6 +101,10 @@ content::WebContents* PaymentRequestState::GetWebContents() {
 ContentPaymentRequestDelegate* PaymentRequestState::GetPaymentRequestDelegate()
     const {
   return payment_request_delegate_;
+}
+
+void PaymentRequestState::ShowProcessingSpinner() {
+  GetPaymentRequestDelegate()->ShowProcessingSpinner();
 }
 
 PaymentRequestSpec* PaymentRequestState::GetSpec() const {
@@ -151,9 +153,8 @@ bool PaymentRequestState::MayCrawlForInstallablePaymentApps() {
          !spec_->supports_basic_card();
 }
 
-void PaymentRequestState::OnPaymentAppInstalled(const url::Origin& origin,
-                                                int64_t registration_id) {
-  sw_identity_callback_.Run(origin, registration_id);
+bool PaymentRequestState::IsOffTheRecord() const {
+  return GetPaymentRequestDelegate()->IsOffTheRecord();
 }
 
 void PaymentRequestState::OnPaymentAppCreated(std::unique_ptr<PaymentApp> app) {
@@ -178,13 +179,6 @@ void PaymentRequestState::OnPaymentAppCreationError(
 
 bool PaymentRequestState::SkipCreatingNativePaymentApps() const {
   return false;
-}
-
-void PaymentRequestState::OnCreatingNativePaymentAppsSkipped(
-    content::PaymentAppProvider::PaymentApps unused_apps,
-    ServiceWorkerPaymentAppFinder::InstallablePaymentApps
-        unused_installable_apps) {
-  NOTREACHED();
 }
 
 void PaymentRequestState::OnDoneCreatingPaymentApps() {
@@ -314,6 +308,14 @@ void PaymentRequestState::CheckRequestedMethodsSupported(
           features::kStrictHasEnrolledAutofillInstrument)) {
     supported = false;
     get_all_payment_apps_error_ = errors::kStrictBasicCardShowReject;
+  }
+
+  bool is_in_twa = !payment_request_delegate_->GetTwaPackageName().empty();
+  if (!supported && get_all_payment_apps_error_.empty() &&
+      base::Contains(spec_->payment_method_identifiers_set(),
+                     methods::kGooglePlayBilling) &&
+      !is_in_twa) {
+    get_all_payment_apps_error_ = errors::kAppStoreMethodOnlySupportedInTwa;
   }
 
   std::move(callback).Run(supported, get_all_payment_apps_error_);

@@ -320,7 +320,6 @@ if (is_win) {
       ":browser_dependencies",
       ":chrome_dll_manifest",
       ":chrome_dll_version",
-      "//base/trace_event/etw_manifest:chrome_events_win",
       "//chrome/app:chrome_dll_resources",
       "//chrome/app:command_ids",
       "//chrome/app/theme:chrome_unscaled_resources",
@@ -368,13 +367,15 @@ if (is_win) {
   chrome_framework_name = chrome_product_full_name + " Framework"
   chrome_framework_version = chrome_version_full
 
+  verify_dynamic_libraries = !is_component_build && !is_asan
+
   group("chrome") {
     deps = [ ":chrome_app" ]
 
     data_deps = [ ":chrome_app" ]
 
-    if (debug_devtools) {
-      deps += [ ":devtools_debug_resources" ]
+    if (verify_dynamic_libraries) {
+      deps += [ ":verify_libraries_chrome_app" ]
     }
 
     if (is_chrome_branded && is_official_build) {
@@ -448,6 +449,27 @@ if (is_win) {
       # This is a bit of a hack, since GN deliberately terminates its search
       # for runtime_deps at create_bundle nodes (https://crbug.com/1010347).
       data_deps = [ ":chrome_framework" ]
+    }
+  }
+
+  if (verify_dynamic_libraries) {
+    action("verify_libraries_chrome_app") {
+      script = "//chrome/tools/build/mac/verify_dynamic_libraries.py"
+      inputs = [ "${root_out_dir}/${chrome_product_full_name}.app/Contents/MacOS/${chrome_product_full_name}" ]
+      outputs = [ "$target_out_dir/run_$target_name.stamp" ]
+      args = [
+        "--stamp",
+        rebase_path(outputs[0], root_out_dir),
+        "-B",
+        mac_bin_path,
+        "--image",
+        rebase_path(inputs[0], root_out_dir),
+        "--allow",
+        "/usr/lib/libSystem.B.dylib",
+        "--allow",
+        "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+      ]
+      deps = [ ":chrome_app" ]
     }
   }
 
@@ -658,6 +680,32 @@ if (is_win) {
       helper_name_suffix = _helper_suffix
       helper_bundle_id_suffix = _helper_bundle_id
     }
+
+    if (verify_dynamic_libraries) {
+      action("verify_libraries_chrome_helper_app_${_helper_target}") {
+        script = "//chrome/tools/build/mac/verify_dynamic_libraries.py"
+        inputs = [ "${root_out_dir}/${chrome_helper_name}${_helper_suffix}.app/Contents/MacOS/${chrome_helper_name}${_helper_suffix}" ]
+        outputs = [ "$target_out_dir/run_$target_name.stamp" ]
+        args = [
+          "--stamp",
+          rebase_path(outputs[0], root_out_dir),
+          "-B",
+          mac_bin_path,
+          "--image",
+          rebase_path(inputs[0], root_out_dir),
+
+          # Do not --allow more libraries here without consulting with the
+          # security team (security-dev@chromium.org).
+          "--allow",
+          "/usr/lib/libsandbox.1.dylib",
+          "--allow",
+          "/usr/lib/libSystem.B.dylib",
+          "--allow",
+          "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+        ]
+        deps = [ ":chrome_helper_app_${_helper_target}" ]
+      }
+    }
   }
 
   bundle_data("chrome_framework_helpers") {
@@ -677,6 +725,10 @@ if (is_win) {
       sources +=
           [ "$root_out_dir/${chrome_helper_name}${helper_params[2]}.app" ]
       public_deps += [ ":chrome_helper_app_${helper_params[0]}" ]
+      if (verify_dynamic_libraries) {
+        public_deps +=
+            [ ":verify_libraries_chrome_helper_app_${helper_params[0]}" ]
+      }
     }
 
     if (is_asan) {
@@ -726,43 +778,6 @@ if (is_win) {
       } else {
         sources += [ "$root_out_dir/snapshot_blob.bin" ]
       }
-    }
-  }
-
-  # When debug_devtools is enabled, symlink the inspector resources into the
-  # framework bundle. The resources go into the final output directory for the
-  # framework in the app bundle, rather than the framework bundle in
-  # root_out_dir, since copy_bundle_data copies the contents of the link
-  # rather than the link itself.
-  if (debug_devtools) {
-    action("devtools_debug_resources") {
-      _stamp = "$target_out_dir/run_${target_name}.stamp"
-
-      outputs = [ _stamp ]
-
-      script = "//build/symlink.py"
-
-      args = [
-        "-f",
-        "--touch",
-        rebase_path(_stamp, root_out_dir),
-
-        # Convert the symlink source and destination to an absolute paths, which
-        # makes symlinking easier (now pwd manipulation).
-        rebase_path("$root_out_dir/resources/inspector"),
-        rebase_path(
-            "$root_out_dir/$chrome_product_full_name.app/Contents/Frameworks/$chrome_framework_name.framework/Versions/$chrome_version_full/Resources/inspector"),
-      ]
-
-      deps = [
-        # Depend on :chrome_app to ensure that the bundle is produced before
-        # creating or destroying the symlink.
-        ":chrome_app",
-        "//third_party/blink/public:blink_devtools_frontend_resources",
-      ]
-    }
-  } else {
-    group("devtools_debug_resources") {
     }
   }
 
@@ -1218,6 +1233,7 @@ group("child_dependencies") {
     "//pdf",
     "//services/tracing/public/cpp",
     "//third_party/blink/public:blink_devtools_frontend_resources",
+    "//third_party/blink/public:blink_devtools_inspector_resources",
   ]
 
   if (enable_nacl) {
@@ -1311,6 +1327,8 @@ group("extra_resources") {
       "//chrome/browser/resources:gaia_auth_host_resources",
       "//chrome/browser/resources:history_resources",
       "//chrome/browser/resources:local_ntp_resources",
+      "//chrome/browser/resources:nearby_internals_resources",
+      "//chrome/browser/resources:nearby_share_dialog_resources",
       "//chrome/browser/resources:new_tab_page_resources",
       "//chrome/browser/resources:settings_resources",
     ]
@@ -1318,6 +1336,7 @@ group("extra_resources") {
 
   if (is_chromeos) {
     public_deps += [
+      "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
       "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
@@ -1341,7 +1360,10 @@ group("extra_resources") {
   }
 
   if (enable_print_preview) {
-    public_deps += [ "//chrome/browser/resources:print_preview_resources" ]
+    public_deps += [
+      "//chrome/browser/resources:print_preview_pdf_resources",
+      "//chrome/browser/resources:print_preview_resources",
+    ]
   }
 }
 
@@ -1426,10 +1448,6 @@ if (is_android) {
     sources = [ "browser/android/bookmarks/partner_bookmarks_reader.h" ]
   }
 
-  java_cpp_enum("payments_journey_logger_enum_javagen") {
-    sources = [ "../components/payments/core/journey_logger.h" ]
-  }
-
   java_cpp_enum("quick_action_category_enum_javagen") {
     sources = [ "browser/android/contextualsearch/resolved_search_term.h" ]
   }
@@ -1440,7 +1458,7 @@ if (is_android) {
 
   java_cpp_enum("download_enum_javagen") {
     sources = [
-      "browser/download/download_location_dialog_type.h",
+      "browser/download/download_dialog_types.h",
       "browser/download/download_prompt_status.h",
     ]
   }

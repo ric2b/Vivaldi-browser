@@ -106,17 +106,9 @@ Value ConvertOnePath(const Scope* scope,
         value, err, scope->settings()->build_settings()->root_path_utf8());
     if (err->has_error())
       return Value();
-    // Special case:
-    //   rebase_path("//foo", "//bar") ==> "../foo"
-    //   rebase_path("//foo", "//foo") ==> "." and not "../foo"
-    if (resolved_file.value() ==
-        to_dir.value().substr(0, to_dir.value().size() - 1)) {
-      result.string_value() = ".";
-    } else {
-      result.string_value() =
-          RebasePath(resolved_file.value(), to_dir,
-                     scope->settings()->build_settings()->root_path_utf8());
-    }
+    result.string_value() =
+        RebasePath(resolved_file.value(), to_dir,
+                   scope->settings()->build_settings()->root_path_utf8());
   }
 
   return result;
@@ -151,12 +143,12 @@ const char kRebasePath_Help[] =
   with a double slash like "//foo/bar"), you should use the get_path_info()
   function. This function won't work because it will always make relative
   paths, and it needs to support making paths relative to the source root, so
-  can't also generate source-absolute paths without more special-cases.
+  it can't also generate source-absolute paths without more special-cases.
 
 Arguments
 
   input
-      A string or list of strings representing file or directory names These
+      A string or list of strings representing file or directory names. These
       can be relative paths ("foo/bar.txt"), system absolute paths
       ("/foo/bar.txt"), or source absolute paths ("//foo/bar.txt").
 

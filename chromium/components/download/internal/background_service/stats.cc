@@ -45,7 +45,11 @@ std::string TaskTypeToHistogramSuffix(DownloadTaskType task_type) {
     case DownloadTaskType::CLEANUP_TASK:
       return "CleanUpTask";
     case DownloadTaskType::DOWNLOAD_AUTO_RESUMPTION_TASK:
+      NOTREACHED();
       return "DownloadAutoResumptionTask";
+    case DownloadTaskType::DOWNLOAD_LATER_TASK:
+      NOTREACHED();
+      return "DownloadLaterTask";
   }
   NOTREACHED();
   return std::string();
@@ -320,12 +324,6 @@ void LogHasUploadData(DownloadClient client, bool has_upload_data) {
   std::string name("Download.Service.Upload.HasUploadData");
   name.append(".").append(ClientToHistogramSuffix(client));
   base::UmaHistogramBoolean(name, has_upload_data);
-}
-
-void LogDownloadClientInflatedFullBrowser(DownloadClient client) {
-  std::string client_name(ClientToHistogramSuffix(client));
-  base::UmaHistogramBoolean(
-      "Download.Service.Clients.InflatedFullBrowser." + client_name, true);
 }
 
 }  // namespace stats

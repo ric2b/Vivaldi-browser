@@ -13,10 +13,10 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
-import android.support.test.filters.SmallTest;
 import android.view.ViewGroup;
 
 import androidx.annotation.ColorRes;
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -477,6 +477,7 @@ public class VoiceRecognitionHandlerTest {
     @After
     public void tearDown() {
         SysUtils.resetForTesting();
+        TestThreadUtils.runOnUiThreadBlocking(() -> { mWindowAndroid.destroy(); });
     }
 
     /**

@@ -286,12 +286,19 @@ class HeadlessWebContentsScreenshotWindowPositionTest
   }
 };
 
+// Flaky on Windows Debug https://crbug.com/1090801
+#if defined(OS_WIN) && !defined(NDEBUG)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_P(
+    HeadlessWebContentsScreenshotWindowPositionTest);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_P(
     HeadlessWebContentsScreenshotWindowPositionTest);
+#endif
 
 // Instantiate test case for both software and gpu compositing modes.
-#if !defined(OS_WIN)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
 // TODO(crbug.com/1045980): Disabled on Windows due to flakiness.
+// TODO(crbug.com/1086872): Disabled due to flakiness on Mac ASAN.
 INSTANTIATE_TEST_SUITE_P(HeadlessWebContentsScreenshotWindowPositionTests,
                          HeadlessWebContentsScreenshotWindowPositionTest,
                          ::testing::Bool());
@@ -515,7 +522,7 @@ HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsPDFPageSizeRoundingTest);
 const char kExpectedStructTreeJSON[] = R"({
    "type": "Document",
    "~children": [ {
-      "type": "H",
+      "type": "H1",
       "~children": [ {
          "type": "NonStruct"
       } ]
@@ -533,6 +540,14 @@ const char kExpectedStructTreeJSON[] = R"({
          } ]
       }, {
          "type": "LI",
+         "~children": [ {
+            "type": "NonStruct"
+         } ]
+      } ]
+   }, {
+      "type": "Div",
+      "~children": [ {
+         "type": "Link",
          "~children": [ {
             "type": "NonStruct"
          } ]
@@ -565,6 +580,11 @@ const char kExpectedStructTreeJSON[] = R"({
                "type": "NonStruct"
             } ]
          } ]
+      } ]
+   }, {
+      "type": "H2",
+      "~children": [ {
+         "type": "NonStruct"
       } ]
    }, {
       "type": "Div",
@@ -643,7 +663,12 @@ class HeadlessWebContentsTaggedPDFTest
   }
 };
 
+// Flaky on Windows Debug https://crbug.com/1090801
+#if defined(OS_WIN) && !defined(NDEBUG)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsTaggedPDFTest);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsTaggedPDFTest);
+#endif
 
 #endif  // BUILDFLAG(ENABLE_PRINTING)
 
@@ -1176,9 +1201,10 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
   }
 };
 
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_FUCHSIA)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 // TODO(crbug.com/1078405): Disabled due to flakiness.
+// TODO(crbug.com/1090936): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
 #else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);

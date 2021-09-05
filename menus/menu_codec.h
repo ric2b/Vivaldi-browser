@@ -32,7 +32,7 @@ class MenuCodec {
   // Decodes JSON into a Menu_Model object. Returns true on success,
   // false otherwise.
   bool Decode(Menu_Node* root, Menu_Control* control, const base::Value& value,
-              bool is_bundle);
+              bool is_bundle, const std::string& force_version);
 
   // Encodes the model to a corresponding JSON value tree.
   base::Value Encode(Menu_Model* model);

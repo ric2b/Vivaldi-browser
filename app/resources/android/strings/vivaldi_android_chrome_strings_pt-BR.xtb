@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
-<translation id="1169602411434249000">Bloquear Rastreadores</translation>
 <translation id="2433507940547922241">Aparência</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
 <translation id="3700829948786686853">Bem-vindo ao Vivaldi</translation>
@@ -15,4 +14,5 @@ Para ajustar o termo de pesquisa, toque nele e mantenha-o pressionado. Para refi
 <translation id="7519434535192513364">O recurso "Tocar para pesquisar" envia a palavra selecionada e a página atual como contexto para a Pesquisa Vivaldi. É possível desativá-lo em <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="804786196054284061">Acordo de Licença de Usuário Final</translation>
+<translation id="8820817407110198400">Favoritos</translation>
 </translationbundle>

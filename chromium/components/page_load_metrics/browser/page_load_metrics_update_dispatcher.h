@@ -75,6 +75,11 @@ enum PageLoadTimingStatus {
   // We received a longest input timestamp without a longest input delay.
   INVALID_NULL_LONGEST_INPUT_DELAY,
 
+  // We received a first scroll delay without a first scroll timestamp.
+  INVALID_NULL_FIRST_SCROLL_TIMESTAMP,
+  // We received a first scroll timestamp without a first scroll delay.
+  INVALID_NULL_FIRST_SCROLL_DELAY,
+
   // Longest input delay cannot happen before first input delay.
   INVALID_LONGEST_INPUT_TIMESTAMP_LESS_THAN_FIRST_INPUT_TIMESTAMP,
 
@@ -127,6 +132,8 @@ class PageLoadMetricsUpdateDispatcher {
         const mojom::FrameIntersectionUpdate& frame_intersection_update) = 0;
     virtual void OnNewDeferredResourceCounts(
         const mojom::DeferredResourceCounts& new_deferred_resource_data) = 0;
+    virtual void UpdateThroughput(
+        mojom::ThroughputUkmDataPtr throughput_data) = 0;
   };
 
   // The |client| instance must outlive this object.
@@ -147,6 +154,9 @@ class PageLoadMetricsUpdateDispatcher {
       mojom::DeferredResourceCountsPtr new_deferred_resource_data,
       mojom::InputTimingPtr input_timing_delta);
 
+  void UpdateThroughput(content::RenderFrameHost* render_frame_host,
+                        mojom::ThroughputUkmDataPtr throughput_data);
+
   // This method is only intended to be called for PageLoadFeatures being
   // recorded directly from the browser process. Features coming from the
   // renderer process should use the main flow into |UpdateMetrics|.
@@ -155,6 +165,8 @@ class PageLoadMetricsUpdateDispatcher {
 
   void DidFinishSubFrameNavigation(
       content::NavigationHandle* navigation_handle);
+
+  void OnFrameDeleted(content::RenderFrameHost* render_frame_host);
 
   void ShutDown();
 

@@ -11,7 +11,14 @@ mojom("test_interfaces") {
   sources = [
     "constants.test-mojom",
     "enums.test-mojom",
+    "export1.test-mojom",
+    "export2.test-mojom",
+    "export3.test-mojom",
+    "export4.test-mojom",
+    "import.test-mojom",
     "module.test-mojom",
+    "other_dir/other_dir.test-mojom",
+    "structs.test-mojom",
   ]
   use_typescript_sources = true
 }

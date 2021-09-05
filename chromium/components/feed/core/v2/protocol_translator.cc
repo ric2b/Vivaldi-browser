@@ -4,10 +4,13 @@
 
 #include "components/feed/core/v2/protocol_translator.h"
 
+#include <string>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "components/feed/core/proto/v2/packing.pb.h"
 #include "components/feed/core/proto/v2/wire/data_operation.pb.h"
 #include "components/feed/core/proto/v2/wire/feature.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_response.pb.h"
@@ -85,10 +88,10 @@ struct ConvertedDataOperation {
 };
 
 bool TranslateFeature(feedwire::Feature* feature,
-                      ConvertedDataOperation* result) {
+                      ConvertedDataOperation& result) {
   feedstore::StreamStructure::Type type =
       TranslateNodeType(feature->renderable_unit());
-  result->stream_structure.set_type(type);
+  result.stream_structure.set_type(type);
 
   if (type == feedstore::StreamStructure::CONTENT) {
     feedwire::Content* wire_content = feature->mutable_content_extension();
@@ -99,10 +102,10 @@ bool TranslateFeature(feedwire::Feature* feature,
     // TODO(iwells): We still need score, availability_time_seconds,
     // offline_metadata, and representation_data to populate content_info.
 
-    result->content.emplace();
-    *(result->content->mutable_content_id()) =
-        result->stream_structure.content_id();
-    result->content->set_allocated_frame(
+    result.content.emplace();
+    *(result.content->mutable_content_id()) =
+        result.stream_structure.content_id();
+    result.content->set_allocated_frame(
         wire_content->mutable_xsurface_content()->release_xsurface_output());
   }
   return true;
@@ -110,26 +113,26 @@ bool TranslateFeature(feedwire::Feature* feature,
 
 base::Optional<feedstore::StreamSharedState> TranslateSharedState(
     feedwire::ContentId content_id,
-    feedwire::RenderData* wire_shared_state) {
-  if (wire_shared_state->render_data_type() != feedwire::RenderData::XSURFACE) {
+    feedwire::RenderData& wire_shared_state) {
+  if (wire_shared_state.render_data_type() != feedwire::RenderData::XSURFACE) {
     return base::nullopt;
   }
 
   feedstore::StreamSharedState shared_state;
   *shared_state.mutable_content_id() = std::move(content_id);
   shared_state.set_allocated_shared_state_data(
-      wire_shared_state->mutable_xsurface_container()->release_render_data());
+      wire_shared_state.mutable_xsurface_container()->release_render_data());
   return shared_state;
 }
 
 bool TranslatePayload(base::Time now,
                       feedwire::DataOperation operation,
                       ConvertedGlobalData* global_data,
-                      ConvertedDataOperation* result) {
+                      ConvertedDataOperation& result) {
   switch (operation.payload_case()) {
     case feedwire::DataOperation::kFeature: {
       feedwire::Feature* feature = operation.mutable_feature();
-      result->stream_structure.set_allocated_parent_id(
+      result.stream_structure.set_allocated_parent_id(
           feature->release_parent_id());
 
       if (!TranslateFeature(feature, result))
@@ -137,16 +140,16 @@ bool TranslatePayload(base::Time now,
     } break;
     case feedwire::DataOperation::kNextPageToken: {
       feedwire::Token* token = operation.mutable_next_page_token();
-      result->stream_structure.set_allocated_parent_id(
+      result.stream_structure.set_allocated_parent_id(
           token->release_parent_id());
-      result->next_page_token = std::move(
+      result.next_page_token = std::move(
           *token->mutable_next_page_token()->mutable_next_page_token());
     } break;
     case feedwire::DataOperation::kRenderData: {
-      result->shared_state =
-          TranslateSharedState(result->stream_structure.content_id(),
-                               operation.mutable_render_data());
-      if (!result->shared_state)
+      result.shared_state =
+          TranslateSharedState(result.stream_structure.content_id(),
+                               *operation.mutable_render_data());
+      if (!result.shared_state)
         return false;
     } break;
     case feedwire::DataOperation::kRequestSchedule: {
@@ -184,7 +187,7 @@ base::Optional<ConvertedDataOperation> TranslateDataOperationInternal(
       result.stream_structure.set_allocated_content_id(
           operation.mutable_metadata()->release_content_id());
 
-      if (!TranslatePayload(now, std::move(operation), global_data, &result))
+      if (!TranslatePayload(now, std::move(operation), global_data, result))
         return base::nullopt;
       break;
 
@@ -280,19 +283,35 @@ RefreshResponseData TranslateWireResponse(
     }
   }
 
-  // TODO(harringtond): If there's more than one shared state, record some
-  // sort of error.
   if (!result->shared_states.empty()) {
+    if (result->shared_states.size() > 1) {
+      DLOG(ERROR)
+          << "Receieved more than one shared state. Only the first is used.";
+    }
     *result->stream_data.mutable_shared_state_id() =
         result->shared_states.front().content_id();
   }
-  feedstore::SetLastAddedTime(current_time, &result->stream_data);
+  feedstore::SetLastAddedTime(current_time, result->stream_data);
 
   RefreshResponseData response_data;
   response_data.model_update_request = std::move(result);
   response_data.request_schedule = std::move(global_data.request_schedule);
 
   return response_data;
+}
+
+std::vector<feedstore::DataOperation> TranslateDismissData(
+    base::Time current_time,
+    feedpacking::DismissData data) {
+  std::vector<feedstore::DataOperation> result;
+  for (auto& operation : data.data_operations()) {
+    base::Optional<feedstore::DataOperation> translated_operation =
+        TranslateDataOperation(current_time, operation);
+    if (translated_operation) {
+      result.push_back(std::move(translated_operation.value()));
+    }
+  }
+  return result;
 }
 
 }  // namespace feed

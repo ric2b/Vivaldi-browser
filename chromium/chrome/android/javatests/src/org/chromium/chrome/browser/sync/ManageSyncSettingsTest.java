@@ -6,8 +6,6 @@ package org.chromium.chrome.browser.sync;
 
 import android.app.Dialog;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.SmallTest;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -17,11 +15,13 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -79,19 +79,19 @@ public class ManageSyncSettingsTest {
 
     private SettingsActivity mSettingsActivity;
 
-    @Rule
-    public SyncTestRule mSyncTestRule = new SyncTestRule();
-    @Rule
-    public SettingsActivityTestRule<ManageSyncSettings> mSettingsActivityTestRule =
+    private final SyncTestRule mSyncTestRule = new SyncTestRule();
+
+    private final SettingsActivityTestRule<ManageSyncSettings> mSettingsActivityTestRule =
             new SettingsActivityTestRule<>(ManageSyncSettings.class, true);
+
+    // SettingsActivity needs to be initialized and destroyed with the mock
+    // signin environment setup in SyncTestRule
+    @Rule
+    public final RuleChain mRuleChain =
+            RuleChain.outerRule(mSyncTestRule).around(mSettingsActivityTestRule);
 
     @Rule
     public final ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
-
-    @After
-    public void tearDown() {
-        TestThreadUtils.runOnUiThreadBlocking(() -> ProfileSyncService.resetForTests());
-    }
 
     @Test
     @SmallTest
@@ -143,6 +143,73 @@ public class ManageSyncSettingsTest {
 
         closeFragment(fragment);
         assertChosenDataTypesAre(expectedTypes);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Sync"})
+    @Features.EnableFeatures(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+    public void testUnsettingAllDataTypesStopsSync() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        SyncTestUtil.waitForSyncActive();
+
+        ManageSyncSettings fragment = startManageSyncPreferences();
+        assertSyncOnState(fragment);
+        mSyncTestRule.togglePreference(getSyncEverything(fragment));
+
+        for (CheckBoxPreference dataType : getDataTypes(fragment).values()) {
+            mSyncTestRule.togglePreference(dataType);
+        }
+        // All data types have been unchecked. Sync should stop.
+        Assert.assertFalse(SyncTestUtil.isSyncRequested());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Sync"})
+    @Features.EnableFeatures(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+    public void testSettingAnyDataTypeStartsSync() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setChosenDataTypes(false, new HashSet<>());
+        mSyncTestRule.stopSync();
+        ManageSyncSettings fragment = startManageSyncPreferences();
+
+        CheckBoxPreference syncAutofill =
+                (CheckBoxPreference) fragment.findPreference(ManageSyncSettings.PREF_SYNC_AUTOFILL);
+        mSyncTestRule.togglePreference(syncAutofill);
+        // Sync should start after any data type is checked.
+        Assert.assertTrue(SyncTestUtil.isSyncRequested());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Sync"})
+    @Features.EnableFeatures(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+    public void testTogglingSyncEverythingStartsSync() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setChosenDataTypes(false, new HashSet<>());
+        mSyncTestRule.stopSync();
+        ManageSyncSettings fragment = startManageSyncPreferences();
+
+        mSyncTestRule.togglePreference(getSyncEverything(fragment));
+        // Sync should start after setting sync everything toggle.
+        Assert.assertTrue(SyncTestUtil.isSyncRequested());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Sync"})
+    @Features.EnableFeatures(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+    public void testTogglingSyncEverythingDoesNotStopSync() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setChosenDataTypes(false, new HashSet<>());
+        mSyncTestRule.startSync();
+        ManageSyncSettings fragment = startManageSyncPreferences();
+
+        // Sync is requested to start. Toggling SyncEverything will call setChosenDataTypes with
+        // empty set in the backend. But sync stop request should not be called.
+        mSyncTestRule.togglePreference(getSyncEverything(fragment));
+        Assert.assertTrue(SyncTestUtil.isSyncRequested());
     }
 
     @Test

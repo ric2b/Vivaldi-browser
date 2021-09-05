@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 
 #include "base/compiler_specific.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/referrer.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -15,6 +16,8 @@
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
 #include "third_party/blink/renderer/core/html/portal/portal_post_message_helper.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/loader/document_load_timing.h"
+#include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -60,7 +63,7 @@ ScriptPromise PortalContents::Activate(ScriptState* script_state,
   // This object (and thus the Mojo connection it owns) remains alive while the
   // renderer awaits the response.
   remote_portal_->Activate(
-      std::move(data),
+      std::move(data), base::TimeTicks::Now(),
       WTF::Bind(&PortalContents::OnActivateResponse, WrapPersistent(this)));
 
   // Dissociate from the element. The element is expected to do the same.
@@ -72,7 +75,7 @@ ScriptPromise PortalContents::Activate(ScriptState* script_state,
 void PortalContents::OnActivateResponse(
     mojom::blink::PortalActivateResult result) {
   auto reject = [&](DOMExceptionCode code, const char* message) {
-    if (GetDocument().IsContextDestroyed())
+    if (!GetDocument().GetExecutionContext())
       return;
 
     ScriptState* script_state = activate_resolver_->GetScriptState();
@@ -91,8 +94,8 @@ void PortalContents::OnActivateResponse(
   bool should_destroy_contents = false;
   switch (result) {
     case mojom::blink::PortalActivateResult::kPredecessorWasAdopted:
-      if (!GetDocument().IsContextDestroyed())
-        GetDocument().GetPage()->SetInsidePortal(true);
+      if (auto* page = GetDocument().GetPage())
+        page->SetInsidePortal(true);
       FALLTHROUGH;
     case mojom::blink::PortalActivateResult::kPredecessorWillUnload:
       activate_resolver_->Resolve();
@@ -154,10 +157,11 @@ void PortalContents::Navigate(
     return;
   }
 
+  ExecutionContext* context = GetDocument().GetExecutionContext();
   if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault)
-    referrer_policy_to_use = GetDocument().GetReferrerPolicy();
+    referrer_policy_to_use = context->GetReferrerPolicy();
   Referrer referrer = SecurityPolicy::GenerateReferrer(
-      referrer_policy_to_use, url, GetDocument().OutgoingReferrer());
+      referrer_policy_to_use, url, context->OutgoingReferrer());
   auto mojo_referrer = mojom::blink::Referrer::New(
       KURL(NullURL(), referrer.referrer), referrer.referrer_policy);
 
@@ -214,7 +218,7 @@ void PortalContents::DispatchLoadEvent() {
   GetDocument().CheckCompleted();
 }
 
-void PortalContents::Trace(Visitor* visitor) {
+void PortalContents::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(portal_element_);
   visitor->Trace(activate_resolver_);

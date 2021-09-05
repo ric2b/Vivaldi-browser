@@ -54,7 +54,6 @@ crbug.com/24182 fast/canvas/color-space/canvas-colorManaged-toBlob-toDataURL.htm
 crbug.com/24182 fast/dom/timer-throttling-background-page-near-alignment-interval.html [ Slow ]
 crbug.com/24182 http/tests/perf/large-inlined-script.html [ Slow ]
 crbug.com/24182 fast/css/should-not-insert-stylesheet-into-detached-document.html [ Slow ]
-crbug.com/24182 fast/dom/shadow/svg-style-in-shadow-tree-crash.html [ Slow ]
 crbug.com/24182 fast/encoding/char-encoding.html [ Slow ]
 crbug.com/24182 fast/frames/sandboxed-iframe-navigation-targetlink.html [ Slow ]
 crbug.com/24182 html/marquee/marquee-destroyed-without-removed-from-crash.html [ Slow ]
@@ -128,6 +127,8 @@ crbug.com/357427 http/tests/workers/terminate-during-sync-operation-file.html [ 
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-filesystem.html [ Slow ]
 crbug.com/402379 [ Debug ] storage/indexeddb/cursor-continue-validity.html [ Slow ]
 crbug.com/402379 [ Debug ] storage/indexeddb/mozilla/indexes.html [ Slow ]
+crbug.com/402379 [ Release Win ] storage/indexeddb/mozilla/indexes.html [ Slow ]
+
 crbug.com/504703 inspector-protocol/debugger/debugger-step-into-dedicated-worker.js [ Slow ]
 
 crbug.com/419993 [ Debug ] fast/css/giant-stylesheet-crash.html [ Slow ]
@@ -202,9 +203,6 @@ crbug.com/779366 fast/shapes/crash-allocating-very-large-raster-shape.html [ Slo
 
 # These font-display tests are slow as they test web fonts behavior around the 3-seconds timeout.
 crbug.com/564109 http/tests/webfont/font-display-intervention.html [ Slow ]
-
-# This test has many test cases and each case requires a gesture scroll with pauses in between.
-crbug.com/765326 virtual/scroll_customization/fast/scroll-behavior/scroll-customization/scroll-customization-property.html [ Slow ]
 
 # This test does a lot of IPC because it tests limits on IPC allocations,
 # and is therefore slow.
@@ -349,9 +347,6 @@ crbug.com/874695 http/tests/fetch/workers/stream-reader.html [ Slow ]
 crbug.com/874695 http/tests/fetch/workers/thorough/* [ Slow ]
 crbug.com/874695 http/tests/images/png-progressive-load.html [ Slow ]
 crbug.com/874695 http/tests/images/webp-progressive-load.html [ Slow ]
-crbug.com/874695 http/tests/inspector-protocol/request-mixed-content-status-blockable.js [ Slow ]
-crbug.com/874695 http/tests/inspector-protocol/request-mixed-content-status-none.js [ Slow ]
-crbug.com/874695 http/tests/inspector-protocol/request-mixed-content-status-optionally-blockable.js [ Slow ]
 crbug.com/874695 http/tests/media/controls/toggle-class-with-state-source-buffer.html [ Slow ]
 crbug.com/874695 http/tests/media/preload-conditions.html [ Slow ]
 crbug.com/874695 http/tests/media/video-buffered.html [ Slow ]
@@ -446,7 +441,6 @@ crbug.com/874695 virtual/gpu/fast/canvas/canvas-draw-canvas-on-canvas-shadow.htm
 crbug.com/874695 virtual/gpu/fast/canvas/canvas-filter-modified.html [ Slow ]
 crbug.com/874695 virtual/gpu/fast/canvas/canvas-filter-modified-save-restore.html [ Slow ]
 crbug.com/874695 virtual/gpu/fast/canvas/canvas-filter-stroke-liveness.html [ Slow ]
-crbug.com/874695 virtual/gpu/fast/canvas/color-space/canvas-createImageBitmap-linear-rgb.html [ Slow ]
 crbug.com/874695 virtual/gpu/fast/canvas/downsample-quality.html [ Slow ]
 crbug.com/874695 virtual/gpu/fast/canvas/OffscreenCanvas-2d-imageData-in-worker.html [ Slow ]
 crbug.com/874695 virtual/gpu/fast/canvas/OffscreenCanvas-text-rendering-in-worker.html [ Slow ]
@@ -490,8 +484,7 @@ crbug.com/980804 fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html
 
 crbug.com/983642 virtual/gpu/fast/canvas/canvas-composite-alpha.html [ Slow ]
 crbug.com/983642 [ Mac Debug ] fast/canvas/canvas-composite-alpha.html [ Slow ]
-crbug.com/983642 virtual/gpu/fast/canvas/canvas-composite-text-alpha.html [ Slow ]
-crbug.com/983642 [ Debug ] fast/canvas/canvas-composite-text-alpha.html [ Slow ]
+crbug.com/983642 fast/canvas/canvas-composite-text-alpha.html [ Slow ]
 crbug.com/983642 virtual/gpu/fast/canvas/color-space/canvas-createImageBitmap-e_srgb.html [ Slow ]
 crbug.com/983642 [ Mac ] fast/canvas/color-space/canvas-createImageBitmap-e_srgb.html [ Slow ]
 crbug.com/983642 [ Win ] virtual/gpu/fast/canvas/color-space/canvas-createImageBitmap-p3.html [ Slow ]
@@ -503,6 +496,7 @@ crbug.com/994331 compositing/lots-of-img-layers.html [ Slow ]
 crbug.com/1071114 external/wpt/css/css-fonts/test_font_family_parsing.html [ Slow ]
 crbug.com/1071418 external/wpt/css/css-transitions/idlharness.html [ Slow ]
 crbug.com/1048204 external/wpt/selection/idlharness.window.html [ Slow ]
+crbug.com/1047818 external/wpt/css/css-masking/idlharness.html [ Slow ]
 
 # This test contains a slow loading image that results in timeouts.
 crbug.com/853360 [ Mac ] http/tests/misc/slow-loading-image-in-pattern.html [ Slow ]
@@ -521,6 +515,29 @@ crbug.com/24182 [ Mac10.10 ] virtual/threaded/external/wpt/css/css-animations/Ke
 crbug.com/24182 [ Mac10.10 ] virtual/threaded/external/wpt/css/css-scroll-snap/snap-after-initial-layout/writing-mode-horizontal-tb.html [ Slow ]
 crbug.com/24182 [ Mac10.10 ] virtual/threaded/external/wpt/css/css-animations/CSSAnimation-canceling.tentative.html [ Slow ]
 
-# These MathML tests operator over a huge dictionary and are slow.
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-auto-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-auto-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-fixed-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-fixed-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-percentage-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-auto-percentage-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-auto-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-auto-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-fixed-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-fixed-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-percentage-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-fixed-percentage-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-auto-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-auto-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-fixed-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-fixed-no-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-percentage-intrinsic-ratio.html [ Slow ]
+crbug.com/1091716 svg/as-object/sizing/svg-in-object-placeholder-percentage-percentage-no-intrinsic-ratio.html [ Slow ]
 
 crbug.com/1043669 [ Mac ] inspector-protocol/emulation/set-vision-deficiency.js [ Slow ]
+crbug.com/1092121 fast/css/large-list-of-rules-crash.html [ Slow ]
+
+crbug.com/1042205 virtual/off-main-thread-css-paint/external/wpt/css/css-paint-api/paint2d-filter.https.html [ Slow ]
+
+# Slow is the intended behavior
+crbug.com/1048136 http/tests/subresource_filter/overlay-popup-non-ad-followed-by-ad.html [ Slow ]

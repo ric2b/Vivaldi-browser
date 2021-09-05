@@ -16,7 +16,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/task_observer.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -25,6 +24,7 @@
 #include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/common/content_navigation_policy.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -210,6 +210,16 @@ void IsolateAllSitesForTesting(base::CommandLine* command_line) {
   command_line->AppendSwitch(switches::kSitePerProcess);
 }
 
+bool CanSameSiteMainFrameNavigationsChangeRenderFrameHosts() {
+  // TODO(crbug.com/936696): Also return true when RenderDocument for main frame
+  // is enabled.
+  return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled();
+}
+
+bool CanSameSiteMainFrameNavigationsChangeSiteInstances() {
+  return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled();
+}
+
 GURL GetWebUIURL(const std::string& host) {
   return GURL(GetWebUIURLString(host));
 }
@@ -392,8 +402,8 @@ void InProcessUtilityThreadHelper::CheckHasRunningChildProcess() {
           std::move(quit_closure).Run();
       };
 
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(check_has_running_child_process_on_io,
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(check_has_running_child_process_on_io,
                                 run_loop_->QuitClosure()));
 }
 

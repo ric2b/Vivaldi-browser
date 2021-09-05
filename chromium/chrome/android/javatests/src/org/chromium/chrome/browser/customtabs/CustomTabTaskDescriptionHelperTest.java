@@ -12,9 +12,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
-import android.support.test.filters.MediumTest;
 
 import androidx.annotation.NonNull;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -198,10 +198,7 @@ public class CustomTabTaskDescriptionHelperTest {
     private WebappActivity launchWebappAndWaitTillPageLoaded(Intent launchIntent, String url) {
         launchIntent.putExtra(ShortcutHelper.EXTRA_URL, url);
         mWebappActivityTestRule.startWebappActivity(launchIntent);
-
-        WebappActivity webappActivity = mWebappActivityTestRule.getActivity();
-        ChromeTabUtils.waitForTabPageLoaded(webappActivity.getActivityTab(), url);
-        return webappActivity;
+        return mWebappActivityTestRule.getActivity();
     }
 
     private void waitForTitle(Tab tab, String expectedTitle) throws Exception {

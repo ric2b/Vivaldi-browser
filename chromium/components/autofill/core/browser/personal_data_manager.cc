@@ -445,11 +445,6 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
           ReceiveLoadedDbValues(h, result.get(),
                                 &pending_server_creditcards_query_,
                                 &server_credit_cards_);
-
-          // If the user has a saved unmasked server card and the experiment is
-          // disabled, force mask all cards back to the unsaved state.
-          if (!OfferStoreUnmaskedCards(is_off_the_record_))
-            ResetFullServerCards();
         }
         break;
       case AUTOFILL_CLOUDTOKEN_RESULT:
@@ -2067,12 +2062,17 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
                               ? Suggestion::PREFIX_MATCH
                               : Suggestion::SUBSTRING_MATCH;
 
+      // Get the nickname for the card suggestion, which may not be the same as
+      // the card's nickname if there are duplicates of the card on file.
+      base::string16 suggestion_nickname =
+          GetDisplayNicknameForCreditCard(*credit_card);
+
       // If the value is the card number, the label is the expiration date.
       // Otherwise the label is the card number, or if that is empty the
       // cardholder name. The label should never repeat the value.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
-        suggestion->value =
-            credit_card->CardIdentifierStringForAutofillDisplay();
+        suggestion->value = credit_card->CardIdentifierStringForAutofillDisplay(
+            suggestion_nickname);
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
         suggestion->label = credit_card->GetInfo(
@@ -2082,9 +2082,10 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
       } else if (credit_card->number().empty()) {
-        // TODO(crbug/1059087): Update suggestion label with nickname for
-        // empty-number local cards when nickname is supported for local card.
-        if (type.GetStorableType() != CREDIT_CARD_NAME_FULL) {
+        DCHECK_EQ(credit_card->record_type(), CreditCard::LOCAL_CARD);
+        if (credit_card->HasValidNickname()) {
+          suggestion->label = credit_card->nickname();
+        } else if (type.GetStorableType() != CREDIT_CARD_NAME_FULL) {
           suggestion->label = credit_card->GetInfo(
               AutofillType(CREDIT_CARD_NAME_FULL), app_locale_);
         }
@@ -2096,7 +2097,8 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
         suggestion->label =
             base::FeatureList::IsEnabled(features::kAutofillKeyboardAccessory)
                 ? credit_card->ObfuscatedLastFourDigits()
-                : credit_card->CardIdentifierStringForAutofillDisplay();
+                : credit_card->CardIdentifierStringForAutofillDisplay(
+                      suggestion_nickname);
 #elif defined(OS_IOS)
         // E.g. "••••1234"".
         suggestion->label = credit_card->ObfuscatedLastFourDigits();
@@ -2649,6 +2651,29 @@ void PersonalDataManager::MigrateUserOptedInWalletSyncTransportIfNeeded() {
                                            /*opted_in=*/false);
   prefs::SetUserOptedInWalletSyncTransport(pref_service_, primary_account_id,
                                            /*opted_in=*/true);
+}
+
+base::string16 PersonalDataManager::GetDisplayNicknameForCreditCard(
+    const CreditCard& card) const {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillEnableCardNicknameManagement)) {
+    return base::string16();
+  }
+
+  // Always prefer a local nickname if available.
+  if (card.HasValidNickname() && card.record_type() == CreditCard::LOCAL_CARD)
+    return card.nickname();
+  // Either the card a) has no nickname or b) is a server card and we would
+  // prefer to use the nickname of a local card.
+  std::vector<CreditCard*> candidates = GetCreditCards();
+  for (CreditCard* candidate : candidates) {
+    if (candidate->guid() != card.guid() && candidate->HasSameNumberAs(card) &&
+        candidate->HasValidNickname()) {
+      return candidate->nickname();
+    }
+  }
+  // Fall back to nickname of |card|, which may be empty.
+  return card.nickname();
 }
 
 }  // namespace autofill

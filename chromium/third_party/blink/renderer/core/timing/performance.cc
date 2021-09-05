@@ -503,7 +503,7 @@ void Performance::GenerateAndAddResourceTiming(
   AddResourceTiming(
       GenerateResourceTiming(*security_origin, info, *context),
       !initiator_type.IsNull() ? initiator_type : info.InitiatorType(),
-      info.TakeWorkerTimingReceiver());
+      info.TakeWorkerTimingReceiver(), context);
 }
 
 mojom::blink::ResourceTimingInfoPtr Performance::GenerateResourceTiming(
@@ -592,9 +592,11 @@ void Performance::AddResourceTiming(
     mojom::blink::ResourceTimingInfoPtr info,
     const AtomicString& initiator_type,
     mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
-        worker_timing_receiver) {
+        worker_timing_receiver,
+    ExecutionContext* context) {
   auto* entry = MakeGarbageCollected<PerformanceResourceTiming>(
-      *info, time_origin_, initiator_type, std::move(worker_timing_receiver));
+      *info, time_origin_, initiator_type, std::move(worker_timing_receiver),
+      context);
   NotifyObserversOfEntry(*entry);
   // https://w3c.github.io/resource-timing/#dfn-add-a-performanceresourcetiming-entry
   if (CanAddResourceTimingEntry() &&
@@ -839,44 +841,53 @@ PerformanceMeasure* Performance::MeasureInternal(
       return nullptr;
     }
 
-    base::Optional<double> duration = base::nullopt;
+    base::Optional<StringOrDouble> start;
+    if (options->hasStart()) {
+      start = options->start();
+    }
+    base::Optional<double> duration;
     if (options->hasDuration()) {
       duration = options->duration();
     }
+    base::Optional<StringOrDouble> end;
+    if (options->hasEnd()) {
+      end = options->end();
+    }
 
-    return MeasureWithDetail(script_state, measure_name, options->start(),
-                             std::move(duration), options->end(),
-                             options->detail(), exception_state);
+    return MeasureWithDetail(
+        script_state, measure_name, start, duration, end,
+        options->hasDetail() ? options->detail() : ScriptValue(),
+        exception_state);
   }
+
   // measure("name", "mark1", *)
-  StringOrDouble converted_start;
+  base::Optional<StringOrDouble> start;
   if (start_or_options.IsString()) {
-    converted_start =
-        StringOrDouble::FromString(start_or_options.GetAsString());
+    start = StringOrDouble::FromString(start_or_options.GetAsString());
   }
   // We let |end_mark| behave the same whether it's empty, undefined or null
   // in JS, as long as |end_mark| is null in C++.
-  return MeasureWithDetail(
-      script_state, measure_name, converted_start,
-      /* duration = */ base::nullopt,
-      end_mark ? StringOrDouble::FromString(*end_mark) : StringOrDouble(),
-      ScriptValue::CreateNull(script_state->GetIsolate()), exception_state);
+  base::Optional<StringOrDouble> end;
+  if (end_mark) {
+    end = StringOrDouble::FromString(*end_mark);
+  }
+  return MeasureWithDetail(script_state, measure_name, start,
+                           /* duration = */ base::nullopt, end,
+                           ScriptValue::CreateNull(script_state->GetIsolate()),
+                           exception_state);
 }
 
 PerformanceMeasure* Performance::MeasureWithDetail(
     ScriptState* script_state,
     const AtomicString& measure_name,
-    const StringOrDouble& start,
-    base::Optional<double> duration,
-    const StringOrDouble& end,
+    const base::Optional<StringOrDouble>& start,
+    const base::Optional<double>& duration,
+    const base::Optional<StringOrDouble>& end,
     const ScriptValue& detail,
     ExceptionState& exception_state) {
-  StringOrDouble original_start = start;
-  StringOrDouble original_end = end;
-
-  PerformanceMeasure* performance_measure = GetUserTiming().Measure(
-      script_state, measure_name, original_start, std::move(duration),
-      original_end, detail, exception_state);
+  PerformanceMeasure* performance_measure =
+      GetUserTiming().Measure(script_state, measure_name, start, duration, end,
+                              detail, exception_state);
   if (performance_measure)
     NotifyObserversOfEntry(*performance_measure);
   return performance_measure;
@@ -1045,7 +1056,7 @@ void Performance::BuildJSONValue(V8ObjectBuilder& builder) const {
   // |memory| is not part of the spec, omitted.
 }
 
-void Performance::Trace(Visitor* visitor) {
+void Performance::Trace(Visitor* visitor) const {
   visitor->Trace(resource_timing_buffer_);
   visitor->Trace(resource_timing_secondary_buffer_);
   visitor->Trace(element_timing_buffer_);

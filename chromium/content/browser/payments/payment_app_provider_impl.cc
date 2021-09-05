@@ -17,7 +17,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
-#include "base/task/post_task.h"
 #include "base/token.h"
 #include "components/payments/core/native_error_strings.h"
 #include "components/payments/core/payments_validators.h"
@@ -188,16 +187,15 @@ class RespondWithCallback : public PaymentHandlerResponseCallback {
 
     InvokePaymentAppCallbackRepository::GetInstance()->RemoveCallback(
         browser_context_);
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
-        base::BindOnce(&CloseClientWindowOnUIThread, browser_context_));
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&CloseClientWindowOnUIThread));
   }
 
  private:
-  static void CloseClientWindowOnUIThread(BrowserContext* browser_context) {
+  static void CloseClientWindowOnUIThread() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-    PaymentAppProvider::GetInstance()->CloseOpenedWindow(browser_context);
+    PaymentAppProvider::GetInstance()->CloseOpenedWindow();
   }
 
   int request_id_;
@@ -406,8 +404,8 @@ class AbortRespondWithCallback : public RespondWithCallback {
 void DidGetAllPaymentAppsOnCoreThread(
     PaymentAppProvider::GetAllPaymentAppsCallback callback,
     PaymentAppProvider::PaymentApps apps) {
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(std::move(callback), std::move(apps)));
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(apps)));
 }
 
 void GetAllPaymentAppsOnCoreThread(
@@ -419,6 +417,31 @@ void GetAllPaymentAppsOnCoreThread(
       base::BindOnce(&DidGetAllPaymentAppsOnCoreThread, std::move(callback)));
 }
 
+void DidUpdatePaymentAppIconOnCoreThread(
+    PaymentAppProvider::UpdatePaymentAppIconCallback callback,
+    payments::mojom::PaymentHandlerStatus status) {
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), status));
+}
+
+void UpdatePaymentAppIconOnCoreThread(
+    scoped_refptr<PaymentAppContextImpl> payment_app_context,
+    int64_t registration_id,
+    const std::string& instrument_key,
+    const std::string& name,
+    const std::string& string_encoded_icon,
+    const std::string& method_name,
+    const SupportedDelegations& supported_delegations,
+    PaymentAppProvider::UpdatePaymentAppIconCallback callback) {
+  DCHECK_CURRENTLY_ON(content::ServiceWorkerContext::GetCoreThreadId());
+  payment_app_context->payment_app_database()
+      ->SetPaymentAppInfoForRegisteredServiceWorker(
+          registration_id, instrument_key, name, string_encoded_icon,
+          method_name, supported_delegations,
+          base::BindOnce(&DidUpdatePaymentAppIconOnCoreThread,
+                         std::move(callback)));
+}
+
 void DispatchAbortPaymentEvent(
     BrowserContext* browser_context,
     PaymentAppProvider::AbortCallback callback,
@@ -427,8 +450,8 @@ void DispatchAbortPaymentEvent(
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   if (service_worker_status != blink::ServiceWorkerStatusCode::kOk) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(std::move(callback), false));
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false));
     return;
   }
 
@@ -456,8 +479,8 @@ void DispatchCanMakePaymentEvent(
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   if (service_worker_status != blink::ServiceWorkerStatusCode::kOk) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(std::move(callback),
                        CreateBlankCanMakePaymentResponse(
                            CanMakePaymentEventResponseType::BROWSER_ERROR)));
@@ -489,8 +512,8 @@ void DispatchPaymentRequestEvent(
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   if (service_worker_status != blink::ServiceWorkerStatusCode::kOk) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             std::move(callback),
             CreateBlankPaymentHandlerResponse(
@@ -565,14 +588,14 @@ void OnInstallPaymentApp(
     PaymentRequestEventDataPtr event_data,
     PaymentAppProvider::RegistrationIdCallback registration_id_callback,
     PaymentAppProvider::InvokePaymentAppCallback callback,
-    BrowserContext* browser_context,
+    WebContents* web_contents,
     int64_t registration_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (registration_id >= 0 && browser_context != nullptr) {
+  if (registration_id >= 0 && web_contents != nullptr) {
     std::move(registration_id_callback).Run(registration_id);
     PaymentAppProvider::GetInstance()->InvokePaymentApp(
-        browser_context, registration_id, sw_origin, std::move(event_data),
+        web_contents, registration_id, sw_origin, std::move(event_data),
         std::move(callback));
   } else {
     std::move(callback).Run(CreateBlankPaymentHandlerResponse(
@@ -643,6 +666,8 @@ class PermissionChecker : public base::SupportsUserData::Data {
 void AbortInvokePaymentApp(BrowserContext* browser_context,
                            PaymentEventResponseType reason) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  if (!browser_context)
+    return;
 
   InvokeRespondWithCallback* callback =
       InvokePaymentAppCallbackRepository::GetInstance()->GetCallback(
@@ -809,15 +834,17 @@ void PaymentAppProviderImpl::GetAllPaymentApps(
 }
 
 void PaymentAppProviderImpl::InvokePaymentApp(
-    BrowserContext* browser_context,
+    WebContents* web_contents,
     int64_t registration_id,
     const url::Origin& sw_origin,
     PaymentRequestEventDataPtr event_data,
     InvokePaymentAppCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
   scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
-      GetDevTools(browser_context, sw_origin);
+      GetDevTools(web_contents->GetBrowserContext(), sw_origin);
   if (dev_tools) {
     std::map<std::string, std::string> data = {
         {"Merchant Top Origin", event_data->top_origin.spec()},
@@ -836,9 +863,10 @@ void PaymentAppProviderImpl::InvokePaymentApp(
   }
 
   StartServiceWorkerForDispatch(
-      browser_context, registration_id,
+      web_contents->GetBrowserContext(), registration_id,
       base::BindOnce(
-          &DispatchPaymentRequestEvent, browser_context, std::move(event_data),
+          &DispatchPaymentRequestEvent, web_contents->GetBrowserContext(),
+          std::move(event_data),
           base::BindOnce(&OnResponseForPaymentRequestOnUiThread, dev_tools,
                          registration_id, sw_origin,
                          event_data->payment_request_id, std::move(callback))));
@@ -857,10 +885,12 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
     RegistrationIdCallback registration_id_callback,
     InvokePaymentAppCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
   if (!sw_js_url.is_valid() || !sw_scope.is_valid() || method.empty()) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             std::move(callback),
             CreateBlankPaymentHandlerResponse(
@@ -886,17 +916,40 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
                      std::move(callback)));
 }
 
-void PaymentAppProviderImpl::CanMakePayment(
+void PaymentAppProviderImpl::UpdatePaymentAppIcon(
     BrowserContext* browser_context,
+    int64_t registration_id,
+    const std::string& instrument_key,
+    const std::string& name,
+    const std::string& string_encoded_icon,
+    const std::string& method_name,
+    const SupportedDelegations& supported_delegations,
+    PaymentAppProvider::UpdatePaymentAppIconCallback callback) {
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      BrowserContext::GetDefaultStoragePartition(browser_context));
+  scoped_refptr<PaymentAppContextImpl> payment_app_context =
+      partition->GetPaymentAppContext();
+
+  RunOrPostTaskOnThread(
+      FROM_HERE, content::ServiceWorkerContext::GetCoreThreadId(),
+      base::BindOnce(&UpdatePaymentAppIconOnCoreThread, payment_app_context,
+                     registration_id, instrument_key, name, string_encoded_icon,
+                     method_name, supported_delegations, std::move(callback)));
+}
+
+void PaymentAppProviderImpl::CanMakePayment(
+    WebContents* web_contents,
     int64_t registration_id,
     const url::Origin& sw_origin,
     const std::string& payment_request_id,
     CanMakePaymentEventDataPtr event_data,
     CanMakePaymentCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
   scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
-      GetDevTools(browser_context, sw_origin);
+      GetDevTools(web_contents->GetBrowserContext(), sw_origin);
   if (dev_tools) {
     std::map<std::string, std::string> data = {
         {"Merchant Top Origin", event_data->top_origin.spec()},
@@ -915,23 +968,25 @@ void PaymentAppProviderImpl::CanMakePayment(
   }
 
   StartServiceWorkerForDispatch(
-      browser_context, registration_id,
-      base::BindOnce(&DispatchCanMakePaymentEvent, browser_context,
-                     std::move(event_data),
+      web_contents->GetBrowserContext(), registration_id,
+      base::BindOnce(&DispatchCanMakePaymentEvent,
+                     web_contents->GetBrowserContext(), std::move(event_data),
                      base::BindOnce(&OnResponseForCanMakePaymentOnUiThread,
                                     dev_tools, registration_id, sw_origin,
                                     payment_request_id, std::move(callback))));
 }
 
-void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
+void PaymentAppProviderImpl::AbortPayment(WebContents* web_contents,
                                           int64_t registration_id,
                                           const url::Origin& sw_origin,
                                           const std::string& payment_request_id,
                                           AbortCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
   scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
-      GetDevTools(browser_context, sw_origin);
+      GetDevTools(web_contents->GetBrowserContext(), sw_origin);
   if (dev_tools) {
     dev_tools->LogBackgroundServiceEvent(
         registration_id, sw_origin, DevToolsBackgroundService::kPaymentHandler,
@@ -940,8 +995,9 @@ void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
   }
 
   StartServiceWorkerForDispatch(
-      browser_context, registration_id,
-      base::BindOnce(&DispatchAbortPaymentEvent, browser_context,
+      web_contents->GetBrowserContext(), registration_id,
+      base::BindOnce(&DispatchAbortPaymentEvent,
+                     web_contents->GetBrowserContext(),
                      base::BindOnce(&OnResponseForAbortPaymentOnUiThread,
                                     dev_tools, registration_id, sw_origin,
                                     payment_request_id, std::move(callback))));
@@ -949,34 +1005,36 @@ void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
 
 void PaymentAppProviderImpl::SetOpenedWindow(WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
-  CloseOpenedWindow(web_contents->GetBrowserContext());
+  CloseOpenedWindow();
+  DCHECK(!payment_handler_window_);
 
-  payment_handler_windows_[web_contents->GetBrowserContext()] =
+  payment_handler_window_ =
       std::make_unique<PaymentHandlerWindowObserver>(web_contents);
 }
 
-void PaymentAppProviderImpl::CloseOpenedWindow(
-    BrowserContext* browser_context) {
+void PaymentAppProviderImpl::CloseOpenedWindow() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto it = payment_handler_windows_.find(browser_context);
-  if (it != payment_handler_windows_.end()) {
-    if (it->second->web_contents() != nullptr) {
-      it->second->web_contents()->Close();
-    }
-    payment_handler_windows_.erase(it);
+  if (payment_handler_window_ && payment_handler_window_->web_contents()) {
+    payment_handler_window_->web_contents()->Close();
+    payment_handler_window_.reset();
   }
 }
 
 void PaymentAppProviderImpl::OnClosingOpenedWindow(
-    BrowserContext* browser_context,
+    WebContents* web_contents,
     PaymentEventResponseType reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents)
+    return;
 
   RunOrPostTaskOnThread(
       FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
-      base::BindOnce(&AbortInvokePaymentApp, browser_context, reason));
+      base::BindOnce(&AbortInvokePaymentApp, web_contents->GetBrowserContext(),
+                     reason));
 }
 
 bool PaymentAppProviderImpl::IsValidInstallablePaymentApp(

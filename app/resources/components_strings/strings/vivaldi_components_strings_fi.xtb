@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Jatka</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Diagnosoidaan verkkoa<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Ilmoitukset</translation>
+<translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2539524384386349900">Tunnista</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> lähetti virheellisen vastauksen.</translation>
 <translation id="2586657967955657006">Leikepöytä</translation>
@@ -71,6 +72,7 @@
 <translation id="3226128629678568754">Lähetä tiedoston lataukseen tarvittavat tiedot uudelleen painamalla päivityspainiketta.</translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3234666976984236645">Tunnista aina tärkeä sisältö tällä sivustolla</translation>
+<translation id="3308738399950580893">mainokset</translation>
 <translation id="3422472998109090673">Sivustoon <ph name="HOST_NAME" /> ei saada tällä hetkellä yhteyttä.</translation>
 <translation id="3427092606871434483">Salli (oletus)</translation>
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
@@ -86,6 +88,7 @@
 <translation id="3681007416295224113">Varmenteen tiedot</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />tarkistaa välityspalvelin-, palomuuri- ja nimipalveluasetukset<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jos käytät välityspalvelinta…</translation>
+<translation id="3894751534882749287">Jos silti haluat nähdä sivun, sen jäljityssuojaustasoa voi säätää jäljityksenestoikkunassa tai napsauttamalla Salli-painiketta</translation>
 <translation id="3950820424414687140">Kirjaudu</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
@@ -112,6 +115,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Diagnosoidaan Windowsin verkkoasetuksia<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Jäljitysesto</translation>
 <translation id="4744603770635761495">Suoritettavan tiedoston polku</translation>
 <translation id="4750917950439032686">Salasanasi, luottokorttinumerosi ja muut tietosi säilyvät yksityisinä niitä sivustolle lähetettäessä.</translation>
 <translation id="4764776831041365478">Osoitteessa <ph name="URL" /> oleva sivu saattaa olla väliaikaisesti pois käytöstä tai se on voitu siirtää pysyvästi uuteen osoitteeseen.</translation>
@@ -174,10 +178,12 @@
 <translation id="7090678807593890770">Tee Google-haku: <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Laajennuksen sallima</translation>
 <translation id="7111012039238467737">(Voimassa)</translation>
+<translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> alueelta <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata tietoturvastandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Peru käyttöoikeus</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
+<translation id="7364115444476960850">Vivaldin <ph name="BLOCKER_NAME" /> on estänyt sivun, jolle yrität päästä</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
 <translation id="7445762425076701745">Palvelimen identiteettiä ei voi täysin todentaa. Palvelinyhteys käyttää verkkonimeä, joka kelpaa vain omassa verkossasi eikä ulkopuolinen varmenteen myöntäjä voi todentaa sen omistajaa. Jotkin varmenneauktoriteetit myöntävät kuitenkin näillekin nimille varmenteita, joten et voi olla varma, onko yhteytesi haluamaasi sivustoon eikä hyökkääjän sivustoon.</translation>
 <translation id="7455133967321480974">Käytä yleistä oletusasetusta (estä)</translation>
@@ -201,6 +207,7 @@
 <translation id="8037357227543935929">Kysy (oletus)</translation>
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
+<translation id="8119307142152921512">jäljitys ja mainokset</translation>
 <translation id="8142868475871995937">Voit lukea listan kielletyistä URL-osoitteista ja muut järjestelmänvalvojasi määräämät käytännöt osoitteessa &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="8149426793427495338">Tietokoneesi siirtyi nukkumaan.</translation>
 <translation id="8150722005171944719">Tiedosto osoitteessa <ph name="URL" /> ei ole luettavissa. Se on voitu poistaa tai siirtää, tai tiedoston käyttöluvat voivat estää sen käytön.</translation>
@@ -218,6 +225,7 @@
 <translation id="8703575177326907206">Yhteyttäsi verkkotunnukseen <ph name="DOMAIN" /> ei ole salattu.</translation>
 <translation id="8740359287975076522">Sivuston <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-osoitetta&lt;/abbr&gt; ei löydy. Ongelmaa diagnosoidaan.</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
+<translation id="8940028675168378100">Estää <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Välityspalvelin <ph name="DOMAIN" /> vaatii käyttäjänimen ja salasanan.</translation>
 <translation id="9008201768610948239">Ohita</translation>
 <translation id="9011424611726486705">Avaa sivustoasetukset</translation>
@@ -225,6 +233,7 @@
 <translation id="9039213469156557790">Sivulla on kuitenkin osia, joita ei ole suojattu. Muut voivat tarkastella näitä osia siirrettäessä, ja hyökkääjä voi muuttaa sivun käyttäytymistä muokkaamalla niitä.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
+<translation id="9180553614777056266">Mainosesto</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>
 <translation id="9219103736887031265">Kuvat</translation>
 <translation id="936602727769022409">Saatat menettää pääsyn Google-tiliisi. Chromium suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>

@@ -87,7 +87,7 @@ void BrowserCloseManager::OnBrowserReportCloseable(bool proceed) {
   if (!current_browser_)
     return;
 
-  current_browser_ = NULL;
+  current_browser_ = nullptr;
 
   if (proceed)
     TryToCloseBrowsers();
@@ -136,8 +136,9 @@ void BrowserCloseManager::OnReportDownloadsCancellable(bool proceed) {
       g_browser_process->profile_manager()->GetLoadedProfiles());
   for (Profile* profile : profiles) {
     ShowInProgressDownloads(profile);
-    if (profile->HasOffTheRecordProfile())
-      ShowInProgressDownloads(profile->GetOffTheRecordProfile());
+    std::vector<Profile*> otr_profiles = profile->GetAllOffTheRecordProfiles();
+    for (Profile* otr : otr_profiles)
+      ShowInProgressDownloads(otr);
   }
 }
 

@@ -13,15 +13,15 @@ namespace features {
 const base::Feature kWebViewBrotliSupport{"WebViewBrotliSupport",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Connect to MetricsBridgeService to retrieve and transmit UMA metrics
-// collected in nonembedded WebView processes.
-const base::Feature kWebViewCollectNonembeddedMetrics{
-    "WebViewCollectNonEmbeddedMetrics", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Use the SafeBrowsingApiHandler which uses the connectionless GMS APIs. This
 // Feature is checked and used in downstream internal code.
 const base::Feature kWebViewConnectionlessSafeBrowsing{
     "WebViewConnectionlessSafeBrowsing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Only allow extra headers added via loadUrl() to be sent to the original
+// origin; strip them from the request if a cross-origin redirect occurs.
+const base::Feature kWebViewExtraHeadersSameOriginOnly{
+    "WebViewExtraHeadersSameOriginOnly", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Activate compatible origin checks for AndroidStreamReaderURLLoader.
 const base::Feature kWebViewOriginCheckForStreamReader{
@@ -39,6 +39,10 @@ const base::Feature kWebViewOriginCheckForStreamReader{
 //   depending on headers, but that's a NetworkService implementation detail).
 const base::Feature kWebViewSniffMimeType{"WebViewSniffMimeType",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+// A Feature used for WebView variations tests. Not used in production.
+const base::Feature kWebViewTestFeature{"WebViewTestFeature",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable raster in wide color gamut for apps that use webview in a wide color
 // gamut activity.

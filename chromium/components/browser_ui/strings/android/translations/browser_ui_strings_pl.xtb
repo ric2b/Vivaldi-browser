@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Dalej</translation>
 <translation id="1242008676835033345">Umieszczono na <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Zatrzymaj</translation>
+<translation id="1289742167380433257">Aby zaoszczędzić dane, obrazy z tej strony zostały zoptymalizowane przez Google.</translation>
 <translation id="129382876167171263">W tym miejscu pojawiają się pliki zapisane przez witryny</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" />–<ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Strona <ph name="SITE_NAME" /> została dodana</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Pytaj, zanim zezwolisz stronom na tworzenie mapy 3D Twojego otoczenia lub śledzenie pozycji kamery (zalecane)</translation>
 <translation id="2212565012507486665">Zezwalaj na pliki cookie</translation>
 <translation id="2289270750774289114">Pytaj, gdy strona chce wykryć urządzenia Bluetooth w pobliżu (zalecane)</translation>
+<translation id="2315043854645842844">Wybieranie certyfikatu klienta nie jest obsługiwane przez ten system operacyjny.</translation>
 <translation id="2359808026110333948">Dalej</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Ukończono pobieranie <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Skopiowane</translation>
 <translation id="2822354292072154809">Czy na pewno chcesz zresetować wszystkie uprawnienia witryny dla obiektu <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Witryna</translation>
+<translation id="2874939134665556319">Poprzedni utwór</translation>
 <translation id="2910701580606108292">Pytaj, zanim zezwolisz stronom na odtwarzanie treści chronionej</translation>
 <translation id="2913331724188855103">Zezwalaj witrynom na zapisywanie danych w plikach cookie i ich odczytywanie (zalecane)</translation>
 <translation id="2968755619301702150">Przeglądarka certyfikatów</translation>
 <translation id="300526633675317032">Spowoduje to usunięcie <ph name="SIZE_IN_KB" /> danych witryn.</translation>
+<translation id="301521992641321250">Automatycznie zablokowane</translation>
 <translation id="3115898365077584848">Pokaż informacje</translation>
 <translation id="3123473560110926937">Blokowane na niektórych stronach</translation>
 <translation id="3190152372525844641">Przyznaj Chrome uprawnienia w <ph name="BEGIN_LINK" />ustawieniach Androida<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Synchronizacja w tle</translation>
 <translation id="3822502789641063741">Wyczyścić dane witryn?</translation>
 <translation id="385051799172605136">Wstecz</translation>
+<translation id="3859306556332390985">Przewiń do przodu</translation>
 <translation id="3955193568934677022">Zezwalaj witrynom na odtwarzanie treści chronionej (zalecane)</translation>
 <translation id="3987993985790029246">Kopiuj link</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Tytuł</translation>
 <translation id="4008040567710660924">Zezwalaj na pliki cookie z określonej strony internetowej.</translation>
+<translation id="4046123991198612571">Następny utwór</translation>
 <translation id="4165986682804962316">Ustawienia witryn</translation>
 <translation id="4226663524361240545">Powiadomienia będą sygnalizowane wibracjami</translation>
 <translation id="4242533952199664413">Otwórz ustawienia</translation>
 <translation id="4259722352634471385">Adres zablokowany: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Dopuszczone</translation>
+<translation id="429312253194641664">Strona odtwarza multimedia</translation>
 <translation id="4433925000917964731">Lżejsza wersja strony dostarczona przez Google</translation>
 <translation id="4434045419905280838">Pop-upy i przekierowania</translation>
 <translation id="445467742685312942">Zezwalaj stronom na odtwarzanie treści chronionych</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Anuluj wszystkie uprawnienia urządzenia</translation>
 <translation id="4964199952259983386">Aby w Chrome można było korzystać z AR, włącz też kamerę w <ph name="BEGIN_LINK" />ustawieniach Androida<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Dalej</translation>
+<translation id="4996978546172906250">Udostępnij przez</translation>
 <translation id="5039804452771397117">Zezwalaj</translation>
 <translation id="5048398596102334565">Zezwalaj stronom na dostęp do czujników ruchu (zalecane)</translation>
 <translation id="5063480226653192405">Wykorzystanie</translation>
@@ -141,7 +149,7 @@
 <translation id="6040143037577758943">Zamknij</translation>
 <translation id="6042308850641462728">Więcej</translation>
 <translation id="6064125863973209585">Ukończenie pobierania plików</translation>
-<translation id="6165508094623778733">Więcej informacji</translation>
+<translation id="6165508094623778733">Dowiedz się więcej</translation>
 <translation id="6177111841848151710">Zablokowano dostęp obecnej wyszukiwarce</translation>
 <translation id="6181444274883918285">Dodaj witrynę do wyjątków</translation>
 <translation id="6192792657125177640">Wyjątki</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Wyczyść</translation>
 <translation id="6697925417670533197">W trakcie pobierania</translation>
 <translation id="6746124502594467657">W dół</translation>
+<translation id="6766622839693428701">Przesuń w dół, by zamknąć.</translation>
 <translation id="6782111308708962316">Nie pozwalaj witrynom innych firm zapisywać ani odczytywać danych z plików cookie</translation>
+<translation id="6790428901817661496">Odtwórz</translation>
 <translation id="6818926723028410516">Wybierz elementy</translation>
 <translation id="6864395892908308021">To urządzenie nie obsługuje NFC</translation>
 <translation id="6910211073230771657">Usunięto</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Strona używa kamery</translation>
 <translation id="7817023149356982970">Wylogujemy Cię z tej strony.</translation>
 <translation id="7828557259026017104">Pliki cookie są tworzone przez odwiedzane witryny. Witryny zapisują w nich Twoje ustawienia. Pliki cookie innych firm są tworzone przez inne witryny. W tych witrynach znajdują się niektóre treści, np. reklamy i obrazy, które wyświetlają się na odwiedzanej stronie.</translation>
+<translation id="7835852323729233924">Odtwarzanie multimediów</translation>
 <translation id="7846076177841592234">Anuluj wybór</translation>
 <translation id="7846621471902887024">Wylogujemy Cię ze wszystkich stron.</translation>
 <translation id="7882806643839505685">Zezwalaj na dźwięk na określonej stronie.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Na pewno chcesz usunąć wszystkie dane lokalne (w tym pliki cookie) i zresetować uprawnienia tej witryny?</translation>
 <translation id="8007176423574883786">Wyłączona na tym urządzeniu</translation>
 <translation id="802154636333426148">Nie udało się pobrać</translation>
+<translation id="8068648041423924542">Nie można wybrać certyfikatu.</translation>
 <translation id="8087000398470557479">Treść z <ph name="DOMAIN_NAME" /> dostarczana przez Google.</translation>
 <translation id="8116925261070264013">Wyciszone</translation>
 <translation id="8131740175452115882">Potwierdź</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Strona używa kamery i mikrofonu</translation>
 <translation id="8380167699614421159">Na tej stronie wyświetlają się uciążliwe lub wprowadzające w błąd reklamy</translation>
 <translation id="8394832520002899662">Kliknij, by wrócić na tę stronę</translation>
+<translation id="8425213833346101688">Zmień</translation>
+<translation id="8441146129660941386">Przewiń do tyłu</translation>
 <translation id="8447861592752582886">Cofnij zgodę na dostęp do urządzenia</translation>
 <translation id="8463851957836045671">Strona jest szybka</translation>
 <translation id="851751545965956758">Nie zezwalaj stronom na łączenie się z urządzeniami</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Blokuj pliki cookie z określonej strony internetowej.</translation>
 <translation id="8959122750345127698">Adres nieosiągalny: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Zarządzany przez Twoich rodziców</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Dostęp do mikrofonu</translation>
 <translation id="965817943346481315">Zablokuj, jeśli na stronie wyświetlają się uciążliwe lub wprowadzające w błąd reklamy (zalecane)</translation>
 </translationbundle>

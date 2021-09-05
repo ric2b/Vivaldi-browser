@@ -28,6 +28,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/history/print_job_history_service_factory.h"
+#include "chrome/browser/chromeos/printing/print_management/printing_manager_factory.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
 #include "chrome/browser/chromeos/tether/tether_service_factory.h"
@@ -57,8 +58,8 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::MediaPlayerAPI::GetFactoryInstance();
 #if defined(USE_CUPS)
   extensions::PrintingAPIHandler::GetFactoryInstance();
-#endif
   extensions::PrintJobFinishedEventDispatcher::GetFactoryInstance();
+#endif
   extensions::SessionStateChangedEventDispatcher::GetFactoryInstance();
   file_manager::EventRouterFactory::GetInstance();
   file_manager::VolumeManagerFactory::GetInstance();
@@ -71,6 +72,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   policy::PolicyCertServiceFactory::GetInstance();
   policy::UserCloudPolicyTokenForwarderFactory::GetInstance();
   policy::UserNetworkConfigurationUpdaterFactory::GetInstance();
+  printing::print_management::PrintingManagerFactory::GetInstance();
   PrintJobHistoryServiceFactory::GetInstance();
   smb_client::SmbServiceFactory::GetInstance();
   SyncedPrintersManagerFactory::GetInstance();

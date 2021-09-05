@@ -124,6 +124,7 @@ jumbo_static_library("metrics") {
     "ukm_demographic_metrics_provider.h",
     "unsent_log_store.cc",
     "unsent_log_store.h",
+    "unsent_log_store_metrics.cc",
     "unsent_log_store_metrics.h",
     "unsent_log_store_metrics_impl.cc",
     "unsent_log_store_metrics_impl.h",
@@ -214,14 +215,15 @@ static_library("component_metrics") {
 }
 
 if (!is_ios) {
-  static_library("gpu") {
+  static_library("content") {
     sources = [
-      "gpu/gpu_metrics_provider.cc",
-      "gpu/gpu_metrics_provider.h",
-      "gpu/rendering_perf_metrics_provider.cc",
-      "gpu/rendering_perf_metrics_provider.h",
+      "content/gpu_metrics_provider.cc",
+      "content/gpu_metrics_provider.h",
+      "content/rendering_perf_metrics_provider.cc",
+      "content/rendering_perf_metrics_provider.h",
+      "content/subprocess_metrics_provider.cc",
+      "content/subprocess_metrics_provider.h",
     ]
-
     public_deps = [ ":metrics" ]
     deps = [
       "//base",
@@ -251,8 +253,6 @@ jumbo_static_library("net") {
     "net/net_metrics_log_uploader.h",
     "net/network_metrics_provider.cc",
     "net/network_metrics_provider.h",
-    "net/wifi_access_point_info_provider.cc",
-    "net/wifi_access_point_info_provider.h",
   ]
 
   public_deps = [ ":metrics" ]
@@ -269,14 +269,6 @@ jumbo_static_library("net") {
     "//third_party/zlib/google:compression_utils",
     "//url",
   ]
-
-  if (is_chromeos) {
-    sources += [
-      "net/wifi_access_point_info_provider_chromeos.cc",
-      "net/wifi_access_point_info_provider_chromeos.h",
-    ]
-    deps += [ "//chromeos/network" ]
-  }
 }
 
 static_library("ui") {
@@ -442,6 +434,7 @@ source_set("unit_tests") {
     "file_metrics_provider_unittest.cc",
     "histogram_encoder_unittest.cc",
     "library_support/histogram_manager_unittest.cc",
+    "log_decoder_unittest.cc",
     "machine_id_provider_nonwin_unittest.cc",
     "metrics_log_manager_unittest.cc",
     "metrics_log_store_unittest.cc",
@@ -457,6 +450,7 @@ source_set("unit_tests") {
     "stability_metrics_helper_unittest.cc",
     "stability_metrics_provider_unittest.cc",
     "ui/screen_info_metrics_provider_unittest.cc",
+    "unsent_log_store_metrics_impl_unittest.cc",
     "unsent_log_store_unittest.cc",
   ]
 
@@ -513,14 +507,13 @@ source_set("unit_tests") {
   # these tests.
   if (is_ios) {
     sources -= [ "child_call_stack_profile_collector_unittest.cc" ]
-  }
-
-  if (is_ios) {
     deps += [ "//ios/web/public/test" ]
-  }
-
-  if (!is_ios) {
-    deps += [ "//content/test:test_support" ]
+  } else {
+    sources += [ "content/subprocess_metrics_provider_unittest.cc" ]
+    deps += [
+      ":content",
+      "//content/test:test_support",
+    ]
   }
 }
 

@@ -32,13 +32,14 @@ blink::mojom::FetchAPIResponsePtr BackgroundFetchSettledFetch::CloneResponse(
   return blink::mojom::FetchAPIResponse::New(
       response->url_list, response->status_code, response->status_text,
       response->response_type, response->response_source, response->headers,
-      CloneSerializedBlob(response->blob), response->error,
+      response->mime_type, CloneSerializedBlob(response->blob), response->error,
       response->response_time, response->cache_storage_cache_name,
       response->cors_exposed_header_names,
       CloneSerializedBlob(response->side_data_blob),
       CloneSerializedBlob(response->side_data_blob_for_cache_put),
-      mojo::Clone(response->parsed_headers),
-      response->loaded_with_credentials);
+      mojo::Clone(response->parsed_headers), response->connection_info,
+      response->alpn_negotiated_protocol, response->loaded_with_credentials,
+      response->was_fetched_via_spdy);
 }
 
 // static

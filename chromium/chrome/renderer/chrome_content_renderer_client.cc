@@ -34,11 +34,11 @@
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pdf_util.h"
 #include "chrome/common/pepper_permission_util.h"
-#include "chrome/common/prerender_types.h"
 #include "chrome/common/prerender_url_loader_throttle.h"
+#include "chrome/common/privacy_budget/privacy_budget_settings_provider.h"
 #include "chrome/common/profiler/thread_profiler.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/common/secure_origin_whitelist.h"
+#include "chrome/common/secure_origin_allowlist.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -48,6 +48,8 @@
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
+#include "chrome/renderer/lite_video/lite_video_hint_agent.h"
+#include "chrome/renderer/lite_video/lite_video_util.h"
 #include "chrome/renderer/loadtimes_extension_bindings.h"
 #include "chrome/renderer/media/flash_embed_rewrite.h"
 #include "chrome/renderer/media/webrtc_logging_agent_impl.h"
@@ -83,10 +85,12 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
+#include "components/prerender/common/prerender_types.mojom.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -126,6 +130,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -342,6 +347,9 @@ ChromeContentRendererClient::ChromeContentRendererClient()
   for (const char* origin : kPredefinedAllowedCameraDeviceOrigins)
     allowed_camera_device_origins_.insert(origin);
 #endif
+
+  blink::IdentifiabilityStudySettings::SetGlobalProvider(
+      std::make_unique<PrivacyBudgetSettingsProvider>());
 }
 
 ChromeContentRendererClient::~ChromeContentRendererClient() {}
@@ -447,7 +455,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   }
 
   for (auto& scheme :
-       secure_origin_whitelist::GetSchemesBypassingSecureContextCheck()) {
+       secure_origin_allowlist::GetSchemesBypassingSecureContextCheck()) {
     WebSecurityPolicy::AddSchemeToSecureContextSafelist(
         WebString::FromASCII(scheme));
   }
@@ -550,9 +558,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
     }
   }
 
-  // Set up a mojo service to test if this page is a distiller page.
+  // Set up a render frame observer to test if this page is a distiller page.
   new dom_distiller::DistillerJsRenderFrameObserver(
-      render_frame, ISOLATED_WORLD_ID_CHROME_INTERNAL, registry);
+      render_frame, ISOLATED_WORLD_ID_CHROME_INTERNAL);
 
   if (dom_distiller::ShouldStartDistillabilityService()) {
     // Create DistillabilityAgent to send distillability updates to
@@ -605,10 +613,13 @@ void ChromeContentRendererClient::RenderFrameCreated(
         render_frame, subresource_filter_ruleset_dealer_.get(),
         std::move(ad_resource_tracker));
   }
-  if (render_frame->IsMainFrame()) {
-    new previews::ResourceLoadingHintsAgent(
-        render_frame_observer->associated_interfaces(), render_frame);
-  }
+
+  if (lite_video::IsLiteVideoEnabled())
+    new lite_video::LiteVideoHintAgent(render_frame);
+
+  new previews::ResourceLoadingHintsAgent(
+      render_frame_observer->associated_interfaces(), render_frame);
+
   if (translate::IsSubFrameTranslationEnabled()) {
     new translate::PerFrameTranslateAgent(
         render_frame, ISOLATED_WORLD_ID_TRANSLATE, associated_interfaces);
@@ -1341,7 +1352,7 @@ bool ChromeContentRendererClient::IsPrefetchOnly(
     content::RenderFrame* render_frame,
     const blink::WebURLRequest& request) {
   return prerender::PrerenderHelper::GetPrerenderMode(render_frame) ==
-         prerender::PREFETCH_ONLY;
+         prerender::mojom::PrerenderMode::kPrefetchOnly;
 }
 
 uint64_t ChromeContentRendererClient::VisitedLinkHash(const char* canonical_url,
@@ -1447,8 +1458,10 @@ ChromeContentRendererClient::CreateWorkerContentSettingsClient(
 #if !defined(OS_ANDROID)
 std::unique_ptr<media::SpeechRecognitionClient>
 ChromeContentRendererClient::CreateSpeechRecognitionClient(
-    content::RenderFrame* render_frame) {
-  return std::make_unique<ChromeSpeechRecognitionClient>(render_frame);
+    content::RenderFrame* render_frame,
+    media::SpeechRecognitionClient::OnReadyCallback callback) {
+  return std::make_unique<ChromeSpeechRecognitionClient>(render_frame,
+                                                         std::move(callback));
 }
 #endif
 

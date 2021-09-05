@@ -395,7 +395,7 @@ int URLRequest::GetResponseCode() const {
   return job_->GetResponseCode();
 }
 
-void URLRequest::set_maybe_sent_cookies(CookieStatusList cookies) {
+void URLRequest::set_maybe_sent_cookies(CookieAccessResultList cookies) {
   maybe_sent_cookies_ = std::move(cookies);
 }
 
@@ -983,13 +983,12 @@ void URLRequest::NotifySSLCertificateError(int net_error,
   delegate_->OnSSLCertificateError(this, net_error, ssl_info, fatal);
 }
 
-bool URLRequest::CanGetCookies(const CookieList& cookie_list) const {
+bool URLRequest::CanGetCookies() const {
   DCHECK(!(load_flags_ & LOAD_DO_NOT_SEND_COOKIES));
   bool can_get_cookies = g_default_can_use_cookies;
   if (network_delegate_) {
     can_get_cookies =
-        network_delegate_->CanGetCookies(*this, cookie_list,
-                                         /*allowed_from_caller=*/true);
+        network_delegate_->CanGetCookies(*this, /*allowed_from_caller=*/true);
   }
 
   if (!can_get_cookies)
@@ -1015,7 +1014,10 @@ net::PrivacyMode URLRequest::DeterminePrivacyMode() const {
   // Enable privacy mode if flags tell us not send or save cookies.
   if ((load_flags_ & LOAD_DO_NOT_SEND_COOKIES) ||
       (load_flags_ & LOAD_DO_NOT_SAVE_COOKIES)) {
-    return PRIVACY_MODE_ENABLED;
+    // TODO(https://crbug.com/775438): Client certs should always be
+    // affirmatively omitted for these requests.
+    return send_client_certs_ ? PRIVACY_MODE_ENABLED
+                              : PRIVACY_MODE_ENABLED_WITHOUT_CLIENT_CERTS;
   }
 
   // Otherwise, check with the delegate if present, or base it off of

@@ -68,6 +68,24 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     return HasRareData() ? rare_data_->lines_until_clamp : 0;
   }
 
+  // How much an annotation box overflow from this box.
+  // This is for LayoutNGRubyRun and line boxes.
+  // 0 : No overflow
+  // -N : Overflowing by N px at block-start side
+  //      This happens only for LayoutRubyRun.
+  // N : Overflowing by N px at block-end side
+  LayoutUnit AnnotationOverflow() const {
+    return HasRareData() ? rare_data_->annotation_overflow : LayoutUnit();
+  }
+
+  // The amount of available space for block-start side annotations of the
+  // next box.
+  // This never be negative.
+  LayoutUnit BlockEndAnnotationSpace() const {
+    return HasRareData() ? rare_data_->block_end_annotation_space
+                         : LayoutUnit();
+  }
+
   LogicalOffset OutOfFlowPositionedOffset() const {
     DCHECK(bitfields_.has_oof_positioned_offset);
     return HasRareData() ? rare_data_->oof_positioned_offset
@@ -145,8 +163,18 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     return HasRareData() ? rare_data_->end_margin_strut : NGMarginStrut();
   }
 
+  // Get the intrinsic block-size of the fragment (i.e. the block-size the
+  // fragment would get if no block-size constraints were applied). This is not
+  // supported (and should not be needed [1]) if the node got split into
+  // multiple fragments.
+  //
+  // [1] If a node gets block-fragmented, it means that it has possibly been
+  // constrained and/or stretched by something extrinsic (i.e. the
+  // fragmentainer), so the value returned here wouldn't be useful.
   const LayoutUnit IntrinsicBlockSize() const {
-    DCHECK(physical_fragment_->IsBox());
+#if DCHECK_IS_ON()
+    AssertSoleBoxFragment();
+#endif
     return intrinsic_block_size_;
   }
 
@@ -373,6 +401,8 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     NGExclusionSpace exclusion_space;
     scoped_refptr<SerializedScriptValue> custom_layout_data;
     LayoutUnit overflow_block_size = kIndefiniteSize;
+    LayoutUnit annotation_overflow;
+    LayoutUnit block_end_annotation_space;
 #if DCHECK_IS_ON()
     bool has_tallest_unbreakable_block_size = false;
 #endif
@@ -382,6 +412,10 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
 
   bool HasRareData() const { return bitfields_.has_rare_data; }
   RareData* EnsureRareData();
+
+#if DCHECK_IS_ON()
+  void AssertSoleBoxFragment() const;
+#endif
 
   struct Bitfields {
     DISALLOW_NEW();

@@ -104,6 +104,11 @@ bool StructTraits<
   if (!data.ReadBounds(&out->bounds))
     return false;
 
+  if (!data.ReadDatalistValues(&out->datalist_values))
+    return false;
+  if (!data.ReadDatalistLabels(&out->datalist_labels))
+    return false;
+
   return true;
 }
 
@@ -219,7 +224,7 @@ bool StructTraits<autofill::mojom::PasswordFormFillDataDataView,
     Read(autofill::mojom::PasswordFormFillDataDataView data,
          autofill::PasswordFormFillData* out) {
   if (!data.ReadFormRendererId(&out->form_renderer_id) ||
-      !data.ReadOrigin(&out->origin) || !data.ReadAction(&out->action) ||
+      !data.ReadUrl(&out->url) || !data.ReadAction(&out->action) ||
       !data.ReadUsernameField(&out->username_field) ||
       !data.ReadPasswordField(&out->password_field) ||
       !data.ReadPreferredRealm(&out->preferred_realm) ||
@@ -269,8 +274,7 @@ bool StructTraits<
     autofill::PasswordForm>::Read(autofill::mojom::PasswordFormDataView data,
                                   autofill::PasswordForm* out) {
   if (!data.ReadScheme(&out->scheme) ||
-      !data.ReadSignonRealm(&out->signon_realm) ||
-      !data.ReadOriginWithPath(&out->origin) ||
+      !data.ReadSignonRealm(&out->signon_realm) || !data.ReadUrl(&out->url) ||
       !data.ReadAction(&out->action) ||
       !data.ReadAffiliatedWebRealm(&out->affiliated_web_realm) ||
       !data.ReadSubmitElement(&out->submit_element) ||

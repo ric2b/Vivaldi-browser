@@ -40,6 +40,7 @@ WorkerNavigator::WorkerNavigator(const String& user_agent,
                                  const UserAgentMetadata& ua_metadata,
                                  ExecutionContext* execution_context)
     : ExecutionContextClient(execution_context),
+      NavigatorDeviceMemory(nullptr),
       NavigatorLanguage(execution_context),
       user_agent_(user_agent),
       ua_metadata_(ua_metadata) {}
@@ -68,11 +69,12 @@ void WorkerNavigator::NotifyUpdate() {
       *Event::Create(event_type_names::kLanguagechange));
 }
 
-void WorkerNavigator::Trace(Visitor* visitor) {
+void WorkerNavigator::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
   NavigatorLanguage::Trace(visitor);
   Supplementable<WorkerNavigator>::Trace(visitor);
+  NavigatorDeviceMemory::Trace(visitor);
 }
 
 }  // namespace blink

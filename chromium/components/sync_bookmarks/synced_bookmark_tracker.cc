@@ -32,7 +32,7 @@ namespace sync_bookmarks {
 
 const base::Feature kInvalidateBookmarkSyncMetadataIfMismatchingGuid{
     "InvalidateBookmarkSyncMetadataIfMismatchingGuid",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagDuplicates{
     "InvalidateBookmarkSyncMetadataIfClientTagDuplicates",
@@ -192,12 +192,17 @@ SyncedBookmarkTracker::CreateFromBookmarkModelAndMetadata(
     return nullptr;
   }
 
-  const bool bookmarks_full_title_reuploaded =
-      model_metadata.bookmarks_full_title_reuploaded();
+  auto tracker =
+      CreateEmpty(std::move(*model_metadata.mutable_model_type_state()));
 
-  auto tracker = base::WrapUnique(new SyncedBookmarkTracker(
-      std::move(*model_metadata.mutable_model_type_state()),
-      bookmarks_full_title_reuploaded));
+  // When the reupload feature is enabled and disabled again, there may occur
+  // new entities which weren't reuploaded.
+  const bool bookmarks_full_title_reuploaded =
+      model_metadata.bookmarks_full_title_reuploaded() &&
+      base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarkFullTitles);
+  if (bookmarks_full_title_reuploaded) {
+    tracker->SetBookmarksFullTitleReuploaded();
+  }
 
   const CorruptionReason corruption_reason =
       tracker->InitEntitiesFromModelAndMetadata(model,
@@ -210,12 +215,14 @@ SyncedBookmarkTracker::CreateFromBookmarkModelAndMetadata(
     return nullptr;
   }
 
-  tracker->ReuploadBookmarksOnLoadIfNeeded();
-
   return tracker;
 }
 
 SyncedBookmarkTracker::~SyncedBookmarkTracker() = default;
+
+void SyncedBookmarkTracker::SetBookmarksFullTitleReuploaded() {
+  bookmarks_full_title_reuploaded_ = true;
+}
 
 const SyncedBookmarkTracker::Entity* SyncedBookmarkTracker::GetEntityForSyncId(
     const std::string& sync_id) const {
@@ -665,11 +672,11 @@ SyncedBookmarkTracker::ReorderUnsyncedEntitiesExceptDeletions(
   return ordered_entities;
 }
 
-void SyncedBookmarkTracker::ReuploadBookmarksOnLoadIfNeeded() {
+bool SyncedBookmarkTracker::ReuploadBookmarksOnLoadIfNeeded() {
   if (bookmarks_full_title_reuploaded_ ||
       !base::FeatureList::IsEnabled(
           switches::kSyncReuploadBookmarkFullTitles)) {
-    return;
+    return false;
   }
   for (const auto& sync_id_and_entity : sync_id_to_entities_map_) {
     const SyncedBookmarkTracker::Entity* entity =
@@ -682,7 +689,8 @@ void SyncedBookmarkTracker::ReuploadBookmarksOnLoadIfNeeded() {
     }
     IncrementSequenceNumber(entity);
   }
-  bookmarks_full_title_reuploaded_ = true;
+  SetBookmarksFullTitleReuploaded();
+  return true;
 }
 
 void SyncedBookmarkTracker::TraverseAndAppend(

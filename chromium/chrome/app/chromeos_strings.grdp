@@ -34,6 +34,9 @@
   </message>
 
   <!-- Wallpaper Manager -->
+  <message name="IDS_WALLPAPER_MANAGER_APP_NAME" desc="Name of the app which allows users to pick their wallpaper.">
+    Wallpaper Picker
+  </message>
   <message name="IDS_WALLPAPER_MANAGER_ALL_CATEGORY_LABEL" desc="Wallpaper category label.">
     All
   </message>
@@ -817,11 +820,17 @@
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_TITLE" desc="The title of the dialog that welcomes the user on the first log in, and explains Chrome Sync and privacy options.">
     You're signed in!
   </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_TITLE_WITH_DEVICE" desc="Alternate title for the dialog that explains Chrome Sync and privacy options on first login.">
+    Personalize your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_SUBTITLE" desc="The subtitle of the dialog that explains Chrome Sync and privacy options on first login.">
+    The following services help keep your data safe and secure. You can turn these features off at any time.
+  </message>
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_OS_SYNC_NAME" desc="Title of the 'Settings sync' section of the sync confirmation dialog that is displayed on the first user log in.">
     Chrome OS settings sync
   </message>
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_OS_SYNC_DESCRIPTION" desc="Description of 'Settings sync' section of the sync confirmation dialog that is displayed on the first user log in.">
-    Your apps, settings, and other customizations will sync across all Chrome OS devices signed in with your Google Account.
+    Your apps, settings, and other customizations will be synced across all Chrome OS devices signed in with your Google Account.
   </message>
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_CHROME_BROWSER_SYNC_NAME" desc="Title of the 'Chrome browser sync' section of the sync confirmation dialog that is displayed on the first user log in.">
     Chrome browser sync
@@ -846,6 +855,20 @@
   </message>
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_ACCEPT_AND_CONTINUE" desc="The label on the button that closes dialog while accepting the selected settings.">
     Accept and continue
+  </message>
+  <!-- TODO(jamescook): We landed both sets of labels to get them in before
+       string freeze. After M85 branches, delete the ones we didn't use. -->
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_ACCEPT" desc="The label on the button that closes the dialog while agreeing to sync.">
+    Yes, I'm in
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_DECLINE" desc="The label on the button that closes the dialog while not agreeing to sync.">
+    No, thanks
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_ACCEPT2" desc="Alternate label on the button that closes the dialog while agreeing to sync.">
+    Got it
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_DECLINE2" desc="Alternate label on the button that closes the dialog while not agreeing to sync.">
+    No thanks
   </message>
 
   <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_TITLE" desc="The title of the dialog that recommend apps which user has installed in other devices">
@@ -1963,41 +1986,6 @@
     No language
   </message>
 
-  <!-- OOBE supervised user Change picture UI -->
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_TAKE_PHOTO" desc="The text on the button to take photo of the current user.">
-    Take photo
-  </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_CAPTURE_VIDEO" desc="The text on the button to capture video of the current user.">
-    Capture video
-  </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_PHOTO_FROM_CAMERA" desc="The accessible text on the icon in the user image grid for a camera photo, when a photo has been captured.">
-    Photo from internal camera
-  </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_DISCARD_PHOTO" desc="The text on the button to discard the captured photo or video of the current user.">
-    Discard photo or video
-  </message>
-  <message name="IDS_OPTIONS_PHOTO_CAPTURE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was captured.">
-    Photo was captured
-  </message>
-  <message name="IDS_OPTIONS_PHOTO_DISCARD_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was discarded.">
-    Photo was discarded
-  </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_CAMERA" desc="The text on the button to switch the mode of the camera to photo.">
-    Switch to camera mode
-  </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_VIDEO" desc="The text on the button to switch the mode of the camera to video.">
-    Switch to video recorder
-  </message>
-  <message name="IDS_IMAGE_SCREEN_PROFILE_PHOTO" desc="The title of the Google profile photo of the user on image selection screen. Please keep in sync with IDS_OPTIONS_CHANGE_PICTURE_PROFILE_PHOTO.">
-    Google Profile photo
-  </message>
-  <message name="IDS_IMAGE_SCREEN_PROFILE_LOADING_PHOTO" desc="The title of the loading stub for Google profile image on image selection screen. Please keep in sync with IDS_OPTIONS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO.">
-    Google Profile photo (loading)
-  </message>
-  <message name="IDS_IMAGE_SCREEN_SYNCING_PREFERENCES" desc="The message displayed on the image screen of the GAIA flow while user preferences are syncing.">
-    Syncing your preferences...
-  </message>
-
   <!-- Slow UI -->
   <message name="IDS_SLOW_DISABLE" desc="The text of the button that disables performance collection for feedback reports">
     Disable performance data collection
@@ -2203,7 +2191,7 @@
     A factory error has been detected
   </message>
   <message name="IDS_WRONG_HWID_SCREEN_MESSAGE_FIRST_PART" desc="Warning message shown on screen notifying about malformed hardware ID. First paragraph.">
-    Unfortunately, your computer is configured with a malformed hardware ID. This prevents Chrome OS from updating with the latest security fixes and your computer <ph name="BEGIN_BOLD">$1</ph>may be vulnerable to malicious attacks<ph name="END_BOLD">$2</ph>.
+    Unfortunately, your computer is configured with a malformed hardware ID. This prevents Chrome OS from updating with the latest security fixes and your computer <ph name="BEGIN_BOLD">&lt;b&gt;</ph>may be vulnerable to malicious attacks<ph name="END_BOLD">&lt;/b&gt;</ph>.
   </message>
   <message name="IDS_WRONG_HWID_SCREEN_MESSAGE_SECOND_PART" desc="Warning message shown on screen notifying about malformed hardware ID. Second paragraph.">
     Please contact your hardware manufacturer immediately to send your computer to a repair facility.
@@ -2229,13 +2217,16 @@
     Loading...
   </message>
   <message name="IDS_TERMS_OF_SERVICE_SCREEN_ERROR" desc="Error message shown when the Terms of Service could not be loaded.">
-    Oops, something went wrong.
+    Terms of Service could not be loaded
   </message>
   <message name="IDS_TERMS_OF_SERVICE_SCREEN_TRY_AGAIN" desc="Message telling the user to try again later. Shown beneath the error message when the Terms of Service could not be loaded.">
-    Please try again later.
+    Please check your network connection and try again.
   </message>
   <message name="IDS_TERMS_OF_SERVICE_SCREEN_BACK_BUTTON" desc="Text of the back button on Terms of Service screen.">
     Back
+  </message>
+  <message name="IDS_TERMS_OF_SERVICE_SCREEN_RETRY_BUTTON" desc="Text of the retry button on Terms of Service screen.">
+    Retry
   </message>
   <message name="IDS_TERMS_OF_SERVICE_SCREEN_ACCEPT_BUTTON" desc="Text of the accept button on the Terms of Service screen.">
     Accept and continue
@@ -2293,6 +2284,9 @@
   </message>
 
   <!-- Common Network type strings -->
+  <message name="IDS_NETWORK_TYPE" desc="Label for network types">
+    Type
+  </message>
   <message name="IDS_NETWORK_TYPE_ETHERNET" desc="Label for Ethernet networks.">
     Ethernet
   </message>
@@ -2319,6 +2313,9 @@
   </message>
   <message name="IDS_NETWORK_TYPE_VPN_BUILTIN" desc="The built-in VPN types (Open VPN and L2TP/IPSec).">
     OpenVPN / L2TP
+  </message>
+  <message name="IDS_NETWORK_TYPE_WIRELESS" desc="Label for wireless networks (Cellular, Tether, and WiFi.).">
+    Wireless
   </message>
 
   <!-- Status bar -->
@@ -2616,7 +2613,7 @@
     Connecting and verifying<ph name="ANIMATED_ELLIPSIS">$1<ex>...</ex></ph>
   </message>
   <message name="IDS_DEVICE_DISABLED_HEADING" desc="Heading of the message shown to the user when the device has been disabled by its owner.">
-    Locked
+    Your device is locked
   </message>
   <message name="IDS_DEVICE_DISABLED_EXPLANATION_WITH_DOMAIN" desc="Explanation shown to the user when the device has been disabled by its owner. This version is used when the domain that owns the device is known.">
     This device (SN: <ph name="SERIAL_NUMBER">$1<ex>1234</ex></ph>) was locked by the <ph name="SAML_DOMAIN">$2<ex>example.com</ex></ph> administrator.
@@ -2807,7 +2804,7 @@
     Reset
   </message>
 
-  <!-- Obsolete versions Notification strings-->
+  <!-- Update Required Screen Strings-->
   <message name="IDS_UPDATE_REQUIRED_SCREEN_TITLE" desc="The title of the update required dialog on the login screen to inform the user that policy prevents user sign in before OS version is is updated.">
      Immediate update required
   </message>
@@ -2837,6 +2834,42 @@
   </message>
   <message name="IDS_UPDATE_REQUIRED_UPDATING_MESSAGE" desc="The message of the update required dialog on the login screen to inform the user that the device is updating and will restart after the update is complete.">
     Device will restart when updates are complete.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_ADMIN_MESSAGE" desc="The title of the message on the update required dialog on the login screen showing return instructions from the device administrator as the device has reached its end of life.">
+    Instructions from your device administrator:
+  </message>
+
+  <!-- Update Required Notiifcation Strings-->
+  <message name="IDS_UPDATE_REQUIRED_NETWORK_LIMITATION_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device is not connected to a network suitable for downloading updates and an update is required within one or more days.">
+    {0, plural,
+      =1 {Last day to update device}
+      other {Update device within # days}}
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and an update is required.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update before the deadline. The update will download automatically when you connect to the internet.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and it is last day to update the device.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update today. The update will download automatically when you connect to the internet.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and an update is required.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi and download an update before the deadline. Or, download from a metered connection (charges may apply).
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and it is last day to update the device.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi today to download an update. Or, download from a metered connection (charges may apply).
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
+    {0, plural,
+      =1 {Immediate return required}
+      other {Return device within # days}}
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE_IMMEDIATE" desc="The body text of the noti fication dialog informing the user that the device has reached end of life and it is last day to return it.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device today.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE" desc="The body text of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device before the deadline.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_SEE_DETAILS" desc="The button text of the notification dialog which can be clicked to view return instructions from the admin on the settings page.">
+    See Details
   </message>
 
   <!-- Genius App -->
@@ -3150,6 +3183,9 @@
   <message name="IDS_ENTERPRISE_ENROLLMENT_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE" desc="Error message to show when the user tries to enroll a device with a packaged license using a consumer account.">
     Your device includes a Chrome Enterprise Upgrade, but your username is not associated with an enterprise account. Please create an enterprise account by visiting g.co/ChromeEnterpriseAccount on a secondary device.
   </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL" desc="Error message to show when the user tries to enroll a device with an ineligible enterprise account.">
+    Your username belongs to your organization's enterprise account. To enroll devices to the account, first verify domain ownership in the Admin console. You will need administrative privileges on the account to verify.
+  </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED" desc="Error message to show when the user tries to enroll a device, but administrator has not accepted TOS.">
     Your administrator must first accept the terms of service in the Admin console Chrome device list.
   </message>
@@ -3372,6 +3408,21 @@
   <message name="IDS_NETWORK_UI_TITLE" desc="Title of the page">
     Network
   </message>
+  <message name="IDS_NETWORK_UI_TAB_GENERAL" desc="General tab name">
+    General
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_HEALTH" desc="Network health tab name">
+    Network Health
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_LOGS" desc="Network logs tab name">
+    Network Logs
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_STATE" desc="Network state tab name">
+    Network State
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_SELECT" desc="Network Select tab name">
+    Network Select
+  </message>
   <message name="IDS_NETWORK_UI_AUTO_REFRESH" desc="Instructions for how to auto-refresh the page">
     Add a query param in URL to auto-refresh the page: chrome://network/?refresh=&lt;sec&gt;
   </message>
@@ -3398,6 +3449,9 @@
   </message>
   <message name="IDS_NETWORK_UI_GLOBAL_POLICY" desc="Label for global policy properties">
     Global Policy:
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_HEALTH" desc="Label for network health section">
+    Network Health Snapshot
   </message>
   <message name="IDS_NETWORK_UI_NETWORK_LISTS" desc="Label for network lists section">
     Network (Service) and Device properties
@@ -3429,9 +3483,80 @@
   <message name="IDS_NETWORK_UI_ADD_NEW_WIFI_BUTTON_TEXT" desc="Text for button which, when pressed, opens the 'Add new Wi-Fi network' dialog.">
     Show 'Add new Wi-Fi' dialog
   </message>
+  <message name="IDS_NETWORK_UI_IMPORT_ONC_BUTTON_TEXT" desc="Text for button which, when pressed, selects and imports an ONC file for network configuration.">
+    Import ONC File
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DESCRIPTION" desc="Text describing the section for storing network logs in the chrome://network debugging UI.">
+    Store system logs to the Downloads directory.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_SYSTEM_LOGS" desc="Text describing the checkbox option for storing the system logs file sent in feedback reports.">
+    Include the system_logs.txt file sent in feedback reports.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_FILTER_PII" desc="Text describing the checkbox option for striping personally identifiable information from the system logs.">
+    Strip Personally Identifiable Information from system_logs.txt.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_POLICIES" desc="Text describing the checkbox option for storing the policies.json file.">
+    Include a policies.json file with policy configurations.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUG_LOGS" desc="Text describing the checkbox option for storing the debugd logs files.">
+    Include all log files collected by debugd as a separate archive.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_CHROME_LOGS" desc="Text describing the checkbox option for including the chrome logs in the stored logs file.">
+    Include Chrome log files in the archive.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_STORE_BUTTON" desc="Text displayed on the button for storing system logs.">
+    Store system logs
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_STATUS" desc="Message displayed while storing logs.">
+    Generating log files...
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_SUCCESS" desc="Message displayed when system logs are successfully written.">
+    Logs successfully written to Downloads directory.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUGGING_TITLE" desc="Title for the section for setting connection manager debugging.">
+    Network Debugging
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUGGING_DESCRIPTION" desc="Description for the section for setting network debugging.">
+    Sets the debugging level of the network connection manager and other services using ff_debug.
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUGGING_NONE" desc="Text displayed when the Shill debugging mode is set to 'none'.">
+    None
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUGGING_UNKNOWN" desc="Text displayed when the Shill debugging mode is unknown.">
+    Unknown
+  </message>
 
   <message name="IDS_DEVICE_LOG_LINK_TEXT" desc="Message preceeding link to chrome://device-log">
-    For network logs, see: <ph name="DEVICE_LOG_LINK">&lt;a href="chrome://device-log"&gt;chrome://device-log&lt;/a&gt;</ph>
+    To view network UI logs, see: <ph name="DEVICE_LOG_LINK">&lt;a href="chrome://device-log"&gt;chrome://device-log&lt;/a&gt;</ph>
+  </message>
+
+  <!-- Network Health display strings -->
+  <message name="IDS_NETWORK_HEALTH_STATE" desc="Network Health State label">
+    State
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_UNINITIALIZED" desc="Network Health State - Uninitialized">
+    Uninitialized
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_DISABLED" desc="Network Health State - Disabled">
+    Disabled
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_PROHIBITED" desc="Network Health State - Prohibited">
+    Prohibited
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_NOT_CONNECTED" desc="Network Health State - Not Connected">
+    Not Connected
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTING" desc="Network Health State - Connecting">
+    Connecting
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_PORTAL" desc="Network Health State - Portal">
+    Portal
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTED" desc="Network Health State - Connected">
+    Connected
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_ONLINE" desc="Network Health State - Online">
+    Online
   </message>
 
   <!-- Set time/date UI display strings -->
@@ -3905,7 +4030,7 @@
     Related info
   </message>
   <message name="IDS_ASSISTANT_SCREEN_CONTEXT_DESC" desc="Description for assistant screen context optin. This is also used as the sub label for context-enable toggle in Assistant settings page.">
-    Let your Assistant show you info related to what's on your screen
+    Let your Assistant proactively show info related to what's on your screen
   </message>
   <message name="IDS_ASSISTANT_READY_SCREEN_TITLE" desc="Title for assistant ready screen.">
     Your Assistant is ready
@@ -4328,6 +4453,12 @@
   <message name="IDS_CROSTINI_INSTALLER_USERNAME_NOT_AVAILABLE_ERROR" desc="Text shown in the Crostini installer dialog when the user picks a username that is not available">
     Username "<ph name="USERNAME">$1<ex>root</ex></ph>" is not available
   </message>
+  <message name="IDS_CROSTINI_INSTALLER_RECOMMENDED_DISK_SIZE_LABEL" desc="Label for the radio button in the Crostini installer dialog to pick the recommended disk size">
+    Recommended (<ph name="INSTALL_SIZE">$1<ex>1.3GB</ex></ph>)
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_CUSTOM_DISK_SIZE_LABEL" desc="Label for the radio button in the Crostini installer dialog to pick a custom disk size">
+    Custom
+  </message>
   <message name="IDS_CROSTINI_UNINSTALLER_TITLE" desc="Title of the Crostini uninstaller, a dialog for uninstalling Linux, the associated VM and Linux files.">
     Delete Linux (Beta)
   </message>
@@ -4353,7 +4484,7 @@
     Upgrade Linux (Beta)
   </message>
   <message name="IDS_CROSTINI_UPGRADER_BODY" desc="Description for the Crostini upgrader, a dialog for upgrading Linux.">
-    We recommend you back up your current Linux container prior to upgrading.
+    Backing up files is recommended as part of this upgrade to prevent data loss in case the upgrade cannot be completed. Starting the upgrade will cause Linux (Beta) to shut down. Please save open files before proceeding.
   </message>
   <message name="IDS_CROSTINI_UPGRADER_UPGRADE_BUTTON" desc="Label for the button in the Crostini upgrader dialog to begin upgrading Linux.">
     Upgrade
@@ -4454,6 +4585,9 @@
   <message name="IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM" desc="Text shown in the context menu for the Linux terminal app, allowing users to shut down the Linux virtual machine.">
     Shut down Linux (Beta)
   </message>
+  <message name="IDS_CROSTINI_CREDITS_PLACEHOLDER" desc="Message shown to the user if the credits file is unavailable (e.g. because Crostini isn't installed).">
+    Crostini is not installed. Please install Crostini to view credits.
+  </message>
   <message name="IDS_CROSTINI_TERMINA_UPDATE_REQUIRED" desc="Text shown in the Crostini update dialog when the VM component needs updating.">
     Linux (Beta) update required
   </message>
@@ -4545,14 +4679,6 @@
   </message>
   <message name="IDS_CROSTINI_APPLICATION_UNINSTALL_NOTIFICATION_ERROR_MESSAGE" desc="Message in the Notification for Linux application uninstallation when there is an error during uninstallation.">
     An error occurred during uninstallation. Please uninstall through the Terminal.
-  </message>
-
-  <!-- Crostini Repository Search -->
-  <message name="IDS_CROSTINI_REPOSITORY_SEARCH_RESULT_TITLE_PLACEHOLDER_TEXT" translateable="false" desc="Placeholder title text for surfaced Crostini Repository Search results in the app launcher">
-    Install <ph name="LINUX_APP_NAME">$1<ex>GIMP</ex></ph>
-  </message>
-  <message name="IDS_CROSTINI_REPOSITORY_SEARCH_RESULT_DETAILS_PLACEHOLDER_TEXT" translateable="false" desc="Placeholder description details for surfaced Crostini Repository Search results in the app launcher">
-    Linux Application
   </message>
 
   <!-- Crostini export and import notification -->
@@ -4892,8 +5018,8 @@
   <message name="IDS_SMB_SHARES_ADD_SERVICE_MENU_OPTION" desc="The text displayed in the files app Add New Services menu for the option that allows users to mount a new SMB file share.">
     SMB file share
   </message>
-  <message name="IDS_SMB_SHARES_CREDENTIALS_DIALOG_TITLE" desc="The text displayed as the title of the dialog that prompts users to updated their username and passowrd for a mounted SMB file share.">
-    Update credentials for <ph name="SHARE_PATH">$1<ex>\\server\share</ex></ph>.
+  <message name="IDS_SMB_SHARES_CREDENTIALS_DIALOG_TITLE" desc="The text displayed as the title of the dialog that prompts users to update their username and password for a mounted SMB file share. Without full stop at the end, because this is a title.">
+    Update credentials for <ph name="SHARE_PATH">$1<ex>\\server\share</ex></ph>
   </message>
   <message name="IDS_SMB_SHARES_CREDENTIALS_USERNAME" desc="Title for the input that lets users specify their username for an SMB share. This field is required.">
     Username
@@ -4932,14 +5058,14 @@
   </message>
 
   <!-- Strings for Plugin VM -->
-  <message name="IDS_PLUGIN_VM_APP_NAME" desc="Name of the 'Plugin VM' app.">
-    Plugin VM
+  <message name="IDS_PLUGIN_VM_APP_NAME" desc="Name of the 'Parallels' app.">
+    Parallels Desktop
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_TITLE" desc="Title of the Plugin VM installer when asking user to start installation.">
     Set up <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph> on your Chromebook
   </message>
-  <message name="IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_MESSAGE" desc="Body of the Plugin VM installer when asking user to start installation." translateable="false">
-    <ph name="RECOMMENDED_SPACE">$1<ex>32GB</ex></ph> of free space is recommended for installation.
+  <message name="IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_MESSAGE" desc="Body of the Parallels installer when asking user to start installation.">
+    <ph name="PARALLELS_NAME">Parallels Desktop</ph> allows you to run Windows® apps on your Chromebook. <ph name="MINIMUM_SPACE">$1<ex>20GB</ex></ph> of free space is recommended for installation.
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_INSTALL_BUTTON" desc="Label for the button in the Plugin VM installer to begin installion.">
     Install
@@ -4956,8 +5082,11 @@
   <message name="IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_TITLE" desc="Title of the Plugin VM installer if Plugin VM is disallowed.">
     <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph> needs permission to run
   </message>
-  <message name="IDS_PLUGIN_VM_INSTALLER_LOW_DISK_SPACE_MESSAGE" desc="Text of the Plugin VM installer that warns them of low disk space.">
-    Your device is low on storage. At least <ph name="RECOMMENDED_SPACE">$1<ex>32GB</ex></ph> of free space is recommended to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>. To increase free space, delete files from your device.
+  <message name="IDS_PLUGIN_VM_INSTALLER_ERROR_OFFLINE_TITLE" desc="Title of the Plugin VM installer when the user starts installation but the device is offline.">
+    <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is offline
+  </message>
+  <message name="IDS_PLUGIN_VM_INSTALLER_ERROR_OFFLINE_MESSAGE" desc="Text of the Plugin VM installer when the user starts installation but the device is offline.">
+    Connect to the internet and try again
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_START_DOWNLOADING_MESSAGE" desc="Text of the Plugin VM installer that informs the user that setup may take a while.">
     This may take awhile
@@ -4971,8 +5100,8 @@
   <message name="IDS_PLUGIN_VM_INSTALLER_IMPORTED_MESSAGE" desc="Text of the Plugin VM installer after successful installation.">
     <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph> is ready to use.
   </message>
-  <message name="IDS_PLUGIN_VM_INSTALLER_CREATED_MESSAGE" desc="Text of the Plugin VM installer after new VM creation.">
-    Please launch Plugin VM to install the Guest Operating System.
+  <message name="IDS_PLUGIN_VM_INSTALLER_CREATED_MESSAGE" desc="Text of the Parallels installer after new VM creation.">
+    Please launch Parallels Desktop to install Windows.
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_ERROR_MESSAGE_LOGIC_ERROR" desc="Text of the Plugin VM installer if the installation failed due to an internal error.">
     Couldn't install <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>. Please try again, or contact your administrator. Error code: <ph name="ERROR_CODE">$2<ex>7</ex></ph>.
@@ -5026,7 +5155,7 @@
     Something went wrong. Please try again.
   </message>
   <message name="IDS_PLUGIN_VM_UNINSTALL_PROMPT_BODY" desc="Message of the confirmation dialog displayed before removal begins.">
-    Removing Plugin VM will delete your VM. This includes its applications, settings, and data. Are you sure you wish to continue?
+    Uninstalling Parallels Desktop will delete your Windows image. This includes its applications, settings, and data. Are you sure you wish to continue?
   </message>
   <message name="IDS_PLUGIN_VM_REMOVING_NOTIFICATION_IN_PROGRESS_MESSAGE" desc="Message in the notification shown when removing the 'Plugin VM' app.">
     Uninstalling <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>...
@@ -5047,7 +5176,7 @@
     Please restart your device to use <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>.
   </message>
   <message name="IDS_PLUGIN_VM_INSUFFICIENT_DISK_SPACE_MESSAGE" desc="Error message shown if Plugin VM installation fails because there is not enough free space on the device.">
-      Your device is low on storage. At least <ph name="MINIMUM_SPACE">$1<ex>16GB</ex></ph> of free space is required to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>, and over <ph name="RECOMMENDED_SPACE">$3<ex>32GB</ex></ph> of free space is recommended. To increase free space, delete files from device.
+      Your device is low on storage. At least <ph name="MINIMUM_SPACE">$1<ex>16GB</ex></ph> of free space is required to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>. To increase free space, delete files from device.
   </message>
 
   <!-- Strings for Account Manager error screen -->
@@ -5144,14 +5273,6 @@
   <message name="IDS_EDU_LOGIN_PARENT_SIGNIN_PASSWORD_HIDE" desc="A tool tip on a button that hides the saved password that is being shown.">
     Hide password
   </message>
-  <message name="IDS_EDU_LOGIN_COEXISTENCE_TITLE" desc="Title for the screen explaining co-existence to a parent.">
-    School account information for parents
-  </message>
-  <message name="IDS_EDU_LOGIN_COEXISTENCE_BODY" desc="Text on the screen explaining co-existence to a parent.">
-    Adding a school account to a profile enables easy sign-in to websites and extensions as a student while operating under parental controls. It does not give a child access to bookmarks, passwords, or other browser data synced with the school account.&lt;br&gt;&lt;br&gt;
-    If your child uses a Chromebook in school and you wish to mirror the school experience at home to ensure your child has access to all necessary schoolwork, please sign out of this Family Link account and sign in to the school account from the Chrome OS accounts page (note: Family Link parental controls will not apply).&lt;br&gt;&lt;br&gt;
-    If your child does not use a Chromebook in school or if you prefer to manage your child’s experience at home using Family Link, please click the Next button below to add a school account to this profile.
-  </message>
 
   <!--
     ==================================================================================
@@ -5159,6 +5280,14 @@
     chrome/browser/chromeos/child_accounts/secondary_account_consent_logger.cc
     to the value of "v<GERRIT_CL_NUMBER>"
   -->
+  <message name="IDS_EDU_LOGIN_INFO_COEXISTENCE_TITLE" desc="Title for the screen explaining co-existence to a parent.">
+    School account information for parents
+  </message>
+  <message name="IDS_EDU_LOGIN_INFO_COEXISTENCE_BODY" desc="Text on the screen explaining co-existence to a parent.">
+    Adding a school account to a profile enables easy sign-in to websites and extensions as a student while operating under parental controls. It does not give a child access to bookmarks, passwords, or other browser data synced with the school account.&lt;br&gt;&lt;br&gt;
+    If your child uses a Chromebook in school and you wish to mirror the school experience at home to ensure your child has access to all necessary schoolwork, please sign out of this Family Link account and sign in to the school account from the Chrome OS accounts page (note: Family Link parental controls will not apply).&lt;br&gt;&lt;br&gt;
+    If your child does not use a Chromebook in school or if you prefer to manage your child’s experience at home using Family Link, please click the Next button below to add a school account to this profile.
+  </message>
   <message name="IDS_EDU_LOGIN_INFO_TITLE" desc="Title for the parent information screen in EDU account addition flow.">
     G Suite for Education accounts
   </message>
@@ -5167,23 +5296,6 @@
   </message>
   <message name="IDS_EDU_LOGIN_INFO_PARENT_SETTINGS" desc="Text informing parent about Google services that users can access, browsing data storage and Family Link parent settings.">
     G Suite for Education administrators determine which Google services their users can access while signed into a G Suite for Education account. This may include some features or services that your child was previously unable to access using this supervised  account. School administrators are required to provide or obtain consent for the use of the services by their minor users.
-  </message>
-  <message name="IDS_EDU_LOGIN_INFO_DATA_PROTECTION" desc="Text informing parent about their child's data protection.">
-    Your child's data in Classroom will be protected. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://support.google.com</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
-  </message>
-  <message name="IDS_EDU_LOGIN_INFO_RESOURCES_AVAILABILITY" desc="Text informing parent some resources for schoolwork might not be available.">
-    Resources for schoolwork might not be available or automatically loaded
-    Your child might not have access to:
-    <ph name="BEGIN_LIST">&lt;ul&gt;</ph>
-      <ph name="LIST_ITEM">&lt;li&gt;</ph>Applications and extensions that were installed by the school
-      <ph name="LIST_ITEM">&lt;li&gt;</ph>Bookmarks from a school Chromebook
-      <ph name="LIST_ITEM">&lt;li&gt;</ph>Autofill passwords to educational sites
-    <ph name="END_LIST">&lt;/ul&gt;</ph>
-    To get the full school experience on this device, your child should:
-    <ph name="BEGIN_OLIST">&lt;ol&gt;</ph>
-      <ph name="OLIST_ITEM">&lt;li&gt;</ph>Sign out of their Family Link managed account
-      <ph name="OLIST_ITEM">&lt;li&gt;</ph>Sign in with their GSuite for Education account on the sign-in screen. Note, however, this will mean school policies including app and website access settings will take effect over your Family Link supervision features (for instance, school administrators may allow YouTube if it’s necessary for homework, screentime would not be enforced, etc.)
-    <ph name="END_OLIST">&lt;/ol&gt;</ph>
   </message>
   <!--
     IDS_EDU_LOGIN_INFO_* strings END
@@ -5317,5 +5429,30 @@ You can manage this account’s settings by installing the Family Link app on yo
   </message>
   <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_INVALID_PASSWORD" desc="Text on a password field that tells the user the password is incorrect.">
     Invalid password
+  </message>
+
+  <!-- ADB sideloading policy-change notifications -->
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_SIDELOADING_DISALLOWED_NOTIFICATION_TITLE" desc="Title for the notification informing the user that ADB sideloading has been disabled.">
+    ADB debugging disabled
+  </message>
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_SIDELOADING_DISALLOWED_NOTIFICATION_MESSAGE" desc="Text for the notification informing the user that ADB sideloading has been disabled, but that the administrator is not forcing a powerwash.">
+    <ph name="DOMAIN">$1<ex>google.com</ex></ph> has disabled ADB debugging. No new applications can be sideloaded.
+  </message>
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_POWERWASH_PLANNED_NOTIFICATION_TITLE" desc="Title for the notification informing the user that local data will be deleted.">
+    Device data will be deleted in 24 hours
+  </message>
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_POWERWASH_ON_REBOOT_NOTIFICATION_TITLE" desc="Title for the notification informing the user that local data will be deleted after reboot.">
+    Device data will be deleted
+  </message>
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_POWERWASH_NOTIFICATION_MESSAGE" desc="Text for the notification informing the user that that ADB sideloading has been disabled by the administrator which will result in local data being deleted after reboot.">
+    <ph name="DOMAIN">$1<ex>google.com</ex></ph> is disabling ADB debugging, which will reset your device. Back up your files before restarting.
+  </message>
+  <message name="IDS_ADB_SIDELOADING_POLICY_CHANGE_RESTART_TO_POWERWASH" meaning="button label" desc="Button label to restart the device which will result in local data being deleted.">
+    Restart to powerwash
+  </message>
+
+  <!-- Strings for Custom Tab UI -->
+  <message name="IDS_CUSTOM_TABS_ACTION_MENU_ACCESSIBLE_NAME" desc="Accessible name for the overflow menu of the Chrome Custom Tab toolbar.">
+    Action menu button
   </message>
 </grit-part>

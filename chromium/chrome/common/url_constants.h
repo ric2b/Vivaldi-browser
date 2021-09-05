@@ -234,6 +234,9 @@ extern const char kUpgradeHelpCenterBaseURL[];
 // Help center URL for who the account administrator is.
 extern const char kWhoIsMyAdministratorHelpURL[];
 
+// Link to the flash roadmap
+extern const char kChromeFlashRoadmapURL[];
+
 #if defined(OS_ANDROID)
 extern const char kAndroidAppScheme[];
 #endif
@@ -282,9 +285,6 @@ extern const char kChromeOSGestureEducationHelpURL[];
 // Palette help link for Chrome.
 extern const char kChromePaletteHelpURL[];
 
-// The URL for "How do I sign in to Classroom?" page.
-extern const char kClassroomSigninLearnMoreURL[];
-
 extern const char kCrosScheme[];
 
 extern const char kCupsPrintLearnMoreURL[];
@@ -327,9 +327,6 @@ extern const char kLinuxAppsLearnMoreURL[];
 // The URL for additional help that is given when Linux export/import fails.
 extern const char kLinuxExportImportHelpURL[];
 
-// Credits for Linux for Chromebooks.
-extern const char kLinuxCreditsPath[];
-
 // The URL for the "Learn more" link for natural scrolling on ChromeOS.
 extern const char kNaturalScrollHelpURL[];
 
@@ -357,6 +354,9 @@ extern const char kTimeZoneSettingsLearnMoreURL[];
 
 // The URL for the "Learn more" page for the network file shares settings page.
 extern const char kSmbSharesLearnMoreURL[];
+
+// The URL for the "Learn more" page for Suggested Content in the privacy page.
+extern const char kSuggestedContentLearnMoreURL[];
 
 // The URL to a support article with more information about gestures available
 // in tablet mode on Chrome OS (gesture to go to home screen, overview, or to go

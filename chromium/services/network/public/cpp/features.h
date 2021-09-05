@@ -13,8 +13,6 @@ namespace network {
 namespace features {
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCapReferrerToOriginOnCrossOrigin;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kExpectCTReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kNetworkErrorLogging;
@@ -41,6 +39,8 @@ extern const base::Feature kCrossOriginOpenerPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
+COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginEmbedderPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kBlockNonSecureExternalRequests;
@@ -56,8 +56,6 @@ extern const base::FeatureParam<std::string>
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDisableKeepaliveFetch;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kOutOfBlinkFrameAncestors;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature
     kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -72,7 +70,11 @@ extern const base::Feature kCorbAllowlistAlsoAppliesToOorCors;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const char kCorbAllowlistAlsoAppliesToOorCorsParamName[];
 COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kRequestInitiatorSiteLockEnfocement;
+COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kStrictAccessControlAllowListCheck;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kCertVerifierService;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kTrustTokens;
@@ -88,7 +90,13 @@ extern const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial;
 
 COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kOutOfBlinkCSPEE;
+
+COMPONENT_EXPORT(NETWORK_CPP)
 bool ShouldEnableOutOfBlinkCorsForTesting();
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kWebSocketReassembleShortMessages;
 
 }  // namespace features
 }  // namespace network

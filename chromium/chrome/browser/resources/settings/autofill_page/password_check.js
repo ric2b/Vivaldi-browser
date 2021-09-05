@@ -26,7 +26,6 @@ import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bun
 
 import {loadTimeData} from '../i18n_setup.js';
 import {SyncBrowserProxyImpl, SyncPrefs, SyncStatus} from '../people_page/sync_browser_proxy.m.js';
-import {PluralStringProxyImpl} from '../plural_string_proxy.js';
 import {PrefsBehavior} from '../prefs/prefs_behavior.m.js';
 import {Route, Router, RouteObserverBehavior} from '../router.m.js';
 import {routes} from '../route.js';
@@ -80,7 +79,7 @@ Polymer({
     /** @private */
     isButtonHidden_: {
       type: Boolean,
-      computed: 'computeIsButtonHidden_(status, isSignedOut_)',
+      computed: 'computeIsButtonHidden_(status, isSignedOut_, isInitialStatus)',
     },
 
     /** @private {SyncPrefs} */
@@ -220,9 +219,9 @@ Polymer({
   currentRouteChanged(currentRoute) {
     const router = Router.getInstance();
 
-    if (currentRoute.path == routes.CHECK_PASSWORDS.path &&
+    if (currentRoute.path === routes.CHECK_PASSWORDS.path &&
         !this.startCheckAutomaticallySucceeded &&
-        router.getQueryParameters().get('start') == 'true') {
+        router.getQueryParameters().get('start') === 'true') {
       this.passwordManager.recordPasswordCheckInteraction(
           PasswordManagerProxy.PasswordCheckInteraction
               .START_CHECK_AUTOMATICALLY);
@@ -445,7 +444,7 @@ Polymer({
    * @private
    */
   isCheckInProgress_() {
-    return this.status.state == CheckState.RUNNING;
+    return this.status.state === CheckState.RUNNING;
   },
 
   /**
@@ -454,7 +453,7 @@ Polymer({
    * @private
    */
   showsTimestamp_() {
-    return this.status.state == CheckState.IDLE &&
+    return this.status.state === CheckState.IDLE &&
         !!this.status.elapsedTimeSinceLastCheck;
   },
 
@@ -501,6 +500,7 @@ Polymer({
   computeIsButtonHidden_() {
     switch (this.status.state) {
       case CheckState.IDLE:
+        return this.isInitialStatus;  // Only a native IDLE state allows checks.
       case CheckState.CANCELED:
       case CheckState.RUNNING:
       case CheckState.OFFLINE:
@@ -524,7 +524,7 @@ Polymer({
    */
   bannerImageSrc_(isDarkMode) {
     const type =
-        (this.status.state == CheckState.IDLE && !this.waitsForFirstCheck_()) ?
+        (this.status.state === CheckState.IDLE && !this.waitsForFirstCheck_()) ?
         'positive' :
         'neutral';
     const suffix = isDarkMode ? '_dark' : '';
@@ -540,7 +540,7 @@ Polymer({
     if (this.hasLeakedCredentials_()) {
       return false;
     }
-    return this.status.state == CheckState.CANCELED ||
+    return this.status.state === CheckState.CANCELED ||
         !this.hasLeaksOrErrors_();
   },
 
@@ -613,7 +613,7 @@ Polymer({
    */
   computeIsSignedOut_() {
     if (!this.syncStatus_ || !this.syncStatus_.signedIn) {
-      return !this.storedAccounts_ || this.storedAccounts_.length == 0;
+      return !this.storedAccounts_ || this.storedAccounts_.length === 0;
     }
     return !!this.syncStatus_.hasError;
   },

@@ -3,19 +3,27 @@ update_target("//chrome/browser:browser") {
   sources += [
     "//vivaldi/browser/menus/vivaldi_menu_enums.h",
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration.h",
-    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_linux.cc",
-    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",
-    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
     "//vivaldi/browser/vivaldi_permission_context_base.cc",
     "//vivaldi/browser/vivaldi_profile_impl.cc",
     "//vivaldi/browser/vivaldi_profile_impl.h",
   ]
+  if (is_win) {
+    sources += [
+      "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
+    ]
+  }
+  if (is_linux) {
+    sources += [
+      "//vivaldi/browser/shell_integration/vivaldi_shell_integration_linux.cc",
+    ]
+  }
   if (is_mac) {
     sources += [
       "//vivaldi/browser/mac/sparkle_util.h",
       "//vivaldi/browser/mac/sparkle_util.mm",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.h",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.mm",
+      "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",
     ]
   }
   if (!is_android) {
@@ -48,7 +56,6 @@ update_target("//chrome/browser/ui:ui") {
     "//vivaldi/browser/ui/vivaldi_browser_navigator.cc",
     "//vivaldi/browser/ui/vivaldi_browser_navigator.h",
     "//vivaldi/browser/launch_update_notifier.h",
-    "//vivaldi/browser/launch_update_notifier_win.cc",
     "//vivaldi/browser/startup_vivaldi_browser.cpp",
     "//vivaldi/browser/startup_vivaldi_browser.h",
     "//vivaldi/browser/ui/viv_tab_contents_synced_tab_delegate.cc",
@@ -56,6 +63,11 @@ update_target("//chrome/browser/ui:ui") {
     "//vivaldi/browser/ui/vivaldi_tab_helpers.h",
     "//vivaldi/browser/ui/vivaldi_window_sizer.cc",
   ]
+  if (is_win) {
+    sources += [
+      "//vivaldi/browser/launch_update_notifier_win.cc",
+    ]
+  }
   if (is_posix) {
     sources += [
       "//vivaldi/browser/launch_update_notifier_posix.cc",

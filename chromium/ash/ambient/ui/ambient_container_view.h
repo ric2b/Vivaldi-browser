@@ -5,18 +5,22 @@
 #ifndef ASH_AMBIENT_UI_AMBIENT_CONTAINER_VIEW_H_
 #define ASH_AMBIENT_UI_AMBIENT_CONTAINER_VIEW_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "base/macros.h"
-#include "ui/views/widget/widget_delegate.h"
+#include "ui/views/view.h"
 
 namespace ash {
 
 class AmbientAssistantContainerView;
 class AmbientViewDelegate;
+class GlanceableInfoView;
 class PhotoView;
 
-// Container view for ambient mode.
-class ASH_EXPORT AmbientContainerView : public views::WidgetDelegateView {
+// Container view to display all Ambient Mode related views, i.e. photo frame,
+// weather info.
+class ASH_EXPORT AmbientContainerView : public views::View {
  public:
   explicit AmbientContainerView(AmbientViewDelegate* delegate);
   ~AmbientContainerView() override;
@@ -25,18 +29,33 @@ class ASH_EXPORT AmbientContainerView : public views::WidgetDelegateView {
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
-
-  // Fade out the background photo.
-  void FadeOutPhotoView();
+  void AddedToWidget() override;
 
  private:
+  friend class AmbientAshTestBase;
+  class HostWidgetEventObserver;
+
   void Init();
+
+  // Layouts its child views.
+  void LayoutPhotoView();
+  void LayoutGlanceableInfoView();
+  void LayoutAssistantView();
+
+  // Invoked on specific types of events.
+  void HandleEvent();
+
+  PhotoView* photo_view_for_testing() { return photo_view_; }
 
   AmbientViewDelegate* delegate_ = nullptr;
 
   // Owned by view hierarchy.
   PhotoView* photo_view_ = nullptr;
   AmbientAssistantContainerView* ambient_assistant_container_view_ = nullptr;
+  GlanceableInfoView* glanceable_info_view_ = nullptr;
+
+  // Observes events from its host widget.
+  std::unique_ptr<HostWidgetEventObserver> event_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(AmbientContainerView);
 };

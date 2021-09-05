@@ -249,7 +249,7 @@ EventTargetData::EventTargetData() = default;
 
 EventTargetData::~EventTargetData() = default;
 
-void EventTargetData::Trace(Visitor* visitor) {
+void EventTargetData::Trace(Visitor* visitor) const {
   visitor->Trace(event_listener_map);
 }
 
@@ -656,7 +656,7 @@ RegisteredEventListener* EventTarget::GetAttributeRegisteredEventListener(
 
   for (auto& event_listener : *listener_vector) {
     EventListener* listener = event_listener.Callback();
-    if (listener->IsEventHandler() &&
+    if (GetExecutionContext() && listener->IsEventHandler() &&
         listener->BelongsToTheCurrentWorld(GetExecutionContext()))
       return &event_listener;
   }

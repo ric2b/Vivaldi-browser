@@ -18,7 +18,9 @@
 
 class GURL;
 class Profile;
-
+namespace base {
+class Time;
+}
 // Forward declared to support safe downcast;
 namespace extensions {
 class BookmarkAppRegistrar;
@@ -28,6 +30,7 @@ namespace web_app {
 
 class AppRegistrarObserver;
 class WebAppRegistrar;
+class WebApp;
 
 enum class ExternalInstallSource;
 
@@ -35,6 +38,9 @@ class AppRegistrar {
  public:
   explicit AppRegistrar(Profile* profile);
   virtual ~AppRegistrar();
+
+  virtual void Start() {}
+  virtual void Shutdown() {}
 
   // Returns whether the app with |app_id| is currently listed in the registry.
   // ie. we have data for web app manifest and icons, and this |app_id| can be
@@ -90,6 +96,9 @@ class AppRegistrar {
   virtual DisplayMode GetAppDisplayMode(const AppId& app_id) const = 0;
   virtual DisplayMode GetAppUserDisplayMode(const AppId& app_id) const = 0;
 
+  virtual base::Time GetAppLastLaunchTime(const AppId& app_id) const = 0;
+  virtual base::Time GetAppInstallTime(const AppId& app_id) const = 0;
+
   // Returns the "icons" field from the app manifest, use |AppIconManager| to
   // load icon bitmap data.
   virtual std::vector<WebApplicationIconInfo> GetAppIconInfos(
@@ -98,6 +107,16 @@ class AppRegistrar {
   // Represents which icon sizes we successfully downloaded from the IconInfos.
   virtual std::vector<SquareSizePx> GetAppDownloadedIconSizes(
       const AppId& app_id) const = 0;
+
+  // Returns the "shortcuts" field from the app manifest, use |AppIconManager|
+  // to load shortcuts menu icons bitmaps data.
+  virtual std::vector<WebApplicationShortcutsMenuItemInfo> GetAppShortcutInfos(
+      const AppId& app_id) const = 0;
+
+  // Represents which icon sizes we successfully downloaded from the
+  // ShortcutInfos.
+  virtual std::vector<std::vector<SquareSizePx>>
+  GetAppDownloadedShortcutsMenuIconsSizes(const AppId& app_id) const = 0;
 
   virtual std::vector<AppId> GetAppIds() const = 0;
 
@@ -150,10 +169,18 @@ class AppRegistrar {
   void RemoveObserver(AppRegistrarObserver* observer);
 
   void NotifyWebAppInstalled(const AppId& app_id);
+  void NotifyWebAppManifestUpdated(const AppId& app_id,
+                                   base::StringPiece old_name);
+  void NotifyWebAppsWillBeUpdatedFromSync(
+      const std::vector<const WebApp*>& new_apps_state);
   void NotifyWebAppUninstalled(const AppId& app_id);
   void NotifyWebAppLocallyInstalledStateChanged(const AppId& app_id,
                                                 bool is_locally_installed);
   void NotifyWebAppDisabledStateChanged(const AppId& app_id, bool is_disabled);
+  void NotifyWebAppLastLaunchTimeChanged(const AppId& app_id,
+                                         const base::Time& time);
+  void NotifyWebAppInstallTimeChanged(const AppId& app_id,
+                                      const base::Time& time);
 
  protected:
   Profile* profile() const { return profile_; }

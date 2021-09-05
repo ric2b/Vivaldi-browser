@@ -167,7 +167,7 @@ TEST(PasswordFeatureManagerUtil, AccountStoragePerAccountSettings) {
   // Initially the user is not signed in, so everything is off/local.
   EXPECT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   EXPECT_FALSE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  EXPECT_FALSE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  EXPECT_FALSE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
   EXPECT_EQ(GetDefaultPasswordStore(&pref_service, &sync_service),
             autofill::PasswordForm::Store::kProfileStore);
 
@@ -220,6 +220,55 @@ TEST(PasswordFeatureManagerUtil, AccountStoragePerAccountSettings) {
             autofill::PasswordForm::Store::kProfileStore);
 }
 
+TEST(PasswordFeatureManagerUtil, AccountStorageKeepSettingsOnlyForUsers) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(features::kEnablePasswordsAccountStorage);
+
+  TestingPrefServiceSimple pref_service;
+  pref_service.registry()->RegisterDictionaryPref(
+      prefs::kAccountStoragePerAccountSettings);
+
+  CoreAccountInfo first_account;
+  first_account.email = "first@account.com";
+  first_account.gaia = "first";
+  first_account.account_id = CoreAccountId::FromGaiaId(first_account.gaia);
+
+  CoreAccountInfo second_account;
+  second_account.email = "second@account.com";
+  second_account.gaia = "second";
+  second_account.account_id = CoreAccountId::FromGaiaId(second_account.gaia);
+
+  syncer::TestSyncService sync_service;
+  sync_service.SetDisableReasons({});
+  sync_service.SetIsAuthenticatedAccountPrimary(false);
+  sync_service.SetTransportState(syncer::SyncService::TransportState::ACTIVE);
+
+  // Let SyncService run in transport mode with |first_account| and opt in.
+  sync_service.SetAuthenticatedAccountInfo(first_account);
+  OptInToAccountStorage(&pref_service, &sync_service);
+  ASSERT_TRUE(IsOptedInForAccountStorage(&pref_service, &sync_service));
+
+  // Switch to |second_account| and again opt in.
+  sync_service.SetAuthenticatedAccountInfo(second_account);
+  OptInToAccountStorage(&pref_service, &sync_service);
+  ASSERT_TRUE(IsOptedInForAccountStorage(&pref_service, &sync_service));
+
+  // Sign out. The opt-in still exists, but doesn't apply anymore.
+  sync_service.SetAuthenticatedAccountInfo(CoreAccountInfo());
+  ASSERT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
+
+  // Keep the opt-in only for |first_account| (and some unknown other user).
+  KeepAccountStorageSettingsOnlyForUsers(&pref_service,
+                                         {first_account.gaia, "other_gaia_id"});
+
+  // The first account should still be opted in, but not the second.
+  sync_service.SetAuthenticatedAccountInfo(first_account);
+  EXPECT_TRUE(IsOptedInForAccountStorage(&pref_service, &sync_service));
+
+  sync_service.SetAuthenticatedAccountInfo(second_account);
+  EXPECT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
+}
+
 TEST(PasswordFeatureManagerUtil, SyncSuppressesAccountStorageOptIn) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(features::kEnablePasswordsAccountStorage);
@@ -245,7 +294,7 @@ TEST(PasswordFeatureManagerUtil, SyncSuppressesAccountStorageOptIn) {
   // In this state, the user could opt in to the account storage.
   ASSERT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   ASSERT_TRUE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  ASSERT_TRUE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  ASSERT_TRUE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
 
   // Now the user enables Sync-the-feature.
   sync_service.SetIsAuthenticatedAccountPrimary(true);
@@ -255,7 +304,7 @@ TEST(PasswordFeatureManagerUtil, SyncSuppressesAccountStorageOptIn) {
   // Now the account-storage opt-in should *not* be available anymore.
   EXPECT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   EXPECT_FALSE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  EXPECT_FALSE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  EXPECT_FALSE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
 }
 
 TEST(PasswordFeatureManagerUtil, SyncDisablesAccountStorage) {
@@ -283,7 +332,7 @@ TEST(PasswordFeatureManagerUtil, SyncDisablesAccountStorage) {
   // and saving will default to the account store.
   ASSERT_FALSE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   ASSERT_TRUE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  ASSERT_TRUE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  ASSERT_TRUE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
   ASSERT_EQ(GetDefaultPasswordStore(&pref_service, &sync_service),
             autofill::PasswordForm::Store::kAccountStore);
 
@@ -291,7 +340,7 @@ TEST(PasswordFeatureManagerUtil, SyncDisablesAccountStorage) {
   OptInToAccountStorage(&pref_service, &sync_service);
   ASSERT_TRUE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   ASSERT_FALSE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  ASSERT_TRUE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  ASSERT_TRUE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
   ASSERT_EQ(GetDefaultPasswordStore(&pref_service, &sync_service),
             autofill::PasswordForm::Store::kAccountStore);
 
@@ -303,7 +352,7 @@ TEST(PasswordFeatureManagerUtil, SyncDisablesAccountStorage) {
   ASSERT_TRUE(sync_service.IsSyncFeatureEnabled());
   EXPECT_TRUE(IsOptedInForAccountStorage(&pref_service, &sync_service));
   EXPECT_FALSE(ShouldShowAccountStorageOptIn(&pref_service, &sync_service));
-  EXPECT_FALSE(ShouldShowPasswordStorePicker(&pref_service, &sync_service));
+  EXPECT_FALSE(ShouldShowAccountStorageBubbleUi(&pref_service, &sync_service));
   EXPECT_EQ(GetDefaultPasswordStore(&pref_service, &sync_service),
             autofill::PasswordForm::Store::kProfileStore);
 }
@@ -347,6 +396,76 @@ TEST(PasswordFeatureManagerUtil, OptOutClearsStorePreference) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.AccountStorage.SignedInAccountFoundDuringOptOut", true,
       1);
+  // The change to the profile store above should have been recorded. Clearing
+  // the pref does not get recorded in this histogram!
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.DefaultPasswordStoreSet",
+      autofill::PasswordForm::Store::kProfileStore, 1);
+}
+
+TEST(PasswordFeatureManagerUtil, OptInOutHistograms) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(features::kEnablePasswordsAccountStorage);
+  base::HistogramTester histogram_tester;
+
+  TestingPrefServiceSimple pref_service;
+  pref_service.registry()->RegisterDictionaryPref(
+      prefs::kAccountStoragePerAccountSettings);
+
+  syncer::TestSyncService sync_service;
+  sync_service.SetDisableReasons({});
+  sync_service.SetTransportState(syncer::SyncService::TransportState::ACTIVE);
+  sync_service.SetIsAuthenticatedAccountPrimary(false);
+
+  CoreAccountInfo first_account;
+  first_account.email = "first@account.com";
+  first_account.gaia = "first";
+  first_account.account_id = CoreAccountId::FromGaiaId(first_account.gaia);
+
+  CoreAccountInfo second_account;
+  second_account.email = "second@account.com";
+  second_account.gaia = "second";
+  second_account.account_id = CoreAccountId::FromGaiaId(second_account.gaia);
+
+  // Opt in with the first account.
+  sync_service.SetAuthenticatedAccountInfo(first_account);
+  OptInToAccountStorage(&pref_service, &sync_service);
+  // There is now 1 opt-in.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 1, 1);
+
+  // Opt in with the second account.
+  sync_service.SetAuthenticatedAccountInfo(second_account);
+  OptInToAccountStorage(&pref_service, &sync_service);
+  // There are now 2 opt-ins.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 2);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 2, 1);
+
+  // Out out of the second account again.
+  OptOutOfAccountStorageAndClearSettings(&pref_service, &sync_service);
+  // The OptedIn histogram is unchanged.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 2);
+  // There is now an OptedOut sample; there is 1 opt-in left.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptOut", 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptOut", 1, 1);
+
+  // Clear all remaining opt-ins (which is just one).
+  ClearAccountStorageSettingsForAllUsers(&pref_service);
+  // The OptedIn/OptedOut histograms are unchanged.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn", 2);
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptOut", 1);
+  // There was 1 remaining opt-in that was cleared.
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStorage.ClearedOptInForAllAccounts", 1, 1);
 }
 
 }  // namespace features_util

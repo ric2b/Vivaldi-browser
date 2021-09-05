@@ -23,6 +23,7 @@
 #include "chrome/browser/search_engines/template_url_service_factory_test_util.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
+#include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
@@ -30,9 +31,11 @@
 #include "components/omnibox/browser/test_location_bar_model.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -40,6 +43,7 @@
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/gfx/animation/animation_container_element.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/render_text_test_api.h"
@@ -77,9 +81,12 @@ class TestingOmniboxView : public OmniboxViewViews {
   bool base_text_emphasis() const { return base_text_emphasis_; }
 
   // OmniboxViewViews:
-  void EmphasizeURLComponents() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {}
+  void SetPathColor(SkColor color) override;
   using OmniboxView::OnInlineAutocompleteTextMaybeChanged;
+
+  // Returns the latest path color set via SetPathColor().
+  SkColor path_color() { return path_color_; }
 
  private:
   // OmniboxViewViews:
@@ -102,6 +109,10 @@ class TestingOmniboxView : public OmniboxViewViews {
 
   // SetEmphasis() logs whether the base color of the text is emphasized.
   bool base_text_emphasis_;
+
+  // The latest path color set via SetPathColor(). Initialize to magenta to
+  // distinguish an unset path color from when the path is set to transparent.
+  SkColor path_color_ = SK_ColorMAGENTA;
 
   DISALLOW_COPY_AND_ASSIGN(TestingOmniboxView);
 };
@@ -133,9 +144,8 @@ void TestingOmniboxView::CheckUpdatePopupNotCalled() {
   EXPECT_EQ(update_popup_call_count_, 0U);
 }
 
-void TestingOmniboxView::EmphasizeURLComponents() {
-  UpdateTextStyle(GetText(), model()->CurrentTextIsURL(),
-                  model()->client()->GetSchemeClassifier());
+void TestingOmniboxView::SetPathColor(SkColor color) {
+  path_color_ = color;
 }
 
 void TestingOmniboxView::UpdatePopup() {
@@ -204,9 +214,10 @@ class TestingOmniboxEditController : public ChromeOmniboxEditController {
 // Base class that ensures ScopedFeatureList is initialized first.
 class OmniboxViewViewsTestBase : public ChromeViewsTestBase {
  public:
-  explicit OmniboxViewViewsTestBase(
-      const std::vector<base::Feature>& enabled_features) {
-    scoped_feature_list_.InitWithFeatures(enabled_features, {});
+  OmniboxViewViewsTestBase(
+      const std::vector<base::Feature>& enabled_features,
+      const std::vector<base::Feature>& disabled_features) {
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
  protected:
@@ -215,10 +226,12 @@ class OmniboxViewViewsTestBase : public ChromeViewsTestBase {
 
 class OmniboxViewViewsTest : public OmniboxViewViewsTestBase {
  public:
-  explicit OmniboxViewViewsTest(
-      const std::vector<base::Feature>& enabled_features);
+  OmniboxViewViewsTest(const std::vector<base::Feature>& enabled_features,
+                       const std::vector<base::Feature>& disabled_features);
 
-  OmniboxViewViewsTest() : OmniboxViewViewsTest(std::vector<base::Feature>()) {}
+  OmniboxViewViewsTest()
+      : OmniboxViewViewsTest(std::vector<base::Feature>(),
+                             std::vector<base::Feature>()) {}
 
   TestLocationBarModel* location_bar_model() { return &location_bar_model_; }
   CommandUpdaterImpl* command_updater() { return &command_updater_; }
@@ -267,6 +280,7 @@ class OmniboxViewViewsTest : public OmniboxViewViewsTestBase {
   CommandUpdaterImpl command_updater_;
   TestLocationBarModel location_bar_model_;
   TestingOmniboxEditController omnibox_edit_controller_;
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
 
   std::unique_ptr<views::Widget> widget_;
 
@@ -279,8 +293,9 @@ class OmniboxViewViewsTest : public OmniboxViewViewsTestBase {
 };
 
 OmniboxViewViewsTest::OmniboxViewViewsTest(
-    const std::vector<base::Feature>& enabled_features)
-    : OmniboxViewViewsTestBase(enabled_features),
+    const std::vector<base::Feature>& enabled_features,
+    const std::vector<base::Feature>& disabled_features)
+    : OmniboxViewViewsTestBase(enabled_features, disabled_features),
       command_updater_(nullptr),
       omnibox_edit_controller_(&command_updater_, &location_bar_model_) {}
 
@@ -314,14 +329,14 @@ void OmniboxViewViewsTest::SetUp() {
   AutocompleteClassifierFactory::GetInstance()->SetTestingFactoryAndUse(
       profile_.get(),
       base::BindRepeating(&AutocompleteClassifierFactory::BuildInstanceFor));
-  omnibox_view_ =
-      new TestingOmniboxView(&omnibox_edit_controller_,
-                             std::make_unique<ChromeOmniboxClient>(
-                                 &omnibox_edit_controller_, profile_.get()));
-  test_api_ = std::make_unique<views::TextfieldTestApi>(omnibox_view_);
-  omnibox_view_->Init();
+  auto omnibox_view = std::make_unique<TestingOmniboxView>(
+      &omnibox_edit_controller_,
+      std::make_unique<ChromeOmniboxClient>(&omnibox_edit_controller_,
+                                            profile_.get()));
+  test_api_ = std::make_unique<views::TextfieldTestApi>(omnibox_view.get());
+  omnibox_view->Init();
 
-  widget_->SetContentsView(omnibox_view_);
+  omnibox_view_ = widget_->SetContentsView(std::move(omnibox_view));
 }
 
 void OmniboxViewViewsTest::TearDown() {
@@ -441,10 +456,17 @@ TEST_F(OmniboxViewViewsTest, OnBlur) {
       base::WideToUTF16(L"\x05e8\x05e2.\x05e7\x05d5\x05dd/0123/abcd");
   omnibox_view()->SetWindowTextAndCaretPos(kContentsRtl, 0, false, false);
   EXPECT_EQ(gfx::NO_ELIDE, render_text->elide_behavior());
+
+  // TODO(https://crbug.com/1094386): this assertion fails because
+  // EmphasizeURLComponents() sets the textfield's directionality to
+  // DIRECTIONALITY_AS_URL. This should be either fixed or the assertion
+  // removed.
+  //
   // NOTE: Technically (depending on the font), this expectation could fail if
   // the entire domain fits in 60 pixels. However, 60px is so small it should
   // never happen with any font.
-  EXPECT_GT(0, render_text->GetUpdatedDisplayOffset().x());
+  // EXPECT_GT(0, render_text->GetUpdatedDisplayOffset().x());
+
   omnibox_view()->SelectAll(false);
   EXPECT_TRUE(omnibox_view()->IsSelectAll());
 
@@ -653,7 +675,6 @@ TEST_F(OmniboxViewViewsTest, PasteAndGoToUrlOrSearchCommand) {
 TEST_F(OmniboxViewViewsTest, SelectAllOnReactivateTabAfterDeleteAll) {
   omnibox_edit_controller()->set_omnibox_view(omnibox_view());
 
-  content::RenderViewHostTestEnabler rvh_test_enabler;
   auto web_contents1 =
       content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
 
@@ -706,6 +727,38 @@ TEST_F(OmniboxViewViewsTest, SelectAllDuringMouseDown) {
   EXPECT_TRUE(omnibox_view()->IsSelectAll());
 }
 
+TEST_F(OmniboxViewViewsTest, SetWindowTextAndCaretPos) {
+  // googl|e.com
+  omnibox_view()->SetWindowTextAndCaretPos(base::UTF8ToUTF16("google.com"), 5,
+                                           false, false);
+  EXPECT_EQ(base::ASCIIToUTF16("google.com"), omnibox_view()->GetText());
+  EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
+            (std::vector<Range>{{5, 5}}));
+}
+
+TEST_F(OmniboxViewViewsTest, OnInlineAutocompleteTextMaybeChanged) {
+  // No selection, google.com|
+  omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
+      base::UTF8ToUTF16("google.com"), 0, 10);
+  EXPECT_EQ(base::ASCIIToUTF16("google.com"), omnibox_view()->GetText());
+  EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
+            (std::vector<Range>{{10, 10}}));
+
+  // Single selection, gmai[l.com]
+  omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
+      base::UTF8ToUTF16("gmail.com"), 0, 4);
+  EXPECT_EQ(base::ASCIIToUTF16("gmail.com"), omnibox_view()->GetText());
+  EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
+            (std::vector<Range>{{9, 4}}));
+
+  // Multiselection, [go]ogl[e.com]
+  omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
+      base::UTF8ToUTF16("google.com"), 2, 3);
+  EXPECT_EQ(base::ASCIIToUTF16("google.com"), omnibox_view()->GetText());
+  EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
+            (std::vector<Range>{{10, 5}, {0, 2}}));
+}
+
 class OmniboxViewViewsClipboardTest
     : public OmniboxViewViewsTest,
       public ::testing::WithParamInterface<ui::TextEditCommand> {
@@ -735,10 +788,10 @@ TEST_P(OmniboxViewViewsClipboardTest, ClipboardCopyOrCutURL) {
     expected_text = base::ASCIIToUTF16("https://test.com/");
   EXPECT_EQ(expected_text, omnibox_view()->GetText());
 
-  // Make sure both HTML and Plain Text formats are available.
+  // Make sure the plain text format is available, but the HTML one isn't.
   EXPECT_TRUE(clipboard->IsFormatAvailable(
       ui::ClipboardFormatType::GetPlainTextType(), clipboard_buffer));
-  EXPECT_TRUE(clipboard->IsFormatAvailable(
+  EXPECT_FALSE(clipboard->IsFormatAvailable(
       ui::ClipboardFormatType::GetHtmlType(), clipboard_buffer));
 
   // Windows clipboard only supports text URLs.
@@ -789,16 +842,14 @@ INSTANTIATE_TEST_SUITE_P(OmniboxViewViewsClipboardTest,
 class OmniboxViewViewsSteadyStateElisionsTest : public OmniboxViewViewsTest {
  public:
   OmniboxViewViewsSteadyStateElisionsTest()
-      : OmniboxViewViewsTest({
-            omnibox::kHideSteadyStateUrlScheme,
-            omnibox::kHideSteadyStateUrlTrivialSubdomains,
-        }) {}
+      : OmniboxViewViewsTest(
+            {
+                omnibox::kHideSteadyStateUrlScheme,
+                omnibox::kHideSteadyStateUrlTrivialSubdomains,
+            },
+            {}) {}
 
  protected:
-  explicit OmniboxViewViewsSteadyStateElisionsTest(
-      const std::vector<base::Feature>& enabled_features)
-      : OmniboxViewViewsTest(enabled_features) {}
-
   const int kCharacterWidth = 10;
   const GURL kFullUrl = GURL("https://www.example.com/");
 
@@ -1213,7 +1264,7 @@ TEST_F(OmniboxViewViewsSteadyStateElisionsTest, SaveSelectAllOnBlurAndRefocus) {
 TEST_F(OmniboxViewViewsSteadyStateElisionsTest, UnelideFromModel) {
   EXPECT_TRUE(IsElidedUrlDisplayed());
 
-  omnibox_view()->model()->Unelide(false /* exit_query_in_omnibox */);
+  omnibox_view()->model()->Unelide();
   EXPECT_TRUE(omnibox_view()->IsSelectAll());
   size_t start, end;
   omnibox_view()->GetSelectionBounds(&start, &end);
@@ -1222,98 +1273,580 @@ TEST_F(OmniboxViewViewsSteadyStateElisionsTest, UnelideFromModel) {
   ExpectFullUrlDisplayed();
 }
 
-class OmniboxViewViewsSteadyStateElisionsAndQueryInOmniboxTest
-    : public OmniboxViewViewsSteadyStateElisionsTest {
+class OmniboxViewViewsNoPathHidingTest : public OmniboxViewViewsTest {
  public:
-  OmniboxViewViewsSteadyStateElisionsAndQueryInOmniboxTest()
-      : OmniboxViewViewsSteadyStateElisionsTest({
-            omnibox::kHideSteadyStateUrlScheme,
-            omnibox::kHideSteadyStateUrlTrivialSubdomains,
-            omnibox::kQueryInOmnibox,
-        }) {}
+  OmniboxViewViewsNoPathHidingTest()
+      : OmniboxViewViewsTest(
+            {},
+            {omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction,
+             omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover}) {}
 
- protected:
-  const GURL kValidSearchResultsPage =
-      GURL("https://www.google.com/search?q=foo+query");
-
-  void SetUp() override {
-    OmniboxViewViewsSteadyStateElisionsTest::SetUp();
-
-    location_bar_model()->set_url(kValidSearchResultsPage);
-    location_bar_model()->set_security_level(
-        security_state::SecurityLevel::SECURE);
-    location_bar_model()->set_display_search_terms(
-        base::ASCIIToUTF16("foo query"));
-
-    omnibox_view()->model()->ResetDisplayTexts();
-    omnibox_view()->RevertAll();
-
-    // Sanity check that Query in Omnibox is working with Steady State Elisions.
-    EXPECT_EQ(base::ASCIIToUTF16("foo query"), omnibox_view()->GetText());
-
-    // Focus the Omnibox.
-    SendMouseClick(0);
-  }
+  OmniboxViewViewsNoPathHidingTest(const OmniboxViewViewsNoPathHidingTest&) =
+      delete;
+  OmniboxViewViewsNoPathHidingTest& operator=(
+      const OmniboxViewViewsNoPathHidingTest&) = delete;
 };
 
-TEST_F(OmniboxViewViewsSteadyStateElisionsAndQueryInOmniboxTest,
-       DontUnelideQueryInOmniboxSearchTerms) {
-  // Right key should NOT unelide, and should correctly place the cursor at the
-  // end of the search query.
-  omnibox_textfield_view()->OnKeyPressed(
-      ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_RIGHT, 0));
-  EXPECT_EQ(base::ASCIIToUTF16("foo query"), omnibox_view()->GetText());
-  EXPECT_FALSE(omnibox_view()->model()->user_input_in_progress());
-
-  size_t start, end;
-  omnibox_view()->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(9U, start);
-  EXPECT_EQ(9U, end);
-}
-
-TEST_F(OmniboxViewViewsSteadyStateElisionsAndQueryInOmniboxTest,
-       UnelideFromModel) {
-  // Uneliding without exiting Query in Omnibox should do nothing.
-  omnibox_view()->model()->Unelide(false /* exit_query_in_omnibox */);
-  EXPECT_EQ(base::ASCIIToUTF16("foo query"), omnibox_view()->GetText());
-  {
-    size_t start, end;
-    omnibox_view()->GetSelectionBounds(&start, &end);
-    EXPECT_EQ(9U, start);
-    EXPECT_EQ(0U, end);
-  }
-
-  // Uneliding and exiting Query in Omnibox should reveal the full URL.
-  omnibox_view()->model()->Unelide(true /* exit_query_in_omnibox */);
-  EXPECT_EQ(base::ASCIIToUTF16(kValidSearchResultsPage.spec()),
-            omnibox_view()->GetText());
-  {
-    size_t start, end;
-    omnibox_view()->GetSelectionBounds(&start, &end);
-    EXPECT_EQ(41U, start);
-    EXPECT_EQ(0U, end);
-  }
-}
-
-TEST_F(OmniboxViewViewsSteadyStateElisionsAndQueryInOmniboxTest,
-       NoEmphasisForUrlLikeQueries) {
-  // Prevents regressions for crbug.com/942945. Set the displayed search terms
-  // to something somewhat URL-like.
-  location_bar_model()->set_display_search_terms(base::ASCIIToUTF16("foo:bar"));
+// Tests that when no path-hiding field trials are enabled, the path is not
+// hidden. Regression test for https://crbug.com/1093748.
+TEST_F(OmniboxViewViewsNoPathHidingTest, PathNotHiddenByDefault) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
   omnibox_view()->model()->ResetDisplayTexts();
   omnibox_view()->RevertAll();
-  EXPECT_EQ(base::ASCIIToUTF16("foo:bar"), omnibox_view()->GetText());
-  EXPECT_FALSE(omnibox_view()->model()->user_input_in_progress());
 
-  omnibox_view()->ResetEmphasisTestState();
   omnibox_view()->EmphasizeURLComponents();
-
-  // Expect that no part is de-emphasized, there is no "scheme" range.
-  EXPECT_TRUE(omnibox_view()->base_text_emphasis());
-  EXPECT_FALSE(omnibox_view()->emphasis_range().IsValid());
-  EXPECT_FALSE(omnibox_view()->scheme_range().IsValid());
+  EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
 }
 
+class OmniboxViewViewsRevealOnHoverTest : public OmniboxViewViewsTest {
+ public:
+  OmniboxViewViewsRevealOnHoverTest()
+      : OmniboxViewViewsTest(
+            {omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover},
+            {}) {}
+
+  OmniboxViewViewsRevealOnHoverTest(const OmniboxViewViewsRevealOnHoverTest&) =
+      delete;
+  OmniboxViewViewsRevealOnHoverTest& operator=(
+      const OmniboxViewViewsRevealOnHoverTest&) = delete;
+};
+
+// Tests the field trial variation that hides the path by default and reveals on
+// hover.
+TEST_F(OmniboxViewViewsRevealOnHoverTest, HoverAndExit) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+  EXPECT_EQ(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+
+  // As soon as the mouse hovers over the omnibox, the fade-in animation should
+  // start running.
+  omnibox_view()->OnMouseMoved(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_in =
+      omnibox_view()->GetPathFadeInAnimationForTesting();
+  ASSERT_TRUE(fade_in);
+  EXPECT_TRUE(fade_in->IsAnimating());
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_in->GetCurrentColor());
+
+  // Advance the clock through the animation and check the color.
+  gfx::AnimationContainerElement* fade_in_as_element =
+      static_cast<gfx::AnimationContainerElement*>(
+          fade_in->GetAnimationForTesting());
+  fade_in_as_element->SetStartTime(base::TimeTicks());
+  fade_in_as_element->Step(
+      base::TimeTicks() +
+      base::TimeDelta::FromMilliseconds(
+          OmniboxFieldTrial::RevealPathQueryRefOnHoverThresholdMs()));
+  // After the extended hover threshold has elapsed, the animation should still
+  // be transparent.
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_in->GetCurrentColor());
+  // Now advance through the fade-in and check the color. We assume that the
+  // fade-in takes less than 1 second.
+  fade_in_as_element->Step(base::TimeTicks() + base::TimeDelta::FromSeconds(1));
+  SkColor dimmed_text_color =
+      GetOmniboxColor(omnibox_view()->GetThemeProvider(),
+                      OmniboxPart::LOCATION_BAR_TEXT_DIMMED);
+  EXPECT_EQ(dimmed_text_color, fade_in->GetCurrentColor());
+
+  // Now exit the mouse. At this point the fade-in animation should be stopped
+  // and the fade-out animation should run.
+  omnibox_view()->OnMouseExited(CreateMouseEvent(ui::ET_MOUSE_EXITED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* path_fade_out_after_hover_animation =
+      omnibox_view()->GetPathFadeOutAfterHoverAnimationForTesting();
+  EXPECT_FALSE(
+      omnibox_view()->GetPathFadeInAnimationForTesting()->IsAnimating());
+  EXPECT_TRUE(path_fade_out_after_hover_animation->IsAnimating());
+  EXPECT_EQ(dimmed_text_color,
+            path_fade_out_after_hover_animation->GetCurrentColor());
+
+  gfx::AnimationContainerElement* fade_out_as_element =
+      static_cast<gfx::AnimationContainerElement*>(
+          path_fade_out_after_hover_animation->GetAnimationForTesting());
+  fade_out_as_element->SetStartTime(base::TimeTicks());
+  // We assume that the fade-out takes less than 1 second.
+  fade_out_as_element->Step(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(SK_ColorTRANSPARENT,
+            path_fade_out_after_hover_animation->GetCurrentColor());
+}
+
+class OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest
+    : public OmniboxViewViewsTest {
+ public:
+  OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest()
+      : OmniboxViewViewsTest(
+            {omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction,
+             omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover},
+            {}) {}
+
+  OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest(
+      const OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest&) = delete;
+  OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest& operator=(
+      const OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest&) = delete;
+};
+
+// Tests the field trial variation that hides the path when the user interacts
+// with the page and brings it back when the user hovers over the omnibox.
+TEST_F(OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+       UserInteractionAndHover) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  content::MockNavigationHandle navigation;
+  navigation.set_is_same_document(false);
+  omnibox_view()->DidFinishNavigation(&navigation);
+  EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+
+  // Simulate a user interaction and check that the fade-out animation runs.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  EXPECT_TRUE(fade_out->IsAnimating());
+  EXPECT_EQ(GetOmniboxColor(omnibox_view()->GetThemeProvider(),
+                            OmniboxPart::LOCATION_BAR_TEXT_DIMMED),
+            fade_out->GetCurrentColor());
+
+  // Advance the clock through the fade-out animation; we assume that it takes
+  // less than 1s.
+  gfx::AnimationContainerElement* fade_out_as_element =
+      static_cast<gfx::AnimationContainerElement*>(
+          omnibox_view()
+              ->GetPathFadeOutAfterInteractionAnimationForTesting()
+              ->GetAnimationForTesting());
+  fade_out_as_element->SetStartTime(base::TimeTicks());
+  fade_out_as_element->Step(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_out->GetCurrentColor());
+
+  // A second user interaction should not run the animation again.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  EXPECT_FALSE(omnibox_view()
+                   ->GetPathFadeOutAfterInteractionAnimationForTesting()
+                   ->IsAnimating());
+
+  // The path should come back on hover.
+  omnibox_view()->OnMouseMoved(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_in =
+      omnibox_view()->GetPathFadeInAnimationForTesting();
+  ASSERT_TRUE(fade_in);
+  EXPECT_TRUE(fade_in->IsAnimating());
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_in->GetCurrentColor());
+  gfx::AnimationContainerElement* fade_in_as_element =
+      static_cast<gfx::AnimationContainerElement*>(
+          fade_in->GetAnimationForTesting());
+  fade_in_as_element->SetStartTime(base::TimeTicks());
+  // Assume that the extended hover time + fade-in time is less than 2 seconds.
+  fade_in_as_element->Step(base::TimeTicks() + base::TimeDelta::FromSeconds(2));
+  EXPECT_EQ(GetOmniboxColor(omnibox_view()->GetThemeProvider(),
+                            OmniboxPart::LOCATION_BAR_TEXT_DIMMED),
+            fade_in->GetCurrentColor());
+}
+
+class OmniboxViewViewsHideOnInteractionTest : public OmniboxViewViewsTest {
+ public:
+  OmniboxViewViewsHideOnInteractionTest()
+      : OmniboxViewViewsTest(
+            {omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction},
+            {}) {}
+
+  OmniboxViewViewsHideOnInteractionTest(
+      const OmniboxViewViewsHideOnInteractionTest&) = delete;
+  OmniboxViewViewsHideOnInteractionTest& operator=(
+      const OmniboxViewViewsHideOnInteractionTest&) = delete;
+};
+
+// Tests the the "Always Show Full URLs" option works with the field trial
+// variation that hides the path when the user interacts with the page.
+TEST_F(OmniboxViewViewsHideOnInteractionTest, AlwaysShowFullURLs) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("https://www.example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+  omnibox_view()->OnThemeChanged();
+
+  // Enable the "Always show full URLs" setting.
+  location_bar_model()->set_should_prevent_elision(true);
+  omnibox_view()->OnShouldPreventElisionChanged();
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+  omnibox_view()->OnTabChanged(web_contents.get());
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo"),
+            omnibox_view()->GetText());
+
+  // The path shouldn't be hidden when the Always Show Full URLs option is
+  // set.
+  EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+
+  // When the Always Show Full URLs pref is enabled, the omnibox view won't
+  // observe user interactions and fade out the path.
+  EXPECT_FALSE(omnibox_view()->web_contents());
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  EXPECT_FALSE(fade_out);
+}
+
+// Tests the the "Always Show Full URLs" option works with the field trial
+// variation that reveals the path when the user interacts with the page.
+TEST_F(OmniboxViewViewsRevealOnHoverTest, AlwaysShowFullURLs) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("https://www.example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+  omnibox_view()->OnThemeChanged();
+
+  // Enable the "Always show full URLs" setting.
+  location_bar_model()->set_should_prevent_elision(true);
+  omnibox_view()->OnShouldPreventElisionChanged();
+
+  // After a hover, there should be no animations running.
+  omnibox_view()->OnMouseMoved(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_in =
+      omnibox_view()->GetPathFadeInAnimationForTesting();
+  EXPECT_FALSE(fade_in);
+  omnibox_view()->OnMouseExited(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterHoverAnimationForTesting();
+  EXPECT_FALSE(fade_out);
+}
+
+// This test fixture enables the reveal-on-hover path-hiding field trial, and
+// the hide-on-interaction variation when the parameter is true.
+class OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest
+    : public OmniboxViewViewsTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest()
+      : OmniboxViewViewsTest(
+            GetParam()
+                ? std::vector<base::Feature>(
+                      {omnibox::kOmniboxContextMenuShowFullUrls,
+                       omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover,
+                       omnibox::
+                           kHideSteadyStateUrlPathQueryAndRefOnInteraction})
+                : std::vector<base::Feature>(
+                      {omnibox::kOmniboxContextMenuShowFullUrls,
+                       omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover}),
+            {}) {}
+
+  OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest(
+      const OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest&) =
+      delete;
+  OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest& operator=(
+      const OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest&) =
+      delete;
+
+ protected:
+  bool IsHideOnInteractionEnabled() { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest,
+    OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest,
+    ::testing::Values(true, false));
+
+// Tests that unsetting the "Always show full URLs" option begins showing/hiding
+// the path appropriately when path-hiding field trials are enabled.
+TEST_P(OmniboxViewViewsRevealOnHoverAndMaybeHideOnInteractionTest,
+       UnsetAlwaysShowFullURLs) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("https://www.example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+  omnibox_view()->OnThemeChanged();
+
+  // Enable the "Always show full URLs" setting.
+  location_bar_model()->set_should_prevent_elision(true);
+  omnibox_view()->OnShouldPreventElisionChanged();
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+  omnibox_view()->OnTabChanged(web_contents.get());
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo"),
+            omnibox_view()->GetText());
+
+  // Now toggle the preference and check that the animations run as expected.
+  location_bar_model()->set_should_prevent_elision(false);
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->OnShouldPreventElisionChanged();
+  // Note: this doesn't test that LocationBarModel correctly applies the
+  // preference; it simply tests that
+  // OmniboxViewViews::OnShouldPreventElisionChanged retrieves an updated
+  // display URL from LocationBarModel.
+  EXPECT_EQ(base::ASCIIToUTF16("example.test/foo"), omnibox_view()->GetText());
+  if (IsHideOnInteractionEnabled()) {
+    EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+    // Simulate a user interaction and check the fade-out animation.
+    omnibox_view()->DidGetUserInteraction(
+        blink::WebInputEvent::Type::kGestureScrollBegin);
+    OmniboxViewViews::PathFadeAnimation* fade_out =
+        omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+    ASSERT_TRUE(fade_out);
+    EXPECT_TRUE(fade_out->IsAnimating());
+  } else {
+    EXPECT_EQ(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+  // Simulate a hover event and check the fade-in/fade-out animations. This
+  // should happen the same regardless of whether hide-on-interaction is
+  // enabled.
+  omnibox_view()->OnMouseMoved(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_in =
+      omnibox_view()->GetPathFadeInAnimationForTesting();
+  ASSERT_TRUE(fade_in);
+  EXPECT_TRUE(fade_in->IsAnimating());
+  omnibox_view()->OnMouseExited(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterHoverAnimationForTesting();
+  ASSERT_TRUE(fade_out);
+  EXPECT_TRUE(fade_out->IsAnimating());
+}
+
+// Tests that in the hide-on-interaction field trial, when the path changes
+// while being faded out, the animation is stopped.
+TEST_F(OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+       PathChangeDuringAnimation) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  content::MockNavigationHandle navigation;
+  navigation.set_is_same_document(false);
+  omnibox_view()->DidFinishNavigation(&navigation);
+  EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+
+  // Simulate a user interaction and check that the fade-out animation runs.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  EXPECT_TRUE(fade_out->IsAnimating());
+
+  // Change the path and check that the animation is cancelled.
+  location_bar_model()->set_url(GURL("https://example.test/foo#bar"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo#bar"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+  EXPECT_FALSE(fade_out->IsAnimating());
+}
+
+// Tests that in the hide-on-interaction field trial, the path is shown on
+// cross-document main-frame navigations, but not on same-document navigations.
+TEST_F(OmniboxViewViewsHideOnInteractionTest, SameDocNavigations) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(false);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+
+  // On a same-document navigation before the path has faded out, the path
+  // should remain visible.
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(true);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+
+  // Simulate a user interaction to fade out the path.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  ASSERT_TRUE(fade_out);
+  EXPECT_TRUE(fade_out->IsAnimating());
+
+  // On a cross-document main-frame navigation, the path should remain visible.
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(false);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+    OmniboxViewViews::PathFadeAnimation* fade_out =
+        omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+    ASSERT_TRUE(fade_out);
+    EXPECT_FALSE(fade_out->IsAnimating());
+  }
+
+  // Simulate another user interaction to fade out the path, and advance the
+  // clock all the way through the animation.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  ASSERT_TRUE(fade_out);
+  EXPECT_TRUE(fade_out->IsAnimating());
+  gfx::AnimationContainerElement* fade_out_as_element =
+      fade_out->GetAnimationForTesting();
+  fade_out_as_element->SetStartTime(base::TimeTicks());
+  fade_out_as_element->Step(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_out->GetCurrentColor());
+
+  // On a subsequent same-document main-frame navigation, the path should remain
+  // invisible.
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(true);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    // The path is explicitly set to transparent after same-frame navigations
+    // that happen after the path has been faded out.
+    EXPECT_EQ(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+}
+
+// Tests that in the hide-on-interaction field trial, the path is not re-shown
+// on subframe navigations.
+TEST_F(OmniboxViewViewsHideOnInteractionTest, SubframeNavigations) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(false);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    EXPECT_NE(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+
+  // Simulate a user interaction to fade out the path, and advance the clock all
+  // the way through the animation.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  ASSERT_TRUE(fade_out);
+  EXPECT_TRUE(fade_out->IsAnimating());
+  gfx::AnimationContainerElement* fade_out_as_element =
+      fade_out->GetAnimationForTesting();
+  fade_out_as_element->SetStartTime(base::TimeTicks());
+  fade_out_as_element->Step(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_out->GetCurrentColor());
+
+  // On a subframe navigation, the path should remain invisible.
+  {
+    content::MockNavigationHandle navigation;
+    navigation.set_is_same_document(false);
+    std::unique_ptr<content::WebContents> web_contents =
+        content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+    content::RenderFrameHostTester::For(web_contents->GetMainFrame())
+        ->InitializeRenderFrameIfNeeded();
+    content::RenderFrameHost* subframe =
+        content::RenderFrameHostTester::For(web_contents->GetMainFrame())
+            ->AppendChild("subframe");
+    navigation.set_render_frame_host(subframe);
+    omnibox_view()->DidFinishNavigation(&navigation);
+    // The path is explicitly set to transparent in DidFinishNavigation.
+    EXPECT_EQ(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  }
+}
+
+// Tests that in the hide-on-interaction field trial variation, the path is
+// faded out after omnibox focus and blur.
+TEST_F(OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
+       HideOnInteractionAfterFocusAndBlur) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  content::MockNavigationHandle navigation;
+  navigation.set_is_same_document(false);
+  omnibox_view()->DidFinishNavigation(&navigation);
+
+  // Simulate a user interaction to fade out the path.
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  OmniboxViewViews::PathFadeAnimation* fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  gfx::AnimationContainerElement* fade_out_as_element =
+      static_cast<gfx::AnimationContainerElement*>(
+          omnibox_view()
+              ->GetPathFadeOutAfterInteractionAnimationForTesting()
+              ->GetAnimationForTesting());
+  fade_out_as_element->SetStartTime(base::TimeTicks());
+  fade_out_as_element->Step(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(SK_ColorTRANSPARENT, fade_out->GetCurrentColor());
+
+  // Now focus and blur the omnibox. After blur, the path should fade out again
+  // after another user interaction.
+  omnibox_view()->OnFocus();
+  omnibox_view()->OnBlur();
+  omnibox_view()->DidGetUserInteraction(
+      blink::WebInputEvent::Type::kGestureScrollBegin);
+  fade_out =
+      omnibox_view()->GetPathFadeOutAfterInteractionAnimationForTesting();
+  EXPECT_TRUE(fade_out->IsAnimating());
+}
+
+// Tests that in the reveal-on-hover field trial variation (without
+// hide-on-interaction), the path is faded back in after focus, then blur, then
+// hover.
+TEST_F(OmniboxViewViewsRevealOnHoverTest, AfterBlur) {
+  location_bar_model()->set_url(GURL("https://example.test/foo"));
+  location_bar_model()->set_url_for_display(
+      base::ASCIIToUTF16("example.test/foo"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Call OnThemeChanged() to create the animations.
+  omnibox_view()->OnThemeChanged();
+
+  // Focus and blur the omnibox, then hover over it. The path should fade in.
+  omnibox_view()->OnFocus();
+  omnibox_view()->OnBlur();
+  EXPECT_EQ(SK_ColorTRANSPARENT, omnibox_view()->path_color());
+  omnibox_view()->OnMouseMoved(CreateMouseEvent(ui::ET_MOUSE_MOVED, {0, 0}));
+  OmniboxViewViews::PathFadeAnimation* fade_in =
+      omnibox_view()->GetPathFadeInAnimationForTesting();
+  ASSERT_TRUE(fade_in);
+  EXPECT_TRUE(fade_in->IsAnimating());
+}
+
+// TODO (manukh) move up to where the other OmniboxViewViewsTest tests are.
 TEST_F(OmniboxViewViewsTest, OverflowingAutocompleteText) {
   // Make the Omnibox narrow so it can't fit the entire string (~650px), but
   // wide enough to fit the user text (~65px).
@@ -1325,7 +1858,7 @@ TEST_F(OmniboxViewViewsTest, OverflowingAutocompleteText) {
   omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
       base::ASCIIToUTF16("user text. Followed by very long autocompleted text "
                          "that is unlikely to fit in |kOmniboxWidth|"),
-      10);
+      0, 10);
 
   // NOTE: Technically (depending on the font), this expectation could fail if
   // 'user text' doesn't fit in 100px or the entire string fits in 100px.

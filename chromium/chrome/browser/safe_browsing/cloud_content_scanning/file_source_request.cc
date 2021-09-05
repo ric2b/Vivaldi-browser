@@ -91,13 +91,27 @@ GetFileDataBlocking(const base::FilePath& path) {
 
 }  // namespace
 
-FileSourceRequest::FileSourceRequest(bool block_unsupported_types,
-                                     base::FilePath path,
-                                     base::FilePath file_name,
-                                     BinaryUploadService::Callback callback)
-    : Request(std::move(callback)),
+FileSourceRequest::FileSourceRequest(
+    const enterprise_connectors::AnalysisSettings& analysis_settings,
+    base::FilePath path,
+    base::FilePath file_name,
+    BinaryUploadService::Callback callback)
+    : Request(std::move(callback), analysis_settings.analysis_url),
       has_cached_result_(false),
-      block_unsupported_types_(block_unsupported_types),
+      block_unsupported_types_(analysis_settings.block_unsupported_file_types),
+      path_(std::move(path)),
+      file_name_(std::move(file_name)) {
+  set_filename(file_name_.AsUTF8Unsafe());
+}
+
+FileSourceRequest::FileSourceRequest(
+    const enterprise_connectors::AnalysisSettings& analysis_settings,
+    base::FilePath path,
+    base::FilePath file_name,
+    BinaryUploadService::ContentAnalysisCallback callback)
+    : Request(std::move(callback), analysis_settings.analysis_url),
+      has_cached_result_(false),
+      block_unsupported_types_(analysis_settings.block_unsupported_file_types),
       path_(std::move(path)),
       file_name_(std::move(file_name)) {
   set_filename(file_name_.AsUTF8Unsafe());
@@ -118,6 +132,31 @@ void FileSourceRequest::GetRequestData(DataCallback callback) {
                      weakptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
+bool FileSourceRequest::FileTypeUnsupportedByDlp() const {
+  if (use_legacy_proto()) {
+    return deep_scanning_request().has_dlp_scan_request() &&
+           !FileTypeSupportedForDlp(file_name_);
+  } else {
+    for (const std::string& tag : content_analysis_request().tags()) {
+      if (tag == "dlp")
+        return !FileTypeSupportedForDlp(file_name_);
+    }
+    return false;
+  }
+}
+
+bool FileSourceRequest::HasMalwareRequest() const {
+  if (use_legacy_proto()) {
+    return deep_scanning_request().has_malware_scan_request();
+  } else {
+    for (const std::string& tag : content_analysis_request().tags()) {
+      if (tag == "malware")
+        return true;
+    }
+    return false;
+  }
+}
+
 void FileSourceRequest::OnGotFileData(
     DataCallback callback,
     std::pair<BinaryUploadService::Result, Data> result_and_data) {
@@ -130,15 +169,14 @@ void FileSourceRequest::OnGotFileData(
     return;
   }
 
-  if (deep_scanning_request().has_dlp_scan_request() &&
-      !FileTypeSupportedForDlp(file_name_)) {
+  if (FileTypeUnsupportedByDlp()) {
     // Abort the request early if settings say to block unsupported types or if
     // there was no malware request to be done, otherwise proceed with the
     // malware request only.
-    if (block_unsupported_types_ ||
-        !deep_scanning_request().has_malware_scan_request()) {
-      CacheResultAndData(BinaryUploadService::Result::UNSUPPORTED_FILE_TYPE,
-                         std::move(result_and_data.second));
+    if (block_unsupported_types_ || !HasMalwareRequest()) {
+      CacheResultAndData(
+          BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE,
+          std::move(result_and_data.second));
       std::move(callback).Run(cached_result_, cached_data_);
       return;
     } else {

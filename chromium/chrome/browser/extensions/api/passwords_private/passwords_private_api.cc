@@ -77,7 +77,16 @@ ResponseAction PasswordsPrivateRemoveSavedPasswordFunction::Run() {
   auto parameters =
       api::passwords_private::RemoveSavedPassword::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
-  GetDelegate(browser_context())->RemoveSavedPassword(parameters->id);
+  GetDelegate(browser_context())->RemoveSavedPasswords({parameters->id});
+  return RespondNow(NoArguments());
+}
+
+// PasswordsPrivateRemoveSavedPasswordsFunction
+ResponseAction PasswordsPrivateRemoveSavedPasswordsFunction::Run() {
+  auto parameters =
+      api::passwords_private::RemoveSavedPasswords::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters);
+  GetDelegate(browser_context())->RemoveSavedPasswords(parameters->ids);
   return RespondNow(NoArguments());
 }
 
@@ -86,7 +95,16 @@ ResponseAction PasswordsPrivateRemovePasswordExceptionFunction::Run() {
   auto parameters =
       api::passwords_private::RemovePasswordException::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
-  GetDelegate(browser_context())->RemovePasswordException(parameters->id);
+  GetDelegate(browser_context())->RemovePasswordExceptions({parameters->id});
+  return RespondNow(NoArguments());
+}
+
+// PasswordsPrivateRemovePasswordExceptionsFunction
+ResponseAction PasswordsPrivateRemovePasswordExceptionsFunction::Run() {
+  auto parameters =
+      api::passwords_private::RemovePasswordExceptions::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters);
+  GetDelegate(browser_context())->RemovePasswordExceptions(parameters->ids);
   return RespondNow(NoArguments());
 }
 
@@ -174,6 +192,16 @@ void PasswordsPrivateGetPasswordExceptionListFunction::GotList(
   Respond(ArgumentList(
       api::passwords_private::GetPasswordExceptionList::Results::Create(
           entries)));
+}
+
+// PasswordsPrivateMovePasswordToAccountFunction
+ResponseAction PasswordsPrivateMovePasswordToAccountFunction::Run() {
+  auto parameters =
+      api::passwords_private::MovePasswordToAccount::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters);
+  GetDelegate(browser_context())
+      ->MovePasswordToAccount(parameters->id, GetSenderWebContents());
+  return RespondNow(NoArguments());
 }
 
 // PasswordsPrivateImportPasswordsFunction

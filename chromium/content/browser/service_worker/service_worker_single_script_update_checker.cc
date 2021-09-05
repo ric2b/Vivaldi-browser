@@ -180,7 +180,7 @@ ServiceWorkerSingleScriptUpdateChecker::ServiceWorkerSingleScriptUpdateChecker(
         static_cast<int>(blink::mojom::ResourceType::kServiceWorker);
 
     // Request SSLInfo. It will be persisted in service worker storage and
-    // may be used by ServiceWorkerNavigationLoader for navigations handled
+    // may be used by ServiceWorkerMainResourceLoader for navigations handled
     // by this service worker.
     options |= network::mojom::kURLLoadOptionSendSSLInfoWithResponse;
   } else {
@@ -216,14 +216,11 @@ ServiceWorkerSingleScriptUpdateChecker::ServiceWorkerSingleScriptUpdateChecker(
       std::move(compare_reader), std::move(copy_reader), std::move(writer),
       /*pause_when_not_identical=*/true);
 
-  // Get a unique request id across browser-initiated navigations and navigation
-  // preloads.
-  const int request_id = GlobalRequestID::MakeBrowserInitiated().request_id;
   network_loader_ = ServiceWorkerUpdatedScriptLoader::
       ThrottlingURLLoaderCoreWrapper::CreateLoaderAndStart(
           loader_factory->Clone(), browser_context_getter, MSG_ROUTING_NONE,
-          request_id, options, resource_request,
-          network_client_receiver_.BindNewPipeAndPassRemote(),
+          GlobalRequestID::MakeBrowserInitiated().request_id, options,
+          resource_request, network_client_receiver_.BindNewPipeAndPassRemote(),
           kUpdateCheckTrafficAnnotation);
   DCHECK_EQ(network_loader_state_,
             ServiceWorkerUpdatedScriptLoader::LoaderState::kNotStarted);

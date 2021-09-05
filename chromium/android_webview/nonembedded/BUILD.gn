@@ -14,6 +14,7 @@ generate_jni("nonembedded_jni_headers") {
 # as a library.
 android_library("nonembedded_java") {
   sources = [
+    "java/src/org/chromium/android_webview/nonembedded/AwNonembeddedUmaRecorder.java",
     "java/src/org/chromium/android_webview/nonembedded/LicenseActivity.java",
     "java/src/org/chromium/android_webview/nonembedded/LicenseContentProvider.java",
     "java/src/org/chromium/android_webview/nonembedded/WebViewApkApplication.java",
@@ -22,11 +23,14 @@ android_library("nonembedded_java") {
     ":devui_java",
     ":services_java",
     "//android_webview:android_webview_product_config_java",
+    "//android_webview:common_aidl_java",
     "//android_webview:common_java",
+    "//android_webview/proto:metrics_bridge_records_proto_java",
     "//base:base_java",
     "//base:jni_java",
     "//components/about_ui/android:aboutui_java",
     "//components/embedder_support/android:application_java",
+    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//ui/android:ui_java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
@@ -55,10 +59,10 @@ android_library("devui_java") {
     "//android_webview:common_aidl_java",
     "//android_webview:common_crash_java",
     "//android_webview:common_java",
-    "//android_webview:common_metrics_java",
     "//android_webview:common_platform_services_java",
     "//base:base_java",
     "//components/minidump_uploader:minidump_uploader_java",
+    "//components/version_info/android:version_constants_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_fragment_fragment_java",
     "//ui/android:ui_java",
@@ -82,14 +86,15 @@ android_library("services_java") {
     "//android_webview:common_aidl_java",
     "//android_webview:common_crash_java",
     "//android_webview:common_java",
-    "//android_webview:common_metrics_java",
     "//android_webview:common_platform_services_java",
     "//android_webview:common_variations_java",
+    "//android_webview/proto:metrics_bridge_records_proto_java",
     "//base:base_java",
     "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/variations/android:variations_java",
     "//components/version_info/android:version_constants_java",
+    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
   ]
 }
 

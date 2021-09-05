@@ -11,6 +11,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.image_editor.ImageEditorDialogCoordinator;
 import org.chromium.chrome.browser.modules.ModuleInstallUi;
 import org.chromium.chrome.browser.screenshot.EditorScreenshotTask;
+import org.chromium.chrome.browser.share.share_sheet.ChromeOptionShareCallback;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.modules.image_editor.ImageEditorModuleProvider;
 
@@ -24,13 +25,16 @@ public class ScreenshotCoordinator {
 
     private final Activity mActivity;
     private final Tab mTab;
+    private final ChromeOptionShareCallback mChromeOptionShareCallback;
 
     private EditorScreenshotTask mScreenshotTask;
     private Bitmap mScreenshot;
 
-    public ScreenshotCoordinator(Activity activity, Tab tab) {
+    public ScreenshotCoordinator(
+            Activity activity, Tab tab, ChromeOptionShareCallback chromeOptionShareCallback) {
         mActivity = activity;
         mTab = tab;
+        mChromeOptionShareCallback = chromeOptionShareCallback;
     }
 
     /**
@@ -78,15 +82,19 @@ public class ScreenshotCoordinator {
      * Opens the screenshot sharesheet.
      */
     private void launchSharesheet() {
-        // TODO(crbug/1024586): Open screenshot sharesheet.
+        ScreenshotShareSheetDialogCoordinator shareSheet =
+                new ScreenshotShareSheetDialogCoordinator(
+                        mActivity, mScreenshot, mTab, mChromeOptionShareCallback);
+        shareSheet.showShareSheet();
+        mScreenshot = null;
     }
 
     /**
-     * Installs the DFM and shows UI (i.e. toasts and a retry dialog) informing the user of the
-     * installation status.
+     * Installs the DFM and shows UI (i.e. toasts and a retry dialog) informing the
+     * user of the installation status.
      */
     private void installEditor() {
-        ModuleInstallUi ui = new ModuleInstallUi(
+        final ModuleInstallUi ui = new ModuleInstallUi(
                 mTab, R.string.image_editor_module_title, new ModuleInstallUi.FailureUiListener() {
                     @Override
                     public void onFailureUiResponse(boolean retry) {
@@ -94,6 +102,8 @@ public class ScreenshotCoordinator {
                             // User initiated retries are not counted toward the maximum number
                             // of install attempts per session.
                             installEditor();
+                        } else {
+                            launchSharesheet();
                         }
                     }
                 });
@@ -104,7 +114,7 @@ public class ScreenshotCoordinator {
                 ui.showInstallSuccessUi();
                 launchEditor();
             } else {
-                ui.showInstallFailureUi();
+                launchSharesheet();
             }
         });
     }

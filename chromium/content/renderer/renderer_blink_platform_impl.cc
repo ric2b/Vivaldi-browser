@@ -165,13 +165,10 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
                             : nullptr),
       sudden_termination_disables_(0),
       is_locked_to_site_(false),
-      default_task_runner_(main_thread_scheduler->DefaultTaskRunner()),
       main_thread_scheduler_(main_thread_scheduler) {
 
   // RenderThread may not exist in some tests.
   if (RenderThreadImpl::current()) {
-    io_runner_ = RenderThreadImpl::current()->GetIOTaskRunner();
-    thread_safe_sender_ = RenderThreadImpl::current()->thread_safe_sender();
 #if defined(OS_LINUX)
     mojo::PendingRemote<font_service::mojom::FontService> font_service;
     RenderThreadImpl::current()->BindHostReceiver(
@@ -228,13 +225,13 @@ RendererBlinkPlatformImpl::CreateCodeCacheLoader() {
 
 std::unique_ptr<blink::WebURLLoaderFactory>
 RendererBlinkPlatformImpl::WrapURLLoaderFactory(
-    mojo::ScopedMessagePipeHandle url_loader_factory_handle) {
+    blink::CrossVariantMojoRemote<network::mojom::URLLoaderFactoryInterfaceBase>
+        url_loader_factory) {
   return std::make_unique<WebURLLoaderFactoryImpl>(
       RenderThreadImpl::current()->resource_dispatcher()->GetWeakPtr(),
       base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
           mojo::PendingRemote<network::mojom::URLLoaderFactory>(
-              std::move(url_loader_factory_handle),
-              network::mojom::URLLoaderFactory::Version_)));
+              std::move(url_loader_factory))));
 }
 
 std::unique_ptr<blink::WebURLLoaderFactory>

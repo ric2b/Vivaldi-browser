@@ -128,17 +128,6 @@ void StreamTexture::ReleaseChannel() {
   channel_ = nullptr;
 }
 
-// gpu::gles2::GLStreamTextureMatrix implementation
-void StreamTexture::GetTextureMatrix(float xform[16]) {
-  static constexpr float kIdentity[16]{
-      1, 0, 0, 0,  //
-      0, 1, 0, 0,  //
-      0, 0, 1, 0,  //
-      0, 0, 0, 1   //
-  };
-  memcpy(xform, kIdentity, sizeof(kIdentity));
-}
-
 bool StreamTexture::IsUsingGpuMemory() const {
   // Once the image is bound during the first update, we just replace/update the
   // same image every time in future and hence the image is always bound to a
@@ -236,8 +225,12 @@ void StreamTexture::OnFrameAvailable() {
 
   gfx::Rect visible_rect;
   gfx::Size coded_size;
-  texture_owner_->GetCodedSizeAndVisibleRect(rotated_visible_size_, &coded_size,
-                                             &visible_rect);
+  if (!texture_owner_->GetCodedSizeAndVisibleRect(rotated_visible_size_,
+                                                  &coded_size, &visible_rect)) {
+    // if we failed to get right size fallback to visible size.
+    coded_size = rotated_visible_size_;
+    visible_rect = gfx::Rect(coded_size);
+  }
 
   if (coded_size != coded_size_ || visible_rect != visible_rect_) {
     coded_size_ = coded_size;

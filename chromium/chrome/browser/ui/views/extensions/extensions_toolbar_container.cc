@@ -87,17 +87,22 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser,
 }
 
 ExtensionsToolbarContainer::~ExtensionsToolbarContainer() {
+  // The child views hold pointers to the |actions_|, and thus need to be
+  // destroyed before them.
+  RemoveAllChildViews(true);
+
   // Create a copy of the anchored widgets, since |anchored_widgets_| will
   // be modified by closing them.
   std::vector<views::Widget*> widgets;
   widgets.reserve(anchored_widgets_.size());
-  for (auto& anchored_widget : anchored_widgets_)
+  for (const auto& anchored_widget : anchored_widgets_)
     widgets.push_back(anchored_widget.widget);
-  for (views::Widget* widget : widgets)
+  for (auto* widget : widgets)
     widget->Close();
   // The widgets should close synchronously (resulting in OnWidgetClosing()),
   // so |anchored_widgets_| should now be empty.
-  CHECK(anchored_widgets_.empty());
+  DCHECK(anchored_widgets_.empty());
+  CHECK(!views::WidgetObserver::IsInObserverList());
 }
 
 void ExtensionsToolbarContainer::UpdateAllIcons() {
@@ -109,10 +114,8 @@ void ExtensionsToolbarContainer::UpdateAllIcons() {
 
 ToolbarActionView* ExtensionsToolbarContainer::GetViewForId(
     const std::string& id) {
-  auto it = icons_.find(id);
-  if (it == icons_.end())
-    return nullptr;
-  return it->second.get();
+  const auto it = icons_.find(id);
+  return (it == icons_.end()) ? nullptr : it->second;
 }
 
 void ExtensionsToolbarContainer::ShowWidgetForExtension(
@@ -189,7 +192,8 @@ void ExtensionsToolbarContainer::UpdateIconVisibility(
     action_view->ClearProperty(views::kFlexBehaviorKey);
   }
 
-  if (must_show || model_->IsActionPinned(extension_id))
+  if (must_show ||
+      (CanShowIconInToolbar() && model_->IsActionPinned(extension_id)))
     animating_layout_manager()->FadeIn(action_view);
   else
     animating_layout_manager()->FadeOut(action_view);
@@ -396,6 +400,7 @@ void ExtensionsToolbarContainer::OnToolbarActionRemoved(
   if (popped_out_action_ == controller.get())
     UndoPopOut();
 
+  RemoveChildViewT(GetViewForId(action_id));
   icons_.erase(action_id);
 
   UpdateContainerVisibility();
@@ -417,14 +422,17 @@ void ExtensionsToolbarContainer::OnToolbarActionUpdated(
 void ExtensionsToolbarContainer::OnToolbarVisibleCountChanged() {}
 
 void ExtensionsToolbarContainer::OnToolbarHighlightModeChanged(
-    bool is_highlighting) {}
+    bool is_highlighting) {
+  NOTREACHED()
+      << "Action highlighting is not supported with the extensions menu";
+}
 
 void ExtensionsToolbarContainer::OnToolbarModelInitialized() {
   CreateActions();
 }
 
 void ExtensionsToolbarContainer::OnToolbarPinnedActionsChanged() {
-  for (auto& it : icons_)
+  for (const auto& it : icons_)
     UpdateIconVisibility(it.first);
   ReorderViews();
 }
@@ -432,10 +440,10 @@ void ExtensionsToolbarContainer::OnToolbarPinnedActionsChanged() {
 void ExtensionsToolbarContainer::ReorderViews() {
   const auto& pinned_action_ids = model_->pinned_action_ids();
   for (size_t i = 0; i < pinned_action_ids.size(); ++i)
-    ReorderChildView(icons_[pinned_action_ids[i]].get(), i);
+    ReorderChildView(GetViewForId(pinned_action_ids[i]), i);
 
   if (drop_info_.get())
-    ReorderChildView(icons_[drop_info_->action_id].get(), drop_info_->index);
+    ReorderChildView(GetViewForId(drop_info_->action_id), drop_info_->index);
 
   // The extension button is always last.
   ReorderChildView(extensions_button_, -1);
@@ -449,7 +457,7 @@ void ExtensionsToolbarContainer::CreateActions() {
   if (!model_->actions_initialized())
     return;
 
-  for (auto& action_id : model_->action_ids())
+  for (const auto& action_id : model_->action_ids())
     CreateActionForId(action_id);
 
   ReorderViews();
@@ -462,12 +470,10 @@ void ExtensionsToolbarContainer::CreateActionForId(
       model_->CreateActionForId(browser_, this, false, action_id));
   auto icon = std::make_unique<ToolbarActionView>(actions_.back().get(), this);
   // Set visibility before adding to prevent extraneous animation.
-  icon->SetVisible(model_->IsActionPinned(action_id));
-  icon->set_owned_by_client();
+  icon->SetVisible(CanShowIconInToolbar() && model_->IsActionPinned(action_id));
   icon->AddButtonObserver(this);
   icon->AddObserver(this);
-  AddChildView(icon.get());
-  icons_[action_id] = std::move(icon);
+  icons_.insert({action_id, AddChildView(std::move(icon))});
 }
 
 content::WebContents* ExtensionsToolbarContainer::GetCurrentWebContents() {
@@ -476,6 +482,11 @@ content::WebContents* ExtensionsToolbarContainer::GetCurrentWebContents() {
 
 bool ExtensionsToolbarContainer::ShownInsideMenu() const {
   return false;
+}
+
+bool ExtensionsToolbarContainer::CanShowIconInToolbar() const {
+  // Pinning extensions is not available in PWAs.
+  return !browser_->app_controller();
 }
 
 void ExtensionsToolbarContainer::OnToolbarActionViewDragDone() {}
@@ -526,6 +537,9 @@ int ExtensionsToolbarContainer::GetDragOperationsForView(View* sender,
 bool ExtensionsToolbarContainer::CanStartDragForView(View* sender,
                                                      const gfx::Point& press_pt,
                                                      const gfx::Point& p) {
+  if (!CanShowIconInToolbar())
+    return false;
+
   // Only pinned extensions should be draggable.
   auto it = std::find_if(model_->pinned_action_ids().cbegin(),
                          model_->pinned_action_ids().cend(),

@@ -21,6 +21,7 @@
 #include "chrome/browser/engagement/site_engagement_details.mojom.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/installable/installable_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -253,7 +254,6 @@ void PopulateInfoMapWithEngagement(
   // with the highest engagement score.
   for (const auto& detail : engagement_details) {
     if (detail.installed_bonus > 0) {
-      // This origin was recently launched from the home screen.
       MaybePopulateImportantInfoForReason(detail.origin, &content_origins,
                                           ImportantReason::HOME_SCREEN,
                                           base::nullopt, output);
@@ -366,7 +366,7 @@ void PopulateInfoMapWithBookmarks(
 // used to warn about clearing data for installed apps can be excluded from the
 // Android build.
 #if !defined(OS_ANDROID)
-void PopulateInfoMapWithInstalled(
+void PopulateInfoMapWithInstalledEngagedInTimePeriod(
     browsing_data::TimePeriod time_period,
     Profile* profile,
     std::map<std::string, ImportantDomainInfo>* output) {
@@ -436,6 +436,19 @@ void ImportantSitesUtil::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(prefs::kImportantSitesDialogHistory);
 }
 
+// static
+std::set<std::string> ImportantSitesUtil::GetInstalledRegisterableDomains(
+    Profile* profile) {
+  std::set<GURL> installed_origins = GetOriginsWithInstalledWebApps(profile);
+  std::set<std::string> registerable_domains;
+
+  for (auto& origin : installed_origins) {
+    registerable_domains.emplace(
+        ImportantSitesUtil::GetRegisterableDomainOrIP(origin));
+  }
+  return registerable_domains;
+}
+
 std::vector<ImportantDomainInfo>
 ImportantSitesUtil::GetImportantRegisterableDomains(Profile* profile,
                                                     size_t max_results) {
@@ -490,7 +503,8 @@ ImportantSitesUtil::GetInstalledRegisterableDomains(
     size_t max_results) {
   std::vector<ImportantDomainInfo> installed_domains;
   std::map<std::string, ImportantDomainInfo> installed_app_info;
-  PopulateInfoMapWithInstalled(time_period, profile, &installed_app_info);
+  PopulateInfoMapWithInstalledEngagedInTimePeriod(time_period, profile,
+                                                  &installed_app_info);
 
   std::unordered_set<std::string> excluded_domains =
       GetBlacklistedImportantDomains(profile);

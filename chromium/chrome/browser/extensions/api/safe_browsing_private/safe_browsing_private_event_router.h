@@ -14,7 +14,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/prefs/pref_change_registrar.h"
 
 namespace content {
 class BrowserContext;
@@ -37,7 +36,8 @@ class DeviceManagementService;
 
 namespace safe_browsing {
 class BinaryUploadService;
-class DlpDeepScanningVerdict;
+enum class DeepScanAccessPoint;
+struct ContentAnalysisScanResult;
 }
 
 #if defined(OS_CHROMEOS)
@@ -71,13 +71,7 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   static const char kKeyClickedThrough[];
   static const char kKeyTriggeredRuleId[];
   static const char kKeyTriggeredRuleName[];
-  static const char kKeyTriggeredRuleResourceName[];
-  static const char kKeyTriggeredRuleSeverity[];
   static const char kKeyTriggeredRuleAction[];
-  static const char kKeyMatchedDetectors[];
-  static const char kKeyMatchedDetectorId[];
-  static const char kKeyMatchedDetectorName[];
-  static const char kKeyMatchedDetectorType[];
   static const char kKeyTriggeredRuleInfo[];
   static const char kKeyThreatType[];
   static const char kKeyContentType[];
@@ -90,8 +84,10 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   static const char kKeyInterstitialEvent[];
   static const char kKeySensitiveDataEvent[];
   static const char kKeyUnscannedFileEvent[];
+  static const char kKeyUnscannedReason[];
 
-  // String constants for the "trigger" event field.
+  // String constants for the "trigger" event field.  This corresponds to
+  // an enterprise connector.
   static const char kTriggerFileDownload[];
   static const char kTriggerFileUpload[];
   static const char kTriggerWebContentUpload[];
@@ -126,33 +122,26 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
                                        const std::string& reason,
                                        int net_error_code);
 
-  // Notifies listeners that deep scanning detected a dangerous download.
-  void OnDangerousDeepScanningResult(const GURL& url,
-                                     const std::string& file_name,
-                                     const std::string& download_digest_sha256,
-                                     const std::string& threat_type,
-                                     const std::string& mime_type,
-                                     const std::string& trigger,
-                                     const int64_t content_size);
-
-  // Notifies listeners that scanning for sensitive data detected a violation.
-  void OnSensitiveDataEvent(
-      const safe_browsing::DlpDeepScanningVerdict& verdict,
+  // Notifies listeners that the analysis connector detected a violation.
+  void OnAnalysisConnectorResult(
       const GURL& url,
       const std::string& file_name,
       const std::string& download_digest_sha256,
       const std::string& mime_type,
       const std::string& trigger,
+      safe_browsing::DeepScanAccessPoint access_point,
+      const safe_browsing::ContentAnalysisScanResult& result,
       const int64_t content_size);
 
-  // Notifies listeners that scanning for sensitive data detected a violation.
-  void OnSensitiveDataWarningBypassed(
-      const safe_browsing::DlpDeepScanningVerdict& verdict,
+  // Notifies listeners that an analysis connector violation was bypassed.
+  void OnAnalysisConnectorWarningBypassed(
       const GURL& url,
       const std::string& file_name,
       const std::string& download_digest_sha256,
       const std::string& mime_type,
       const std::string& trigger,
+      safe_browsing::DeepScanAccessPoint access_point,
+      const safe_browsing::ContentAnalysisScanResult& result,
       const int64_t content_size);
 
   // Notifies listeners that deep scanning failed, for the given |reason|.
@@ -161,6 +150,7 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
                             const std::string& download_digest_sha256,
                             const std::string& mime_type,
                             const std::string& trigger,
+                            safe_browsing::DeepScanAccessPoint access_point,
                             const std::string& reason,
                             const int64_t content_size);
 
@@ -199,6 +189,8 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   void SetBinaryUploadServiceForTesting(
       safe_browsing::BinaryUploadService* binary_upload_service);
 
+  void SetIdentityManagerForTesting(signin::IdentityManager* identity_manager);
+
  protected:
   // Callback to report safe browsing event through real-time reporting channel,
   // if the browser is authorized to do so. Declared as protected to be called
@@ -214,12 +206,6 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   // if real-time reporting is enabled, the machine is properly reigistered
   // with CBCM and the appropriate policies are enabled.
   void InitRealtimeReportingClient();
-
-  // Initialize DeviceManagementService and |client_| after validating the
-  // browser can upload data.
-  void InitRealtimeReportingClientCallback(
-      policy::DeviceManagementService* device_management_service,
-      bool authorized);
 
   // Continues execution if the client is authorized to do so.
   void IfAuthorized(base::OnceCallback<void(bool)> cont);
@@ -261,6 +247,25 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   // an empty string if the profile is not signed in.
   std::string GetProfileUserName() const;
 
+  // Notifies listeners that deep scanning detected a dangerous download.
+  void OnDangerousDeepScanningResult(const GURL& url,
+                                     const std::string& file_name,
+                                     const std::string& download_digest_sha256,
+                                     const std::string& threat_type,
+                                     const std::string& mime_type,
+                                     const std::string& trigger,
+                                     const int64_t content_size);
+
+  // Notifies listeners that the analysis connector detected a violation.
+  void OnSensitiveDataEvent(
+      const GURL& url,
+      const std::string& file_name,
+      const std::string& download_digest_sha256,
+      const std::string& mime_type,
+      const std::string& trigger,
+      const safe_browsing::ContentAnalysisScanResult& result,
+      const int64_t content_size);
+
   content::BrowserContext* context_;
   signin::IdentityManager* identity_manager_ = nullptr;
   EventRouter* event_router_ = nullptr;
@@ -271,7 +276,6 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   // The |private_client_| is used on platforms where we cannot just get a
   // client and we create our own (used through |client_|).
   std::unique_ptr<policy::CloudPolicyClient> private_client_;
-  PrefChangeRegistrar registrar_;
 
   base::WeakPtrFactory<SafeBrowsingPrivateEventRouter> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingPrivateEventRouter);

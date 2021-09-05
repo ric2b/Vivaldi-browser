@@ -128,50 +128,6 @@ bool IsAppShortcutForProfile(const base::FilePath& shortcut_file_name,
   return false;
 }
 
-// Finds shortcuts in |shortcut_path| that match profile for |profile_path| and
-// extension with title |shortcut_name|.
-// If |shortcut_name| is empty, finds all shortcuts matching |profile_path|.
-std::vector<base::FilePath> FindAppShortcutsByProfileAndTitle(
-    const base::FilePath& shortcut_path,
-    const base::FilePath& profile_path,
-    const base::string16& shortcut_name) {
-  std::vector<base::FilePath> shortcut_paths;
-
-  if (shortcut_name.empty()) {
-    // Find all shortcuts for this profile.
-    base::FileEnumerator files(shortcut_path, false,
-                               base::FileEnumerator::FILES,
-                               FILE_PATH_LITERAL("*.lnk"));
-    base::FilePath shortcut_file = files.Next();
-    while (!shortcut_file.empty()) {
-      if (IsAppShortcutForProfile(shortcut_file, profile_path))
-        shortcut_paths.push_back(shortcut_file);
-      shortcut_file = files.Next();
-    }
-  } else {
-    // Find all shortcuts matching |shortcut_name|.
-    base::FilePath base_path =
-        shortcut_path
-            .Append(web_app::internals::GetSanitizedFileName(shortcut_name))
-            .AddExtension(FILE_PATH_LITERAL(".lnk"));
-
-    const int fileNamesToCheck = 10;
-    for (int i = 0; i < fileNamesToCheck; ++i) {
-      base::FilePath shortcut_file = base_path;
-      if (i > 0) {
-        shortcut_file = shortcut_file.InsertBeforeExtensionASCII(
-            base::StringPrintf(" (%d)", i));
-      }
-      if (base::PathExists(shortcut_file) &&
-          IsAppShortcutForProfile(shortcut_file, profile_path)) {
-        shortcut_paths.push_back(shortcut_file);
-      }
-    }
-  }
-
-  return shortcut_paths;
-}
-
 // Creates application shortcuts in a given set of paths.
 // |shortcut_paths| is a list of directories in which shortcuts should be
 // created. If |creation_reason| is SHORTCUT_CREATION_AUTOMATED and there is an
@@ -227,9 +183,9 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
     if (creation_reason == web_app::SHORTCUT_CREATION_AUTOMATED) {
       // Check whether there is an existing shortcut to this app.
       std::vector<base::FilePath> shortcut_files =
-          FindAppShortcutsByProfileAndTitle(shortcut_paths[i],
-                                            shortcut_info.profile_path,
-                                            shortcut_info.title);
+          web_app::internals::FindAppShortcutsByProfileAndTitle(
+              shortcut_paths[i], shortcut_info.profile_path,
+              shortcut_info.title);
       if (!shortcut_files.empty())
         continue;
     }
@@ -303,8 +259,8 @@ void GetShortcutLocationsAndDeleteShortcuts(
     base::FilePath taskbar_pin_path;
     if (base::PathService::Get(base::DIR_TASKBAR_PINS, &taskbar_pin_path)) {
       std::vector<base::FilePath> taskbar_pin_files =
-          FindAppShortcutsByProfileAndTitle(taskbar_pin_path, profile_path,
-                                            title);
+          web_app::internals::FindAppShortcutsByProfileAndTitle(
+              taskbar_pin_path, profile_path, title);
       *was_pinned_to_taskbar = !taskbar_pin_files.empty();
     } else {
       *was_pinned_to_taskbar = false;
@@ -314,7 +270,8 @@ void GetShortcutLocationsAndDeleteShortcuts(
   for (std::vector<base::FilePath>::const_iterator i = all_paths.begin();
        i != all_paths.end(); ++i) {
     std::vector<base::FilePath> shortcut_files =
-        FindAppShortcutsByProfileAndTitle(*i, profile_path, title);
+        web_app::internals::FindAppShortcutsByProfileAndTitle(*i, profile_path,
+                                                              title);
     if (shortcut_paths && !shortcut_files.empty()) {
       shortcut_paths->push_back(*i);
     }
@@ -357,6 +314,47 @@ base::FilePath GetChromeProxyPath() {
 }
 
 namespace internals {
+
+std::vector<base::FilePath> FindAppShortcutsByProfileAndTitle(
+    const base::FilePath& shortcut_path,
+    const base::FilePath& profile_path,
+    const base::string16& shortcut_name) {
+  std::vector<base::FilePath> shortcut_paths;
+
+  if (shortcut_name.empty()) {
+    // Find all shortcuts for this profile.
+    base::FileEnumerator files(shortcut_path, false,
+                               base::FileEnumerator::FILES,
+                               FILE_PATH_LITERAL("*.lnk"));
+    base::FilePath shortcut_file = files.Next();
+    while (!shortcut_file.empty()) {
+      if (IsAppShortcutForProfile(shortcut_file, profile_path))
+        shortcut_paths.push_back(shortcut_file);
+      shortcut_file = files.Next();
+    }
+  } else {
+    // Find all shortcuts matching |shortcut_name|.
+    base::FilePath base_path =
+        shortcut_path
+            .Append(web_app::internals::GetSanitizedFileName(shortcut_name))
+            .AddExtension(FILE_PATH_LITERAL(".lnk"));
+
+    const int fileNamesToCheck = 10;
+    for (int i = 0; i < fileNamesToCheck; ++i) {
+      base::FilePath shortcut_file = base_path;
+      if (i > 0) {
+        shortcut_file = shortcut_file.InsertBeforeExtensionASCII(
+            base::StringPrintf(" (%d)", i));
+      }
+      if (base::PathExists(shortcut_file) &&
+          IsAppShortcutForProfile(shortcut_file, profile_path)) {
+        shortcut_paths.push_back(shortcut_file);
+      }
+    }
+  }
+
+  return shortcut_paths;
+}
 
 void OnShortcutInfoLoadedForSetRelaunchDetails(
     HWND hwnd,
@@ -531,7 +529,8 @@ std::vector<base::FilePath> GetShortcutPaths(
        // taskbar. This needs to be handled by callers.
        creation_locations.in_quick_launch_bar &&
            base::win::CanPinShortcutToTaskbar(),
-       ShellUtil::SHORTCUT_LOCATION_QUICK_LAUNCH}};
+       ShellUtil::SHORTCUT_LOCATION_QUICK_LAUNCH},
+      {creation_locations.in_startup, ShellUtil::SHORTCUT_LOCATION_STARTUP}};
 
   // Populate shortcut_paths.
   for (size_t i = 0; i < base::size(locations); ++i) {

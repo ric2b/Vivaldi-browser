@@ -10,10 +10,11 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.os.Build;
-import android.support.test.filters.LargeTest;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -25,7 +26,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -48,7 +48,6 @@ import java.util.concurrent.Callable;
  * Tests for the BluetoothChooserDialog class.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class BluetoothChooserDialogTest {
     @Rule
@@ -128,7 +127,7 @@ public class BluetoothChooserDialogTest {
     private BluetoothChooserDialog createDialog() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> {
-                    mWindowAndroid = new ActivityWindowAndroid(mActivityTestRule.getActivity());
+                    mWindowAndroid = mActivityTestRule.getActivity().getWindowAndroid();
                     BluetoothChooserDialog dialog = new BluetoothChooserDialog(mWindowAndroid,
                             "https://origin.example.com/", ConnectionSecurityLevel.SECURE,
                             /*nativeBluetoothChooserDialogPtr=*/42);

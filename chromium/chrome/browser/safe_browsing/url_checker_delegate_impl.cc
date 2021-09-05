@@ -6,14 +6,13 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prerender/prerender_contents.h"
-#include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/safe_browsing/user_interaction_observer.h"
+#include "components/prerender/common/prerender_final_status.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/triggers/suspicious_site_trigger.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -47,9 +46,10 @@ void CreateSafeBrowsingUserInteractionObserver(
     bool is_main_frame,
     scoped_refptr<SafeBrowsingUIManager> ui_manager) {
   content::WebContents* web_contents = web_contents_getter.Run();
-  // Don't delay the interstitial for prerender pages.
+  // Don't delay the interstitial for prerender pages and portals.
   if (!web_contents ||
-      prerender::PrerenderContents::FromWebContents(web_contents)) {
+      prerender::PrerenderContents::FromWebContents(web_contents) ||
+      web_contents->IsPortal()) {
     SafeBrowsingUIManager::StartDisplayingBlockingPage(ui_manager, resource);
     return;
   }
@@ -81,8 +81,8 @@ UrlCheckerDelegateImpl::~UrlCheckerDelegateImpl() = default;
 void UrlCheckerDelegateImpl::MaybeDestroyPrerenderContents(
     content::WebContents::OnceGetter web_contents_getter) {
   // Destroy the prefetch with FINAL_STATUS_SAFEBROSWING.
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&DestroyPrerenderContents,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&DestroyPrerenderContents,
                                 std::move(web_contents_getter)));
 }
 
@@ -92,8 +92,8 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
     const net::HttpRequestHeaders& headers,
     bool is_main_frame,
     bool has_user_gesture) {
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&SafeBrowsingUIManager::StartDisplayingBlockingPage,
                      ui_manager_, resource));
 }
@@ -103,8 +103,8 @@ void UrlCheckerDelegateImpl::
     StartObservingInteractionsForDelayedBlockingPageHelper(
         const security_interstitials::UnsafeResource& resource,
         bool is_main_frame) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&CreateSafeBrowsingUserInteractionObserver,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&CreateSafeBrowsingUserInteractionObserver,
                                 resource.web_contents_getter, resource,
                                 is_main_frame, ui_manager_));
 }
@@ -125,8 +125,8 @@ bool UrlCheckerDelegateImpl::ShouldSkipRequestCheck(
 void UrlCheckerDelegateImpl::NotifySuspiciousSiteDetected(
     const base::RepeatingCallback<content::WebContents*()>&
         web_contents_getter) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&NotifySuspiciousSiteTriggerDetected,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&NotifySuspiciousSiteTriggerDetected,
                                 web_contents_getter));
 }
 

@@ -9,8 +9,9 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <tuple>
 
-#include "ash/system/message_center/arc/arc_notification_surface_manager.h"
+#include "ash/public/cpp/external_arc/message_center/arc_notification_surface_manager.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/ax_tree_source_arc.h"
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_service.h"
@@ -41,8 +42,8 @@ class ArcBridgeService;
 arc::mojom::CaptionStylePtr GetCaptionStyleFromPrefs(PrefService* prefs);
 
 // ArcAccessibilityHelperBridge is an instance to receive converted Android
-// accessibility events and info via mojo interface and dispatch them to chrome
-// os components.
+// accessibility events and info via mojo interface and dispatch them to Chrome
+// OS components.
 class ArcAccessibilityHelperBridge
     : public KeyedService,
       public mojom::AccessibilityHelperHost,
@@ -95,6 +96,7 @@ class ArcAccessibilityHelperBridge
 
   // AXTreeSourceArc::Delegate overrides.
   void OnAction(const ui::AXActionData& data) const override;
+  bool IsScreenReaderEnabled() const override;
 
   // ArcAppListPrefs::Observer overrides.
   void OnTaskDestroyed(int32_t task_id) override;
@@ -166,6 +168,7 @@ class ArcAccessibilityHelperBridge
 
   bool activation_observer_added_ = false;
   bool is_focus_highlight_enabled_ = false;
+  bool is_screen_reader_enabled_ = false;
   Profile* const profile_;
   ArcBridgeService* const arc_bridge_service_;
   TreeMap trees_;

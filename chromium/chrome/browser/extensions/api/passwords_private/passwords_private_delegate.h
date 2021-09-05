@@ -65,15 +65,13 @@ class PasswordsPrivateDelegate : public KeyedService {
       base::string16 new_username,
       base::Optional<base::string16> new_password) = 0;
 
-  // Removes the saved password entry corresponding to the |id| generated for
-  // each entry of the password list.
-  // |id| the id created when going over the list of saved passwords.
-  virtual void RemoveSavedPassword(int id) = 0;
+  // Removes the saved password entries corresponding to the |ids| generated for
+  // each entry of the password list. Any invalid id will be ignored.
+  virtual void RemoveSavedPasswords(const std::vector<int>& ids) = 0;
 
-  // Removes the saved password exception entry corresponding set in the
-  // given |id|
-  // |id| The id for the exception url entry being removed.
-  virtual void RemovePasswordException(int id) = 0;
+  // Removes the password exceptions entries corresponding corresponding to
+  // |ids|. Any invalid id will be ignored.
+  virtual void RemovePasswordExceptions(const std::vector<int>& ids) = 0;
 
   // Undoes the last removal of a saved password or exception.
   virtual void UndoRemoveSavedPasswordOrException() = 0;
@@ -91,6 +89,14 @@ class PasswordsPrivateDelegate : public KeyedService {
       api::passwords_private::PlaintextReason reason,
       PlaintextPasswordCallback callback,
       content::WebContents* web_contents) = 0;
+
+  // Moves a password currently stored on the device to being stored in the
+  // signed-in, non-syncing Google Account. The result is a no-op if any of
+  // these is true: |id| is invalid; |id| corresponds to a password already
+  // stored in the account; or the user is not using the account-scoped password
+  // storage.
+  virtual void MovePasswordToAccount(int id,
+                                     content::WebContents* web_contents) = 0;
 
   // Trigger the password import procedure, allowing the user to select a file
   // containing passwords to import.

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <functional>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -26,7 +27,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/time/default_clock.h"
@@ -37,6 +37,7 @@
 #include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/mojom/storage_service.mojom.h"
 #include "components/services/storage/storage_service_impl.h"
+#include "components/variations/net/variations_http_headers.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/blob_storage/blob_registry_wrapper.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
@@ -58,6 +59,7 @@
 #include "content/browser/network_context_client_base_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/quota/quota_context.h"
+#include "content/browser/service_sandbox_type.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_error_handler.h"
@@ -70,7 +72,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/cors_exempt_headers.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/native_file_system_entry_factory.h"
@@ -81,6 +82,7 @@
 #include "content/public/browser/storage_notification_service.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -94,6 +96,7 @@
 #include "net/ssl/client_cert_store.h"
 #include "net/url_request/url_request_context.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/cross_thread_pending_shared_url_loader_factory.h"
 #include "services/network/public/cpp/features.h"
@@ -183,8 +186,6 @@ mojo::Remote<storage::mojom::StorageService>& GetStorageServiceRemote() {
       }
       remote = ServiceProcessHost::Launch<storage::mojom::StorageService>(
           ServiceProcessHost::Options()
-              .WithSandboxType(is_sandboxed ? SandboxType::kUtility
-                                            : SandboxType::kNoSandbox)
               .WithDisplayName("Storage Service")
               .Pass());
       remote.reset_on_disconnect();
@@ -211,8 +212,8 @@ mojo::Remote<storage::mojom::StorageService>& GetStorageServiceRemote() {
     } else
 #endif  // !defined(OS_ANDROID)
     {
-      base::PostTask(FROM_HERE, {BrowserThread::IO},
-                     base::BindOnce(&RunInProcessStorageService,
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&RunInProcessStorageService,
                                     remote.BindNewPipeAndPassReceiver()));
     }
 
@@ -235,8 +236,8 @@ GetCreateURLLoaderFactoryCallback() {
 void OnClearedCookies(base::OnceClosure callback, uint32_t num_deleted) {
   // The final callback needs to happen from UI thread.
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&OnClearedCookies, std::move(callback), num_deleted));
     return;
   }
@@ -281,8 +282,8 @@ void PerformQuotaManagerStorageCleanup(
 
 void ClearedShaderCache(base::OnceClosure callback) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(&ClearedShaderCache, std::move(callback)));
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ClearedShaderCache, std::move(callback)));
     return;
   }
   std::move(callback).Run();
@@ -612,9 +613,8 @@ void OnAuthRequiredContinuationForWindowId(
                                std::move(auth_challenge_responder),
                                GetWebContentsFromRegistry(window_id));
   } else {
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE, {BrowserThread::IO},
-        base::BindOnce(&GetWebContentsFromRegistry, window_id),
+    GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&GetWebContentsFromRegistry, window_id),
         base::BindOnce(&OnAuthRequiredContinuation, process_id, routing_id,
                        request_id, url, *is_main_frame_opt, first_auth_attempt,
                        auth_info, std::move(head),
@@ -1211,8 +1211,8 @@ void StoragePartitionImpl::Initialize() {
     base::RepeatingCallback<void(const url::Origin)>
         send_notification_function = base::BindRepeating(
             [](StorageNotificationService* service, const url::Origin origin) {
-              base::PostTask(
-                  FROM_HERE, {BrowserThread::UI},
+              GetUIThreadTaskRunner({})->PostTask(
+                  FROM_HERE,
                   base::BindOnce(&StorageNotificationService::
                                      MaybeShowStoragePressureNotification,
                                  base::Unretained(service), std::move(origin)));
@@ -1252,17 +1252,14 @@ void StoragePartitionImpl::Initialize() {
   native_file_system_manager_->BindInternalsReceiver(
       native_file_system_context.InitWithNewPipeAndPassReceiver());
   base::FilePath path = is_in_memory_ ? base::FilePath() : partition_path_;
-  auto indexed_db_context = base::MakeRefCounted<IndexedDBContextImpl>(
+  indexed_db_control_wrapper_ = std::make_unique<IndexedDBControlWrapper>(
       path, browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy,
       base::DefaultClock::GetInstance(),
       ChromeBlobStorageContext::GetRemoteFor(browser_context_),
-      std::move(native_file_system_context),
-      base::CreateSingleThreadTaskRunner({BrowserThread::IO}),
+      std::move(native_file_system_context), GetIOThreadTaskRunner({}),
       /*task_runner=*/nullptr);
-  indexed_db_control_wrapper_ =
-      std::make_unique<IndexedDBControlWrapper>(std::move(indexed_db_context));
 
-  cache_storage_context_ = new CacheStorageContextImpl(browser_context_);
+  cache_storage_context_ = new CacheStorageContextImpl();
   cache_storage_context_->Init(
       path, browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy);
 
@@ -1340,7 +1337,7 @@ void StoragePartitionImpl::Initialize() {
     conversion_manager_ = std::make_unique<ConversionManagerImpl>(
         this, path,
         base::ThreadPool::CreateSequencedTaskRunner(
-            {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
+            {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
   }
 
   is_vivaldi_ = vivaldi::IsVivaldiApp(partition_domain_);
@@ -1719,9 +1716,8 @@ void StoragePartitionImpl::OnAuthRequired(
           std::move(auth_challenge_responder),
           GetIsMainFrameFromRegistry(*window_id));
     } else {
-      base::PostTaskAndReplyWithResult(
-          FROM_HERE, {BrowserThread::IO},
-          base::BindOnce(&GetIsMainFrameFromRegistry, *window_id),
+      GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+          FROM_HERE, base::BindOnce(&GetIsMainFrameFromRegistry, *window_id),
           base::BindOnce(&OnAuthRequiredContinuationForWindowId, *window_id,
                          process_id, routing_id, request_id, url,
                          first_auth_attempt, auth_info, std::move(head),
@@ -1750,9 +1746,8 @@ void StoragePartitionImpl::OnCertificateRequested(
           process_id, routing_id, request_id, cert_info,
           std::move(cert_responder), GetWebContentsFromRegistry(*window_id));
     } else {
-      base::PostTaskAndReplyWithResult(
-          FROM_HERE, {BrowserThread::IO},
-          base::BindOnce(&GetWebContentsFromRegistry, *window_id),
+      GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+          FROM_HERE, base::BindOnce(&GetWebContentsFromRegistry, *window_id),
           base::BindOnce(&OnCertificateRequestedContinuation, process_id,
                          routing_id, request_id, cert_info,
                          std::move(cert_responder)));
@@ -2046,8 +2041,8 @@ StoragePartitionImpl::DataDeletionHelper::CreateTaskCompletionClosure(
 
 void StoragePartitionImpl::DataDeletionHelper::OnTaskComplete(int tracing_id) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(&DataDeletionHelper::OnTaskComplete,
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&DataDeletionHelper::OnTaskComplete,
                                   base::Unretained(this), tracing_id));
     return;
   }
@@ -2115,8 +2110,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
       remove_mask_ & REMOVE_DATA_MASK_FILE_SYSTEMS ||
       remove_mask_ & REMOVE_DATA_MASK_SERVICE_WORKERS ||
       remove_mask_ & REMOVE_DATA_MASK_CACHE_STORAGE) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&DataDeletionHelper::ClearQuotaManagedDataOnIOThread,
                        base::Unretained(this),
                        base::WrapRefCounted(quota_manager), begin,
@@ -2147,8 +2142,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
   }
 
   if (remove_mask_ & REMOVE_DATA_MASK_SHADER_CACHE) {
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&ClearShaderCacheOnIOThread, path, begin, end,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ClearShaderCacheOnIOThread, path, begin, end,
                                   CreateTaskCompletionClosure(
                                       TracingDataType::kShaderCache)));
   }
@@ -2396,13 +2391,27 @@ void StoragePartitionImpl::InitNetworkContext() {
   GetContentClient()->browser()->ConfigureNetworkContextParams(
       browser_context_, is_in_memory_, relative_partition_path_,
       context_params.get(), cert_verifier_creation_params.get());
-  DCHECK(!context_params->cert_verifier_creation_params)
-      << "|cert_verifier_creation_params| should not be set in the "
-         "NetworkContextParams, as they will eventually be removed when the "
-         "CertVerifierService ships.";
+  devtools_instrumentation::ApplyNetworkContextParamsOverrides(
+      browser_context_, context_params.get());
+  DCHECK(!context_params->cert_verifier_params)
+      << "|cert_verifier_params| should not be set in the NetworkContextParams,"
+         "as they will be replaced with either the newly configured "
+         "|cert_verifier_creation_params| or with a new pipe to the "
+         "CertVerifierService.";
 
-  context_params->cert_verifier_creation_params =
-      std::move(cert_verifier_creation_params);
+  context_params->cert_verifier_params =
+      GetCertVerifierParams(std::move(cert_verifier_creation_params));
+
+  // This mechanisms should be used only for legacy internal headers. You can
+  // find a recommended alternative approach on URLRequest::cors_exempt_headers
+  // at services/network/public/mojom/url_loader.mojom.
+  context_params->cors_exempt_header_list.push_back(
+      kCorsExemptPurposeHeaderName);
+  context_params->cors_exempt_header_list.push_back(
+      kCorsExemptRequestedWithHeaderName);
+  variations::UpdateCorsExemptHeaderForVariations(context_params.get());
+
+  cors_exempt_header_list_ = context_params->cors_exempt_header_list;
 
   network_context_.reset();
   GetNetworkService()->CreateNetworkContext(

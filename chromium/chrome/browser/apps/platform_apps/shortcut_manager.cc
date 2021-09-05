@@ -11,7 +11,6 @@
 #include "base/one_shot_event.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -109,7 +108,10 @@ void AppShortcutManager::OnExtensionWillBeInstalled(
     const Extension* extension,
     bool is_update,
     const std::string& old_name) {
-  if (!extension->is_app())
+  // Bookmark apps are handled in
+  // web_app::AppShortcutManager::OnWebAppInstalled() and
+  // web_app::AppShortcutManager::OnWebAppManifestUpdated().
+  if (!extension->is_app() || extension->from_bookmark())
     return;
 
   // If the app is being updated, update any existing shortcuts but do not
@@ -166,8 +168,8 @@ void AppShortcutManager::UpdateShortcutsForAllAppsIfNeeded() {
   if (last_version >= kCurrentAppShortcutsVersion)
     return;
 
-  base::PostDelayedTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
       base::BindOnce(&AppShortcutManager::UpdateShortcutsForAllAppsNow,
                      weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(kUpdateShortcutsForAllAppsDelay));

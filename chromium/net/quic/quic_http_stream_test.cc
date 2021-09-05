@@ -1111,7 +1111,7 @@ TEST_P(QuicHttpStreamTest, LogGranularQuicConnectionError) {
 TEST_P(QuicHttpStreamTest, LogGranularQuicErrorIfHandshakeNotConfirmed) {
   // TODO(nharper): Figure out why this test does not send packets
   // when TLS is used.
-  if (version_.handshake_protocol == quic::PROTOCOL_TLS1_3) {
+  if (version_.UsesTls()) {
     Initialize();
 
     return;
@@ -1615,10 +1615,11 @@ TEST_P(QuicHttpStreamTest, SendChunkedPostRequestAbortedByResetStream) {
         kIncludeVersion, !kFin, DEFAULT_PRIORITY, 0,
         &spdy_request_headers_frame_length, {header, kUploadData}));
     AddWrite(ConstructClientAckPacket(packet_number++, 3, 1, 2));
-    AddWrite(client_maker_.MakeRstPacket(
-        packet_number++,
-        /* include_version = */ true, stream_id_, quic::QUIC_STREAM_NO_ERROR,
-        /* include_stop_sending_if_v99 = */ false));
+      AddWrite(client_maker_.MakeAckAndRstPacket(
+          packet_number++,
+          /* include_version = */ true, stream_id_, quic::QUIC_STREAM_NO_ERROR,
+          4, 1, 1,
+          /* include_stop_sending_if_v99 = */ false));
   } else {
     AddWrite(ConstructRequestHeadersAndDataFramesPacket(
         packet_number++, GetNthClientInitiatedBidirectionalStreamId(0),

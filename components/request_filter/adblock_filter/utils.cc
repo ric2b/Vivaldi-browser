@@ -17,7 +17,7 @@
 namespace {
 // Increment this whenever an incompatible change is made to
 // adblock_rules_list.fbs
-constexpr int kRulesListFormatVersion = 2;
+constexpr int kRulesListFormatVersion = 3;
 
 // Increment this whenever an incompatible change is made to
 // adblock_rules_index.fbs
@@ -43,11 +43,11 @@ enum RulePriorities {
 namespace adblock_filter {
 
 std::string GetIndexVersionHeader() {
-  return base::StringPrintf("---------Version=%d", kRulesListFormatVersion);
+  return base::StringPrintf("---------Version=%d", kIndexFormatVersion);
 }
 
 std::string GetRulesListVersionHeader() {
-  return base::StringPrintf("---------Version=%d", kIndexFormatVersion);
+  return base::StringPrintf("---------Version=%d", kRulesListFormatVersion);
 }
 
 base::FilePath::StringType GetRulesFolderName() {
@@ -86,7 +86,7 @@ int GetRulePriority(const flat::FilterRule& rule) {
   if (rule.options() & flat::OptionFlag_IS_ALLOW_RULE)
     return kAllowPriority;
 
-  if (rule.redirect() != flat::RedirectResource_NO_REDIRECT)
+  if (rule.redirect() && rule.redirect()->size())
     return kRedirectPriority;
 
   return kBlockPriority;

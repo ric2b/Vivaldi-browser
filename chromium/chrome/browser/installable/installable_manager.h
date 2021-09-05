@@ -14,6 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chrome/browser/installable/installable_data.h"
 #include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/installable/installable_params.h"
@@ -80,6 +81,7 @@ class InstallableManager
   friend class content::WebContentsUserData<InstallableManager>;
   friend class AddToHomescreenDataFetcherTest;
   friend class InstallableManagerBrowserTest;
+  friend class InstallableManagerOfflineCapabilityBrowserTest;
   friend class InstallableManagerUnitTest;
   friend class TestInstallableManager;
   FRIEND_TEST_ALL_PREFIXES(InstallableManagerBrowserTest,
@@ -92,6 +94,10 @@ class InstallableManager
                            CheckLazyServiceWorkerNoFetchHandlerFails);
   FRIEND_TEST_ALL_PREFIXES(InstallableManagerBrowserTest,
                            ManifestUrlChangeFlushesState);
+  FRIEND_TEST_ALL_PREFIXES(InstallableManagerOfflineCapabilityBrowserTest,
+                           CheckLazyServiceWorkerPassesWhenWaiting);
+  FRIEND_TEST_ALL_PREFIXES(InstallableManagerOfflineCapabilityBrowserTest,
+                           CheckWebapp);
 
   using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
@@ -205,7 +211,12 @@ class InstallableManager
                                 bool check_webapp_manifest_display,
                                 bool prefer_maskable_icon);
   void CheckServiceWorker();
-  void OnDidCheckHasServiceWorker(content::ServiceWorkerCapability capability);
+  void OnDidCheckHasServiceWorker(
+      base::TimeTicks check_service_worker_start_time,
+      content::ServiceWorkerCapability capability);
+  void OnDidCheckOfflineCapability(
+      base::TimeTicks check_service_worker_start_time,
+      content::OfflineCapability capability);
 
   void CheckAndFetchBestIcon(int ideal_icon_size_in_px,
                              int minimum_icon_size_in_px,
@@ -222,6 +233,7 @@ class InstallableManager
   // content::WebContentsObserver overrides
   void DidFinishNavigation(content::NavigationHandle* handle) override;
   void DidUpdateWebManifestURL(
+      content::RenderFrameHost* rfh,
       const base::Optional<GURL>& manifest_url) override;
   void WebContentsDestroyed() override;
 

@@ -18,11 +18,6 @@ namespace prefs {
 // *************** PROFILE PREFS ***************
 // These are attached to the user profile
 
-// A bool pref that indicates whether interventions for abusive experiences
-// should be enforced.
-const char kAbusiveExperienceInterventionEnforce[] =
-    "abusive_experience_intervention_enforce";
-
 // A bool pref that keeps whether the child status for this profile was already
 // successfully checked via ChildAccountService.
 const char kChildAccountStatusKnown[] = "child_account_status_known";
@@ -706,7 +701,7 @@ const char kSAMLOfflineSigninTimeLimit[] = "saml.offline_signin_time_limit";
 // against GAIA: If GAIA redirects to a SAML IdP, the preference is set to the
 // current time. If GAIA performs the authentication itself, the preference is
 // cleared. The time is expressed as the serialization obtained from
-// base::Time::ToInternalValue().
+// PrefService::SetTime().
 const char kSAMLLastGAIASignInTime[] = "saml.last_gaia_sign_in_time";
 
 // The total number of seconds that the machine has spent sitting on the
@@ -818,6 +813,10 @@ const char kPinUnlockMinimumLength[] = "pin_unlock_minimum_length";
 const char kPinUnlockMaximumLength[] = "pin_unlock_maximum_length";
 // Boolean pref indicating whether users are allowed to set easy pins.
 const char kPinUnlockWeakPinsAllowed[] = "pin_unlock_weak_pins_allowed";
+// A boolean pref that controls whether the PIN autosubmit feature is enabled.
+// This feature, when enabled, exposes the user's PIN length by showing how many
+// digits are necessary to unlock the device. Can be recommended.
+const char kPinUnlockAutosubmitEnabled[] = "pin_unlock_autosubmit_enabled";
 
 // Boolean pref indicating whether this device supports BLE advertising.
 const char kInstantTetheringBleAdvertisingSupported[] =
@@ -1031,10 +1030,6 @@ const char kLoginExtensionApiLaunchExtensionId[] =
 // String containing last RSU lookup key uploaded. Empty until first upload.
 const char kLastRsuDeviceIdUploaded[] = "rsu.last_rsu_device_id_uploaded";
 
-// Boolean that determines whether to show a banner in OS Settings that links
-// to Browser settings.
-const char kSettingsShowBrowserBanner[] = "settings.cros.show_browser_banner";
-
 // Boolean user profile pref that determines whether to show a banner in browser
 // settings that links to OS settings.
 const char kSettingsShowOSBanner[] = "settings.cros.show_os_banner";
@@ -1043,6 +1038,16 @@ const char kSettingsShowOSBanner[] = "settings.cros.show_os_banner";
 // urls to be used via the WebUSB API on the login screen.
 const char kDeviceLoginScreenWebUsbAllowDevicesForUrls[] =
     "device_login_screen_webusb_allow_devices_for_urls";
+
+// Int64 pref indicating the time in microseconds since Windows epoch when the
+// timer for update required which will block user session was started. If the
+// timer is not started the pref holds the default value base::Time().
+const char kUpdateRequiredTimerStartTime[] = "update_required_timer_start_time";
+
+// Int64 pref indicating the waiting time in microseconds after which the update
+// required timer will expire and block user session. If the timer is not
+// started the pref holds the default value base::TimeDelta().
+const char kUpdateRequiredWarningPeriod[] = "update_required_warning_period";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1195,6 +1200,12 @@ const char kAccessibilityImageLabelsEnabled[] =
 // need not be shown every time if it has already been accepted once.
 const char kAccessibilityImageLabelsOptInAccepted[] =
     "settings.a11y.enable_accessibility_image_labels_opt_in_accepted";
+
+#if !defined(OS_CHROMEOS)
+// A boolean pref which determines whether focus highlighting is enabled.
+const char kAccessibilityFocusHighlightEnabled[] =
+    "settings.a11y.focus_highlight";
+#endif
 
 #if !defined(OS_ANDROID)
 // Whether the Live Caption feature is enabled.
@@ -1424,6 +1435,11 @@ const char kPrintJobHistoryExpirationPeriod[] =
 // they use the chrome.printing.submitJob() function.
 const char kPrintingAPIExtensionsWhitelist[] =
     "printing.printing_api_extensions_whitelist";
+
+// Boolean flag which represents whether the user's print job history can be
+// deleted.
+const char kDeletePrintJobHistoryAllowed[] =
+    "printing.delete_print_job_history_allowed";
 #endif  // OS_CHROMEOS
 
 // An integer pref specifying the fallback behavior for sites outside of content
@@ -1540,6 +1556,12 @@ const char kNaviOnboardGroup[] = "browser.navi_onboard_group";
 // permission requests.
 const char kEnableQuietNotificationPermissionUi[] =
     "profile.content_settings.enable_quiet_permission_ui.notifications";
+
+// Boolean indicating whether, as part of the adaptive activation quiet UI dry
+// run experiment, the user has accumulated three notification permission
+// request denies in a row.
+const char kHadThreeConsecutiveNotificationPermissionDenies[] =
+    "profile.content_settings.had_three_consecutive_denies.notifications";
 
 // Boolean indicating whether to show a promo for the quiet notification
 // permission UI.
@@ -1660,6 +1682,10 @@ const char kOpenPdfDownloadInSystemReader[] =
 // Int (as defined by DownloadPromptStatus) which specifies whether we should
 // ask the user where they want to download the file (only for Android).
 const char kPromptForDownloadAndroid[] = "download.prompt_for_download_android";
+
+// The prompt status for the download later dialog.
+const char kDownloadLaterPromptStatus[] =
+    "download.download_later_prompt_status";
 
 // Boolean which specifies whether we should display the missing SD card error.
 // This is only applicable for Android.
@@ -2092,6 +2118,10 @@ const char kAutoEnrollmentPowerLimit[] = "AutoEnrollmentPowerLimit";
 // them to the policy server.
 const char kDeviceActivityTimes[] = "device_status.activity_times";
 
+// A pref that stores user app activity times before reporting them to the
+// policy server.
+const char kAppActivityTimes[] = "device_status.app_activity_times";
+
 // A pref that stores user activity times before reporting them to the policy
 // server.
 const char kUserActivityTimes[] = "consumer_device_status.activity_times";
@@ -2238,12 +2268,14 @@ const char kReportingUsers[] = "reporting_users";
 const char kArcAppInstallEventLoggingEnabled[] =
     "arc.app_install_event_logging_enabled";
 
+// Boolean pref indicating if event logging is enabled for policy based
+// extension.
+const char kExtensionInstallEventLoggingEnabled[] =
+    "extensions.install.event_logging_enabled";
+
 // Whether we received the remove users remote command, and hence should proceed
 // with removing the users while at the login screen.
 const char kRemoveUsersRemoteCommand[] = "remove_users_remote_command";
-
-// Whether camera-produced media files have been consolidated to one place.
-const char kCameraMediaConsolidated[] = "camera_media_consolidated";
 
 // Integer pref used by the metrics::DailyEvent owned by
 // chromeos::power::auto_screen_brightness::MetricsReporter.
@@ -2281,6 +2313,20 @@ const char kSamlInSessionPasswordChangeEnabled[] =
 // will expire (works when kSamlInSessionPasswordChangeEnabled is true).
 const char kSamlPasswordExpirationAdvanceWarningDays[] =
     "saml.password_expiration_advance_warning_days";
+
+// Enable online signin on the lock screen.
+const char kSamlLockScreenReauthenticationEnabled[] =
+    "saml.lock_screen_reauthentication_enabled";
+
+// Integer pref used by the metrics::DailyEvent owned by
+// local_search_service::MetricsReporter.
+const char kLocalSearchServiceMetricsDailySample[] =
+    "local_search_service.metrics.daily_sample";
+
+// Integer prefs used to back event counts reported by
+// local_search_service::MetricsReporter.
+const char kLocalSearchServiceMetricsCrosSettingsCount[] =
+    "local_search_service.metrics.cros_settings_count";
 
 #endif  // defined(OS_CHROMEOS)
 
@@ -2857,12 +2903,6 @@ const char kIsolateOrigins[] = "site_isolation.isolate_origins";
 // Boolean that specifies opting into --site-per-process (full Site Isolation).
 const char kSitePerProcess[] = "site_isolation.site_per_process";
 
-// A list of origins that were heuristically determined to need process
-// isolation. For example, an origin may be placed on this list in response to
-// the user typing a password on it.
-const char kUserTriggeredIsolatedOrigins[] =
-    "site_isolation.user_triggered_isolated_origins";
-
 #if !defined(OS_ANDROID)
 // Boolean that specifies whether media (audio/video) autoplay is allowed.
 const char kAutoplayAllowed[] = "media.autoplay_allowed";
@@ -2953,15 +2993,13 @@ const char kCorsLegacyModeEnabled[] = "cors.legacy_mode.enabled";
 const char kExternalProtocolDialogShowAlwaysOpenCheckbox[] =
     "external_protocol_dialog.show_always_open_checkbox";
 
-// This pref allows the Web Components v0 APIs to be re-enabled temporarily
-// from M80 through M84.
-// TODO(937746): Remove this after M84.
-const char kWebComponentsV0Enabled[] = "web_components_v0_enabled";
-
-// This pref allows the FormControlsRefresh feature to be disabled temporarily
-// from M81 through M84.
-// TODO(1034611): Remove this after M84.
-const char kUseLegacyFormControls[] = "use_legacy_form_controls";
+// List of dictionaries. For each dictionary, key "protocol" is a protocol
+// (as a string) that is permitted by policy to launch an external application
+// without prompting the user. Key "allowed_origins" is a nested list of origin
+// patterns that defines the scope of applicability of that protocol. If the
+// "allow" list is empty, that protocol rule will never apply.
+const char kAutoLaunchProtocolsFromOrigins[] =
+    "protocol_handler.policy.auto_launch_protocols_from_origins";
 
 // This pref enables the ScrollToTextFragment feature.
 const char kScrollToTextFragmentEnabled[] = "scroll_to_text_fragment_enabled";
@@ -2984,6 +3022,10 @@ extern const char kCertificateProvisioningStateForUser[] =
 extern const char kCertificateProvisioningStateForDevice[] =
     "cert_provisioning_device_state";
 #endif
+
+// This pref enables periodically fetching new Media Feed items for top feeds.
+const char kMediaFeedsBackgroundFetching[] =
+    "media_feeds_background_fetching_enabled";
 
 // This pref enables checking of Media Feed items against the Safe Search API.
 const char kMediaFeedsSafeSearchEnabled[] = "media_feeds_safe_search_enabled";

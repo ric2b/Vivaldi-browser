@@ -199,7 +199,7 @@ void AddExtraBookmarkMenuItems(Profile* profile, views::MenuItemView* menu,
     }
     menu->AddMenuItemAt(*menu_index, NextMenuId,
         l10n_util::GetStringUTF16(IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB),
-        base::string16(),
+        base::string16(), base::string16(),
         ui::ThemedVectorIcon(), gfx::ImageSkia(), ui::ThemedVectorIcon(),
         views::MenuItemView::Type::kNormal, ui::NORMAL_SEPARATOR);
     MenuIdToBookmarkMap[NextMenuId] = parent;
@@ -240,11 +240,10 @@ bool AddIfSeparator(const bookmarks::BookmarkNode* node,
 }
 
 void AddSeparator(views::MenuItemView* menu, unsigned int* menu_index) {
-  menu->AddMenuItemAt(*menu_index, 0, base::string16(), base::string16(),
-                      ui::ThemedVectorIcon(), gfx::ImageSkia(),
-                      ui::ThemedVectorIcon(),
-                      views::MenuItemView::Type::kSeparator,
-                      ui::NORMAL_SEPARATOR);
+  menu->AddMenuItemAt(
+      *menu_index, 0, base::string16(), base::string16(), base::string16(),
+      ui::ThemedVectorIcon(), gfx::ImageSkia(), ui::ThemedVectorIcon(),
+      views::MenuItemView::Type::kSeparator, ui::NORMAL_SEPARATOR);
   *menu_index += 1;
 }
 
@@ -254,9 +253,10 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  const base::string16& label,
                                  const gfx::ImageSkia& icon,
                                  views::MenuItemView::Type type) {
-  views::MenuItemView* item = menu->AddMenuItemAt(*menu_index, id, label,
-      base::string16(), ui::ThemedVectorIcon(), icon, ui::ThemedVectorIcon(),
-      type, ui::NORMAL_SEPARATOR);
+  views::MenuItemView* item =
+      menu->AddMenuItemAt(*menu_index, id, label, base::string16(),
+                          base::string16(), ui::ThemedVectorIcon(), icon,
+                          ui::ThemedVectorIcon(), type, ui::NORMAL_SEPARATOR);
   *menu_index += 1;
   return item;
 }

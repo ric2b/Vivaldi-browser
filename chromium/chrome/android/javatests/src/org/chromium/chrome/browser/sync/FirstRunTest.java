@@ -12,16 +12,18 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
@@ -45,7 +47,6 @@ import java.util.concurrent.TimeoutException;
  * Tests for the first run experience.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Remove(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 public class FirstRunTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule() {
@@ -117,6 +118,12 @@ public class FirstRunTest {
 
     private final TestObserver mTestObserver = new TestObserver();
     private FirstRunActivity mActivity;
+
+    @Before
+    public void setUp() {
+        Assert.assertFalse(
+                CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE));
+    }
 
     @After
     public void tearDown() {

@@ -36,6 +36,7 @@
 #include "base/unguessable_token.h"
 #include "net/cookies/site_for_cookies.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/chunked_data_pipe_getter.mojom-blink.h"
 #include "services/network/public/mojom/cors.mojom-blink-forward.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
@@ -64,7 +65,21 @@ class PLATFORM_EXPORT ResourceRequestHead {
   DISALLOW_NEW();
 
  public:
+  // TODO: Remove this enum from here since it is not used in this class anymore
   enum class RedirectStatus : uint8_t { kFollowedRedirect, kNoRedirect };
+
+  struct RedirectInfo {
+    // Original (first) url in the redirect chain.
+    KURL original_url;
+
+    // Previous url in the redirect chain.
+    KURL previous_url;
+
+    RedirectInfo() = delete;
+    RedirectInfo(const KURL& original_url, const KURL& previous_url)
+        : original_url(original_url), previous_url(previous_url) {}
+  };
+
   ResourceRequestHead();
   explicit ResourceRequestHead(const KURL&);
 
@@ -90,14 +105,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
 
   const KURL& Url() const;
   void SetUrl(const KURL&);
-
-  // ThreadableLoader sometimes breaks redirect chains into separate Resource
-  // and ResourceRequests. The ResourceTiming API needs the initial URL for the
-  // name attribute of PerformanceResourceTiming entries. This property
-  // remembers the initial URL for that purpose. Note that it can return a null
-  // URL. In that case, use Url() instead.
-  const KURL& GetInitialUrlForResourceTiming() const;
-  void SetInitialUrlForResourceTiming(const KURL&);
 
   void RemoveUserAndPassFromURL();
 
@@ -334,8 +341,9 @@ class PLATFORM_EXPORT ResourceRequestHead {
     cors_preflight_policy_ = policy;
   }
 
-  void SetRedirectStatus(RedirectStatus status) { redirect_status_ = status; }
-  RedirectStatus GetRedirectStatus() const { return redirect_status_; }
+  const base::Optional<RedirectInfo>& GetRedirectInfo() const {
+    return redirect_info_;
+  }
 
   void SetSuggestedFilename(const base::Optional<String>& suggested_filename) {
     suggested_filename_ = suggested_filename;
@@ -454,15 +462,19 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // |url|,
   bool CanDisplay(const KURL&) const;
 
+  void SetAllowHTTP1ForStreamingUpload(bool allow) {
+    allowHTTP1ForStreamingUpload_ = allow;
+  }
+  bool AllowHTTP1ForStreamingUpload() const {
+    return allowHTTP1ForStreamingUpload_;
+  }
+
  private:
   const CacheControlHeader& GetCacheControlHeader() const;
 
   bool NeedsHTTPOrigin() const;
 
   KURL url_;
-  // TODO(yoav): initial_url_for_resource_timing_ is a stop-gap only needed
-  // until Out-of-Blink CORS lands: https://crbug.com/736308
-  KURL initial_url_for_resource_timing_;
   // base::TimeDelta::Max() represents the default timeout on platforms that
   // have one.
   base::TimeDelta timeout_interval_;
@@ -503,7 +515,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   network::mojom::ReferrerPolicy referrer_policy_;
   bool is_external_request_;
   network::mojom::CorsPreflightPolicy cors_preflight_policy_;
-  RedirectStatus redirect_status_;
+  base::Optional<RedirectInfo> redirect_info_;
   base::Optional<network::mojom::blink::TrustTokenParams> trust_token_params_;
 
   base::Optional<String> suggested_filename_;
@@ -541,6 +553,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // the prefetch cache will be restricted to top-level-navigations.
   bool prefetch_maybe_for_top_level_navigation_ = false;
 
+  bool allowHTTP1ForStreamingUpload_ = false;
+
   // This is used when fetching preload header requests from cross-origin
   // prefetch responses. The browser process uses this token to ensure the
   // request is cached correctly.
@@ -551,6 +565,9 @@ class PLATFORM_EXPORT ResourceRequestBody {
  public:
   ResourceRequestBody();
   explicit ResourceRequestBody(scoped_refptr<EncodedFormData> form_body);
+  explicit ResourceRequestBody(
+      mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+          stream_body);
   ResourceRequestBody(const ResourceRequestBody&) = delete;
   ResourceRequestBody(ResourceRequestBody&&);
 
@@ -559,11 +576,25 @@ class PLATFORM_EXPORT ResourceRequestBody {
 
   ~ResourceRequestBody();
 
+  bool IsEmpty() const { return !form_body_ && !stream_body_; }
   const scoped_refptr<EncodedFormData>& FormBody() const { return form_body_; }
   void SetFormBody(scoped_refptr<EncodedFormData>);
 
+  mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+  TakeStreamBody() {
+    return std::move(stream_body_);
+  }
+  const mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>&
+  StreamBody() const {
+    return stream_body_;
+  }
+  void SetStreamBody(
+      mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>);
+
  private:
   scoped_refptr<EncodedFormData> form_body_;
+  mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+      stream_body_;
 };
 
 // A ResourceRequest is a "request" object for ResourceLoader. Conceptually

@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Calibrazione completata</translation>
 <translation id="252373100621549798">Display sconosciuto</translation>
 <translation id="2545651323591713692">Posticipa</translation>
+<translation id="2570734079541893434">Gestisci impostazioni</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{tra 1 h}other{tra # h}}</translation>
 <translation id="2583543531130364912">Calibra il touchscreen</translation>
 <translation id="2666092431469916601">In alto</translation>
 <translation id="2701330563083355633">Condivisione da <ph name="DEVICE_NAME" /></translation>
+<translation id="271033894570825754">Nuovo</translation>
 <translation id="2743387203779672305">Copia negli appunti</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Apri cartella</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Emoji e simboli</translation>
 <translation id="5476505524087279545">deseleziona</translation>
 <translation id="547979256943495781">Shelf a destra</translation>
+<translation id="5528053674512161860">Impossibile caricare la pagina perché il modulo UI sviluppatore (dev_ui) non è installato</translation>
 <translation id="5574202486608032840">Sistema <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Freccia sinistra</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Chiudi</translation>
 <translation id="6119846243427417423">attiva</translation>
 <translation id="6129953537138746214">Spazio</translation>
+<translation id="6134259848159370930">Cerca sul dispositivo, nelle app, nelle impostazioni e sul Web.</translation>
 <translation id="6135826906199951471">Canc</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6156262341071374681">Espandi per vedere tutte le app</translation>
 <translation id="6165508094623778733">Ulteriori informazioni</translation>
+<translation id="6166852626429024716">Cerca sul dispositivo, nelle app, nelle impostazioni e sul Web.</translation>
 <translation id="6264365405983206840">Seleziona &amp;tutto</translation>
 <translation id="6351032674660237738">APP SUGGERITE</translation>
 <translation id="6364916375976753737">Scorri a sinistra</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 min rimanente}other{# min rimanenti}}</translation>
 <translation id="7319740667687257810">Avvio applicazioni, visualizzazione parziale</translation>
-<translation id="7352651011704765696">Si è verificato un problema</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 min fa}other{# min fa}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 minuto rimanente}other{# minuti rimanenti}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">Spostata alla Pagina <ph name="PAGE_NUMBER" />, riga <ph name="ROW_NUMBER" />, colonna <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Non bloccare</translation>
 <translation id="7907591526440419938">Apri file</translation>
+<translation id="7952747673138230804">Chrome OS mostra suggerimenti relativi a nuovi contenuti da esplorare. Vengono inviate statistiche per migliorare la qualità solo se hai scelto di condividere i dati sull'utilizzo. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Comando</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Più di 1 notifica da leggere}other{Più di # notifiche da leggere}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{tra 1 m}other{tra # m}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623">File <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Shelf sempre visualizzato</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
+<translation id="8685326675965865247">Cerca sul dispositivo, nelle app, nelle impostazioni e sul Web. Usa i tasti freccia per esplorare le tue app.</translation>
 <translation id="8725488761726303204">+ altre <ph name="NUMBER" /></translation>
 <translation id="8730621377337864115">Fine</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 h}other{# h}}</translation>

@@ -74,6 +74,7 @@ const char* const kKnownSettings[] = {
     kCastReceiverName,
     kDeviceAttestationEnabled,
     kDeviceAutoUpdateTimeRestrictions,
+    kDeviceCrostiniArcAdbSideloadingAllowed,
     kDeviceDisabled,
     kDeviceDisabledMessage,
     kDeviceDisplayResolution,
@@ -105,6 +106,7 @@ const char* const kKnownSettings[] = {
     kLoginAuthenticationBehavior,
     kLoginVideoCaptureAllowedUrls,
     kMinimumChromeVersionEnforced,
+    kMinimumChromeVersionEolMessage,
     kPluginVmAllowed,
     kPluginVmLicenseKey,
     kPolicyMissingMitigationMode,
@@ -112,10 +114,12 @@ const char* const kKnownSettings[] = {
     kReleaseChannel,
     kReleaseChannelDelegated,
     kReportDeviceActivityTimes,
+    kReportDeviceBluetoothInfo,
     kReportDeviceBoardStatus,
     kReportDeviceBootMode,
     kReportDeviceCrashReportInfo,
     kReportDeviceCpuInfo,
+    kReportDeviceFanInfo,
     kReportDeviceHardwareStatus,
     kReportDeviceLocation,
     kReportDevicePowerStatus,
@@ -128,6 +132,7 @@ const char* const kKnownSettings[] = {
     kReportDeviceBacklightInfo,
     kReportDeviceUsers,
     kReportDeviceVersionInfo,
+    kReportDeviceVpdInfo,
     kReportDeviceAppInfo,
     kReportOsUpdateStatus,
     kReportRunningKioskApp,
@@ -607,6 +612,18 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetBoolean(kReportDeviceAppInfo,
                                    reporting_policy.report_app_info());
     }
+    if (reporting_policy.has_report_bluetooth_info()) {
+      new_values_cache->SetBoolean(kReportDeviceBluetoothInfo,
+                                   reporting_policy.report_bluetooth_info());
+    }
+    if (reporting_policy.has_report_fan_info()) {
+      new_values_cache->SetBoolean(kReportDeviceFanInfo,
+                                   reporting_policy.report_fan_info());
+    }
+    if (reporting_policy.has_report_vpd_info()) {
+      new_values_cache->SetBoolean(kReportDeviceVpdInfo,
+                                   reporting_policy.report_vpd_info());
+    }
   }
 }
 
@@ -762,6 +779,25 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                                        policy.tpm_firmware_update_settings())));
   }
 
+  if (policy.has_minimum_chrome_version_enforced()) {
+    const em::StringPolicyProto& container(
+        policy.minimum_chrome_version_enforced());
+    if (container.has_value()) {
+      SetJsonDeviceSetting(kMinimumChromeVersionEnforced,
+                           policy::key::kMinimumChromeVersionEnforced,
+                           container.value(), new_values_cache);
+    }
+  }
+
+  if (policy.has_minimum_chrome_version_eol_message()) {
+    const em::StringPolicyProto& container(
+        policy.minimum_chrome_version_eol_message());
+    if (container.has_value()) {
+      new_values_cache->SetValue(kMinimumChromeVersionEolMessage,
+                                 base::Value(container.value()));
+    }
+  }
+
   if (policy.has_cast_receiver_name()) {
     const em::CastReceiverNameProto& container(policy.cast_receiver_name());
     if (container.has_name()) {
@@ -905,6 +941,15 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
   new_values_cache->SetBoolean(kDevicePowerwashAllowed, is_powerwash_allowed);
+
+  if (policy.has_device_crostini_arc_adb_sideloading_allowed()) {
+    const em::DeviceCrostiniArcAdbSideloadingAllowedProto& container(
+        policy.device_crostini_arc_adb_sideloading_allowed());
+    if (container.has_mode()) {
+      new_values_cache->SetValue(kDeviceCrostiniArcAdbSideloadingAllowed,
+                                 base::Value(container.mode()));
+    }
+  }
 }
 
 void DecodeLogUploadPolicies(const em::ChromeDeviceSettingsProto& policy,

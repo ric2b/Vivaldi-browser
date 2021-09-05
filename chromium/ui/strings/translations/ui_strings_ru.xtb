@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Калибровка завершена</translation>
 <translation id="252373100621549798">Неизвестный дисплей</translation>
 <translation id="2545651323591713692">Отложить</translation>
+<translation id="2570734079541893434">Настройки</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{через 1 ч.}one{через # ч.}few{через # ч.}many{через # ч.}other{через # ч.}}</translation>
 <translation id="2583543531130364912">Откалибруйте сенсорный экран</translation>
 <translation id="2666092431469916601">Наверх</translation>
 <translation id="2701330563083355633">С устройства "<ph name="DEVICE_NAME" />"</translation>
+<translation id="271033894570825754">Новый</translation>
 <translation id="2743387203779672305">Скопировать в буфер</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Открыть папку.</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Эмодзи и символы</translation>
 <translation id="5476505524087279545">снять галочку</translation>
 <translation id="547979256943495781">Временное хранилище расположено справа</translation>
+<translation id="5528053674512161860">Не удалось загрузить страницу, поскольку не установлен модуль интерфейса разработчика (dev_ui)</translation>
 <translation id="5574202486608032840">Система <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Клавиша возврата (Backspace)</translation>
 <translation id="5613020302032141669">Стрелка влево</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Закрыть</translation>
 <translation id="6119846243427417423">активировать</translation>
 <translation id="6129953537138746214">Пробел</translation>
+<translation id="6134259848159370930">Поиск на устройстве, в приложениях, настройках и Интернете…</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> Б/с</translation>
 <translation id="6156262341071374681">Просмотреть все приложения</translation>
-<translation id="6165508094623778733">Подробнее...</translation>
+<translation id="6165508094623778733">Подробнее</translation>
+<translation id="6166852626429024716">Поиск на устройстве, в приложениях, настройках и Интернете…</translation>
 <translation id="6264365405983206840">Выделить все</translation>
 <translation id="6351032674660237738">ПРЕДЛАГАЕМЫЕ ПРИЛОЖЕНИЯ</translation>
 <translation id="6364916375976753737">Прокрутка влево</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Осталась 1 мин.}one{Осталась # мин.}few{Осталось # мин.}many{Осталось # мин.}other{Осталось # мин.}}</translation>
 <translation id="7319740667687257810">Панель запуска, частичный список приложений</translation>
-<translation id="7352651011704765696">Ошибка</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 мин. назад}one{# мин. назад}few{# мин. назад}many{# мин. назад}other{# мин. назад}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Осталась 1 минута}one{Осталась # минута}few{Осталось # минуты}many{Осталось # минут}other{Осталось # минуты}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">Приложение перенесено на страницу <ph name="PAGE_NUMBER" />, строка <ph name="ROW_NUMBER" />, столбец <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Не блокировать</translation>
 <translation id="7907591526440419938">Открытие файла</translation>
+<translation id="7952747673138230804">В Chrome OS показываются рекомендации нового контента. Статистику для улучшения рекомендаций мы будем собирать, только если вы разрешите отправку данных об использовании функции. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Command</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{У вас более 1 непрочитанного уведомления}one{У вас более # непрочитанного уведомления}few{У вас более # непрочитанных уведомлений}many{У вас более # непрочитанных уведомлений}other{У вас более # непрочитанного уведомления}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{через 1 мин.}one{через # мин.}few{через # мин.}many{через # мин.}other{через # мин.}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623">Файл <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Временное хранилище будет всегда отображаться</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> КБ/с</translation>
+<translation id="8685326675965865247">Поиск на устройстве, в приложениях, настройках и Интернете. Чтобы переходить от одного приложения к другому, используйте клавиши со стрелками.</translation>
 <translation id="8725488761726303204">Ещё <ph name="NUMBER" /></translation>
 <translation id="8730621377337864115">Готово</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 ч.}one{# ч.}few{# ч.}many{# ч.}other{# ч.}}</translation>

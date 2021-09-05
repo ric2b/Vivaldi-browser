@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/android/jni_weak_ref.h"
-#include "base/logging.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/android/compositor_client.h"
@@ -38,6 +38,7 @@ class ContentViewRenderView : public content::CompositorClient {
 
   // Height, in pixels.
   int height() const { return height_; }
+  void SetHeightChangedListener(base::RepeatingClosure callback);
 
   // Methods called from Java via JNI -----------------------------------------
   void Destroy(JNIEnv* env);
@@ -57,12 +58,14 @@ class ContentViewRenderView : public content::CompositorClient {
                       jint width,
                       jint height,
                       const base::android::JavaParamRef<jobject>& surface);
+  void SetNeedsRedraw(JNIEnv* env);
   void EvictCachedSurface(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetResourceManager(JNIEnv* env);
 
   // CompositorClient implementation
   void UpdateLayerTreeHost() override;
   void DidSwapFrame(int pending_frames) override;
+  void DidSwapBuffers(const gfx::Size& swap_size) override;
 
  private:
   ~ContentViewRenderView() override;
@@ -81,6 +84,7 @@ class ContentViewRenderView : public content::CompositorClient {
 
   int current_surface_format_ = 0;
 
+  base::RepeatingClosure height_changed_listener_;
   int height_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ContentViewRenderView);

@@ -53,6 +53,10 @@ enum class StatusCode : StatusCodeType {
   kCantCreateEglStream = 0x00000304,
   kCantCreateEglStreamConsumer = 0x00000305,
   kCantCreateEglStreamProducer = 0x00000306,
+  kCannotCreateTextureSelector = 0x00000307,
+  kCannotQueryID3D11Multithread = 0x00000308,
+  kCannotGetDecoderConfigCount = 0x00000309,
+  kCannotGetDecoderConfig = 0x0000030A,
 
   // MojoDecoder Errors: 0x04
   kMojoDecoderNoWrappedDecoder = 0x00000401,
@@ -69,8 +73,9 @@ enum class StatusCode : StatusCodeType {
   kV4l2FailedFileCapabilitiesCheck = 0x00000505,
   kV4l2FailedResourceAllocation = 0x00000506,
   kV4l2BadFormat = 0x00000507,
-  kVaapiReinitializedDuringDecode = 0x00000508,
-  kVaapiFailedAcceleratorCreation = 0x00000509,
+  kV4L2FailedToStartStreamQueue = 0x00000508,
+  kVaapiReinitializedDuringDecode = 0x00000509,
+  kVaapiFailedAcceleratorCreation = 0x00000510,
 
   // Encoder Error: 0x06
   kEncoderInitializeNeverCompleted = 0x00000601,

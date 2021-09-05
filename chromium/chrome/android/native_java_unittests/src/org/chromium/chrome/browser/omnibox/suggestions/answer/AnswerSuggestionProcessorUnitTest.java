@@ -5,9 +5,8 @@
 package org.chromium.chrome.browser.omnibox.suggestions.answer;
 
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -185,6 +184,10 @@ public class AnswerSuggestionProcessorUnitTest {
         when(mUrlStateProvider.getTextWithoutAutocomplete()).thenReturn(null);
     }
 
+    ImageFetcher.Params createParams(String url) {
+        return ImageFetcher.Params.create(url, ImageFetcher.ANSWER_SUGGESTIONS_UMA_CLIENT_NAME);
+    }
+
     @CalledByNativeJavaTest
     public void regularAnswer_order() {
         final SuggestionTestHelper suggHelper =
@@ -332,15 +335,13 @@ public class AnswerSuggestionProcessorUnitTest {
         processSuggestion(sugg3);
         processSuggestion(sugg4);
 
-        verify(mImageFetcher, times(1)).fetchImage(eq(url1), anyString(), any());
-        verify(mImageFetcher, times(1)).fetchImage(eq(url2), anyString(), any());
-        verify(mImageFetcher, times(2)).fetchImage(anyString(), anyString(), any());
+        verify(mImageFetcher).fetchImage(eq(createParams(url1)), any());
+        verify(mImageFetcher).fetchImage(eq(createParams(url2)), any());
     }
 
     @CalledByNativeJavaTest
     public void answerImage_bitmapReplacesIconForAllSuggestionsWithSameUrl() {
         final String url = "http://site.com";
-        final ArgumentCaptor<Callback<Bitmap>> callback = ArgumentCaptor.forClass(Callback.class);
         final SuggestionTestHelper sugg1 =
                 createAnswerSuggestion(AnswerType.WEATHER, "", 1, "", 1, url);
         final SuggestionTestHelper sugg2 =
@@ -352,7 +353,8 @@ public class AnswerSuggestionProcessorUnitTest {
         processSuggestion(sugg2);
         processSuggestion(sugg3);
 
-        verify(mImageFetcher).fetchImage(eq(url), anyString(), callback.capture());
+        final ArgumentCaptor<Callback<Bitmap>> callback = ArgumentCaptor.forClass(Callback.class);
+        verify(mImageFetcher).fetchImage(eq(createParams(url)), callback.capture());
 
         final Drawable icon1 = sugg1.getIcon();
         final Drawable icon2 = sugg2.getIcon();
@@ -384,7 +386,7 @@ public class AnswerSuggestionProcessorUnitTest {
 
         processSuggestion(suggHelper);
 
-        verify(mImageFetcher).fetchImage(eq(url), anyString(), callback.capture());
+        verify(mImageFetcher).fetchImage(eq(createParams(url)), callback.capture());
 
         final Drawable icon = suggHelper.getIcon();
         callback.getValue().onResult(null);
@@ -416,7 +418,7 @@ public class AnswerSuggestionProcessorUnitTest {
         processSuggestion(sugg1);
         processSuggestion(sugg2);
 
-        verify(mImageFetcher, times(1)).fetchImage(eq(url), anyString(), callback.capture());
+        verify(mImageFetcher, times(1)).fetchImage(eq(createParams(url)), callback.capture());
 
         final Drawable icon1 = sugg1.getIcon();
         final Drawable icon2 = sugg2.getIcon();

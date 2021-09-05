@@ -116,7 +116,7 @@ XShmImagePool::XShmImagePool(
     scoped_refptr<base::SequencedTaskRunner> host_task_runner,
     scoped_refptr<base::SequencedTaskRunner> event_task_runner,
     XDisplay* display,
-    XID drawable,
+    x11::Drawable drawable,
     Visual* visual,
     int depth,
     std::size_t frames_pending)
@@ -163,9 +163,9 @@ bool XShmImagePool::Resize(const gfx::Size& pixel_size) {
   std::size_t needed_frame_bytes;
   for (std::size_t i = 0; i < frame_states_.size(); ++i) {
     FrameState& state = frame_states_[i];
-    state.image.reset(XShmCreateImage(display_, visual_, depth_, ZPixmap,
-                                      nullptr, &state.shminfo_,
-                                      pixel_size.width(), pixel_size.height()));
+    state.image.reset(XShmCreateImage(
+        display_, visual_, depth_, static_cast<int>(x11::ImageFormat::ZPixmap),
+        nullptr, &state.shminfo_, pixel_size.width(), pixel_size.height()));
     if (!state.image)
       return false;
     std::size_t current_frame_bytes =
@@ -312,18 +312,20 @@ void XShmImagePool::DispatchShmCompletionEvent(XShmCompletionEvent event) {
   }
 }
 
-bool XShmImagePool::CanDispatchXEvent(XEvent* xev) {
+bool XShmImagePool::CanDispatchXEvent(x11::Event* x11_event) {
+  const XEvent* xev = &x11_event->xlib_event();
   DCHECK(event_task_runner_->RunsTasksInCurrentSequence());
 
   if (xev->type != ui::ShmEventBase() + ShmCompletion)
     return false;
 
-  XShmCompletionEvent* shm_event = reinterpret_cast<XShmCompletionEvent*>(xev);
-  return shm_event->drawable == drawable_;
+  const auto* shm_event = reinterpret_cast<const XShmCompletionEvent*>(xev);
+  return shm_event->drawable == drawable_.value;
 }
 
-bool XShmImagePool::DispatchXEvent(XEvent* xev) {
-  if (!CanDispatchXEvent(xev))
+bool XShmImagePool::DispatchXEvent(x11::Event* x11_event) {
+  XEvent* xev = &x11_event->xlib_event();
+  if (!CanDispatchXEvent(x11_event))
     return false;
 
   XShmCompletionEvent* shm_event = reinterpret_cast<XShmCompletionEvent*>(xev);

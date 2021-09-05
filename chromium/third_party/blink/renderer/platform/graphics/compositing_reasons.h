@@ -18,6 +18,7 @@ using CompositingReasons = uint64_t;
 #define FOR_EACH_COMPOSITING_REASON(V)                                        \
   /* Intrinsic reasons that can be known right away by the layer. */          \
   V(3DTransform)                                                              \
+  V(Trivial3DTransform)                                                       \
   V(Video)                                                                    \
   V(Canvas)                                                                   \
   V(Plugin)                                                                   \
@@ -36,6 +37,8 @@ using CompositingReasons = uint64_t;
   V(WillChangeOpacity)                                                        \
   V(WillChangeFilter)                                                         \
   V(WillChangeBackdropFilter)                                                 \
+  /* Reasons that depend on ancestor properties */                            \
+  V(BackfaceInvisibility3DAncestor)                                           \
   /* This flag is needed only when none of the explicit kWillChange* reasons  \
      are set. */                                                              \
   V(WillChangeOther)                                                          \
@@ -57,11 +60,10 @@ using CompositingReasons = uint64_t;
   V(ReflectionWithCompositedDescendants)                                      \
   V(FilterWithCompositedDescendants)                                          \
   V(BlendingWithCompositedDescendants)                                        \
-  V(ClipsCompositingDescendants)                                              \
   V(PerspectiveWith3DDescendants)                                             \
   V(Preserve3DWith3DDescendants)                                              \
   V(IsolateCompositedDescendants)                                             \
-  V(PositionFixedWithCompositedDescendants)                                   \
+  V(FullscreenVideoWithCompositedDescendants)                                 \
                                                                               \
   /* The root layer is a special case. It may be forced to be a layer, but it \
   also needs to be a layer if anything else in the subtree is composited. */  \
@@ -74,9 +76,7 @@ using CompositingReasons = uint64_t;
   V(LayerForOverflowControlsHost)                                             \
   V(LayerForScrollCorner)                                                     \
   V(LayerForScrollingContents)                                                \
-  V(LayerForScrollingContainer)                                               \
   V(LayerForSquashingContents)                                                \
-  V(LayerForSquashingContainer)                                               \
   V(LayerForForeground)                                                       \
   V(LayerForMask)                                                             \
   /* Composited layer painted on top of all other layers as decoration. */    \
@@ -119,17 +119,23 @@ class PLATFORM_EXPORT CompositingReason {
         kActiveFilterAnimation | kActiveBackdropFilterAnimation,
 
     kComboAllDirectStyleDeterminedReasons =
-        k3DTransform | kBackfaceVisibilityHidden | kComboActiveAnimation |
-        kWillChangeTransform | kWillChangeOpacity | kWillChangeFilter |
-        kWillChangeOther | kBackdropFilter | kWillChangeBackdropFilter,
+        k3DTransform | kTrivial3DTransform | kBackfaceVisibilityHidden |
+        kComboActiveAnimation | kWillChangeTransform | kWillChangeOpacity |
+        kWillChangeFilter | kWillChangeOther | kBackdropFilter |
+        kWillChangeBackdropFilter,
 
     kComboAllDirectNonStyleDeterminedReasons =
         kVideo | kCanvas | kPlugin | kIFrame | kOverflowScrollingParent |
         kOutOfFlowClipping | kVideoOverlay | kXrOverlay | kRoot |
-        kRootScroller | kScrollDependentPosition,
+        kRootScroller | kScrollDependentPosition |
+        kBackfaceInvisibility3DAncestor,
 
     kComboAllDirectReasons = kComboAllDirectStyleDeterminedReasons |
                              kComboAllDirectNonStyleDeterminedReasons,
+
+    kComboTransformedRasterizationDisallowedReasons =
+        kComboAllDirectReasons & ~kScrollDependentPosition &
+        ~kTrivial3DTransform & ~kBackfaceVisibilityHidden,
 
     kComboAllCompositedScrollingDeterminedReasons =
         kScrollDependentPosition | kOverflowScrolling,
@@ -138,7 +144,7 @@ class PLATFORM_EXPORT CompositingReason {
         kIsolateCompositedDescendants | kOpacityWithCompositedDescendants |
         kMaskWithCompositedDescendants | kFilterWithCompositedDescendants |
         kBlendingWithCompositedDescendants |
-        kReflectionWithCompositedDescendants | kClipsCompositingDescendants,
+        kReflectionWithCompositedDescendants,
 
     kCombo3DDescendants =
         kPreserve3DWith3DDescendants | kPerspectiveWith3DDescendants,
@@ -154,9 +160,9 @@ class PLATFORM_EXPORT CompositingReason {
         kScrollDependentPosition | kVideo | kCanvas | kPlugin | kIFrame,
 
     kDirectReasonsForTransformProperty =
-        k3DTransform | kWillChangeTransform | kWillChangeOther |
-        kPerspectiveWith3DDescendants | kPreserve3DWith3DDescendants |
-        kActiveTransformAnimation,
+        k3DTransform | kTrivial3DTransform | kWillChangeTransform |
+        kWillChangeOther | kPerspectiveWith3DDescendants |
+        kPreserve3DWith3DDescendants | kActiveTransformAnimation,
     kDirectReasonsForScrollTranslationProperty =
         kRootScroller | kOverflowScrolling,
     kDirectReasonsForEffectProperty =

@@ -81,7 +81,8 @@ std::unique_ptr<ImageProcessor> CreateV4L2ImageProcessorWithInputCandidates(
 
     return v4l2_vda_helpers::CreateImageProcessor(
         input_fourcc, *output_fourcc, input_size, output_size, visible_size,
-        num_buffers, V4L2Device::Create(), ImageProcessor::OutputMode::IMPORT,
+        VideoFrame::StorageType::STORAGE_GPU_MEMORY_BUFFER, num_buffers,
+        V4L2Device::Create(), ImageProcessor::OutputMode::IMPORT,
         std::move(client_task_runner), std::move(error_cb));
   }
   return nullptr;
@@ -96,6 +97,7 @@ std::unique_ptr<ImageProcessor> ImageProcessorFactory::Create(
     const ImageProcessor::PortConfig& output_config,
     const std::vector<ImageProcessor::OutputMode>& preferred_output_modes,
     size_t num_buffers,
+    VideoRotation relative_rotation,
     scoped_refptr<base::SequencedTaskRunner> client_task_runner,
     ImageProcessor::ErrorCB error_cb) {
   std::vector<ImageProcessor::CreateBackendCB> create_funcs;
@@ -112,9 +114,10 @@ std::unique_ptr<ImageProcessor> ImageProcessorFactory::Create(
 
   std::unique_ptr<ImageProcessor> image_processor;
   for (auto& create_func : create_funcs) {
-    image_processor = ImageProcessor::Create(
-        std::move(create_func), input_config, output_config,
-        preferred_output_modes, error_cb, client_task_runner);
+    image_processor =
+        ImageProcessor::Create(std::move(create_func), input_config,
+                               output_config, preferred_output_modes,
+                               relative_rotation, error_cb, client_task_runner);
     if (image_processor)
       return image_processor;
   }

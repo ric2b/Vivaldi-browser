@@ -15,10 +15,10 @@ import org.chromium.base.supplier.DestroyableObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsMarginSupplier;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.download.DownloadPage;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesPage;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsMarginSupplier;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryPage;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
@@ -96,7 +96,8 @@ public class NativePageFactory {
                     mActivity.getActivityTabProvider(), mActivity.getOverviewModeBehavior(),
                     mActivity.getSnackbarManager(), mActivity.getLifecycleDispatcher(),
                     mActivity.getTabModelSelector(), mActivity.isTablet(), mUma.get(),
-                    mActivity.getNightModeStateProvider().isInNightMode(), nativePageHost, tab);
+                    mActivity.getNightModeStateProvider().isInNightMode(), nativePageHost, tab,
+                    mActivity.getBottomSheetController());
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
@@ -159,6 +160,7 @@ public class NativePageFactory {
         Uri uri = Uri.parse(url);
         if (!UrlConstants.CHROME_NATIVE_SCHEME.equals(uri.getScheme())
                 && !VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME.equals(uri.getScheme())
+                && !VivaldiUrlConstants.VIVALDI_SCHEME.equals(uri.getScheme())
                 && !UrlConstants.CHROME_SCHEME.equals(uri.getScheme())) {
             return NativePageType.NONE;
         }
@@ -261,12 +263,12 @@ public class NativePageFactory {
     /** Simple implementation of NativePageHost backed by a {@link Tab} */
     private static class TabShim implements NativePageHost {
         private final Tab mTab;
-        private final ChromeFullscreenManager mFullscreenManager;
+        private final BrowserControlsStateProvider mBrowserControlsStateProvider;
         private final TabModelSelector mTabModelSelector;
 
         public TabShim(Tab tab, ChromeActivity activity) {
             mTab = tab;
-            mFullscreenManager = activity.getFullscreenManager();
+            mBrowserControlsStateProvider = activity.getFullscreenManager();
             mTabModelSelector = activity.getTabModelSelector();
         }
 
@@ -298,7 +300,7 @@ public class NativePageFactory {
 
         @Override
         public DestroyableObservableSupplier<Rect> createDefaultMarginSupplier() {
-            return new BrowserControlsMarginSupplier(mFullscreenManager);
+            return new BrowserControlsMarginSupplier(mBrowserControlsStateProvider);
         }
     }
 
@@ -324,13 +326,15 @@ public class NativePageFactory {
                 page = getBuilder().buildSpeedDialPage(tab);
                 break;
             case NativePageType.BOOKMARKS:
-                page = getBuilder().buildPanelsPage(tab);
+                PanelUtils.showPanelAsync(mActivity, VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL);
+                page = null;
                 break;
             case NativePageType.DOWNLOADS:
-                page = getBuilder().buildPanelsPage(tab);
+                PanelUtils.showPanelAsync(mActivity, VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL);
+                page = null;
                 break;
             case NativePageType.HISTORY:
-                PanelUtils.showPanel(mActivity, UrlConstants.NATIVE_HISTORY_URL, isIncognito);
+                PanelUtils.showPanelAsync(mActivity, VivaldiUrlConstants.VIVALDI_HISTORY_URL);
                 page = null;
                 break;
             case NativePageType.RECENT_TABS:
@@ -340,7 +344,8 @@ public class NativePageFactory {
                 page = getBuilder().buildExploreSitesPage(tab);
                 break;
             case NativePageType.VIVALDI_NOTES:
-                page = getBuilder().buildPanelsPage(tab);
+                PanelUtils.showPanelAsync(mActivity, VivaldiUrlConstants.VIVALDI_NATIVE_NOTES_URL);
+                page = null;
                 break;
             default:
                 assert false;

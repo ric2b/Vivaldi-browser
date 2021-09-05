@@ -109,7 +109,9 @@ Extended attributes on partial interface members work as normal. However, only t
 * If a flag obviously applies to only one member of a single-member interface (i.e., it is named after that member), the extended attribute should be on the member.
 
 The remaining extended attribute, `[ImplementedAs]`, is mandatory. A partial
-interface must have `[ImplementedAs]` extended attribute to specify a static-only C++ class.
+interface must have `[ImplementedAs]` extended attribute to specify the C++ class that includes the required static methods.
+This may be a static-only class, or for cases where a single static method is a simple getter for an object, that object's
+class may implement the required static method.
 This is stored internally via `[PartialInterfaceImplementedAs]` (see below).
 
 ### interface mixins
@@ -640,13 +642,13 @@ Usage:
 
 For methods all calls are logged, and by default for attributes all access (calls to getter or setter) are logged, but this can be restricted to just read (getter) or just write (setter).
 
-### [CallWith] _(m, a)_, [SetterCallWith] _(a)_, [ConstructorCallWith] _(i)_
+### [CallWith] _(m, a)_, [GetterCallWith] _(a)_, [SetterCallWith] _(a)_, [ConstructorCallWith] _(i)_
 
 Summary: `[CallWith]` indicates that the bindings code calls the Blink implementation with additional information.
 
 Each value changes the signature of the Blink methods by adding an additional parameter to the head of the parameter list, such as `ScriptState*` for `[CallWith=ScriptState]`.
 
-`[SetterCallWith]` applies to attributes, and only affects the signature of the setter.
+`[GetterCallWith]` and `[SetterCallWith]` apply to attributes, and only affects the signature of the getter and setter, respectively.
 
 #### [CallWith=ScriptState] _(m, a*)_
 
@@ -964,6 +966,13 @@ This attribute must be accompanied by either `[Measure]` or `[MeasureAs]`.
 [HighEntropy, MeasureAs=InterestingNamedAttribute] attribute Node interestingNamedAttribute;
 [HighEntropy, Measure] Node getInterestingNode();
 [HighEntropy, Measure] const INTERESTING_CONSTANT = 1;
+```
+
+Attributes labeled with `[HighEntropy=Direct]` are simple surfaces which can be expressed as a sequence of bytes without any need for additional parsing logic.
+For now, this label is only supported for attribute getters, although the `[HighEntropy]` label is supported more broadly.
+
+```webidl
+[HighEntropy=Direct, MeasureAs=SimpleNamedAttribute] attribute unsigned long simpleNamedAttribute;
 ```
 
 ### [DeprecateAs] _(m, a, c)_
@@ -1562,7 +1571,7 @@ Marked functions are allowed to be nondeterministic, throw exceptions, force lay
 
 All DOM constructors are assumed to have side effects. However, an exception can be explicitly indicated when calling constructors using the V8 API method Function::NewInstanceWithSideEffectType().
 
-There is not yet support for marking SymbolKeyedMethodConfigurations as side-effect free. This requires additional support in V8 to whitelist Intrinsics.
+There is not yet support for marking SymbolKeyedMethodConfigurations as side-effect free. This requires additional support in V8 to allow Intrinsics.
 
 Usage for attributes and operations: `[Affects=Nothing]` can be specified on an operation, or on an attribute to indicate that its getter callback is side effect free:
 

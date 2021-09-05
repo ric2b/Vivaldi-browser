@@ -8,6 +8,7 @@
 #include <cmath>
 #include <memory>
 
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/checked_math.h"
 #include "third_party/blink/public/common/features.h"
@@ -642,7 +643,10 @@ void BaseRenderingContext2D::DrawPathInternal(
        { c->drawPath(sk_path, *flags); },
        [](const SkIRect& rect)  // overdraw test lambda
        { return false; },
-       bounds, paint_type);
+       bounds, paint_type,
+       GetState().HasPattern(paint_type)
+           ? CanvasRenderingContext2DState::kNonOpaqueImage
+           : CanvasRenderingContext2DState::kNoImage);
 }
 
 static SkPathFillType ParseWinding(const String& winding_rule_string) {
@@ -699,15 +703,20 @@ void BaseRenderingContext2D::fillRect(double x,
   // pattern was unaccelerated is because it was not possible to hold that image
   // in an accelerated texture - that is, into the GPU). That's why we disable
   // the acceleration to be sure that it will work.
-  if (IsAccelerated() && GetState().HasPattern() &&
-      !GetState().PatternIsAccelerated())
+  if (IsAccelerated() &&
+      GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType) &&
+      !GetState().PatternIsAccelerated(
+          CanvasRenderingContext2DState::kFillPaintType))
     DisableAcceleration();
   SkRect rect = SkRect::MakeXYWH(fx, fy, fwidth, fheight);
   Draw([&rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
        { c->drawRect(rect, *flags); },
        [&rect, this](const SkIRect& clip_bounds)  // overdraw test lambda
        { return RectContainsTransformedRect(rect, clip_bounds); },
-       rect, CanvasRenderingContext2DState::kFillPaintType);
+       rect, CanvasRenderingContext2DState::kFillPaintType,
+       GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType)
+           ? CanvasRenderingContext2DState::kNonOpaqueImage
+           : CanvasRenderingContext2DState::kNoImage);
 }
 
 static void StrokeRectOnCanvas(const FloatRect& rect,
@@ -755,7 +764,10 @@ void BaseRenderingContext2D::strokeRect(double x,
        { StrokeRectOnCanvas(rect, c, flags); },
        [](const SkIRect& clip_bounds)  // overdraw test lambda
        { return false; },
-       bounds, CanvasRenderingContext2DState::kStrokePaintType);
+       bounds, CanvasRenderingContext2DState::kStrokePaintType,
+       GetState().HasPattern(CanvasRenderingContext2DState::kStrokePaintType)
+           ? CanvasRenderingContext2DState::kNonOpaqueImage
+           : CanvasRenderingContext2DState::kNoImage);
 }
 
 void BaseRenderingContext2D::ClipInternal(const Path& path,
@@ -1179,9 +1191,7 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
   FloatSize default_object_size(Width(), Height());
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   if (!image_source->IsVideoElement()) {
-    AccelerationHint hint =
-        IsAccelerated() ? kPreferAcceleration : kPreferNoAcceleration;
-    image = image_source->GetSourceImageForCanvas(&source_image_status, hint,
+    image = image_source->GetSourceImageForCanvas(&source_image_status,
                                                   default_object_size);
     if (source_image_status == kUndecodableSourceImageStatus) {
       exception_state.ThrowDOMException(
@@ -1405,8 +1415,7 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
 
   FloatSize default_object_size(Width(), Height());
   scoped_refptr<Image> image_for_rendering =
-      image_source->GetSourceImageForCanvas(&status, kPreferNoAcceleration,
-                                            default_object_size);
+      image_source->GetSourceImageForCanvas(&status, default_object_size);
 
   switch (status) {
     case kNormalSourceImageStatus:
@@ -1613,7 +1622,7 @@ ImageData* BaseRenderingContext2D::getImageData(
   // Deferred offscreen canvases might have recorded commands, make sure
   // that those get drawn here
   FinalizeFrame();
-  scoped_refptr<StaticBitmapImage> snapshot = GetImage(kPreferNoAcceleration);
+  scoped_refptr<StaticBitmapImage> snapshot = GetImage();
 
   // GetImagedata is faster in Unaccelerated canvases
   if (IsAccelerated())
@@ -1836,7 +1845,13 @@ void BaseRenderingContext2D::PutByteArray(const unsigned char* source,
   DCHECK_GE(origin_y, 0);
   DCHECK_LT(origin_y, source_rect.MaxY());
 
-  const size_t src_bytes_per_row = bytes_per_pixel * source_size.Width();
+  const base::CheckedNumeric<size_t> src_bytes_per_row_checked =
+      base::CheckMul(bytes_per_pixel, source_size.Width());
+  if (!src_bytes_per_row_checked.IsValid()) {
+    VLOG(1) << "Invalid sizes";
+    return;
+  }
+  const size_t src_bytes_per_row = src_bytes_per_row_checked.ValueOrDie();
   const void* src_addr =
       source + origin_y * src_bytes_per_row + origin_x * bytes_per_pixel;
 
@@ -1997,7 +2012,7 @@ void BaseRenderingContext2D::setTextBaseline(const String& s) {
   ModifiableState().SetTextBaseline(baseline);
 }
 
-void BaseRenderingContext2D::Trace(Visitor* visitor) {
+void BaseRenderingContext2D::Trace(Visitor* visitor) const {
   visitor->Trace(state_stack_);
 }
 

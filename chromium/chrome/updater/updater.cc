@@ -11,7 +11,7 @@
 #include "build/build_config.h"
 #include "chrome/updater/app/app.h"
 #include "chrome/updater/app/app_uninstall.h"
-#include "chrome/updater/app/app_update_all.h"
+#include "chrome/updater/app/app_wake.h"
 #include "chrome/updater/configurator.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/crash_client.h"
@@ -21,21 +21,21 @@
 #include "components/crash/core/common/crash_key.h"
 
 #if defined(OS_WIN)
-#include "chrome/updater/server/win/server.h"
-#include "chrome/updater/server/win/service_main.h"
+#include "chrome/updater/app/server/win/server.h"
+#include "chrome/updater/app/server/win/service_main.h"
 #include "chrome/updater/win/install_app.h"
 #endif
 
 #if defined(OS_MACOSX)
+#include "chrome/updater/app/server/mac/server.h"
+#include "chrome/updater/mac/setup/app_swap.h"
 #include "chrome/updater/mac/setup/install_app.h"
-#include "chrome/updater/mac/setup/swap_app.h"
-#include "chrome/updater/server/mac/server.h"
 #endif
 
 // Instructions For Windows.
 // - To install only the updater, run "updatersetup.exe" from the build out dir.
 // - To install Chrome and the updater, do the same but use the --appid:
-//    updatersetup.exe --appid={8A69D345-D564-463C-AFF1-A69D9E530F96}
+//    updatersetup.exe --appid={8A69D345-D564-463c-AFF1-A69D9E530F96}
 // - To uninstall, run "updater.exe --uninstall" from its install directory,
 // which is under %LOCALAPPDATA%\Google\GoogleUpdater, or from the |out|
 // directory of the build.
@@ -53,7 +53,7 @@ namespace {
 void InitLogging(const base::CommandLine& command_line) {
   logging::LoggingSettings settings;
   base::FilePath log_dir;
-  GetProductDirectory(&log_dir);
+  GetBaseDirectory(&log_dir);
   const auto log_file = log_dir.Append(FILE_PATH_LITERAL("updater.log"));
   settings.log_file_path = log_file.value().c_str();
   settings.logging_dest = logging::LOG_TO_ALL;
@@ -90,7 +90,12 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
   }
 
   if (command_line->HasSwitch(kServerSwitch)) {
-    return AppServerInstance()->Run();
+#if defined(OS_WIN)
+    // By design, Windows uses a leaky singleton server for its RPC server.
+    return AppServerSingletonInstance()->Run();
+#else
+    return MakeAppServer()->Run();
+#endif
   }
 
 #if defined(OS_WIN)
@@ -99,18 +104,20 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 #endif  // OS_WIN
 
   if (command_line->HasSwitch(kInstallSwitch))
-    return AppInstallInstance()->Run();
+    return MakeAppInstall()->Run();
 
 #if defined(OS_MACOSX)
-  if (command_line->HasSwitch(kSwapUpdaterSwitch))
-    return AppSwapUpdaterInstance()->Run();
+  if (command_line->HasSwitch(kPromoteCandidateSwitch))
+    return MakeAppPromoteCandidate()->Run();
+  if (command_line->HasSwitch(kUninstallCandidateSwitch))
+    return MakeAppUninstallCandidate()->Run();
 #endif  // OS_MACOSX
 
   if (command_line->HasSwitch(kUninstallSwitch))
-    return AppUninstallInstance()->Run();
+    return MakeAppUninstall()->Run();
 
-  if (command_line->HasSwitch(kUpdateAppsSwitch)) {
-    return AppUpdateAllInstance()->Run();
+  if (command_line->HasSwitch(kWakeSwitch)) {
+    return MakeAppWake()->Run();
   }
 
   VLOG(1) << "Unknown command line switch.";

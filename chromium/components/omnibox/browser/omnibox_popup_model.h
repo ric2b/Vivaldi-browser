@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_result.h"
@@ -71,6 +72,11 @@ class OmniboxPopupModel {
 
     // The single (ambiguous) button focus state is not used when button row
     // is enabled. Instead, the specific FOCUSED_* states below apply.
+    //
+    // TODO(tommycli): The BUTTON_FOCUSED state is a holdover from when we only
+    // had one button type. At this point, it's too ambiguous, and we should
+    // gradually deprecate this state in favor of the FOCUSED_* states below.
+    // Also see Selection::IsButtonFocused().
     BUTTON_FOCUSED = 3,
 
     // Button row focus states:
@@ -91,7 +97,8 @@ class OmniboxPopupModel {
     // match (if BUTTON_FOCUSED) is selected.
     LineState state;
 
-    Selection(size_t line, LineState state) : line(line), state(state) {}
+    explicit Selection(size_t line, LineState state = NORMAL)
+        : line(line), state(state) {}
 
     bool operator==(const Selection&) const;
     bool operator!=(const Selection&) const;
@@ -100,6 +107,9 @@ class OmniboxPopupModel {
     // Returns true if going to this selection from given |from| selection
     // results in activation of keyword state when it wasn't active before.
     bool IsChangeToKeyword(Selection from) const;
+
+    // Returns true if this selection represents a button being focused.
+    bool IsButtonFocused() const;
   };
 
   // |pref_service| can be nullptr, in which case OmniboxPopupModel won't
@@ -150,32 +160,27 @@ class OmniboxPopupModel {
   size_t selected_line() const { return selection_.line; }
   LineState selected_line_state() const { return selection_.state; }
 
-  // Call to change the selected line.  This will update all state and repaint
-  // the necessary parts of the window, as well as updating the edit with the
-  // new temporary text.  |line| will be clamped to the range of valid lines.
-  // |reset_to_default| is true when the selection is being reset back to the
-  // initial state, and thus there is no temporary text (and not
-  // |has_selected_match_|). If |force| is true then the selected line will
-  // be updated forcibly even if the |line| is same as the current selected
-  // line.
-  // NOTE: This assumes the popup is open, although both the old and new values
-  // for the selected line can be kNoMatch.
-  void SetSelectedLine(size_t line, bool reset_to_default, bool force);
+  // Sets the current selection to |new_selection|. Caller is responsible for
+  // making sure |new_selection| is valid. This assumes the popup is open.
+  //
+  // This will update all state and repaint the necessary parts of the window,
+  // as well as updating the textfield with the new temporary text.
+  //
+  // |reset_to_default| restores the original inline autocompletion.
+  // |force_update_ui| updates the UI even if the selection has not changed.
+  void SetSelection(Selection new_selection,
+                    bool reset_to_default = false,
+                    bool force_update_ui = false);
+
+  // We still need to run through the whole SetSelection method, because
+  // changing the line state sometimes requires updating inline autocomplete.
+  void SetSelectedLineState(LineState new_state) {
+    SetSelection(Selection(selected_line(), new_state));
+  }
 
   // Called when the user hits escape after arrowing around the popup.  This
   // will reset the popup to the initial state.
   void ResetToInitialState();
-
-  // If the selected line has both a normal match and a keyword match, this can
-  // be used to choose which to select.  This allows the user to toggle between
-  // normal and keyword mode with tab/shift-tab without rerunning autocomplete
-  // or disturbing other popup state, which in turn is an important part of
-  // supporting the use of tab to do both tab-to-search and
-  // tab-to-traverse-dropdown.
-  //
-  // It is an error to call this when the selected line does not have both
-  // matches (or there is no selection).
-  void SetSelectedLineState(LineState state);
 
   // Tries to erase the suggestion at |line|.  This should determine if the item
   // at |line| can be removed from history, and if so, remove it and update the
@@ -185,8 +190,9 @@ class OmniboxPopupModel {
   // Returns true if the destination URL of the match is bookmarked.
   bool IsStarredMatch(const AutocompleteMatch& match) const;
 
-  // The user has manually selected a match.
-  bool has_selected_match() { return has_selected_match_; }
+  // Returns true if the selection is on the initial line, which is usually the
+  // default match (except in the no-default-match case).
+  bool SelectionOnInitialLine() const;
 
   // Invoked from the edit model any time the result set of the controller
   // changes.
@@ -211,10 +217,6 @@ class OmniboxPopupModel {
   // dedicated row.
   bool SelectedLineIsTabSwitchSuggestion();
 
-  // If |closes| is set true, the popup will close when the omnibox is blurred.
-  bool popup_closes_on_blur() const { return popup_closes_on_blur_; }
-  void set_popup_closes_on_blur(bool closes) { popup_closes_on_blur_ = closes; }
-
   OmniboxEditModel* edit_model() { return edit_model_; }
 
   // Gets all the available selections, filtered by |direction| and |step|, as
@@ -232,17 +234,26 @@ class OmniboxPopupModel {
   // keyword mode state maintained in the edit model.
   Selection StepSelection(Direction direction, Step step);
 
-  // Applies a given selection. Use GetNextSelection instead of constructing
-  // a selection from scratch.
-  void SetSelection(Selection selection);
+  // Returns true if the control represented by |selection.state| is present on
+  // the match in |selection.line|. This is the source-of-truth the UI code
+  // should query to decide whether or not to draw the control.
+  bool IsControlPresentOnMatch(Selection selection) const;
 
-  // Preserves current selection line but resets it to default state.
-  // Returns new selection.
-  Selection ClearSelectionState();
+  // Triggers the action on |selection| (usually an auxiliary button).
+  // If the popup model supports the action and performs it, this returns true.
+  // This can't handle all actions currently, and returns false in those cases.
+  // The timestamp parameter is currently only used by FOCUSED_BUTTON_TAB_SWITCH
+  // and FOCUSED_BUTTON_PEDAL, so is set by default for other use cases.
+  bool TriggerSelectionAction(Selection selection,
+                              base::TimeTicks timestamp = base::TimeTicks());
 
-  // Returns true if the |selection| is available according to result matches.
-  // It doesn't account for some Step methods skipping some selections.
-  bool IsSelectionAvailable(Selection selection) const;
+  // This returns the accessibility label for current selection. This is an
+  // extended version of AutocompleteMatchType::ToAccessibilityLabel() which
+  // also returns narration about the any focused secondary button.
+  // Never call this when the current selection is kNoMatch.
+  base::string16 GetAccessibilityLabelForCurrentSelection(
+      const base::string16& match_text,
+      int* label_prefix_length = nullptr);
 
  private:
   void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon);
@@ -262,15 +273,6 @@ class OmniboxPopupModel {
   // suggestion whose tab switch button was focused, so that we may compare
   // if equal.
   GURL old_focused_url_;
-
-  // The user has manually selected a match.
-  // TODO(tommycli): We can _probably_ eliminate this variable. It seems to be
-  // mostly rendundant with selected_line() and result()->default_match().
-  bool has_selected_match_;
-
-  // True if the popup should close on omnibox blur. This defaults to true, and
-  // is only false while a bubble related to the popup contents is shown.
-  bool popup_closes_on_blur_ = true;
 
   // Observers.
   base::ObserverList<OmniboxPopupModelObserver>::Unchecked observers_;

@@ -46,14 +46,16 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   void SetInfoBox(const InfoBox& info_box) override;
   void ClearInfoBox() override;
   void SetProgress(int progress) override;
+  void SetProgressActiveStep(int active_step) override;
   void SetProgressVisible(bool visible) override;
+  void SetStepProgressBarConfiguration(
+      const ShowProgressBarProto::StepProgressBarConfiguration& configuration)
+      override;
   void SetUserActions(
       std::unique_ptr<std::vector<UserAction>> user_actions) override;
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
-  void WriteUserModel(
-      base::OnceCallback<void(UserModel*)> write_callback) override;
   void SetViewportMode(ViewportMode mode) override;
   ViewportMode GetViewportMode() override;
   void SetPeekMode(ConfigureBottomSheetProto::PeekMode peek_mode) override;
@@ -66,6 +68,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) override;
   UserModel* GetUserModel() override;
   EventHandler* GetEventHandler() override;
+  void ExpectNavigation() override;
   bool HasNavigationError() override;
   bool IsNavigatingToNewDocument() override;
   void RequireUI() override;
@@ -76,9 +79,9 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
 
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) override;
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) override;
   void ClearGenericUi() override;
 
   ClientSettings* GetMutableSettings() { return &client_settings_; }

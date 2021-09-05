@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -206,6 +207,7 @@ void FakeBluetoothGattCharacteristicClient::ReadValue(
 void FakeBluetoothGattCharacteristicClient::WriteValue(
     const dbus::ObjectPath& object_path,
     const std::vector<uint8_t>& value,
+    base::StringPiece type_option,
     base::OnceClosure callback,
     ErrorCallback error_callback) {
   if (!authenticated_) {

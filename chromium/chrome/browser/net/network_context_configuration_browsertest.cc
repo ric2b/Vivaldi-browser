@@ -434,7 +434,7 @@ class NetworkContextConfigurationBrowserTest
       case NetworkContextType::kOnDiskAppWithIncognitoProfile:
         // Incognito actually uses the non-incognito prefs, so this should end
         // up being the same pref store as in the KProfile case.
-        return browser()->profile()->GetOffTheRecordProfile()->GetPrefs();
+        return browser()->profile()->GetPrimaryOTRProfile()->GetPrefs();
     }
   }
 
@@ -463,7 +463,7 @@ class NetworkContextConfigurationBrowserTest
       case NetworkContextType::kIncognitoProfile:
       case NetworkContextType::kOnDiskAppWithIncognitoProfile:
         ProfileNetworkContextServiceFactory::GetForContext(
-            browser()->profile()->GetOffTheRecordProfile())
+            browser()->profile()->GetPrimaryOTRProfile())
             ->FlushProxyConfigMonitorForTesting();
         break;
     }
@@ -633,8 +633,8 @@ class NetworkContextConfigurationBrowserTest
         url, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(
             [](std::string* cookies_out, base::RunLoop* run_loop,
-               const net::CookieStatusList& cookies,
-               const net::CookieStatusList& excluded_cookies) {
+               const net::CookieAccessResultList& cookies,
+               const net::CookieAccessResultList& excluded_cookies) {
               *cookies_out = net::CanonicalCookie::BuildCookieLine(cookies);
               run_loop->Quit();
             },
@@ -1386,17 +1386,26 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   FlushNetworkInterface();
   std::string accept_language2, user_agent2;
   ASSERT_TRUE(FetchHeaderEcho("accept-language", &accept_language2));
-  EXPECT_EQ(system ? kNoAcceptLanguage : "uk", accept_language2);
+  if (GetProfile()->IsOffTheRecord()) {
+    EXPECT_EQ(system ? kNoAcceptLanguage : "en-US,en;q=0.9", accept_language2);
+  } else {
+    EXPECT_EQ(system ? kNoAcceptLanguage : "uk", accept_language2);
+  }
   ASSERT_TRUE(FetchHeaderEcho("user-agent", &user_agent2));
   EXPECT_EQ(::GetUserAgent(), user_agent2);
 
   // Try a more complicated one, with multiple languages.
   browser()->profile()->GetPrefs()->SetString(language::prefs::kAcceptLanguages,
-                                              "uk, en_US");
+                                              "uk, en-US");
   FlushNetworkInterface();
   std::string accept_language3, user_agent3;
   ASSERT_TRUE(FetchHeaderEcho("accept-language", &accept_language3));
-  EXPECT_EQ(system ? kNoAcceptLanguage : "uk,en_US;q=0.9", accept_language3);
+  if (GetProfile()->IsOffTheRecord()) {
+    EXPECT_EQ(system ? kNoAcceptLanguage : "en-US,en;q=0.9", accept_language3);
+  } else {
+    EXPECT_EQ(system ? kNoAcceptLanguage : "uk,en-US;q=0.9,en;q=0.8",
+              accept_language3);
+  }
   ASSERT_TRUE(FetchHeaderEcho("user-agent", &user_agent3));
   EXPECT_EQ(::GetUserAgent(), user_agent3);
 }

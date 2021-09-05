@@ -10,6 +10,10 @@
 // Path to the persisted file for the credential provider archivable store.
 NSURL* CredentialProviderSharedArchivableStoreURL();
 
+// Key for the app group user defaults containing the managed user ID to be
+// validated in the extension.
+NSString* AppGroupUserDefaultsCredentialProviderManagedUserID();
+
 // Key for the app group user defaults indicating if the credentials have been
 // synced with iOS via AuthenticationServices.
 extern NSString* const

@@ -26,7 +26,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_native_app_window_views.h"
 
 // static
 PasswordBubbleViewBase* PasswordBubbleViewBase::g_manage_passwords_bubble_ =
@@ -44,8 +43,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
   if (browser->is_vivaldi()) {
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());
-    VivaldiNativeAppWindowViews* native_view =
-        static_cast<VivaldiNativeAppWindowViews*>(window->GetBaseWindow());
+    views::View* contents_view = window->GetContentsView();
     bool is_fullscreen = window->IsFullscreen();
 
     extensions::VivaldiUtilitiesAPI* api =
@@ -65,8 +63,8 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
     gfx::Point pos =
         flow_direction == "down" ? rect.bottom_right() : rect.top_right();
 
-    ConvertPointToScreen(native_view, &pos);
-    ConvertRectToScreen(native_view, &rect);
+    ConvertPointToScreen(contents_view, &pos);
+    ConvertRectToScreen(contents_view, &rect);
     rect.set_x(pos.x() - (rect.width() / 2));
 
     PasswordBubbleViewBase* bubble =
@@ -87,7 +85,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
 
     if (is_fullscreen) {
       g_manage_passwords_bubble_->AdjustForFullscreen(
-          native_view->GetBoundsInScreen());
+          contents_view->GetBoundsInScreen());
     }
     g_manage_passwords_bubble_->ShowForReason(reason);
     g_manage_passwords_bubble_->SetAnchorRect(rect);
@@ -177,18 +175,6 @@ const content::WebContents* PasswordBubbleViewBase::GetWebContents() const {
   return controller->GetWebContents();
 }
 
-base::string16 PasswordBubbleViewBase::GetWindowTitle() const {
-  const PasswordBubbleControllerBase* controller = GetController();
-  DCHECK(controller);
-  return controller->GetTitle();
-}
-
-bool PasswordBubbleViewBase::ShouldShowWindowTitle() const {
-  const PasswordBubbleControllerBase* controller = GetController();
-  DCHECK(controller);
-  return !controller->GetTitle().empty();
-}
-
 PasswordBubbleViewBase::PasswordBubbleViewBase(
     content::WebContents* web_contents,
     views::View* anchor_view,
@@ -207,6 +193,14 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
 PasswordBubbleViewBase::~PasswordBubbleViewBase() {
   if (g_manage_passwords_bubble_ == this)
     g_manage_passwords_bubble_ = nullptr;
+}
+
+void PasswordBubbleViewBase::Init() {
+  LocationBarBubbleDelegateView::Init();
+  const PasswordBubbleControllerBase* controller = GetController();
+  DCHECK(controller);
+  SetTitle(controller->GetTitle());
+  SetShowTitle(!controller->GetTitle().empty());
 }
 
 void PasswordBubbleViewBase::OnWidgetClosing(views::Widget* widget) {

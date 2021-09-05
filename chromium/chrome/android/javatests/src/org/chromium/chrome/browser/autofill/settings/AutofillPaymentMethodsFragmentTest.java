@@ -6,10 +6,9 @@ package org.chromium.chrome.browser.autofill.settings;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import android.support.test.filters.MediumTest;
-
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -25,8 +24,6 @@ import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
-
-import java.util.Calendar;
 
 /**
  * Instrumentation tests for AutofillPaymentMethodsFragment.
@@ -50,7 +47,7 @@ public class AutofillPaymentMethodsFragmentTest {
             /* origin= */ "",
             /* isLocal= */ false, /* isCached= */ false, /* name= */ "John Doe",
             /* number= */ "4444333322221111",
-            /* obfuscatedNumber= */ "", /* month= */ "5", nextYear(),
+            /* obfuscatedNumber= */ "", /* month= */ "5", AutofillTestHelper.nextYear(),
             /* basicCardIssuerNetwork =*/"visa",
             /* issuerIconDrawableId= */ 0, /* billingAddressId= */ "",
             /* serverId= */ "");
@@ -58,7 +55,7 @@ public class AutofillPaymentMethodsFragmentTest {
             new CreditCard(/* guid= */ "", /* origin= */ "",
                     /* isLocal= */ false, /* isCached= */ false, /* name= */ "John Doe",
                     /* number= */ "5454545454545454",
-                    /* obfuscatedNumber= */ "", /* month= */ "12", nextYear(),
+                    /* obfuscatedNumber= */ "", /* month= */ "12", AutofillTestHelper.nextYear(),
                     /* basicCardIssuerNetwork= */ "mastercard", /* issuerIconDrawableId= */ 0,
                     /* billingAddressId= */ "",
                     /* serverId= */ "");
@@ -190,9 +187,5 @@ public class AutofillPaymentMethodsFragmentTest {
 
     private static PreferenceScreen getPreferenceScreen(SettingsActivity activity) {
         return ((AutofillPaymentMethodsFragment) activity.getMainFragment()).getPreferenceScreen();
-    }
-
-    private static String nextYear() {
-        return String.valueOf(Calendar.getInstance().get(Calendar.YEAR) + 1);
     }
 }

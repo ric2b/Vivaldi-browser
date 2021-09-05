@@ -185,8 +185,7 @@ ServiceWorkerHandler::ServiceWorkerHandler(bool allow_inspect_worker)
       browser_context_(nullptr),
       storage_partition_(nullptr) {}
 
-ServiceWorkerHandler::~ServiceWorkerHandler() {
-}
+ServiceWorkerHandler::~ServiceWorkerHandler() = default;
 
 void ServiceWorkerHandler::Wire(UberDispatcher* dispatcher) {
   frontend_.reset(new ServiceWorker::Frontend(dispatcher->channel()));
@@ -438,10 +437,10 @@ void ServiceWorkerHandler::OnWorkerVersionUpdated(
     base::flat_set<std::string> client_set;
 
     for (const auto& client : version.clients) {
-      if (client.second.type ==
+      if (client.second.type() ==
           blink::mojom::ServiceWorkerClientType::kWindow) {
-        WebContents* web_contents =
-            WebContents::FromFrameTreeNodeId(client.second.frame_tree_node_id);
+        WebContents* web_contents = WebContents::FromFrameTreeNodeId(
+            client.second.GetFrameTreeNodeId());
         // There is a possibility that the frame is already deleted
         // because of the thread hopping.
         if (!web_contents)

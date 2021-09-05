@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "content/public/browser/render_frame_host.h"
@@ -63,6 +64,13 @@ struct WebPreferences;
 // An interface and utility for driving tests of RenderFrameHost.
 class RenderFrameHostTester {
  public:
+  enum class HeavyAdIssueType {
+    kNetworkTotal,
+    kCpuTotal,
+    kCpuPeak,
+    kAll,
+  };
+
   // Retrieves the RenderFrameHostTester that drives the specified
   // RenderFrameHost. The RenderFrameHost must have been created while
   // RenderFrameHost testing was enabled; use a
@@ -114,6 +122,9 @@ class RenderFrameHostTester {
   // Gets all the console messages requested via
   // RenderFrameHost::AddMessageToConsole in this frame.
   virtual const std::vector<std::string>& GetConsoleMessages() = 0;
+
+  // Get a count of the total number of heavy ad issues reported.
+  virtual int GetHeavyAdIssueCount(HeavyAdIssueType type) = 0;
 };
 
 // An interface and utility for driving tests of RenderViewHost.
@@ -133,10 +144,10 @@ class RenderViewHostTester {
   virtual ~RenderViewHostTester() {}
 
   // Gives tests access to RenderViewHostImpl::CreateRenderView.
-  virtual bool CreateTestRenderView(const base::string16& frame_name,
-                                    int opener_frame_route_id,
-                                    int proxy_routing_id,
-                                    bool created_with_opener) = 0;
+  virtual bool CreateTestRenderView(
+      const base::Optional<base::UnguessableToken>& opener_frame_route_id,
+      int proxy_routing_id,
+      bool created_with_opener) = 0;
 
   // Makes the WasHidden/WasShown calls to the RenderWidget that
   // tell it it has been hidden or restored from having been hidden.

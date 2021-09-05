@@ -27,6 +27,7 @@
 #include "android_webview/browser/gfx/java_browser_view_renderer_helper.h"
 #include "android_webview/browser/gfx/render_thread_manager.h"
 #include "android_webview/browser/gfx/scoped_app_gl_state_restore.h"
+#include "android_webview/browser/js_java_interaction/aw_web_message_host_factory.h"
 #include "android_webview/browser/lifecycle/aw_contents_lifecycle_notifier.h"
 #include "android_webview/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "android_webview/browser/permission/aw_permission_request.h"
@@ -58,10 +59,9 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/autofill/android/autofill_provider_android.h"
+#include "components/autofill/android/provider/autofill_provider_android.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
@@ -112,6 +112,7 @@ using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 using content::RenderFrameHost;
 using content::WebContents;
+using js_injection::JsCommunicationHost;
 using navigation_interception::InterceptNavigationDelegate;
 
 namespace android_webview {
@@ -217,9 +218,7 @@ AwRenderProcessGoneDelegate* AwRenderProcessGoneDelegate::FromWebContents(
 
 AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     : content::WebContentsObserver(web_contents.get()),
-      browser_view_renderer_(
-          this,
-          base::CreateSingleThreadTaskRunner({BrowserThread::UI})),
+      browser_view_renderer_(this, content::GetUIThreadTaskRunner({})),
       web_contents_(std::move(web_contents)) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
   icon_helper_.reset(new IconHelper(web_contents_.get()));
@@ -555,8 +554,8 @@ void ShowGeolocationPromptHelper(const JavaObjectWeakGlobalRef& java_ref,
                                  const GURL& origin) {
   JNIEnv* env = AttachCurrentThread();
   if (java_ref.get(env).obj()) {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&ShowGeolocationPromptHelperTask, java_ref, origin));
   }
 }
@@ -1315,29 +1314,40 @@ jint AwContents::GetEffectivePriority(
   return 0;
 }
 
-JsJavaConfiguratorHost* AwContents::GetJsJavaConfiguratorHost() {
+JsCommunicationHost* AwContents::GetJsCommunicationHost() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!js_java_configurator_host_.get()) {
-    js_java_configurator_host_ =
-        std::make_unique<JsJavaConfiguratorHost>(web_contents_.get());
+  if (!js_communication_host_.get()) {
+    js_communication_host_ =
+        std::make_unique<JsCommunicationHost>(web_contents_.get());
   }
-  return js_java_configurator_host_.get();
+  return js_communication_host_.get();
 }
 
-jint AwContents::AddDocumentStartJavascript(
+jint AwContents::AddDocumentStartJavaScript(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& script,
     const base::android::JavaParamRef<jobjectArray>& allowed_origin_rules) {
-  return GetJsJavaConfiguratorHost()->AddDocumentStartJavascript(
-      env, script, allowed_origin_rules);
+  std::vector<std::string> native_allowed_origin_rule_strings;
+  AppendJavaStringArrayToStringVector(env, allowed_origin_rules,
+                                      &native_allowed_origin_rule_strings);
+  auto result = GetJsCommunicationHost()->AddDocumentStartJavaScript(
+      base::android::ConvertJavaStringToUTF16(env, script),
+      native_allowed_origin_rule_strings);
+  if (result.error_message) {
+    env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                  result.error_message->data());
+    return -1;
+  }
+  DCHECK(result.script_id);
+  return result.script_id.value();
 }
 
-void AwContents::RemoveDocumentStartJavascript(
+void AwContents::RemoveDocumentStartJavaScript(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     jint script_id) {
-  GetJsJavaConfiguratorHost()->RemoveDocumentStartJavascript(env, script_id);
+  GetJsCommunicationHost()->RemoveDocumentStartJavaScript(script_id);
 }
 
 base::android::ScopedJavaLocalRef<jstring> AwContents::AddWebMessageListener(
@@ -1346,23 +1356,35 @@ base::android::ScopedJavaLocalRef<jstring> AwContents::AddWebMessageListener(
     const base::android::JavaParamRef<jobject>& listener,
     const base::android::JavaParamRef<jstring>& js_object_name,
     const base::android::JavaParamRef<jobjectArray>& allowed_origin_rules) {
-  return GetJsJavaConfiguratorHost()->AddWebMessageListener(
-      env, listener, js_object_name, allowed_origin_rules);
+  base::string16 native_js_object_name =
+      base::android::ConvertJavaStringToUTF16(env, js_object_name);
+  std::vector<std::string> native_allowed_origin_rule_strings;
+  AppendJavaStringArrayToStringVector(env, allowed_origin_rules,
+                                      &native_allowed_origin_rule_strings);
+  const base::string16 error_message =
+      GetJsCommunicationHost()->AddWebMessageHostFactory(
+          std::make_unique<AwWebMessageHostFactory>(listener),
+          native_js_object_name, native_allowed_origin_rule_strings);
+  if (error_message.empty())
+    return nullptr;
+  return base::android::ConvertUTF16ToJavaString(env, error_message);
 }
 
 void AwContents::RemoveWebMessageListener(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& js_object_name) {
-  GetJsJavaConfiguratorHost()->RemoveWebMessageListener(env, js_object_name);
+  GetJsCommunicationHost()->RemoveWebMessageHostFactory(
+      ConvertJavaStringToUTF16(env, js_object_name));
 }
 
 base::android::ScopedJavaLocalRef<jobjectArray> AwContents::GetJsObjectsInfo(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jclass>& clazz) {
-  if (js_java_configurator_host_.get()) {
-    return GetJsJavaConfiguratorHost()->GetJsObjectsInfo(env, clazz);
+  if (js_communication_host_.get()) {
+    return AwWebMessageHostFactory::GetWebMessageListenerInfo(
+        GetJsCommunicationHost(), env, clazz);
   }
   return nullptr;
 }
@@ -1459,8 +1481,7 @@ void AwContents::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   // If this request was blocked in any way, broadcast an error.
   net::Error error_code = navigation_handle->GetNetErrorCode();
-  if (error_code != net::ERR_BLOCKED_BY_CLIENT &&
-      error_code != net::ERR_BLOCKED_BY_ADMINISTRATOR &&
+  if (!net::IsRequestBlockedError(error_code) &&
       error_code != net::ERR_ABORTED) {
     return;
   }

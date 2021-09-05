@@ -26,8 +26,8 @@
 #include "build/chromecast_buildflags.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/os_crypt.h"
-#include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/scoped_message_error_crash_key.h"
+#include "mojo/public/cpp/system/functions.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_change_notifier_posix.h"
@@ -56,6 +56,7 @@
 #include "services/network/net_log_proxy_sink.h"
 #include "services/network/network_context.h"
 #include "services/network/network_usage_accumulator.h"
+#include "services/network/public/cpp/crash_keys.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/load_info_util.h"
@@ -184,9 +185,37 @@ void HandleBadMessage(const std::string& error) {
   LOG(WARNING) << "Mojo error in NetworkService:" << error;
   mojo::debug::ScopedMessageErrorCrashKey crash_key_value(error);
   base::debug::DumpWithoutCrashing();
+  network::debug::ClearDeserializationCrashKeyString();
 }
 
 }  // namespace
+
+DataPipeUseTracker::DataPipeUseTracker(NetworkService* network_service,
+                                       DataPipeUser user)
+    : network_service_(network_service), user_(user) {}
+
+DataPipeUseTracker::DataPipeUseTracker(DataPipeUseTracker&& that)
+    : DataPipeUseTracker(that.network_service_, that.user_) {
+  this->state_ = that.state_;
+  that.state_ = State::kReset;
+}
+
+DataPipeUseTracker::~DataPipeUseTracker() {
+  Reset();
+}
+
+void DataPipeUseTracker::Activate() {
+  DCHECK_EQ(state_, State::kInit);
+  network_service_->OnDataPipeCreated(user_);
+  state_ = State::kActivated;
+}
+
+void DataPipeUseTracker::Reset() {
+  if (state_ == State::kActivated) {
+    network_service_->OnDataPipeDropped(user_);
+  }
+  state_ = State::kReset;
+}
 
 // static
 const base::TimeDelta NetworkService::kInitialDohProbeTimeout =
@@ -249,16 +278,17 @@ NetworkService::NetworkService(
 
   // |registry_| is nullptr when an in-process NetworkService is
   // created directly, like in most unit tests.
-  if (registry_) {
-    mojo::core::SetDefaultProcessErrorCallback(
-        base::BindRepeating(&HandleBadMessage));
-  }
+  if (registry_)
+    mojo::SetDefaultProcessErrorHandler(base::BindRepeating(&HandleBadMessage));
 
   if (receiver.is_valid())
     Bind(std::move(receiver));
 
   if (!delay_initialization_until_set_client)
     Initialize(mojom::NetworkServiceParams::New());
+
+  metrics_trigger_timer_.Start(FROM_HERE, base::TimeDelta::FromMinutes(20),
+                               this, &NetworkService::ReportMetrics);
 }
 
 void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
@@ -375,11 +405,6 @@ std::unique_ptr<NetworkService> NetworkService::CreateForTesting() {
 }
 
 void NetworkService::RegisterNetworkContext(NetworkContext* network_context) {
-  // If IsPrimaryNetworkContext() is true, there must be no other
-  // NetworkContexts created yet.
-  DCHECK(!network_context->IsPrimaryNetworkContext() ||
-         network_contexts_.empty());
-
   DCHECK_EQ(0u, network_contexts_.count(network_context));
   network_contexts_.insert(network_context);
   if (quic_disabled_)
@@ -399,11 +424,6 @@ void NetworkService::RegisterNetworkContext(NetworkContext* network_context) {
 }
 
 void NetworkService::DeregisterNetworkContext(NetworkContext* network_context) {
-  // If the NetworkContext is the primary network context, all other
-  // NetworkContexts must already have been destroyed.
-  DCHECK(!network_context->IsPrimaryNetworkContext() ||
-         network_contexts_.size() == 1);
-
   DCHECK_EQ(1u, network_contexts_.count(network_context));
   network_contexts_.erase(network_context);
 }
@@ -442,7 +462,9 @@ void NetworkService::StartNetLog(base::File file,
                                  net::NetLogCaptureMode capture_mode,
                                  base::Value client_constants) {
   DCHECK(client_constants.is_dict());
-  std::unique_ptr<base::DictionaryValue> constants = net::GetNetConstants();
+  std::unique_ptr<base::DictionaryValue> constants =
+      base::DictionaryValue::From(
+          base::Value::ToUniquePtrValue(net::GetNetConstants()));
   constants->MergeDictionary(&client_constants);
 
   file_net_log_observer_ = net::FileNetLogObserver::CreateUnboundedPreExisting(
@@ -467,10 +489,6 @@ void NetworkService::SetSSLKeyLogFile(base::File file) {
 void NetworkService::CreateNetworkContext(
     mojo::PendingReceiver<mojom::NetworkContext> receiver,
     mojom::NetworkContextParamsPtr params) {
-  // Only the first created NetworkContext can have |primary_next_context| set
-  // to true.
-  DCHECK(!params->primary_network_context || network_contexts_.empty());
-
   owned_network_contexts_.emplace(std::make_unique<NetworkContext>(
       this, std::move(receiver), std::move(params),
       base::BindOnce(&NetworkService::OnNetworkContextConnectionClosed,
@@ -504,6 +522,14 @@ void NetworkService::ConfigureStubHostResolver(
   overrides.disabled_upgrade_providers =
       SplitString(features::kDnsOverHttpsUpgradeDisabledProvidersParam.Get(),
                   ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  // Because SECURE mode does not allow any fallback, allow multiple retries as
+  // a quick hack to increase the timeout for these requests.
+  // TODO(crbug.com/1105138): Rethink the timeout logic to be less aggressive in
+  // cases where there is no fallback, without needing to make so many retries.
+  if (secure_dns_mode == net::DnsConfig::SecureDnsMode::SECURE)
+    overrides.doh_attempts = 3;
+
   host_resolver_manager_->SetDnsConfigOverrides(overrides);
 }
 
@@ -768,28 +794,29 @@ void NetworkService::OnBeforeURLRequest() {
   MaybeStartUpdateLoadInfoTimer();
 }
 
-void NetworkService::DestroyNetworkContexts() {
-  // Delete NetworkContexts. If there's a primary NetworkContext, it must be
-  // deleted after all other NetworkContexts, to avoid use-after-frees.
-  for (auto it = owned_network_contexts_.begin();
-       it != owned_network_contexts_.end();) {
-    const auto last = it;
-    ++it;
-    if (!(*last)->IsPrimaryNetworkContext())
-      owned_network_contexts_.erase(last);
-  }
+void NetworkService::OnDataPipeCreated(DataPipeUser user) {
+  auto& entry = data_pipe_use_[user];
+  ++entry.current;
+  entry.max = std::max(entry.max, entry.current);
+}
 
-  DCHECK_LE(owned_network_contexts_.size(), 1u);
+void NetworkService::OnDataPipeDropped(DataPipeUser user) {
+  auto& entry = data_pipe_use_[user];
+  DCHECK_GT(entry.current, 0);
+  --entry.current;
+  entry.min = std::min(entry.min, entry.current);
+}
+
+void NetworkService::StopMetricsTimerForTesting() {
+  metrics_trigger_timer_.Stop();
+}
+
+void NetworkService::DestroyNetworkContexts() {
   owned_network_contexts_.clear();
 }
 
 void NetworkService::OnNetworkContextConnectionClosed(
     NetworkContext* network_context) {
-  if (network_context->IsPrimaryNetworkContext()) {
-    DestroyNetworkContexts();
-    return;
-  }
-
   auto it = owned_network_contexts_.find(network_context);
   DCHECK(it != owned_network_contexts_.end());
   owned_network_contexts_.erase(it);
@@ -879,6 +906,23 @@ void NetworkService::AckUpdateLoadInfo() {
   DCHECK(waiting_on_load_state_ack_);
   waiting_on_load_state_ack_ = false;
   MaybeStartUpdateLoadInfoTimer();
+}
+
+void NetworkService::ReportMetrics() {
+  UMA_HISTOGRAM_COUNTS_10000("Net.DataPipeUseForUrlLoader.Min",
+                             data_pipe_use_[DataPipeUser::kUrlLoader].min);
+  UMA_HISTOGRAM_COUNTS_10000("Net.DataPipeUseForUrlLoader.Max",
+                             data_pipe_use_[DataPipeUser::kUrlLoader].max);
+  UMA_HISTOGRAM_COUNTS_10000("Net.DataPipeUseForWebSocket.Min",
+                             data_pipe_use_[DataPipeUser::kWebSocket].min);
+  UMA_HISTOGRAM_COUNTS_10000("Net.DataPipeUseForWebSocket.Max",
+                             data_pipe_use_[DataPipeUser::kWebSocket].max);
+
+  for (auto& pair : data_pipe_use_) {
+    DataPipeUsage& entry = pair.second;
+    entry.max = entry.current;
+    entry.min = entry.current;
+  }
 }
 
 void NetworkService::Bind(

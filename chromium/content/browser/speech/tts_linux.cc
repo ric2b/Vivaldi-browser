@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "content/browser/speech/tts_platform_impl.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -128,7 +127,7 @@ void TtsPlatformImplLinux::Initialize() {
     // spd_open has memory leaks which are hard to suppress.
     // http://crbug.com/317360
     ANNOTATE_SCOPED_MEMORY_LEAK;
-    conn_ = libspeechd_loader_.spd_open("chrome", "extension_api", NULL,
+    conn_ = libspeechd_loader_.spd_open("chrome", "extension_api", nullptr,
                                         SPD_MODE_THREADED);
   }
   if (!conn_)
@@ -151,7 +150,7 @@ TtsPlatformImplLinux::~TtsPlatformImplLinux() {
   base::AutoLock lock(initialization_lock_);
   if (conn_) {
     libspeechd_loader_.spd_close(conn_);
-    conn_ = NULL;
+    conn_ = nullptr;
   }
 }
 
@@ -159,14 +158,14 @@ void TtsPlatformImplLinux::Reset() {
   base::AutoLock lock(initialization_lock_);
   if (conn_)
     libspeechd_loader_.spd_close(conn_);
-  conn_ = libspeechd_loader_.spd_open("chrome", "extension_api", NULL,
+  conn_ = libspeechd_loader_.spd_open("chrome", "extension_api", nullptr,
                                       SPD_MODE_THREADED);
 }
 
 bool TtsPlatformImplLinux::PlatformImplAvailable() {
   if (!initialization_lock_.Try())
     return false;
-  bool result = libspeechd_loader_.loaded() && (conn_ != NULL);
+  bool result = libspeechd_loader_.loaded() && (conn_ != nullptr);
   initialization_lock_.Release();
   return result;
 }
@@ -345,8 +344,8 @@ void TtsPlatformImplLinux::NotificationCallback(size_t msg_id,
   // be in a separate thread.
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     current_notification_ = type;
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&TtsPlatformImplLinux::OnSpeechEvent,
                        base::Unretained(TtsPlatformImplLinux::GetInstance()),
                        type));
@@ -365,8 +364,8 @@ void TtsPlatformImplLinux::IndexMarkCallback(size_t msg_id,
   // be in a separate thread.
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     current_notification_ = state;
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&TtsPlatformImplLinux::OnSpeechEvent,
                        base::Unretained(TtsPlatformImplLinux::GetInstance()),
                        state));

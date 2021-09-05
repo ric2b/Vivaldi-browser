@@ -46,9 +46,9 @@ QuicClientSessionCache::QuicClientSessionCache()
 
 QuicClientSessionCache::QuicClientSessionCache(size_t max_entries)
     : clock_(base::DefaultClock::GetInstance()), cache_(max_entries) {
-  memory_pressure_listener_.reset(
-      new base::MemoryPressureListener(base::BindRepeating(
-          &QuicClientSessionCache::OnMemoryPressure, base::Unretained(this))));
+  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
+      FROM_HERE, base::BindRepeating(&QuicClientSessionCache::OnMemoryPressure,
+                                     base::Unretained(this)));
 }
 
 QuicClientSessionCache::~QuicClientSessionCache() {
@@ -101,6 +101,18 @@ std::unique_ptr<quic::QuicResumptionState> QuicClientSessionCache::Lookup(
   state->application_state = iter->second.application_state.get();
 
   return state;
+}
+
+void QuicClientSessionCache::ClearEarlyData(
+    const quic::QuicServerId& server_id) {
+  auto iter = cache_.Get(server_id);
+  if (iter == cache_.end())
+    return;
+  for (auto& session : iter->second.sessions) {
+    if (session) {
+      session.reset(SSL_SESSION_copy_without_early_data(session.get()));
+    }
+  }
 }
 
 void QuicClientSessionCache::FlushInvalidEntries() {

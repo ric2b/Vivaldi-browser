@@ -15,6 +15,7 @@
 #include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "components/sync/base/time.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "ui/gfx/color_utils.h"
 
@@ -66,6 +67,10 @@ bool WebApp::IsSynced() const {
 
 bool WebApp::IsDefaultApp() const {
   return sources_[Source::kDefault];
+}
+
+bool WebApp::IsPolicyInstalledApp() const {
+  return sources_[Source::kPolicy];
 }
 
 bool WebApp::IsSystemApp() const {
@@ -147,6 +152,14 @@ void WebApp::SetUserDisplayMode(DisplayMode user_display_mode) {
   }
 }
 
+void WebApp::SetUserPageOrdinal(syncer::StringOrdinal page_ordinal) {
+  user_page_ordinal_ = std::move(page_ordinal);
+}
+
+void WebApp::SetUserLaunchOrdinal(syncer::StringOrdinal launch_ordinal) {
+  user_launch_ordinal_ = std::move(launch_ordinal);
+}
+
 void WebApp::SetWebAppChromeOsData(
     base::Optional<WebAppChromeOsData> chromeos_data) {
   chromeos_data_ = std::move(chromeos_data);
@@ -179,48 +192,46 @@ void WebApp::SetAdditionalSearchTerms(
 }
 
 void WebApp::SetShortcutInfos(
-    std::vector<WebAppShortcutMenuItemInfo> shortcut_infos) {
+    std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos) {
   shortcut_infos_ = std::move(shortcut_infos);
 }
 
-void WebApp::SetDownloadedShortcutIconsSizes(
+void WebApp::SetDownloadedShortcutsMenuIconsSizes(
     std::vector<std::vector<SquareSizePx>> sizes) {
-  downloaded_shortcut_icons_sizes_ = std::move(sizes);
+  downloaded_shortcuts_menu_icons_sizes_ = std::move(sizes);
 }
 
-WebApp::WebAppShortcutMenuItemInfo::WebAppShortcutMenuItemInfo() = default;
-
-WebApp::WebAppShortcutMenuItemInfo::WebAppShortcutMenuItemInfo(
-    const WebAppShortcutMenuItemInfo& other) = default;
-
-WebApp::WebAppShortcutMenuItemInfo::WebAppShortcutMenuItemInfo(
-    WebAppShortcutMenuItemInfo&&) noexcept = default;
-
-WebApp::WebAppShortcutMenuItemInfo::~WebAppShortcutMenuItemInfo() = default;
-
-WebApp::WebAppShortcutMenuItemInfo&
-WebApp::WebAppShortcutMenuItemInfo::operator=(
-    const WebAppShortcutMenuItemInfo&) = default;
-
-WebApp::WebAppShortcutMenuItemInfo&
-WebApp::WebAppShortcutMenuItemInfo::operator=(
-    WebAppShortcutMenuItemInfo&&) noexcept = default;
-
-void WebApp::SetSyncData(SyncData sync_data) {
-  sync_data_ = std::move(sync_data);
+void WebApp::SetLastLaunchTime(const base::Time& time) {
+  last_launch_time_ = time;
 }
 
-WebApp::SyncData::SyncData() = default;
+void WebApp::SetInstallTime(const base::Time& time) {
+  install_time_ = time;
+}
 
-WebApp::SyncData::~SyncData() = default;
+void WebApp::SetSyncFallbackData(SyncFallbackData sync_fallback_data) {
+  sync_fallback_data_ = std::move(sync_fallback_data);
+}
 
-WebApp::SyncData::SyncData(const SyncData& sync_data) = default;
+WebApp::SyncFallbackData::SyncFallbackData() = default;
 
-WebApp::SyncData& WebApp::SyncData::operator=(SyncData&& sync_data) = default;
+WebApp::SyncFallbackData::~SyncFallbackData() = default;
 
-std::ostream& operator<<(std::ostream& out, const WebApp::SyncData& sync_data) {
-  return out << "theme_color: " << ColorToString(sync_data.theme_color)
-             << " name: " << sync_data.name;
+WebApp::SyncFallbackData::SyncFallbackData(
+    const SyncFallbackData& sync_fallback_data) = default;
+
+WebApp::SyncFallbackData& WebApp::SyncFallbackData::operator=(
+    SyncFallbackData&& sync_fallback_data) = default;
+
+std::ostream& operator<<(std::ostream& out,
+                         const WebApp::SyncFallbackData& sync_fallback_data) {
+  out << "    theme_color: " << ColorToString(sync_fallback_data.theme_color)
+      << std::endl
+      << "    name: " << sync_fallback_data.name << std::endl
+      << "    scope: " << sync_fallback_data.scope << std::endl;
+  for (const WebApplicationIconInfo& icon : sync_fallback_data.icon_infos)
+    out << "    icon_info: " << icon << std::endl;
+  return out;
 }
 
 std::ostream& operator<<(std::ostream& out, const WebApp& app) {
@@ -238,13 +249,20 @@ std::ostream& operator<<(std::ostream& out, const WebApp& app) {
       << "  theme_color: " << ColorToString(app.theme_color_) << std::endl
       << "  display_mode: " << display_mode << std::endl
       << "  user_display_mode: " << user_display_mode << std::endl
+      << "  user_page_ordinal: " << app.user_page_ordinal_.ToDebugString()
+      << std::endl
+      << "  user_launch_ordinal_: " << app.user_launch_ordinal_.ToDebugString()
+      << std::endl
       << "  sources: " << app.sources_.to_string() << std::endl
       << "  is_locally_installed: " << is_locally_installed << std::endl
       << "  is_in_sync_install: " << is_in_sync_install << std::endl
-      << "  sync_data: " << app.sync_data_ << std::endl
-      << "  description: " << app.description_ << std::endl;
+      << "  sync_fallback_data: " << std::endl
+      << app.sync_fallback_data_ << "  description: " << app.description_
+      << std::endl
+      << "  last_launch_time: " << app.last_launch_time_ << std::endl
+      << "  install_time: " << app.install_time_ << std::endl;
   for (const WebApplicationIconInfo& icon : app.icon_infos_)
-    out << "  icon_url: " << icon << std::endl;
+    out << "  icon_info: " << icon << std::endl;
   for (SquareSizePx size : app.downloaded_icon_sizes_)
     out << "  icon_size_on_disk: " << size << std::endl;
   for (const apps::FileHandler& file_handler : app.file_handlers_)
@@ -259,15 +277,17 @@ std::ostream& operator<<(std::ostream& out, const WebApp& app) {
   return out;
 }
 
-bool operator==(const WebApp::SyncData& sync_data1,
-                const WebApp::SyncData& sync_data2) {
-  return std::tie(sync_data1.name, sync_data1.theme_color) ==
-         std::tie(sync_data2.name, sync_data2.theme_color);
+bool operator==(const WebApp::SyncFallbackData& sync_fallback_data1,
+                const WebApp::SyncFallbackData& sync_fallback_data2) {
+  return std::tie(sync_fallback_data1.name, sync_fallback_data1.theme_color,
+                  sync_fallback_data1.scope, sync_fallback_data1.icon_infos) ==
+         std::tie(sync_fallback_data2.name, sync_fallback_data2.theme_color,
+                  sync_fallback_data2.scope, sync_fallback_data2.icon_infos);
 }
 
-bool operator!=(const WebApp::SyncData& sync_data1,
-                const WebApp::SyncData& sync_data2) {
-  return !(sync_data1 == sync_data2);
+bool operator!=(const WebApp::SyncFallbackData& sync_fallback_data1,
+                const WebApp::SyncFallbackData& sync_fallback_data2) {
+  return !(sync_fallback_data1 == sync_fallback_data2);
 }
 
 bool operator==(const WebApp& app1, const WebApp& app2) {
@@ -275,16 +295,20 @@ bool operator==(const WebApp& app1, const WebApp& app2) {
                   app1.description_, app1.scope_, app1.theme_color_,
                   app1.icon_infos_, app1.downloaded_icon_sizes_,
                   app1.display_mode_, app1.user_display_mode_,
+                  app1.user_page_ordinal_, app1.user_launch_ordinal_,
                   app1.chromeos_data_, app1.is_locally_installed_,
                   app1.is_in_sync_install_, app1.file_handlers_,
-                  app1.additional_search_terms_, app1.sync_data_) ==
+                  app1.additional_search_terms_, app1.sync_fallback_data_,
+                  app1.last_launch_time_, app1.install_time_) ==
          std::tie(app2.app_id_, app2.sources_, app2.name_, app2.launch_url_,
                   app2.description_, app2.scope_, app2.theme_color_,
                   app2.icon_infos_, app2.downloaded_icon_sizes_,
                   app2.display_mode_, app2.user_display_mode_,
+                  app2.user_page_ordinal_, app2.user_launch_ordinal_,
                   app2.chromeos_data_, app2.is_locally_installed_,
                   app2.is_in_sync_install_, app2.file_handlers_,
-                  app2.additional_search_terms_, app2.sync_data_);
+                  app2.additional_search_terms_, app2.sync_fallback_data_,
+                  app2.last_launch_time_, app2.install_time_);
 }
 
 bool operator!=(const WebApp& app1, const WebApp& app2) {

@@ -4,6 +4,7 @@
 
 package org.chromium.weblayer.shell;
 
+import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -19,6 +20,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
+import android.webkit.URLUtil;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -32,6 +34,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.ContextMenuParams;
@@ -43,6 +46,7 @@ import org.chromium.weblayer.NavigationController;
 import org.chromium.weblayer.NewTabCallback;
 import org.chromium.weblayer.NewTabType;
 import org.chromium.weblayer.Profile;
+import org.chromium.weblayer.SettingType;
 import org.chromium.weblayer.SiteSettingsActivity;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.TabCallback;
@@ -58,7 +62,7 @@ import java.util.List;
  * Activity for managing the Demo Shell.
  */
 public class WebLayerShellActivity extends FragmentActivity {
-    private static final String PROFILE_NAME = "DefaultProfile";
+    private static final String NON_INCOGNITO_PROFILE_NAME = "DefaultProfile";
 
     private static class ContextMenuCreator
             implements View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
@@ -133,6 +137,7 @@ public class WebLayerShellActivity extends FragmentActivity {
     private List<Tab> mPreviousTabList = new ArrayList<>();
     private Runnable mExitFullscreenRunnable;
     private View mBottomView;
+    private boolean mInIncognitoMode;
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
@@ -173,6 +178,9 @@ public class WebLayerShellActivity extends FragmentActivity {
             popup.getMenuInflater().inflate(R.menu.app_menu, popup.getMenu());
             MenuItem bottomMenuItem = popup.getMenu().findItem(R.id.toggle_bottom_view_id);
             bottomMenuItem.setChecked(mBottomView != null);
+            popup.getMenu()
+                    .findItem(R.id.translate_menu_id)
+                    .setVisible(mBrowser.getActiveTab().canTranslate());
             popup.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.reload_menu_id) {
                     mBrowser.getActiveTab().getNavigationController().reload();
@@ -205,9 +213,17 @@ public class WebLayerShellActivity extends FragmentActivity {
                 }
 
                 if (item.getItemId() == R.id.site_settings_menu_id) {
-                    Intent intent =
-                            SiteSettingsActivity.createIntentForCategoryList(this, PROFILE_NAME);
+                    // TODO(crbug.com/1083233): Figure out the right long-term behavior here.
+                    if (mInIncognitoMode) return true;
+
+                    Intent intent = SiteSettingsActivity.createIntentForCategoryList(
+                            this, NON_INCOGNITO_PROFILE_NAME);
                     IntentUtils.safeStartActivity(this, intent);
+                    return true;
+                }
+
+                if (item.getItemId() == R.id.translate_menu_id) {
+                    mBrowser.getActiveTab().showTranslateUi();
                     return true;
                 }
 
@@ -254,6 +270,7 @@ public class WebLayerShellActivity extends FragmentActivity {
         fragment.setRetainInstance(true);
         mBrowser = Browser.fromFragment(fragment);
         mProfile = mBrowser.getProfile();
+        mProfile.setBooleanSetting(SettingType.UKM_ENABLED, true);
         setTabCallbacks(mBrowser.getActiveTab(), fragment);
 
         mBrowser.setTopView(mTopContentsContainer);
@@ -287,7 +304,7 @@ public class WebLayerShellActivity extends FragmentActivity {
             return;
         }
         String startupUrl = getUrlFromIntent(getIntent());
-        if (TextUtils.isEmpty(startupUrl)) {
+        if (TextUtils.isEmpty(startupUrl) || !URLUtil.isValidUrl(startupUrl)) {
             startupUrl = "https://google.com";
         }
         loadUrl(startupUrl);
@@ -380,10 +397,10 @@ public class WebLayerShellActivity extends FragmentActivity {
             public void bringTabToFront() {
                 tab.getBrowser().setActiveTab(tab);
 
-                Context context = WebLayerShellActivity.this;
-                Intent intent = new Intent(context, WebLayerShellActivity.class);
+                Activity activity = WebLayerShellActivity.this;
+                Intent intent = new Intent(activity, WebLayerShellActivity.class);
                 intent.setAction(Intent.ACTION_MAIN);
-                context.getApplicationContext().startActivity(intent);
+                activity.startActivity(intent);
             }
         });
         tab.getNavigationController().registerNavigationCallback(new NavigationCallback() {
@@ -427,7 +444,14 @@ public class WebLayerShellActivity extends FragmentActivity {
             }
         }
 
-        Fragment fragment = WebLayer.createBrowserFragment(PROFILE_NAME);
+        if (CommandLine.isInitialized()
+                && CommandLine.getInstance().hasSwitch("start-in-incognito")) {
+            mInIncognitoMode = true;
+        }
+
+        String profileName = mInIncognitoMode ? null : NON_INCOGNITO_PROFILE_NAME;
+
+        Fragment fragment = WebLayer.createBrowserFragment(profileName);
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.add(mMainViewId, fragment);
 

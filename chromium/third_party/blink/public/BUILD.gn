@@ -64,7 +64,6 @@ config("blink_headers_config") {
 buildflag_header("buildflags") {
   header = "public_buildflags.h"
   flags = [
-    "DEBUG_DEVTOOLS=$debug_devtools",
     "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
     "ENABLE_UNHANDLED_TAP=$enable_unhandled_tap",
   ]
@@ -157,7 +156,6 @@ source_set("blink_headers") {
     "platform/scheduler/web_scoped_virtual_time_pauser.h",
     "platform/scheduler/web_thread_scheduler.h",
     "platform/scheduler/web_widget_scheduler.h",
-    "platform/shape_properties.h",
     "platform/task_type.h",
     "platform/url_conversion.h",
     "platform/user_metrics_action.h",
@@ -194,7 +192,6 @@ source_set("blink_headers") {
     "platform/web_document_subresource_filter.h",
     "platform/web_double_size.h",
     "platform/web_drag_data.h",
-    "platform/web_drag_operation.h",
     "platform/web_effective_connection_type.h",
     "platform/web_encrypted_media_client.h",
     "platform/web_encrypted_media_key_information.h",
@@ -344,7 +341,6 @@ source_set("blink_headers") {
     "web/web_hit_test_result.h",
     "web/web_image.h",
     "web/web_image_cache.h",
-    "web/web_ime_text_span.h",
     "web/web_input_element.h",
     "web/web_input_method_controller.h",
     "web/web_label_element.h",
@@ -380,11 +376,11 @@ source_set("blink_headers") {
     "web/web_print_page_description.h",
     "web/web_print_params.h",
     "web/web_print_preset_options.h",
-    "web/web_print_scaling_option.h",
     "web/web_range.h",
     "web/web_remote_frame.h",
     "web/web_remote_frame_client.h",
     "web/web_render_theme.h",
+    "web/web_savable_resources_test_support.h",
     "web/web_scoped_window_focus_allowed_indicator.h",
     "web/web_script_controller.h",
     "web/web_script_execution_callback.h",
@@ -425,14 +421,15 @@ source_set("blink_headers") {
   ]
 
   public_deps = [
+    ":devtools_inspector_resources_grit",
     ":resources_grit",
     "//net",
     "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/blink/public/common",
     "//ui/accessibility:ax_base",
-    "//ui/base/cursor",
-    "//ui/base/ime:text_input_types",
+    "//ui/base/cursor:cursor_base",
+    "//ui/base/ime",
     "//ui/base/ime/mojom",
     "//url",
   ]
@@ -464,6 +461,10 @@ group("blink_devtools_frontend_resources") {
   public_deps = [ "$devtools_frontend_path:devtools_frontend_resources" ]
 }
 
+group("blink_devtools_inspector_resources") {
+  public_deps = [ ":devtools_inspector_resources_grit" ]
+}
+
 group("blink_devtools_frontend_resources_files") {
   testonly = true
   data_deps = [ "$devtools_frontend_path:devtools_all_files" ]
@@ -481,6 +482,25 @@ grit("resources") {
   outputs = [
     "grit/blink_resources.h",
     "blink_resources.pak",
+  ]
+}
+
+grit("devtools_inspector_resources") {
+  # Required because the .grd is generated.
+  enable_input_discovery_for_gn_analyze = false
+
+  source = "$root_out_dir/resources/inspector_overlay/inspector_overlay_resources.grd"
+  output_dir = resources_out_dir
+  outputs = [
+    "grit/inspector_overlay_resources_map.h",
+    "inspector_overlay_resources.pak",
+  ]
+
+  defines =
+      [ "SHARED_INTERMEDIATE_DIR=" + rebase_path(root_out_dir, root_build_dir) ]
+
+  deps = [
+    "$devtools_frontend_path:generate_devtools_inspector_overlay_resources",
   ]
 }
 

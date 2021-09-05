@@ -5,11 +5,18 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LACROS_LACROS_UTIL_H_
 #define CHROME_BROWSER_CHROMEOS_LACROS_LACROS_UTIL_H_
 
+namespace base {
+class FilePath;
+}  // namespace base
+
 namespace version_info {
 enum class Channel;
 }  // namespace version_info
 
 namespace lacros_util {
+
+// Returns the user directory for lacros-chrome.
+base::FilePath GetUserDataDir();
 
 // Returns true if lacros is allowed for the current user type, chrome channel,
 // etc.

@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/optional.h"
+#include "base/strings/string_util.h"
 #include "base/test/gtest_util.h"
 #include "pdf/pdfium/pdfium_engine.h"
 #include "pdf/pdfium/pdfium_test_base.h"
@@ -234,6 +236,80 @@ TEST_F(PDFiumPageImageTest, TestImageAltText) {
 
 using PDFiumPageTextTest = PDFiumTestBase;
 
+TEST_F(PDFiumPageTextTest, TestTextRunBounds) {
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("leading_trailing_spaces_per_text_run.pdf"));
+  ASSERT_TRUE(engine);
+
+  constexpr int kFirstRunStartIndex = 0;
+  constexpr int kFirstRunEndIndex = 20;
+  constexpr int kPageIndex = 0;
+  base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo> text_run_info_1 =
+      engine->GetTextRunInfo(kPageIndex, kFirstRunStartIndex);
+  ASSERT_TRUE(text_run_info_1.has_value());
+
+  const auto& actual_text_run_1 = text_run_info_1.value();
+  EXPECT_EQ(21u, actual_text_run_1.len);
+
+  EXPECT_TRUE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kFirstRunStartIndex)));
+  pp::FloatRect text_run_bounds = actual_text_run_1.bounds;
+  EXPECT_TRUE(text_run_bounds.Contains(
+      engine->GetCharBounds(kPageIndex, kFirstRunStartIndex)));
+
+  // Last non-space character should fall in the bounding box of the text run.
+  // Text run looks like this:
+  // " Hello, world! \r\n "<17 characters><first Tj>
+  // " \r\n "<4 characters><second Tj>
+  // " "<1 character><third Tj starting spaces>
+  // Finally generated text run: " Hello, world! \r\n \r\n "
+  constexpr int kFirstRunLastNonSpaceCharIndex = 13;
+  EXPECT_FALSE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kFirstRunLastNonSpaceCharIndex)));
+  EXPECT_TRUE(text_run_bounds.Contains(
+      engine->GetCharBounds(kPageIndex, kFirstRunLastNonSpaceCharIndex)));
+
+  EXPECT_TRUE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kFirstRunEndIndex)));
+  pp::FloatRect end_char_rect =
+      engine->GetCharBounds(kPageIndex, kFirstRunEndIndex);
+  EXPECT_FALSE(text_run_bounds.Contains(end_char_rect));
+  // Equals to the length of the previous text run.
+  constexpr int kSecondRunStartIndex = 21;
+  constexpr int kSecondRunEndIndex = 36;
+  // Test the properties of second text run.
+  // Note: The leading spaces in second text run are accounted for in the end
+  // of first text run. Hence we won't see a space leading the second text run.
+  base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo> text_run_info_2 =
+      engine->GetTextRunInfo(kPageIndex, kSecondRunStartIndex);
+  ASSERT_TRUE(text_run_info_2.has_value());
+
+  const auto& actual_text_run_2 = text_run_info_2.value();
+  EXPECT_EQ(16u, actual_text_run_2.len);
+
+  EXPECT_FALSE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kSecondRunStartIndex)));
+  text_run_bounds = actual_text_run_2.bounds;
+  EXPECT_TRUE(text_run_bounds.Contains(
+      engine->GetCharBounds(kPageIndex, kSecondRunStartIndex)));
+
+  // Last non-space character should fall in the bounding box of the text run.
+  // Text run looks like this:
+  // "Goodbye, world! "<19 characters><first Tj>
+  // Finally generated text run: "Goodbye, world! "
+  constexpr int kSecondRunLastNonSpaceCharIndex = 35;
+  EXPECT_FALSE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kSecondRunLastNonSpaceCharIndex)));
+  EXPECT_TRUE(text_run_bounds.Contains(
+      engine->GetCharBounds(kPageIndex, kSecondRunLastNonSpaceCharIndex)));
+
+  EXPECT_TRUE(base::IsUnicodeWhitespace(
+      engine->GetCharUnicode(kPageIndex, kSecondRunEndIndex)));
+  EXPECT_FALSE(text_run_bounds.Contains(
+      engine->GetCharBounds(kPageIndex, kSecondRunEndIndex)));
+}
+
 TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
   TestClient client;
   std::unique_ptr<PDFiumEngine> engine =
@@ -333,7 +409,7 @@ TEST_F(PDFiumPageTextTest, TestHighlightTextRunInfo) {
       {7,
        PP_MakeFloatRectFromXYWH(106.66666f, 198.66667f, 73.333336f, 18.666672f),
        PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle},
-      {2, PP_MakeFloatRectFromXYWH(188.0f, 202.66667f, 9.333333f, 14.666667f),
+      {2, PP_MakeFloatRectFromXYWH(181.33333f, 192.0f, 16.0f, 25.333344f),
        PP_PrivateDirection::PP_PRIVATEDIRECTION_NONE, kExpectedStyle},
       {2,
        PP_MakeFloatRectFromXYWH(198.66667f, 202.66667f, 21.333328f, 10.666672f),
@@ -434,6 +510,94 @@ TEST_F(PDFiumPageTextFieldTest, TestPopulateTextFields) {
     CompareRect(kExpectedTextFields[i].bounding_rect,
                 page->text_fields_[i].bounding_rect);
     EXPECT_EQ(kExpectedTextFields[i].flags, page->text_fields_[i].flags);
+  }
+}
+
+using PDFiumPageChoiceFieldTest = PDFiumTestBase;
+
+TEST_F(PDFiumPageChoiceFieldTest, TestPopulateChoiceFields) {
+  struct ExpectedChoiceFieldOption {
+    const char* name;
+    bool is_selected;
+  };
+
+  struct ExpectedChoiceField {
+    const char* name;
+    std::vector<struct ExpectedChoiceFieldOption> options;
+    pp::Rect bounding_rect;
+    int flags;
+  };
+
+  static const ExpectedChoiceField kExpectedChoiceFields[] = {
+      {"Listbox_SingleSelect",
+       {{"Foo", false}, {"Bar", false}, {"Qux", false}},
+       {138, 296, 135, 41},
+       0},
+      {"Combo1",
+       {{"Apple", false}, {"Banana", true}, {"Cherry", false}},
+       {138, 230, 135, 41},
+       131072},
+      {"Listbox_ReadOnly",
+       {{"Dog", false}, {"Elephant", false}, {"Frog", false}},
+       {138, 96, 135, 41},
+       1},
+      {"Listbox_MultiSelectMultipleIndices",
+       {
+           {"Albania", false},
+           {"Belgium", true},
+           {"Croatia", false},
+           {"Denmark", true},
+           {"Estonia", false},
+       },
+       {138, 430, 135, 41},
+       2097152},
+      {"Listbox_MultiSelectMultipleValues",
+       {
+           {"Alpha", false},
+           {"Beta", false},
+           {"Gamma", true},
+           {"Delta", false},
+           {"Epsilon", true},
+       },
+       {138, 496, 135, 41},
+       2097152},
+      {"Listbox_MultiSelectMultipleMismatch",
+       {
+           {"Alligator", true},
+           {"Bear", false},
+           {"Cougar", true},
+           {"Deer", false},
+           {"Echidna", false},
+       },
+       {138, 563, 135, 41},
+       2097152}};
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("form_choice_fields.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
+  ASSERT_TRUE(page);
+  page->PopulateAnnotations();
+  size_t choice_fields_count = page->choice_fields_.size();
+  ASSERT_EQ(base::size(kExpectedChoiceFields), choice_fields_count);
+
+  for (size_t i = 0; i < choice_fields_count; ++i) {
+    EXPECT_EQ(kExpectedChoiceFields[i].name, page->choice_fields_[i].name);
+    size_t choice_field_options_count = page->choice_fields_[i].options.size();
+    ASSERT_EQ(base::size(kExpectedChoiceFields[i].options),
+              choice_field_options_count);
+    for (size_t j = 0; j < choice_field_options_count; ++j) {
+      EXPECT_EQ(kExpectedChoiceFields[i].options[j].name,
+                page->choice_fields_[i].options[j].name);
+      EXPECT_EQ(kExpectedChoiceFields[i].options[j].is_selected,
+                page->choice_fields_[i].options[j].is_selected);
+    }
+    CompareRect(kExpectedChoiceFields[i].bounding_rect,
+                page->choice_fields_[i].bounding_rect);
+    EXPECT_EQ(kExpectedChoiceFields[i].flags, page->choice_fields_[i].flags);
   }
 }
 

@@ -285,11 +285,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "syncSetupFriendlySettings",
       base::FeatureList::IsEnabled(features::kSyncSetupFriendlySettings));
 
+#if defined(OS_WIN)
+  html_source->AddBoolean(
+      "safetyCheckChromeCleanerChildEnabled",
+      base::FeatureList::IsEnabled(features::kSafetyCheckChromeCleanerChild));
+#endif
+
 #if defined(OS_CHROMEOS)
   html_source->AddBoolean("splitSettingsSyncEnabled",
                           chromeos::features::IsSplitSettingsSyncEnabled());
-  html_source->AddBoolean("splitSyncConsent",
-                          chromeos::features::IsSplitSyncConsentEnabled());
+  html_source->AddBoolean("useBrowserSyncConsent",
+                          chromeos::features::ShouldUseBrowserSyncConsent());
 
   html_source->AddBoolean(
       "userCannotManuallyEnterPassword",

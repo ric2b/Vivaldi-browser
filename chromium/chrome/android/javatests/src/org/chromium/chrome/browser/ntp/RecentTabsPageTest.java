@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.ntp;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.view.View;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -18,11 +19,11 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.RecentTabsPageTestUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -39,7 +40,6 @@ import java.util.concurrent.ExecutionException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class RecentTabsPageTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -97,13 +97,7 @@ public class RecentTabsPageTest {
 
     private RecentTabsPage loadRecentTabsPage() {
         mActivityTestRule.loadUrl(UrlConstants.RECENT_TABS_URL);
-        CriteriaHelper.pollUiThread(new Criteria("RecentTabsPage never fully loaded") {
-            @Override
-            public boolean isSatisfied() {
-                return mTab.getNativePage() instanceof RecentTabsPage;
-            }
-        });
-        Assert.assertTrue(mTab.getNativePage() instanceof RecentTabsPage);
+        RecentTabsPageTestUtils.waitForRecentTabsPageLoaded(mTab);
         return (RecentTabsPage) mTab.getNativePage();
     }
 

@@ -66,6 +66,8 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   TestRenderWidgetHost* GetRenderWidgetHost() override;
   void AddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                            const std::string& message) override;
+  void ReportHeavyAdIssue(blink::mojom::HeavyAdResolutionStatus resolution,
+                          blink::mojom::HeavyAdReason reason) override;
   void AddUniqueMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                                  const std::string& message) override;
   bool IsTestRenderFrameHost() const override;
@@ -88,6 +90,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       const std::vector<url::Origin>& allowlist) override;
   void SimulateUserActivation() override;
   const std::vector<std::string>& GetConsoleMessages() override;
+  int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
 
   void SendNavigate(int nav_entry_id,
                     bool did_create_new_entry,
@@ -120,7 +123,8 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SendRendererInitiatedNavigationRequest(const GURL& url,
                                               bool has_user_gesture);
 
-  void DidChangeOpener(int opener_routing_id);
+  void SimulateDidChangeOpener(
+      const base::UnguessableToken& opener_frame_token);
 
   void DidEnforceInsecureRequestPolicy(
       blink::mojom::InsecureRequestPolicy policy);
@@ -224,7 +228,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
           subresource_overrides,
       blink::mojom::ControllerServiceWorkerInfoPtr
           controller_service_worker_info,
-      blink::mojom::ServiceWorkerProviderInfoForClientPtr provider_info,
+      blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory,
       const base::UnguessableToken& devtools_navigation_token) override;
@@ -268,6 +272,11 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
 
   // Keeps a running vector of messages sent to AddMessageToConsole.
   std::vector<std::string> console_messages_;
+
+  // Keep a count of the heavy ad issues sent to ReportHeavyAdIssue.
+  int heavy_ad_issue_network_count_ = 0;
+  int heavy_ad_issue_cpu_total_count_ = 0;
+  int heavy_ad_issue_cpu_peak_count_ = 0;
 
   TestRenderFrameHostCreationObserver child_creation_observer_;
 

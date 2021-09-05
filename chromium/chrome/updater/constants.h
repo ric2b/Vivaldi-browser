@@ -59,7 +59,10 @@ extern const char kInstallSwitch[];
 #if defined(OS_MACOSX)
 // Swaps the current version of the updater with the newly installed one.
 // Performs clean-up.
-extern const char kSwapUpdaterSwitch[];
+extern const char kPromoteCandidateSwitch[];
+
+// TODO(crbug 1072061): this switch should not be shipped.
+extern const char kUninstallCandidateSwitch[];
 #endif  // OS_MACOSX
 
 #if defined(OS_WIN)
@@ -73,8 +76,9 @@ extern const char kInstallFromOutDir[];
 // Uninstalls the updater.
 extern const char kUninstallSwitch[];
 
-// Updates all apps registered with the updater.
-extern const char kUpdateAppsSwitch[];
+// Kicks off the update service. This switch is typically used for by a
+// scheduled to invoke the updater periodically.
+extern const char kWakeSwitch[];
 
 // The updater needs to operate in the system context.
 extern const char kSystemSwitch[];
@@ -127,13 +131,19 @@ extern const char kUninstallScript[];
 extern const char kDevOverrideKeyUrl[];
 extern const char kDevOverrideKeyUseCUP[];
 
+#if defined(OS_WIN)
 // Timing constants.
 //
-// How long to wait for an application installer (such as chrome_installer.exe)
-// to complete.
+// How long to wait for an application installer (such as
+// chrome_installer.exe) to complete.
 constexpr int kWaitForAppInstallerSec = 60;
 
-// Errors.
+// How often the installer progress from registry is sampled. This value may
+// be changed to provide a smoother progress experience (crbug.com/1067475).
+constexpr int kWaitForInstallerProgressSec = 1;
+#endif  // OS_WIN
+
+// Install Errors.
 //
 // Specific install errors for the updater are reported in such a way that
 // their range does not conflict with the range of generic errors defined by
@@ -155,6 +165,13 @@ constexpr int kErrorMissingRunableFile = kCustomInstallErrorBase + 2;
 
 // Running the application installer failed.
 constexpr int kErrorApplicationInstallerFailed = kCustomInstallErrorBase + 3;
+
+// Server Errors.
+//
+// The server process may exit with any of these exit codes.
+constexpr int kErrorOk = 0;
+constexpr int kErrorFailedToLockPrefsMutex = 1;
+constexpr int kErrorFailedToSwap = 2;
 
 // Policy Management constants.
 extern const char kProxyModeDirect[];

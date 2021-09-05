@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Tatal ke kanan</translation>
 <translation id="1781173782405573156">Kekunci lintasan</translation>
 <translation id="1787176709638001873">Teks edit kata laluan</translation>
+<translation id="180203835522132923">Cari + O, kemudian W</translation>
 <translation id="1810107444790159527">Kotak senarai</translation>
 <translation id="1812527064848182527">landskap</translation>
 <translation id="1829244130665387512">Cari dalam halaman</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Leret dua jari ke kiri</translation>
 <translation id="2998131015536248178">Aksara Sebelumnya</translation>
 <translation id="2999559350546931576">Kurangkan nada</translation>
+<translation id="3009352964623081324">Cari + O, kemudian S. Gunakan untuk memasang, mengurus dan menyesuaikan suara.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">Butang radio item menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{koma atas}other{# koma atas}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Penyisipan</translation>
 <translation id="4511186779140817916">Almond Pucat</translation>
 <translation id="451510441928265982">Tiada tajuk tahap 2 sebelumnya</translation>
+<translation id="4515799157838123044">Gelapkan kandungan latar belakang</translation>
 <translation id="4517854969512651305">Tingkatkan nilai</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{garis condong}other{# garis condong}}</translation>
 <translation id="4537277403911487429">Item serupa seterusnya</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Bahagian</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Bar kemajuan</translation>
+<translation id="6660819301598582123">The quick brown fox jumped over the lazy dog.</translation>
 <translation id="667999046851023355">Dokumen</translation>
 <translation id="6688209025607531203">Bukan makluman mod</translation>
 <translation id="6689672606256159458">Jingga Salmon Gelap</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Tiada tajuk tahap 5 seterusnya</translation>
 <translation id="6955705049214951590">Mawar Berkabus</translation>
 <translation id="696356426651109308">Lompat ke permulaan</translation>
-<translation id="699159175332639490">Cari + O + W</translation>
 <translation id="6994042831499278539">Rujukan glosari</translation>
 <translation id="6996566555547746822">Kotak kombo seterusnya</translation>
 <translation id="6997224546856374593">Apabila membaca huruf besar:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Contoh</translation>
 <translation id="7439060726180460871">Direktori</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Tukar pic ketika menyebutkan jenis unsur dan teks dalam tanda petikan, dipadamkan, berhuruf tebal, dalam kurungan atau berhuruf besar.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">Sebut "cap" sebelum huruf</translation>
 <translation id="7518543783849163354">Untuk menghentikan sebentar ChromeVox daripada bertutur, tekan kekunci Control.</translation>

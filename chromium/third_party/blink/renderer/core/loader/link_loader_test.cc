@@ -42,7 +42,9 @@ class MockLinkLoaderClient final
  public:
   explicit MockLinkLoaderClient(bool should_load) : should_load_(should_load) {}
 
-  void Trace(Visitor* visitor) override { LinkLoaderClient::Trace(visitor); }
+  void Trace(Visitor* visitor) const override {
+    LinkLoaderClient::Trace(visitor);
+  }
 
   bool ShouldLoadLink() override { return should_load_; }
   bool IsLinkCreatedByParser() override { return true; }
@@ -594,7 +596,8 @@ TEST_P(LinkLoaderTestPrefetchPrivacyChanges, PrefetchPrivacyChanges) {
                   : network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade);
   }
 
-  platform_->GetURLLoaderMockFactory()->UnregisterAllURLsAndClearMemoryCache();
+  WebURLLoaderMockFactory::GetSingletonInstance()
+      ->UnregisterAllURLsAndClearMemoryCache();
 }
 
 class LinkLoaderTest : public testing::Test,
@@ -660,7 +663,7 @@ TEST_F(LinkLoaderTest, Prefetch) {
                   resource->GetResourceRequest().GetReferrerPolicy());
       }
     }
-    platform_->GetURLLoaderMockFactory()
+    WebURLLoaderMockFactory::GetSingletonInstance()
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 }

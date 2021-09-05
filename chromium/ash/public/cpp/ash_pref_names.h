@@ -20,6 +20,7 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierCenterFocus[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierScale[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardFeatures[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityMonoAudioEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityShortcutsEnabled[];
@@ -31,6 +32,8 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickMovementThreshold[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickMenuPosition[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityCaretHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorHighlightEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorColorEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorColor[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFloatingMenuEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFloatingMenuPosition[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFocusHighlightEnabled[];
@@ -87,6 +90,10 @@ ASH_PUBLIC_EXPORT extern const char kHasSeenStylus[];
 ASH_PUBLIC_EXPORT extern const char kShownPaletteWelcomeBubble[];
 ASH_PUBLIC_EXPORT extern const char kEnableStylusTools[];
 ASH_PUBLIC_EXPORT extern const char kLaunchPaletteOnEjectEvent[];
+
+// Managed-guest session privacy warning.
+ASH_PUBLIC_EXPORT extern const char
+    kManagedGuestSessionPrivacyWarningsEnabled[];
 
 // Lock screen notification settings.
 ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenMode[];
@@ -164,6 +171,7 @@ ASH_PUBLIC_EXPORT extern const char kDetachableBaseDevices[];
 ASH_PUBLIC_EXPORT extern const char kCursorMotionBlurEnabled[];
 
 ASH_PUBLIC_EXPORT extern const char kAssistantNumWarmerWelcomeTriggered[];
+ASH_PUBLIC_EXPORT extern const char kAssistantTimeOfLastInteraction[];
 
 ASH_PUBLIC_EXPORT extern const char kVpnConfigAllowed[];
 
@@ -184,6 +192,9 @@ ASH_PUBLIC_EXPORT extern const char kUsbPowerShareEnabled[];
 
 ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoShownInLauncher[];
 ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoDismissedInLauncher[];
+
+ASH_PUBLIC_EXPORT extern const char kSuggestedContentInfoShownInLauncher[];
+ASH_PUBLIC_EXPORT extern const char kSuggestedContentInfoDismissedInLauncher[];
 
 ASH_PUBLIC_EXPORT extern const char kLockScreenMediaControlsEnabled[];
 

@@ -12,6 +12,7 @@
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
@@ -25,11 +26,11 @@
 #include "chrome/grit/new_tab_page_resources_map.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/google/core/common/google_util.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -63,9 +64,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       ntp_features::IsRealboxEnabled() &&
       base::FeatureList::IsEnabled(ntp_features::kWebUIRealbox);
   source->AddBoolean("realboxEnabled", realbox_enabled);
-  source->AddBoolean("suggestionTransparencyEnabled",
-                     base::FeatureList::IsEnabled(
-                         omnibox::kOmniboxSuggestionTransparencyOptions));
   source->AddBoolean(
       "realboxMatchOmniboxTheme",
       base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme));
@@ -78,6 +76,13 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "iframeOneGoogleBarEnabled",
       base::FeatureList::IsEnabled(ntp_features::kIframeOneGoogleBar));
+  source->AddBoolean(
+      "oneGoogleBarModalOverlaysEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kOneGoogleBarModalOverlays));
+
+  source->AddBoolean(
+      "themeModeDoodlesEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
@@ -188,8 +193,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH}};
   webui::AddResourcePathsBulk(source, kImages);
 
-  source->AddResourcePath("skcolor.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_SKCOLOR_MOJO_LITE_JS);
   source->AddResourcePath("new_tab_page.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
   source->AddResourcePath("omnibox.mojom-lite.js",
@@ -206,13 +209,15 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   // TODO(crbug.com/1076506): remove when changing to iframed OneGoogleBar.
   // Needs to happen after |webui::SetupWebUIDataSource()| since also overrides
   // script-src.
-  source->OverrideContentSecurityPolicyScriptSrc(
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self' 'unsafe-inline' "
       "https:;");
   // Allow embedding of iframes from the One Google Bar and
   // chrome-untrusted://new-tab-page for other external content and resources.
-  source->OverrideContentSecurityPolicyChildSrc(
-      base::StringPrintf("child-src https://*.google.com/ %s %s;",
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc,
+      base::StringPrintf("child-src https: %s %s;",
                          google_util::CommandLineGoogleBaseURL().spec().c_str(),
                          chrome::kChromeUIUntrustedNewTabPageUrl));
 
@@ -280,7 +285,9 @@ void NewTabPageUI::CreatePageHandler(
   DCHECK(pending_page.is_valid());
   page_handler_ = std::make_unique<NewTabPageHandler>(
       std::move(pending_page_handler), std::move(pending_page), profile_,
-      web_contents_, navigation_start_time_);
+      instant_service_, web_contents_,
+      NTPUserDataLogger::GetOrCreateFromWebContents(web_contents_),
+      navigation_start_time_);
 }
 
 void NewTabPageUI::NtpThemeChanged(const NtpTheme& theme) {

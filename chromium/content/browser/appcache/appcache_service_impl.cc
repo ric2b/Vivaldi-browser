@@ -16,7 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/appcache/appcache.h"
@@ -31,8 +30,10 @@
 #include "content/browser/appcache/appcache_storage_impl.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 
@@ -387,7 +388,9 @@ AppCacheServiceImpl::AppCacheServiceImpl(
       partition_(std::move(partition)) {
   if (quota_manager_proxy_.get()) {
     quota_client_ = base::MakeRefCounted<AppCacheQuotaClient>(AsWeakPtr());
-    quota_manager_proxy_->RegisterClient(quota_client_);
+    quota_manager_proxy_->RegisterClient(
+        quota_client_, storage::QuotaClientType::kAppcache,
+        {blink::mojom::StorageType::kTemporary});
   }
 }
 
@@ -399,8 +402,8 @@ AppCacheServiceImpl::~AppCacheServiceImpl() {
     helper.first->Cancel();
   pending_helpers_.clear();
   if (quota_client_) {
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&AppCacheQuotaClient::NotifyAppCacheDestroyed,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&AppCacheQuotaClient::NotifyAppCacheDestroyed,
                                   std::move(quota_client_)));
   }
 
@@ -522,6 +525,7 @@ void AppCacheServiceImpl::RegisterHost(
     const base::UnguessableToken& host_id,
     int32_t render_frame_id,
     int process_id,
+    ChildProcessSecurityPolicyImpl::Handle security_policy_handle,
     mojo::ReportBadMessageCallback bad_message_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (GetHost(host_id)) {
@@ -539,6 +543,7 @@ void AppCacheServiceImpl::RegisterHost(
     host->set_frontend(std::move(frontend_remote), render_frame_id);
   } else {
     host = std::make_unique<AppCacheHost>(host_id, process_id, render_frame_id,
+                                          std::move(security_policy_handle),
                                           std::move(frontend_remote), this);
   }
 

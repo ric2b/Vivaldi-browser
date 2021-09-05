@@ -42,6 +42,7 @@ class ServiceWorkerDiskCache;
 class ServiceWorkerResponseMetadataWriter;
 class ServiceWorkerResponseReader;
 class ServiceWorkerResponseWriter;
+class ServiceWorkerStorageControlImplTest;
 
 namespace service_worker_storage_unittest {
 class ServiceWorkerStorageTest;
@@ -79,6 +80,9 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       ServiceWorkerDatabase::Status status,
       std::unique_ptr<RegistrationList> registrations,
       std::unique_ptr<std::vector<ResourceList>> resource_lists)>;
+  using GetUsageForOriginCallback =
+      base::OnceCallback<void(ServiceWorkerDatabase::Status status,
+                              int64_t usage)>;
   using GetAllRegistrationsCallback =
       base::OnceCallback<void(ServiceWorkerDatabase::Status status,
                               std::unique_ptr<RegistrationList> registrations)>;
@@ -99,11 +103,9 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   using DatabaseStatusCallback =
       base::OnceCallback<void(ServiceWorkerDatabase::Status status)>;
   using GetUserDataInDBCallback =
-      base::OnceCallback<void(const std::vector<std::string>& data,
-                              ServiceWorkerDatabase::Status)>;
-  using GetUserKeysAndDataInDBCallback = base::OnceCallback<void(
-      const base::flat_map<std::string, std::string>& data_map,
-      ServiceWorkerDatabase::Status)>;
+      storage::mojom::ServiceWorkerStorageControl::GetUserDataCallback;
+  using GetUserKeysAndDataInDBCallback = storage::mojom::
+      ServiceWorkerStorageControl::GetUserKeysAndDataByKeyPrefixCallback;
   using GetUserDataForAllRegistrationsInDBCallback = base::OnceCallback<void(
       const std::vector<std::pair<int64_t, std::string>>& user_data,
       ServiceWorkerDatabase::Status)>;
@@ -141,13 +143,17 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void GetRegistrationsForOrigin(const GURL& origin,
                                  GetRegistrationsDataCallback callback);
 
+  // Reads the total resource size stored in the storage for a given origin.
+  void GetUsageForOrigin(const url::Origin& origin,
+                         GetUsageForOriginCallback callback);
+
   // Returns all stored registrations.
   void GetAllRegistrations(GetAllRegistrationsCallback callback);
 
   // Stores |registration_data| and |resources| on persistent storage.
   void StoreRegistrationData(
       storage::mojom::ServiceWorkerRegistrationDataPtr registration_data,
-      std::unique_ptr<ResourceList> resources,
+      ResourceList resources,
       StoreRegistrationDataCallback callback);
 
   // Updates the state of the registration's stored version to active.
@@ -199,7 +205,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
 
   // Removes resource ids from uncommitted list, adds them to the purgeable list
   // and purges them.
-  void DoomUncommittedResources(const std::set<int64_t>& resource_ids,
+  void DoomUncommittedResources(const std::vector<int64_t>& resource_ids,
                                 DatabaseStatusCallback callback);
 
   // Provide a storage mechanism to read/write arbitrary data associated with
@@ -291,7 +297,6 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   // the uncommitted resource keys.
   void PurgeResources(const ResourceList& resources);
   void PurgeResources(const std::vector<int64_t>& resource_ids);
-  void PurgeResources(const std::set<int64_t>& resource_ids);
 
   // Applies |policy_updates|.
   void ApplyPolicyUpdates(
@@ -303,6 +308,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void SetPurgingCompleteCallbackForTest(base::OnceClosure callback);
 
  private:
+  friend class ServiceWorkerStorageControlImplTest;
   friend class service_worker_storage_unittest::ServiceWorkerStorageTest;
   friend class service_worker_storage_unittest::
       ServiceWorkerResourceStorageTest;
@@ -409,7 +415,6 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void InitializeDiskCache();
   void OnDiskCacheInitialized(int rv);
 
-  void StartPurgingResources(const std::set<int64_t>& resource_ids);
   void StartPurgingResources(const std::vector<int64_t>& resource_ids);
   void StartPurgingResources(const ResourceList& resources);
   void ContinuePurgingResources();
@@ -450,7 +455,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       ServiceWorkerDatabase* database,
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,
       storage::mojom::ServiceWorkerRegistrationDataPtr registration,
-      std::unique_ptr<ResourceList> resources,
+      ResourceList resources,
       WriteRegistrationCallback callback);
   static void FindForClientUrlInDB(
       ServiceWorkerDatabase* database,
@@ -473,6 +478,11 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,
       int64_t registration_id,
       FindInDBCallback callback);
+  static void GetUsageForOriginInDB(
+      ServiceWorkerDatabase* database,
+      scoped_refptr<base::SequencedTaskRunner> original_task_runner,
+      url::Origin origin,
+      GetUsageForOriginCallback callback);
   static void GetUserDataInDB(
       ServiceWorkerDatabase* database,
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,

@@ -6,6 +6,8 @@
 
 #include <lib/fdio/limits.h>
 
+#include "base/notreached.h"
+
 namespace base {
 
 size_t GetMaxFds() {
@@ -33,6 +35,12 @@ std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateProcessMetrics(
 TimeDelta ProcessMetrics::GetCumulativeCPUUsage() {
   // TODO(https://crbug.com/926581).
   return TimeDelta();
+}
+
+bool ProcessMetrics::GetCumulativeCPUUsagePerThread(CPUUsagePerThread&) {
+  // TODO(https://crbug.com/926581).
+  NOTIMPLEMENTED();
+  return false;
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {

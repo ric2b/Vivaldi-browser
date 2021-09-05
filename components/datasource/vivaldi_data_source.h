@@ -12,19 +12,9 @@
 #include "content/public/browser/url_data_source.h"
 #include "url/gurl.h"
 
+#include "components/datasource/vivaldi_data_url_utils.h"
+
 class Profile;
-
-namespace base {
-class RefCountedMemory;
-}
-
-namespace gfx {
-class Image;
-}
-
-namespace image_fetcher {
-class ImageFetcher;
-}
 
 // Handlers for Vivaldi data will inherit and implement this class
 // for providing data to the data source.
@@ -52,20 +42,14 @@ class VivaldiDataSource : public content::URLDataSource {
       const content::WebContents::Getter& wc_getter,
       content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
-  bool AllowCaching() override;
-
- protected:
-  bool IsCSSRequest(const std::string& path) const;
-
-  // Use flat_map, not std::map, as it allows to find a value by StringPiece
-  // without allocating a temporary std::string.
-  base::flat_map<std::string, std::unique_ptr<VivaldiDataClassHandler>>
-      data_class_handlers_;
+  bool AllowCaching(const std::string& path) override;
 
  private:
-  void ExtractRequestTypeAndData(base::StringPiece path,
-                                 base::StringPiece& type,
-                                 base::StringPiece& data) const;
+  using PathType = vivaldi_data_url_utils::PathType;
+
+  base::flat_map<vivaldi_data_url_utils::PathType,
+                 std::unique_ptr<VivaldiDataClassHandler>>
+      data_class_handlers_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSource);
 };

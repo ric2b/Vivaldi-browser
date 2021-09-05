@@ -96,10 +96,19 @@ void ServiceWorkerLoaderHelpers::SaveResponseInfo(
   out_head->was_fallback_required_by_service_worker = false;
   out_head->url_list_via_service_worker = response.url_list;
   out_head->response_type = response.response_type;
+  if (response.mime_type.has_value()) {
+    std::string charset;
+    bool had_charset = false;
+    // The mime type set on |response| may have a charset included.  The
+    // loading stack, however, expects the charset to already have been
+    // stripped.  Parse out the mime type essence without any charset and
+    // store the result on |out_head|.
+    net::HttpUtil::ParseContentType(response.mime_type.value(),
+                                    &out_head->mime_type, &charset,
+                                    &had_charset, nullptr);
+  }
   out_head->response_time = response.response_time;
-  out_head->is_in_cache_storage =
-      response.response_source ==
-      network::mojom::FetchResponseSource::kCacheStorage;
+  out_head->service_worker_response_source = response.response_source;
   if (response.cache_storage_cache_name)
     out_head->cache_storage_cache_name = *(response.cache_storage_cache_name);
   else
@@ -107,6 +116,9 @@ void ServiceWorkerLoaderHelpers::SaveResponseInfo(
   out_head->cors_exposed_header_names = response.cors_exposed_header_names;
   out_head->did_service_worker_navigation_preload = false;
   out_head->parsed_headers = mojo::Clone(response.parsed_headers);
+  out_head->connection_info = response.connection_info;
+  out_head->alpn_negotiated_protocol = response.alpn_negotiated_protocol;
+  out_head->was_fetched_via_spdy = response.was_fetched_via_spdy;
 }
 
 // static

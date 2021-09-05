@@ -55,7 +55,7 @@
 <translation id="2572483411312390101">lejátszás</translation>
 <translation id="2613802280814924224">Kérjük, érvényes értéket adjon meg. A legközelebbi érvényes érték <ph name="VALID_VALUE" />.</translation>
 <translation id="2634240155926812724">Zöld csatorna</translation>
-<translation id="2653659639078652383">Elküldés</translation>
+<translation id="2653659639078652383">Küldés</translation>
 <translation id="2657045182931379222">grafikus objektum</translation>
 <translation id="2674318244760992338">lábléc</translation>
 <translation id="2709516037105925701">Automatikus kitöltés</translation>
@@ -186,7 +186,7 @@
 <translation id="6692633176391053278">léptető</translation>
 <translation id="6709570249143506788">Gyenge lejátszási minőség</translation>
 <translation id="6755330956360078551">elemleírás</translation>
-<translation id="6790428901817661496">Játék</translation>
+<translation id="6790428901817661496">Lejátszás</translation>
 <translation id="6820355525329141109">Nem sikerült betölteni a beépülő modult.</translation>
 <translation id="6820615603175220800">bibliográfiai hivatkozás</translation>
 <translation id="6831465880655513317">Színválasztó kétdimenziós csúszkával, amellyel a telítettséget és a világosságot lehet beállítani</translation>

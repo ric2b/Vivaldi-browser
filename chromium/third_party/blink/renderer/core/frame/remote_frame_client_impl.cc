@@ -5,7 +5,12 @@
 #include "third_party/blink/renderer/core/frame/remote_frame_client_impl.h"
 
 #include <memory>
+#include <utility>
+
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/web/web_remote_frame_client.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
@@ -17,8 +22,6 @@
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
-#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
-#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
 
@@ -39,7 +42,7 @@ Frame* ToCoreFrame(WebFrame* frame) {
 RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameImpl* web_frame)
     : web_frame_(web_frame) {}
 
-void RemoteFrameClientImpl::Trace(Visitor* visitor) {
+void RemoteFrameClientImpl::Trace(Visitor* visitor) const {
   visitor->Trace(web_frame_);
   RemoteFrameClient::Trace(visitor);
 }
@@ -56,8 +59,14 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
 
   client->FrameDetached(static_cast<WebRemoteFrameClient::DetachType>(type));
 
-  if (type == FrameDetachType::kRemove)
-    web_frame_->DetachFromParent();
+  if (web_frame_->Parent()) {
+    if (type == FrameDetachType::kRemove)
+      web_frame_->DetachFromParent();
+  } else if (web_frame_->View()) {
+    // If the RemoteFrame being detached is also the main frame in the renderer
+    // process, we need to notify the webview to allow it to clean things up.
+    web_frame_->View()->DidDetachRemoteMainFrame();
+  }
 
   // Clear our reference to RemoteFrame at the very end, in case the client
   // refers to it.
@@ -66,13 +75,6 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
 
 Frame* RemoteFrameClientImpl::Opener() const {
   return ToCoreFrame(web_frame_->Opener());
-}
-
-void RemoteFrameClientImpl::SetOpener(Frame* opener) {
-  WebFrame* opener_frame = WebFrame::FromFrame(opener);
-  if (web_frame_->Client() && web_frame_->Opener() != opener_frame)
-    web_frame_->Client()->DidChangeOpener(opener_frame);
-  web_frame_->SetOpener(opener_frame);
 }
 
 Frame* RemoteFrameClientImpl::Parent() const {
@@ -115,7 +117,7 @@ void RemoteFrameClientImpl::Navigate(
         should_replace_current_entry, is_opener_navigation,
         initiator_frame_has_download_sandbox_flag,
         blocking_downloads_in_sandbox_enabled, initiator_frame_is_ad,
-        blob_url_token.PassPipe(), impression);
+        std::move(blob_url_token), impression);
   }
 }
 
@@ -125,19 +127,6 @@ unsigned RemoteFrameClientImpl::BackForwardLength() {
   // navigation and the subsequent one moving the frame out-of-process.
   // See https://crbug.com/501116.
   return 2;
-}
-
-void RemoteFrameClientImpl::ForwardPostMessage(
-    MessageEvent* event,
-    scoped_refptr<const SecurityOrigin> target,
-    base::Optional<base::UnguessableToken> cluster_id,
-    LocalFrame* source_frame) const {
-  if (web_frame_->Client()) {
-    web_frame_->Client()->ForwardPostMessage(
-        WebLocalFrameImpl::FromFrame(source_frame), web_frame_,
-        WebSecurityOrigin(std::move(target)),
-        WebDOMMessageEvent(event, cluster_id));
-  }
 }
 
 void RemoteFrameClientImpl::FrameRectsChanged(
@@ -151,15 +140,14 @@ void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(
   web_frame_->Client()->UpdateRemoteViewportIntersection(intersection_state);
 }
 
-void RemoteFrameClientImpl::AdvanceFocus(mojom::blink::FocusType type,
-                                         LocalFrame* source) {
-  web_frame_->Client()->AdvanceFocus(type,
-                                     WebLocalFrameImpl::FromFrame(source));
-}
-
 uint32_t RemoteFrameClientImpl::Print(const IntRect& rect,
                                       cc::PaintCanvas* canvas) const {
   return web_frame_->Client()->Print(rect, canvas);
+}
+
+AssociatedInterfaceProvider*
+RemoteFrameClientImpl::GetRemoteAssociatedInterfaces() {
+  return web_frame_->Client()->GetRemoteAssociatedInterfaces();
 }
 
 }  // namespace blink

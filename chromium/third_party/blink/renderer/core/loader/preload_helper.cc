@@ -30,7 +30,7 @@
 #include "third_party/blink/renderer/core/loader/resource/css_style_sheet_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/font_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
-#include "third_party/blink/renderer/core/loader/resource/link_fetch_resource.h"
+#include "third_party/blink/renderer/core/loader/resource/link_prefetch_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/script_resource.h"
 #include "third_party/blink/renderer/core/loader/subresource_integrity_helper.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
@@ -517,8 +517,15 @@ Resource* PreloadHelper::PrefetchIfNeeded(const LinkLoadParameters& params,
 
     ResourceRequest resource_request(params.href);
 
-    if (EqualIgnoringASCIICase(params.as, "document"))
+    // Later a security check is done asserting that the initiator of a
+    // cross-origin prefetch request is same-origin with the origin that the
+    // browser process is aware of. However, since opaque request initiators are
+    // always cross-origin with every other origin, we must not request
+    // cross-origin prefetches from opaque requestors.
+    if (EqualIgnoringASCIICase(params.as, "document") &&
+        !document.GetSecurityOrigin()->IsOpaque()) {
       resource_request.SetPrefetchMaybeForTopLevelNavigation(true);
+    }
 
     // This request could have originally been a preload header on a prefetch
     // response, that was promoted to a prefetch request by LoadLinksFromHeader.
@@ -550,9 +557,8 @@ Resource* PreloadHelper::PrefetchIfNeeded(const LinkLoadParameters& params,
         RuntimeEnabledFeatures::
             SignedExchangePrefetchCacheForNavigationsEnabled() ||
         RuntimeEnabledFeatures::SignedExchangeSubresourcePrefetchEnabled(
-            &document));
-    return LinkFetchResource::Fetch(ResourceType::kLinkPrefetch,
-                                    link_fetch_params, document.Fetcher());
+            document.GetExecutionContext()));
+    return LinkPrefetchResource::Fetch(link_fetch_params, document.Fetcher());
   }
   return nullptr;
 }
@@ -594,7 +600,7 @@ void PreloadHelper::LoadLinksFromHeader(
     if (alternate_resource_info && params.rel.IsLinkPreload()) {
       DCHECK(document);
       DCHECK(RuntimeEnabledFeatures::SignedExchangeSubresourcePrefetchEnabled(
-          document));
+          document->GetExecutionContext()));
       KURL url = params.href;
       base::Optional<ResourceType> resource_type =
           PreloadHelper::GetResourceTypeFromAsAttribute(params.as);

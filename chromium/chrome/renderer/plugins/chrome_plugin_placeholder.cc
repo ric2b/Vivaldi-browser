@@ -15,7 +15,6 @@
 #include "base/values.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/renderer_resources.h"
@@ -24,6 +23,7 @@
 #include "chrome/renderer/plugins/plugin_preroller.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
 #include "components/content_settings/renderer/content_settings_agent_impl.h"
+#include "components/prerender/common/prerender_messages.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/untrustworthy_context_menu_params.h"
@@ -212,9 +212,9 @@ void ChromePluginPlaceholder::UpdateFailure() {
 }
 
 void ChromePluginPlaceholder::OnSetPrerenderMode(
-    prerender::PrerenderMode mode,
+    prerender::mojom::PrerenderMode mode,
     const std::string& histogram_prefix) {
-  OnSetIsPrerendering(mode != prerender::NO_PRERENDER);
+  OnSetIsPrerendering(mode != prerender::mojom::PrerenderMode::kNoPrerender);
 }
 
 void ChromePluginPlaceholder::PluginListChanged() {

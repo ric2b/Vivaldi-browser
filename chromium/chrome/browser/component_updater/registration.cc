@@ -11,6 +11,7 @@
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/crowd_deny_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
+#include "chrome/browser/component_updater/floc_blocklist_component_installer.h"
 #include "chrome/browser/component_updater/games_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
@@ -45,9 +46,7 @@
 #endif  // defined(OS_WIN)
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/component_updater/intervention_policy_database_component_installer.h"
 #include "chrome/browser/component_updater/soda_component_installer.h"
-#include "chrome/browser/enterprise/connectors/service_providers.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #endif
 
@@ -117,10 +116,11 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif
 
   RegisterSubresourceFilterComponent(cus);
+  RegisterFlocBlocklistComponent(cus,
+                                 g_browser_process->floc_blocklist_service());
   RegisterOnDeviceHeadSuggestComponent(
       cus, g_browser_process->GetApplicationLocale());
-  RegisterOptimizationHintsComponent(cus, is_off_the_record_profile,
-                                     profile_prefs);
+  RegisterOptimizationHintsComponent(cus, is_off_the_record_profile);
 
   base::FilePath path;
   if (base::PathService::Get(chrome::DIR_USER_DATA, &path)) {
@@ -165,11 +165,6 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #endif  // defined(OS_WIN)
 
-#if !defined(OS_ANDROID)
-  RegisterInterventionPolicyDatabaseComponent(
-      cus, g_browser_process->GetTabManager()->intervention_policy_database());
-#endif
-
 #if BUILDFLAG(ENABLE_VR)
   if (component_updater::ShouldRegisterVrAssetsComponentOnStartup()) {
     component_updater::RegisterVrAssetsComponent(cus);
@@ -185,18 +180,13 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID)
-  if (profile_prefs->GetBoolean(prefs::kLiveCaptionEnabled))
-    component_updater::RegisterSODAComponent(cus, profile_prefs,
-                                             base::OnceClosure());
+  component_updater::RegisterSODAComponent(cus, profile_prefs,
+                                           base::OnceClosure());
 #endif
 
 #if defined(OS_CHROMEOS)
   RegisterSmartDimComponent(cus);
 #endif  // !defined(OS_CHROMEOS)
-
-#if !defined(OS_ANDROID)
-  enterprise_connectors::RegisterServiceProvidersComponent(cus);
-#endif
 }
 
 }  // namespace component_updater

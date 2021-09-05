@@ -24,7 +24,6 @@
 <translation id="1601560923496285236">Rakenda</translation>
 <translation id="1603914832182249871">(privaatne)</translation>
 <translation id="1620510694547887537">Kaamera</translation>
-<translation id="1635033183663317347">Selle installis sinu järelevaataja.</translation>
 <translation id="1682548588986054654">Uus privaatne aken</translation>
 <translation id="1706625117072057435">Suurendusastmed</translation>
 <translation id="1708338024780164500">(mitteaktiivne)</translation>
@@ -100,7 +99,6 @@
 <translation id="3668823961463113931">Käitlejad</translation>
 <translation id="3678156199662914018">Laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3711931198657368127">Aseta ja ava <ph name="URL" /></translation>
-<translation id="3725367690636977613">lehekülge</translation>
 <translation id="3744111561329211289">Taustal sünkroonimine</translation>
 <translation id="3810973564298564668">Halda...</translation>
 <translation id="3905761538810670789">Paranda rakendus</translation>
@@ -118,7 +116,6 @@
 <translation id="4087089424473531098">Loodud laiendus:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4091434297613116013">paberilehte</translation>
 <translation id="4096508467498758490">Arendaja režiimi laienduste keelamine</translation>
 <translation id="4100839878934973028">Teine programm arvutis on lisanud rakenduse, mis võib muuta Vivaldi tööd.</translation>
 <translation id="4130207949184424187">See laiendus muutis seda, milline leht kuvatakse omnikastikeses otsingu tegemisel.</translation>
@@ -213,13 +210,12 @@
 <translation id="6904344821472985372">Eemalda juurdepääs failile</translation>
 <translation id="6991665348624301627">Printeri valimine</translation>
 <translation id="7006634003215061422">Allveeris</translation>
-<translation id="7053983685419859001">Blokeeri</translation>
+<translation id="7053983685419859001">Blokeeritud</translation>
 <translation id="708060913198414444">K&amp;opeeri heli aadress</translation>
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Juhtelemendid nähtaval</translation>
 <translation id="7311079019872751559">Isoleerimata juurdepääs pluginatele</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7423098979219808738">Esmalt küsitakse</translation>
 <translation id="7427348830195639090">Taustaleht: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="749028671485790643">Profiil <ph name="VALUE" /></translation>
@@ -258,7 +254,6 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8032244173881942855">Kaarti ei õnnestu üle kanda.</translation>
 <translation id="8071432093239591881">Prinditakse pildina</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
-<translation id="8180239481735238521">lehekülg</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Allalaadimine on pooleli} other {Allalaadimised on pooleli}}</translation>
 <translation id="8261378640211443080">Seda laiendust <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />’is ei leidu ja see lisati võibolla ilma sinu loata.</translation>
@@ -275,7 +270,6 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8774934320277480003">Ülaveeris</translation>
 <translation id="8798099450830957504">Vaikimisi</translation>
 <translation id="8808478386290700967">Veebipood</translation>
-<translation id="8813811964357448561">paberileht</translation>
 <translation id="8859174528519900719">Alampaneel: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8915370057835397490">Soovituse laadimine...</translation>
 <translation id="8916476537757519021">Privaatne alampaneel: <ph name="SUBFRAME_SITE" /></translation>

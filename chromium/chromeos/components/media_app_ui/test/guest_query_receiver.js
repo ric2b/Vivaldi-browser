@@ -38,10 +38,10 @@ async function runTestQuery(data) {
     }
   } else if (data.navigate !== undefined) {
     if (data.navigate === 'next') {
-      lastReceivedFileList.loadNext();
+      await lastReceivedFileList.loadNext();
       result = 'loadNext called';
     } else if (data.navigate === 'prev') {
-      lastReceivedFileList.loadPrev();
+      await lastReceivedFileList.loadPrev();
       result = 'loadPrev called';
     } else {
       result = 'nothing called';
@@ -83,6 +83,8 @@ async function runTestQuery(data) {
       DELEGATE.saveCopy(existingFile);
       result = 'boo yah!';
     }
+  } else if (data.getFileErrors) {
+    result = lastReceivedFileList.files.map(file => file.error).join();
   }
   return {testQueryResult: result};
 }
@@ -149,6 +151,13 @@ function installTestHandlers() {
 
   parentMessagePipe.registerHandler('run-test-case', (data) => {
     return runTestCase(/** @type{TestMessageRunTestCase} */ (data));
+  });
+
+  parentMessagePipe.registerHandler('get-last-loaded-files', () => {
+    //  Note: the `ReceivedFileList` has methods stripped since it gets sent
+    //  over a pipe so just send the underlying files.
+    return /** @type {LastLoadedFilesResponse} */ (
+        {fileList: lastReceivedFileList.files});
   });
 
   // Log errors, rather than send them to console.error. This allows the error

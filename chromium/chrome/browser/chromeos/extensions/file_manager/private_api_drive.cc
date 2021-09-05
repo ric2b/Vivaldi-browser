@@ -20,6 +20,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root_map.h"
@@ -225,7 +226,7 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
     DCHECK(!callback_.is_null());
 
     std::move(callback_).Run(std::move(properties_), result);
-    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
+    content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE, this);
   }
 
   // Given parameters.
@@ -401,7 +402,7 @@ class SingleEntryPropertiesGetterForDriveFs {
 
     std::move(callback_).Run(std::move(properties_),
                              drive::FileErrorToBaseFileError(error));
-    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
+    content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE, this);
   }
 
   // Given parameters.
@@ -490,7 +491,7 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
     DCHECK(callback_);
 
     std::move(callback_).Run(std::move(properties_), error);
-    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
+    content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE, this);
   }
 
   // Given parameters.
@@ -504,16 +505,6 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
   base::WeakPtrFactory<SingleEntryPropertiesGetterForDocumentsProvider>
       weak_ptr_factory_{this};
 };  // class SingleEntryPropertiesGetterForDocumentsProvider
-
-std::string MakeThumbnailDataUrlOnSequence(
-    const std::vector<uint8_t>& png_data) {
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(png_data.data()),
-                        png_data.size()),
-      &encoded);
-  return base::StrCat({"data:image/png;base64,", encoded});
-}
 
 void OnSearchDriveFs(
     scoped_refptr<ExtensionFunction> function,
@@ -1102,73 +1093,6 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotMetadata(
     drive::FileError error,
     drivefs::mojom::FileMetadataPtr metadata) {
   OnGotDownloadUrl(metadata ? GURL(metadata->download_url) : GURL());
-}
-
-FileManagerPrivateInternalGetThumbnailFunction::
-    FileManagerPrivateInternalGetThumbnailFunction() {
-  SetWarningThresholds(kDriveSlowOperationThreshold,
-                       kDriveVerySlowOperationThreshold);
-}
-
-FileManagerPrivateInternalGetThumbnailFunction::
-    ~FileManagerPrivateInternalGetThumbnailFunction() = default;
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetThumbnailFunction::Run() {
-  using extensions::api::file_manager_private_internal::GetThumbnail::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  const ChromeExtensionFunctionDetails chrome_details(this);
-  scoped_refptr<storage::FileSystemContext> file_system_context =
-      file_manager::util::GetFileSystemContextForRenderFrameHost(
-          chrome_details.GetProfile(), render_frame_host());
-  const GURL url = GURL(params->url);
-  const storage::FileSystemURL file_system_url =
-      file_system_context->CrackURL(url);
-
-  if (file_system_url.type() != storage::kFileSystemTypeDriveFs) {
-    return RespondNow(Error("Invalid URL"));
-  }
-  drive::DriveIntegrationService* integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(
-          chrome_details.GetProfile());
-  base::FilePath path;
-  if (!integration_service || !integration_service->GetRelativeDrivePath(
-                                  file_system_url.path(), &path)) {
-    return RespondNow(Error("Drive not available"));
-  }
-  auto* drivefs_interface = integration_service->GetDriveFsInterface();
-  if (!drivefs_interface) {
-    return RespondNow(Error("Drive not available"));
-  }
-  drivefs_interface->GetThumbnail(
-      path, params->crop_to_square,
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(
-              &FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail,
-              this),
-          base::Optional<std::vector<uint8_t>>()));
-  return RespondLater();
-}
-
-void FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail(
-    const base::Optional<std::vector<uint8_t>>& data) {
-  if (!data) {
-    Respond(OneArgument(std::make_unique<base::Value>("")));
-    return;
-  }
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&MakeThumbnailDataUrlOnSequence, *data),
-      base::BindOnce(
-          &FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail,
-          this));
-}
-
-void FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail(
-    std::string thumbnail_data_url) {
-  Respond(OneArgument(
-      std::make_unique<base::Value>(std::move(thumbnail_data_url))));
 }
 
 }  // namespace extensions

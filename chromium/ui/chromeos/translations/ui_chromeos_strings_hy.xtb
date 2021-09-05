@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Ճապոներեն ներածում (ԱՄՆ ստեղնաշարի համար)</translation>
 <translation id="1047956942837015229">Ջնջվում է <ph name="COUNT" /> տարր…</translation>
 <translation id="1049926623896334335">Word փաստաթուղթ</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> հավելվածի միջոցով ֆայլերը բացելու համար նախ տեղափոխեք դրանք Windows-ի ֆայլերի պանակ։</translation>
 <translation id="1062407476771304334">Փոխարինել</translation>
 <translation id="1065449928621190041">Կանադական ֆրանսերենի ստեղնաշար</translation>
 <translation id="1119069657431255176">Bzip2 սեղմված tar-արխիվ</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Որոնման սահիչ</translation>
 <translation id="1399648040768741453">Տելուգու ստեղնաշար (հնչյունաբանական)</translation>
 <translation id="1430915738399379752">Տպում</translation>
+<translation id="1433600251059882049">Այս պանակը հասանելի է Լինուքսին և Windows-ին</translation>
+<translation id="1435838927755162558">Կիսվեք պանակով Parallels Desktop-ի հետ</translation>
 <translation id="1439494416798956626">Տեղափոխվել է «<ph name="FOLDER_NAME" />» պանակ</translation>
 <translation id="1441841714100794440">Վիետնամերենի ստեղնաշար (Տելեքս)</translation>
 <translation id="1455548678241328678">Նորվեգերենի ստեղնաշար</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Այս ֆայլը մատչելի չէ անցանց ռեժիմում:</translation>
 <translation id="184633654410729720">Թայերենի ստեղնաշար (Քեդմանի)</translation>
 <translation id="1847880352285315359">Պահվեց</translation>
+<translation id="1853795129690976061">Այս պանակը հասանելի է Լինուքսին</translation>
 <translation id="1864756863218646478">Ֆայլը չգտնվեց:</translation>
 <translation id="1921986354447415460">Թուրքական F ստեղնաշար</translation>
 <translation id="1924372192547904021">«<ph name="DRIVE_NAME" />» կրիչը ձևաչափվեց</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Սինհալայի ստեղնաշար</translation>
 <translation id="240770291734945588">Հասանելի է <ph name="SPACE_AVAILABLE" /></translation>
 <translation id="2425665904502185219">Ֆայլի ընդհանուր չափը</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" /> տարր պատճենվում է «<ph name="FOLDER_NAME" />» պանակում</translation>
 <translation id="2448312741937722512">Տեսակ</translation>
 <translation id="2453576648990281505">Ֆայլն արդեն առկա է</translation>
 <translation id="2464079411014186876">Պաղպաղակ</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Աշխարհագրություն</translation>
 <translation id="3057861065630527966">Կրկնօրինակել ձեր լուսանկարները և տեսանյութերը</translation>
 <translation id="3064388234319122767">Տառադարձություն (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows-ի ֆայլեր</translation>
 <translation id="3078461028045006476">Ուղարկել <ph name="EXTENSION_NAME" />-ի միջոցով</translation>
 <translation id="3088034400796962477">Տառադարձություն (salam ← سلام)</translation>
 <translation id="3116361045094675131">ՄԹ ստեղնաշար</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Ուշադրություն. այս ֆայլերը ժամանակավոր են և կարող են ավտոմատ ջնջվել՝ սկավառակի վրա տարածք ազատելու համար։  <ph name="BEGIN_LINK" />Իմանալ ավելին<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Պանակ</translation>
 <translation id="3549797760399244642">Անցնել drive.google.com…</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> հավելվածի միջոցով ֆայլերը բացելու համար նախ պատճենեք դրանք Windows-ի ֆայլերի պանակ։</translation>
 <translation id="357479282490346887">Լիտվական</translation>
 <translation id="3583509704582854624">Տառաթվային ներածում (ճապոներենի ստեղնաշարի համար)</translation>
 <translation id="3603385196401704894">Կանադական (ֆրանսիական)</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Տարբերակ</translation>
 <translation id="3801082500826908679">ֆարյորերեն</translation>
 <translation id="3809272675881623365">Ճագար</translation>
+<translation id="3810973564298564668">Կառավարել</translation>
 <translation id="3811494700605067549">Ընտրվել է 1 ֆայլ</translation>
 <translation id="3815016854028376614">Չժուին ներածման եղանակ</translation>
 <translation id="3825863595139017598">Մոնղոլերենի ստեղնաշար</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Տեղադրել</translation>
 <translation id="3958548648197196644">Կիվի</translation>
 <translation id="3966388904776714213">Ձայնային նվագարկիչ</translation>
+<translation id="3984317463833596033">Թույլ տվեք Parallels Desktop-ին փոփոխել «<ph name="FOLDER_NAME" />» պանակի ֆայլերը</translation>
 <translation id="4002066346123236978">Վերնագիր</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> հավելվածների միջոցով ֆայլեր բացելու համար նախ դրանք տեղափոխեք <ph name="SHARED_DIRECTORY_LABEL" /> պանակ։</translation>
 <translation id="4070370845051020638">Կանտոներեն ներածման եղանակ</translation>
 <translation id="4072248638558688893">Թամիլերենի ստեղնաշար (հնչյունաբանական)</translation>
 <translation id="4124935795427217608">Միաեղջյուր</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Հանգուլ 2 Set</translation>
 <translation id="4477219268485577442">Բուլղարական հնչյունային</translation>
 <translation id="4479812471636796472">ԱՄՆ Դվորակի ստեղնաշար</translation>
+<translation id="4481711095103932593">Այս պանակը հասանելի է Windows-ին</translation>
 <translation id="4487088045714738411">Բելգիական ստեղնաշար</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
 <translation id="4552678318981539154">Գնեք լրացուցիչ պահեստ</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">«<ph name="ENTRY_NAME" />» գրառումն ավելացվեց ընտրվածքին:</translation>
 <translation id="4582497162516204941">Տեղադրեք Լինուքսով (բետա)</translation>
 <translation id="4594543368593301662">Ցուցադրված են «<ph name="SEARCH_TERM" />» հարցումով որոնման արդյունքները:</translation>
+<translation id="4603392156942865207">«<ph name="FILE_NAME" />» ֆայլը պատճենվում է «<ph name="FOLDER_NAME" />» պանակում</translation>
 <translation id="4631887759990505102">Կատարող</translation>
 <translation id="4656293982926141856">Այս համակարգիչը</translation>
 <translation id="4669606053856530811">«<ph name="SOURCE_NAME" />»-ի անդամներն այլևս չեն կարողանա օգտագործել այս տարրերը, եթե դրանց համար չտրվի ընդհանուր հասանելիություն։</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Ավտոմատ ուղղում</translation>
 <translation id="4881695831933465202">Բացել</translation>
 <translation id="4886021172213954916">Թամիլերենի ստեղնաշար (մեքենագրում)</translation>
-<translation id="4892969127351273348">Չհաջողվեց բացել ֆայլը <ph name="APP_NAME" /> հավելվածով</translation>
+<translation id="4900532980794411603">Հասանելի դարձնել Parallels Desktop-ին</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ֆայլ պատրաստ է պահուստավորման</translation>
 <translation id="4924638091161556692">Ուղղված</translation>
 <translation id="4935975195727477204">Ծաղիկ</translation>
 <translation id="4943368462779413526">Ֆուտբոլ</translation>
+<translation id="4961158930123534723">Parallels Desktop-ին հասանելի է դարձել 1 պանակ</translation>
 <translation id="4969785127455456148">Ալբոմ</translation>
 <translation id="497244430928947428">Մալայալամի ստեղնաշար (հնչյունաբանական)</translation>
 <translation id="4973523518332075481">Նշեք անուն՝ առավելագույնը <ph name="MAX_LENGTH" /> նիշից</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Համակարգիչներ</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Գործողությունը սպասվածից երկար է տևում: Ցանկանո՞ւմ եք ընդհատել:</translation>
+<translation id="5036159836254554629">Կարգավորել հասանելիությունը Parallels Desktop-ի համար</translation>
 <translation id="5038625366300922036">Տեսնել ավելին…</translation>
 <translation id="5061708541166515394">Ցայտունություն</translation>
 <translation id="5068919226082848014">Պիցցա</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> ծավալով ֆայլեր կջնջվեն</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> տարր տեղափոխվում է «<ph name="FOLDER_NAME" />» պանակ</translation>
 <translation id="509429900233858213">Սխալ առաջացավ:</translation>
 <translation id="5098629044894065541">Եբրայական</translation>
 <translation id="5123433949759960244">Բասկետբոլ</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">Ֆրանսերենի ստեղնաշար</translation>
 <translation id="6074825444536523002">Google ձևաթուղթ</translation>
 <translation id="6096979789310008754">Որոնման տեքստը մաքրվեց: Ցուցադրվում են բոլոր ֆայլերն ու պանակները:</translation>
+<translation id="610101264611565198">«<ph name="FILE_NAME" />» ֆայլը տեղափոխվում է «<ph name="FOLDER_NAME" />» պանակ</translation>
 <translation id="6111770213269631447">Տառադարձություն (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Բացատ</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ֆայլը տեղափոխվում է…</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">«<ph name="FILENAME" />»-ը ջնջվում է…</translation>
 <translation id="6581162200855843583">Google Drive-ի հղում</translation>
 <translation id="6607272825297743757">Ֆայլի տվյալներ</translation>
+<translation id="6609332149380188670">Parallels Desktop-ին հասանելի է դարձել <ph name="NUMBER_OF_ITEMS" /> պանակ</translation>
 <translation id="6629841649550503054">Բոլոր ֆայլերը կրկնօրինակվեցին <ph name="BEGIN_LINK" />Google Drive-ում<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Մաքրել</translation>
 <translation id="6650726141019353908">Վարդագույն թիթեռ</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Տեղադրումը չհաջողվեց:</translation>
 <translation id="7040138676081995583">Բացել հավելվածով…</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" />ից քիչ</translation>
 <translation id="7100897339030255923">Ընտրված է <ph name="COUNT" /> տարր</translation>
 <translation id="7106346894903675391">Գնել լրացուցիչ պահեստ…</translation>
 <translation id="7126604456862387217">«&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;» - &lt;em&gt;որոնել Drive-ում&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">Սարքի մոդելը</translation>
 <translation id="8208580316430297579">Արվեստի գործ</translation>
 <translation id="8223479393428528563">Այս ֆայլերը անցանց ռեժիմում օգտագործելու համար, նորից կապակցվեք համացանցին, ֆայլերի վրա աջ սեղմումով ընտրեք <ph name="OFFLINE_CHECKBOX_NAME" /> ընտրանքը:</translation>
+<translation id="8231972167769262174">Մոտ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Ընդհատել</translation>
 <translation id="8261506727792406068">Ջնջել</translation>
 <translation id="8269755669432358899">Ծալել ֆայլերի մասին կարծիք հայտնելու վահանակները</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">Google Drive-ը չկարողացավ համաժամացնել «<ph name="FILENAME" />» ֆայլը: Ավելի ուշ այն նորից կփորձի:</translation>
 <translation id="8477649328507734757">Պտույտ</translation>
 <translation id="8487700953926739672">Մատչելի է անցանց ռեժիմում</translation>
+<translation id="8490342535582768689">Թույլ տվեք Parallels Desktop-ին փոփոխել տվյալները ձեր Google Drive-ում Փոփոխությունները կհամաժամացվեն ձեր մյուս սարքերի հետ։</translation>
 <translation id="8521441079177373948">ՄԹ</translation>
 <translation id="8525306231823319788">Լիաէկրան</translation>
 <translation id="8551494947769799688">Լատվիական</translation>

@@ -199,11 +199,125 @@ class MockVRService {
       return {supportsSession: false};
     });
   }
+
+  // Only handles asynchronous calls to makeXrCompatible. Synchronous calls are
+  // not supported in Javascript.
+  makeXrCompatible() {
+    return Promise.resolve({
+      xr_compatible_result: device.mojom.XrCompatibleResult.kAlreadyCompatible
+    });
+  }
+}
+
+class FakeXRAnchorController {
+  constructor() {
+    // Private properties.
+    this.device_ = null;
+    this.id_ = null;
+    this.dirty_ = true;
+
+    // Properties backing up public attributes / methods.
+    this.deleted_ = false;
+    this.paused_ = false;
+    this.anchorOrigin_ = XRMathHelper.identity();
+  }
+
+  get deleted() {
+    return this.deleted_;
+  }
+
+  pauseTracking() {
+    if(!this.paused_) {
+      this.paused_ = true;
+      this.dirty_ = true;
+    }
+  }
+
+  resumeTracking() {
+    if(this.paused_) {
+      this.paused_ = false;
+      this.dirty_ = true;
+    }
+  }
+
+  stopTracking() {
+    if(!this.deleted_) {
+      this.device_.deleteAnchorController(this.id_);
+
+      this.deleted_ = true;
+      this.dirty_ = true;
+    }
+  }
+
+  setAnchorOrigin(anchorOrigin) {
+    this.anchorOrigin_ = getMatrixFromTransform(anchorOrigin);
+    this.dirty_ = true;
+  }
+
+  // Internal implementation:
+  set id(value) {
+    this.id_ = value;
+  }
+
+  set device(value) {
+    this.device_ = value;
+  }
+
+  get dirty() {
+    return this.dirty_;
+  }
+
+  markProcessed() {
+    this.dirty_ = false;
+  }
+
+  getAnchorOrigin() {
+    return this.anchorOrigin_;
+  }
+}
+
+class FakeXRAnchorCreationEvent extends Event {
+  constructor(type, eventInitDict) {
+    super(type, eventInitDict);
+
+    this.success_ = false;
+    this.requestedAnchorOrigin_ = {};
+    this.isAttachedToEntity_ = false;
+    this.anchorController_ = new FakeXRAnchorController();
+
+    if(eventInitDict.requestedAnchorOrigin != null) {
+      this.requestedAnchorOrigin_ = eventInitDict.requestedAnchorOrigin;
+    }
+
+    if(eventInitDict.isAttachedToEntity != null) {
+      this.isAttachedToEntity_ = eventInitDict.isAttachedToEntity;
+    }
+  }
+
+  get requestedAnchorOrigin() {
+    return this.requestedAnchorOrigin_;
+  }
+
+  get isAttachedToEntity() {
+    return this.isAttachedToEntity_;
+  }
+
+  get success() {
+    return this.success_;
+  }
+
+  set success(value) {
+    this.success_ = value;
+  }
+
+  get anchorController() {
+    return this.anchorController_;
+  }
 }
 
 // Implements XRFrameDataProvider and XRPresentationProvider. Maintains a mock
-// for XRPresentationProvider.
-class MockRuntime {
+// for XRPresentationProvider. Implements FakeXRDevice test API.
+class MockRuntime extends EventTarget {
   // Mapping from string feature names to the corresponding mojo types.
   // This is exposed as a member for extensibility.
   static featureToMojoMap = {
@@ -215,6 +329,7 @@ class MockRuntime {
     'hit-test': device.mojom.XRSessionFeature.HIT_TEST,
     'dom-overlay': device.mojom.XRSessionFeature.DOM_OVERLAY,
     'light-estimation': device.mojom.XRSessionFeature.LIGHT_ESTIMATION,
+    'anchors': device.mojom.XRSessionFeature.ANCHORS,
   };
 
   static sessionModeToMojoMap = {
@@ -224,6 +339,8 @@ class MockRuntime {
   };
 
   constructor(fakeDeviceInit, service) {
+    super();
+
     this.sessionClient_ = new device.mojom.XRSessionClientPtr();
     this.presentation_provider_ = new MockXRPresentationProvider();
 
@@ -247,6 +364,10 @@ class MockRuntime {
     this.transientHitTestSubscriptions_ = new Map();
     // ID of the next subscription to be assigned.
     this.next_hit_test_id_ = 1;
+
+    this.anchor_controllers_ = new Map();
+    // ID of the next anchor to be assigned.
+    this.next_anchor_id_ = 1;
 
     let supportedModes = [];
     if (fakeDeviceInit.supportedModes) {
@@ -571,6 +692,11 @@ class MockRuntime {
     this.input_sources_.delete(source.source_id_);
   }
 
+  // These methods are intended to be used by FakeXRAnchorController only.
+  deleteAnchorController(controllerId) {
+    this.anchor_controllers_.delete(controllerId);
+  }
+
   // Extension point for non-standard modules.
 
   _injectAdditionalFrameData(options, frameData) {
@@ -601,18 +727,13 @@ class MockRuntime {
       }
     }
 
-    // Convert current document time to monotonic time.
-    let now = window.performance.now() / 1000.0;
-    const diff = now - internals.monotonicTimeToZeroBasedDocumentTime(now);
-    now += diff;
-    now *= 1000000;
-
     const frameData = {
       pose: this.pose_,
       mojoSpaceReset: mojo_space_reset,
       inputState: input_state,
       timeDelta: {
-        microseconds: now,
+        // window.performance.now() is in milliseconds, so convert to microseconds.
+        microseconds: window.performance.now() * 1000,
       },
       frameId: this.next_frame_id_++,
       bufferHolder: null,
@@ -622,6 +743,8 @@ class MockRuntime {
     };
 
     this._calculateHitTestResults(frameData);
+
+    this._calculateAnchorInformation(frameData);
 
     this._injectAdditionalFrameData(options, frameData);
 
@@ -647,11 +770,6 @@ class MockRuntime {
     this.dataProviderBinding_.close();
   }
 
-  updateSessionGeometry(frame_size, display_rotation) {
-    // This function must exist to ensure that calls to it do not crash, but we
-    // do not have any use for this data at present.
-  }
-
   // XREnvironmentIntegrationProvider implementation:
   subscribeToHitTest(nativeOriginInformation, entityTypes, ray) {
     if (!this.supportedModes_.includes(device.mojom.XRSessionMode.kImmersiveAr)) {
@@ -662,25 +780,7 @@ class MockRuntime {
       });
     }
 
-    if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.inputSourceId) {
-      if (!this.input_sources_.has(nativeOriginInformation.inputSourceId)) {
-        // Reject - unknown input source ID.
-        return Promise.resolve({
-          result : device.mojom.SubscribeToHitTestResult.FAILURE_GENERIC,
-          subscriptionId : 0
-        });
-      }
-    } else if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.referenceSpaceCategory) {
-      // Bounded_floor & unbounded ref spaces are not yet supported for AR:
-      if (nativeOriginInformation.referenceSpaceCategory == device.mojom.XRReferenceSpaceCategory.UNBOUNDED
-       || nativeOriginInformation.referenceSpaceCategory == device.mojom.XRReferenceSpaceCategory.BOUNDED_FLOOR) {
-        return Promise.resolve({
-          result : device.mojom.SubscribeToHitTestResult.FAILURE_GENERIC,
-          subscriptionId : 0
-        });
-      }
-    } else {
-      // Planes and anchors are not yet supported by the mock interface.
+    if (!this._nativeOriginKnown(nativeOriginInformation)) {
       return Promise.resolve({
         result : device.mojom.SubscribeToHitTestResult.FAILURE_GENERIC,
         subscriptionId : 0
@@ -713,6 +813,65 @@ class MockRuntime {
     return Promise.resolve({
       result : device.mojom.SubscribeToHitTestResult.SUCCESS,
       subscriptionId : id
+    });
+  }
+
+  createAnchor(nativeOriginInformation, nativeOriginFromAnchor) {
+    return new Promise((resolve) => {
+      const mojoFromNativeOrigin = this._getMojoFromNativeOrigin(nativeOriginInformation);
+      if(mojoFromNativeOrigin == null) {
+        resolve({
+          result : device.mojom.CreateAnchorResult.FAILURE,
+          anchorId : 0
+        });
+
+        return;
+      }
+
+      const mojoFromAnchor = XRMathHelper.mul4x4(mojoFromNativeOrigin, nativeOriginFromAnchor);
+
+      const createAnchorEvent = new FakeXRAnchorCreationEvent("anchorcreate", {
+        requestedAnchorOrigin: mojoFromAnchor,
+        isAttachedToEntity: false,
+      });
+
+      this.dispatchEvent(createAnchorEvent);
+
+      if(createAnchorEvent.success) {
+        let anchor_controller = createAnchorEvent.anchorController;
+        const anchor_id = this.next_anchor_id_;
+        this.next_anchor_id_++;
+
+        // If the test allowed the anchor creation,
+        // store the anchor controller & return success.
+        this.anchor_controllers_.set(anchor_id, anchor_controller);
+        anchor_controller.device = this;
+        anchor_controller.id = anchor_id;
+
+        resolve({
+          result : device.mojom.CreateAnchorResult.SUCCESS,
+          anchorId : anchor_id
+        });
+
+        return;
+      }
+
+      resolve({
+        result : device.mojom.CreateAnchorResult.FAILURE,
+        anchorId : 0
+      });
+    });
+  }
+
+  createPlaneAnchor(planeFromAnchor, planeId) {
+    return new Promise((resolve) => {
+
+      // Not supported yet.
+
+      resolve({
+        result : device.mojom.CreateAnchorResult.FAILURE,
+        anchorId : 0
+      });
     });
   }
 
@@ -775,6 +934,61 @@ class MockRuntime {
     return Promise.resolve({
       supportsSession: this.supportedModes_.includes(options.mode)
     });
+  }
+
+  // Private functions - utilities:
+  _nativeOriginKnown(nativeOriginInformation){
+
+    if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.inputSourceId) {
+      if (!this.input_sources_.has(nativeOriginInformation.inputSourceId)) {
+        // Unknown input source.
+        return false;
+      }
+
+      return true;
+    } else if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.referenceSpaceType) {
+      // Bounded_floor & unbounded ref spaces are not yet supported for AR:
+      if (nativeOriginInformation.referenceSpaceType == device.mojom.XRReferenceSpaceType.kUnbounded
+       || nativeOriginInformation.referenceSpaceType == device.mojom.XRReferenceSpaceType.kBoundedFlor) {
+        return false;
+      }
+
+      return true;
+    } else {
+      // Planes and anchors are not yet supported by the mock interface.
+      return false;
+    }
+  }
+
+  // Private functions - anchors implementation:
+
+  // Modifies passed in frameData to add anchor information.
+  _calculateAnchorInformation(frameData) {
+    if (!this.supportedModes_.includes(device.mojom.XRSessionMode.kImmersiveAr)) {
+      return;
+    }
+
+    frameData.anchorsData = new device.mojom.XRAnchorsData();
+    frameData.anchorsData.allAnchorsIds = [];
+    frameData.anchorsData.updatedAnchorsData = [];
+
+    for(const [id, controller] of this.anchor_controllers_) {
+      frameData.anchorsData.allAnchorsIds.push(id);
+
+      // Send the entire anchor data over if there was a change since last GetFrameData().
+      if(controller.dirty) {
+        const anchorData = new device.mojom.XRAnchorData();
+        anchorData.id = id;
+        if(!controller.paused) {
+          anchorData.pose = XRMathHelper.decomposeRigidTransform(
+            controller.getAnchorOrigin());
+        }
+
+        controller.markProcessed();
+
+        frameData.anchorsData.updatedAnchorsData.push(anchorData);
+      }
+    }
   }
 
   // Private functions - hit test implementation:
@@ -982,32 +1196,32 @@ class MockRuntime {
         }
 
         const hitResult = new device.mojom.XRHitResult();
-        hitResult.hitMatrix = new gfx.mojom.Transform();
-
         hitResult.distance = distance;  // Extend the object with additional information used by higher layers.
                                         // It will not be serialized over mojom.
 
-        hitResult.hitMatrix.matrix = new Array(16);
+        const matrix = new Array(16);
 
-        hitResult.hitMatrix.matrix[0] = x_axis.x;
-        hitResult.hitMatrix.matrix[1] = x_axis.y;
-        hitResult.hitMatrix.matrix[2] = x_axis.z;
-        hitResult.hitMatrix.matrix[3] = 0;
+        matrix[0] = x_axis.x;
+        matrix[1] = x_axis.y;
+        matrix[2] = x_axis.z;
+        matrix[3] = 0;
 
-        hitResult.hitMatrix.matrix[4] = y_axis.x;
-        hitResult.hitMatrix.matrix[5] = y_axis.y;
-        hitResult.hitMatrix.matrix[6] = y_axis.z;
-        hitResult.hitMatrix.matrix[7] = 0;
+        matrix[4] = y_axis.x;
+        matrix[5] = y_axis.y;
+        matrix[6] = y_axis.z;
+        matrix[7] = 0;
 
-        hitResult.hitMatrix.matrix[8] = z_axis.x;
-        hitResult.hitMatrix.matrix[9] = z_axis.y;
-        hitResult.hitMatrix.matrix[10] = z_axis.z;
-        hitResult.hitMatrix.matrix[11] = 0;
+        matrix[8] = z_axis.x;
+        matrix[9] = z_axis.y;
+        matrix[10] = z_axis.z;
+        matrix[11] = 0;
 
-        hitResult.hitMatrix.matrix[12] = intersection_point.x;
-        hitResult.hitMatrix.matrix[13] = intersection_point.y;
-        hitResult.hitMatrix.matrix[14] = intersection_point.z;
-        hitResult.hitMatrix.matrix[15] = 1;
+        matrix[12] = intersection_point.x;
+        matrix[13] = intersection_point.y;
+        matrix[14] = intersection_point.z;
+        matrix[15] = 1;
+
+        hitResult.mojoFromResult = XRMathHelper.decomposeRigidTransform(matrix);
 
         return hitResult;
       }
@@ -1040,25 +1254,25 @@ class MockRuntime {
         const inputSource = this.input_sources_.get(nativeOriginInformation.inputSourceId);
         return inputSource._getMojoFromInputSource(mojo_from_viewer);
       }
-    } else if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.referenceSpaceCategory) {
-      switch (nativeOriginInformation.referenceSpaceCategory) {
-        case device.mojom.XRReferenceSpaceCategory.LOCAL:
+    } else if (nativeOriginInformation.$tag == device.mojom.XRNativeOriginInformation.Tags.referenceSpaceType) {
+      switch (nativeOriginInformation.referenceSpaceType) {
+        case device.mojom.XRReferenceSpaceType.kLocal:
           return XRMathHelper.identity();
-        case device.mojom.XRReferenceSpaceCategory.LOCAL_FLOOR:
+        case device.mojom.XRReferenceSpaceType.kLocalFloor:
           if (this.stageParameters_ == null || this.stageParameters_.standingTransform == null) {
             console.warn("Standing transform not available.");
             return null;
           }
           // this.stageParameters_.standingTransform = floor_from_mojo aka native_origin_from_mojo
           return XRMathHelper.inverse(this.stageParameters_.standingTransform.matrix);
-        case device.mojom.XRReferenceSpaceCategory.VIEWER:
+        case device.mojom.XRReferenceSpaceType.kViewer:
           return mojo_from_viewer;
-        case device.mojom.XRReferenceSpaceCategory.BOUNDED_FLOOR:
+        case device.mojom.XRReferenceSpaceType.kBoundedFlor:
           return null;
-        case device.mojom.XRReferenceSpaceCategory.UNBOUNDED:
+        case device.mojom.XRReferenceSpaceType.kUnbounded:
           return null;
         default:
-          throw new TypeError("Unrecognized XRReferenceSpaceCategory!");
+          throw new TypeError("Unrecognized XRReferenceSpaceType!");
       }
     } else {
       // Anchors & planes are not yet supported for hit test.

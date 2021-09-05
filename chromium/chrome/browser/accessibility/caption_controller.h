@@ -62,19 +62,21 @@ class CaptionController : public BrowserListObserver, public KeyedService {
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-  // Off the record profiles will default to having the feature disabled.
-  static void InitOffTheRecordPrefs(Profile* off_the_record_profile);
-
   void Init();
 
   // Routes a transcription to the CaptionBubbleController that belongs to the
-  // appropriate browser.
-  void DispatchTranscription(
+  // appropriate browser. Returns whether the transcription result was routed
+  // successfully. Transcriptions will halt if this returns false.
+  bool DispatchTranscription(
       content::WebContents* web_contents,
       const chrome::mojom::TranscriptionResultPtr& transcription_result);
 
+  CaptionBubbleController* GetCaptionBubbleControllerForBrowser(
+      Browser* browser);
+
  private:
   friend class CaptionControllerFactory;
+  friend class CaptionControllerTest;
 
   // BrowserListObserver:
   void OnBrowserAdded(Browser* browser) override;

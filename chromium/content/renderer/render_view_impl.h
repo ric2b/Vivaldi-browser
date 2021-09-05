@@ -234,7 +234,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   int HistoryBackListCount() override;
   int HistoryForwardListCount() override;
   void DidAutoResize(const blink::WebSize& newSize) override;
-  void DidFocus(blink::WebLocalFrame* calling_frame) override;
   bool CanHandleGestureEvent() override;
   bool AllowPopupsDuringPageUnload() override;
   void OnPageVisibilityChanged(PageVisibilityState visibility) override;
@@ -267,12 +266,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   RenderViewImpl(CompositorDependencies* compositor_deps,
                  const mojom::CreateViewParams& params);
   ~RenderViewImpl() override;
-
-  // Called when Page visibility is changed, to update the View/Page in blink.
-  // This is separate from the IPC handlers as tests may call this and need to
-  // be able to specify |initial_setting| where IPC handlers do not.
-  void ApplyPageVisibilityState(PageVisibilityState visibility_state,
-                                bool initial_setting);
 
  private:
   // For unit tests.
@@ -406,8 +399,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
 
   // Page message handlers -----------------------------------------------------
   void SetPageFrozen(bool frozen);
-  void PutPageIntoBackForwardCache();
-  void RestorePageFromBackForwardCache(base::TimeTicks navigation_start);
   void OnTextAutosizerPageInfoChanged(
       const blink::WebTextAutosizerPageInfo& page_info);
   void OnSetInsidePortal(bool inside_portal);

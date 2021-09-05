@@ -12,16 +12,15 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_proxy.mojom.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
+#include "third_party/blink/public/mojom/messaging/transferable_message.mojom-forward.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-forward.h"
-
-struct FrameHostMsg_OpenURL_Params;
-struct FrameMsg_PostMessage_Params;
 
 namespace blink {
 class AssociatedInterfaceProvider;
@@ -70,7 +69,8 @@ class CONTENT_EXPORT RenderFrameProxyHost
     : public IPC::Listener,
       public IPC::Sender,
       public mojom::RenderFrameProxyHost,
-      public blink::mojom::RemoteFrameHost {
+      public blink::mojom::RemoteFrameHost,
+      public blink::mojom::RemoteMainFrameHost {
  public:
   using CreatedCallback = base::RepeatingCallback<void(RenderFrameProxyHost*)>;
 
@@ -160,6 +160,21 @@ class CONTENT_EXPORT RenderFrameProxyHost
       const gfx::Rect& clip_rect,
       const base::UnguessableToken& guid) override;
   void SetIsInert(bool inert) override;
+  void DidChangeOpener(const base::Optional<base::UnguessableToken>&
+                           opener_frame_token) override;
+  void AdvanceFocus(blink::mojom::FocusType focus_type,
+                    const base::UnguessableToken& source_frame_token) override;
+  void RouteMessageEvent(
+      const base::Optional<base::UnguessableToken>& source_frame_token,
+      const base::string16& source_origin,
+      const base::string16& target_origin,
+      blink::TransferableMessage message) override;
+
+  // blink::mojom::RemoteMainFrameHost overrides:
+  void FocusPage() override;
+
+  // mojom::RenderFrameProxyHost:
+  void OpenURL(mojom::OpenURLParamsPtr params) override;
 
   // Returns associated remote for the content::mojom::RenderFrameProxy Mojo
   // interface.
@@ -180,12 +195,11 @@ class CONTENT_EXPORT RenderFrameProxyHost
   const base::UnguessableToken& GetFrameToken() const { return frame_token_; }
 
  private:
+  // The interceptor needs access to frame_host_receiver_for_testing().
+  friend class RouteMessageEventInterceptor;
+
   // IPC Message handlers.
   void OnDetach();
-  void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
-  void OnRouteMessageEvent(const FrameMsg_PostMessage_Params& params);
-  void OnDidChangeOpener(int32_t opener_routing_id);
-  void OnAdvanceFocus(blink::mojom::FocusType type, int32_t source_routing_id);
   void OnPrintCrossProcessSubframe(const gfx::Rect& rect, int document_cookie);
 
   // IPC::Listener
@@ -194,6 +208,12 @@ class CONTENT_EXPORT RenderFrameProxyHost
       mojo::ScopedInterfaceEndpointHandle handle) override;
 
   blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces();
+
+  // Needed for tests to be able to swap the implementation and intercept calls.
+  mojo::AssociatedReceiver<blink::mojom::RemoteFrameHost>&
+  frame_host_receiver_for_testing() {
+    return remote_frame_host_receiver_;
+  }
 
   // This RenderFrameProxyHost's routing id.
   int routing_id_;
@@ -243,6 +263,9 @@ class CONTENT_EXPORT RenderFrameProxyHost
 
   mojo::AssociatedReceiver<blink::mojom::RemoteFrameHost>
       remote_frame_host_receiver_{this};
+
+  mojo::AssociatedReceiver<blink::mojom::RemoteMainFrameHost>
+      remote_main_frame_host_receiver_{this};
 
   base::UnguessableToken frame_token_ = base::UnguessableToken::Create();
 

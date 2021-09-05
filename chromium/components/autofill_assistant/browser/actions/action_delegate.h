@@ -134,17 +134,14 @@ class ActionDelegate {
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>
           write_callback) = 0;
 
-  // Executes |write_callback| on the currently stored user_model.
-  virtual void WriteUserModel(
-      base::OnceCallback<void(UserModel*)> write_callback) = 0;
-
   using GetFullCardCallback =
       base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
                               const base::string16& cvc)>;
 
-  // Asks for the full card information for the selected card. Might require the
+  // Asks for the full card information for |credit_card|. Might require the
   // user entering CVC.
-  virtual void GetFullCard(GetFullCardCallback callback) = 0;
+  virtual void GetFullCard(const autofill::CreditCard* credit_card,
+                           GetFullCardCallback callback) = 0;
 
   // Fill the address form given by |selector| with the given address
   // |profile|. |profile| cannot be nullptr.
@@ -316,8 +313,16 @@ class ActionDelegate {
   // Show the progress bar and set it at |progress|%.
   virtual void SetProgress(int progress) = 0;
 
+  // Show the progress bar and set the |active_step| to active.
+  virtual void SetProgressActiveStep(int active_step) = 0;
+
   // Shows the progress bar when |visible| is true. Hides it when false.
   virtual void SetProgressVisible(bool visible) = 0;
+
+  // Sets a new step progress bar configuration.
+  virtual void SetStepProgressBarConfiguration(
+      const ShowProgressBarProto::StepProgressBarConfiguration&
+          configuration) = 0;
 
   // Set the viewport mode.
   virtual void SetViewportMode(ViewportMode mode) = 0;
@@ -363,14 +368,19 @@ class ActionDelegate {
   // Gets the user data.
   virtual const UserData* GetUserData() const = 0;
 
+  // Access to the user model.
+  virtual UserModel* GetUserModel() = 0;
+
   // Show |generic_ui| to the user and call |end_action_callback| when done.
   // Note that this callback needs to be tied to one or multiple interactions
   // specified in |generic_ui|, as otherwise it will never be called.
+  // |view_inflation_finished_callback| should be called immediately after
+  // view inflation, with a status indicating whether view inflation succeeded.
   virtual void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) = 0;
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) = 0;
 
   // Clears the generic UI. This will remove all corresponding views from the
   // view hierarchy and remove all corresponding interactions. Note that

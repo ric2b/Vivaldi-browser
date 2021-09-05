@@ -38,6 +38,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/time/time.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
@@ -629,7 +630,7 @@ void ServiceWorkerGlobalScope::BindControllerServiceWorker(
   // and "handle functional event task source" defined in the service worker
   // spec and use them when dispatching events.
   controller_receivers_.Add(
-      this, std::move(receiver), /*context=*/nullptr,
+      std::move(receiver), /*context=*/nullptr,
       GetThread()->GetTaskRunner(TaskType::kInternalDefault));
 }
 
@@ -781,12 +782,19 @@ void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
   wait_until_observer->DidDispatchEvent(false /* event_dispatch_failed */);
 }
 
-void ServiceWorkerGlobalScope::Trace(Visitor* visitor) {
+void ServiceWorkerGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(clients_);
   visitor->Trace(registration_);
   visitor->Trace(service_worker_);
   visitor->Trace(service_worker_objects_);
+  visitor->Trace(service_worker_host_);
+  visitor->Trace(receiver_);
+  visitor->Trace(abort_payment_result_callbacks_);
+  visitor->Trace(can_make_payment_result_callbacks_);
+  visitor->Trace(payment_response_callbacks_);
+  visitor->Trace(fetch_response_callbacks_);
   visitor->Trace(pending_preload_fetch_events_);
+  visitor->Trace(controller_receivers_);
   WorkerGlobalScope::Trace(visitor);
 }
 
@@ -971,8 +979,8 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
                           TRACE_ID_LOCAL(fetch_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
-  mojo::Remote<mojom::blink::ServiceWorkerFetchResponseCallback>
-      response_callback = fetch_response_callbacks_.Take(fetch_event_id);
+  mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
+      fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
 
   auto timing = mojom::blink::ServiceWorkerFetchEventTiming::New();
   timing->dispatch_event_time = event_dispatch_time;
@@ -997,8 +1005,8 @@ void ServiceWorkerGlobalScope::RespondToFetchEvent(
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
 
-  mojo::Remote<mojom::blink::ServiceWorkerFetchResponseCallback>
-      response_callback = fetch_response_callbacks_.Take(fetch_event_id);
+  mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
+      fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
 
   auto timing = mojom::blink::ServiceWorkerFetchEventTiming::New();
   timing->dispatch_event_time = event_dispatch_time;
@@ -1024,8 +1032,8 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithResponseStream(
                           TRACE_ID_LOCAL(fetch_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
-  mojo::Remote<mojom::blink::ServiceWorkerFetchResponseCallback>
-      response_callback = fetch_response_callbacks_.Take(fetch_event_id);
+  mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
+      fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
 
   auto timing = mojom::blink::ServiceWorkerFetchEventTiming::New();
   timing->dispatch_event_time = event_dispatch_time;
@@ -1151,8 +1159,8 @@ void ServiceWorkerGlobalScope::RespondToAbortPaymentEvent(
                           TRACE_ID_LOCAL(event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(abort_payment_result_callbacks_.Contains(event_id));
-  mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>
-      result_callback = abort_payment_result_callbacks_.Take(event_id);
+  payments::mojom::blink::PaymentHandlerResponseCallback* result_callback =
+      abort_payment_result_callbacks_.Take(event_id)->Value().get();
   result_callback->OnResponseForAbortPayment(payment_aborted);
 }
 
@@ -1181,8 +1189,8 @@ void ServiceWorkerGlobalScope::RespondToCanMakePaymentEvent(
                           TRACE_ID_LOCAL(event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(can_make_payment_result_callbacks_.Contains(event_id));
-  mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>
-      result_callback = can_make_payment_result_callbacks_.Take(event_id);
+  payments::mojom::blink::PaymentHandlerResponseCallback* result_callback =
+      can_make_payment_result_callbacks_.Take(event_id)->Value().get();
   result_callback->OnResponseForCanMakePayment(std::move(response));
 }
 
@@ -1211,8 +1219,8 @@ void ServiceWorkerGlobalScope::RespondToPaymentRequestEvent(
                           TRACE_ID_LOCAL(payment_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(payment_response_callbacks_.Contains(payment_event_id));
-  mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>
-      response_callback = payment_response_callbacks_.Take(payment_event_id);
+  payments::mojom::blink::PaymentHandlerResponseCallback* response_callback =
+      payment_response_callbacks_.Take(payment_event_id)->Value().get();
   response_callback->OnResponseForPaymentRequest(std::move(response));
 }
 
@@ -1307,7 +1315,7 @@ ServiceWorkerGlobalScope::TakeCacheStorage() {
 
 mojom::blink::ServiceWorkerHost*
 ServiceWorkerGlobalScope::GetServiceWorkerHost() {
-  DCHECK(service_worker_host_);
+  DCHECK(service_worker_host_.is_bound());
   return service_worker_host_.get();
 }
 
@@ -1441,12 +1449,20 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
     mojo::PendingRemote<mojom::blink::ServiceWorkerFetchResponseCallback>
         response_callback,
     DispatchFetchEventInternalCallback callback,
+    base::Optional<base::TimeTicks> created_time,
     int event_id) {
   DCHECK(IsContextThread());
+  if (created_time.has_value()) {
+    RecordQueuingTime(created_time.value());
+  }
+
   fetch_event_callbacks_.Set(event_id, std::move(callback));
-  fetch_response_callbacks_.Set(
-      event_id, mojo::Remote<mojom::blink::ServiceWorkerFetchResponseCallback>(
-                    std::move(response_callback)));
+  HeapMojoRemote<mojom::blink::ServiceWorkerFetchResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kNetworking));
+  fetch_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
 
   // This TRACE_EVENT is used for perf benchmark to confirm if all of fetch
   // events have completed. (crbug.com/736697)
@@ -1465,25 +1481,26 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
                                 std::move(params->preload_handle));
   }
 
-  mojom::blink::FetchAPIRequest& fetch_request = *params->request;
   ScriptState::Scope scope(ScriptController()->GetScriptState());
   auto* wait_until_observer = MakeGarbageCollected<WaitUntilObserver>(
       this, WaitUntilObserver::kFetch, event_id);
   auto* respond_with_observer = MakeGarbageCollected<FetchRespondWithObserver>(
-      this, event_id, std::move(corp_checker), fetch_request,
+      this, event_id, std::move(corp_checker), *params->request,
       wait_until_observer);
-  Request* request =
-      Request::Create(ScriptController()->GetScriptState(), fetch_request,
-                      Request::ForServiceWorkerFetchEvent::kTrue);
-  request->getHeaders()->SetGuard(Headers::kImmutableGuard);
   FetchEventInit* event_init = FetchEventInit::Create();
   event_init->setCancelable(true);
-  event_init->setRequest(request);
   event_init->setClientId(
-      fetch_request.is_main_resource_load ? String() : params->client_id);
+      params->request->is_main_resource_load ? String() : params->client_id);
   event_init->setResultingClientId(
-      !fetch_request.is_main_resource_load ? String() : params->client_id);
-  event_init->setIsReload(fetch_request.is_reload);
+      !params->request->is_main_resource_load ? String() : params->client_id);
+  event_init->setIsReload(params->request->is_reload);
+
+  Request* request = Request::Create(
+      ScriptController()->GetScriptState(), std::move(params->request),
+      Request::ForServiceWorkerFetchEvent::kTrue);
+  request->getHeaders()->SetGuard(Headers::kImmutableGuard);
+  event_init->setRequest(request);
+
   ScriptState* script_state = ScriptController()->GetScriptState();
   FetchEvent* fetch_event = MakeGarbageCollected<FetchEvent>(
       script_state, event_type_names::kFetch, event_init, respond_with_observer,
@@ -1527,14 +1544,14 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForSubresource(
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
                   std::move(corp_checker), std::move(response_callback),
-                  std::move(callback)),
+                  std::move(callback), base::TimeTicks::Now()),
         CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
   } else {
     event_queue_->EnqueueNormal(
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
                   std::move(corp_checker), std::move(response_callback),
-                  std::move(callback)),
+                  std::move(callback), base::TimeTicks::Now()),
         CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
   }
 }
@@ -1550,7 +1567,7 @@ void ServiceWorkerGlobalScope::Clone(
       cross_origin_embedder_policy, std::move(coep_reporter));
 
   controller_receivers_.Add(
-      this, std::move(receiver), std::move(checker),
+      std::move(receiver), std::move(checker),
       GetThread()->GetTaskRunner(TaskType::kInternalDefault));
 }
 
@@ -1567,7 +1584,7 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
   DCHECK(!global_scope_initialized_);
 
   DCHECK(service_worker_host.is_valid());
-  DCHECK(!service_worker_host_);
+  DCHECK(!service_worker_host_.is_bound());
   service_worker_host_.Bind(std::move(service_worker_host),
                             GetTaskRunner(TaskType::kInternalDefault));
 
@@ -1884,14 +1901,14 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForMainResource(
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
                   /*corp_checker=*/nullptr, std::move(response_callback),
-                  std::move(callback)),
+                  std::move(callback), base::nullopt),
         CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
   } else {
     event_queue_->EnqueueNormal(
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
                   /*corp_checker=*/nullptr, std::move(response_callback),
-                  std::move(callback)),
+                  std::move(callback), base::TimeTicks::Now()),
         CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
   }
 }
@@ -2126,10 +2143,17 @@ void ServiceWorkerGlobalScope::StartAbortPaymentEvent(
     int event_id) {
   DCHECK(IsContextThread());
   abort_payment_event_callbacks_.Set(event_id, std::move(callback));
-  abort_payment_result_callbacks_.Set(
-      event_id,
-      mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>(
-          std::move(response_callback)));
+  HeapMojoRemote<payments::mojom::blink::PaymentHandlerResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  // Payment task need to be processed on the user interaction task
+  // runner (TaskType::kUserInteraction).
+  // See:
+  // https://www.w3.org/TR/payment-request/#user-aborts-the-payment-request-algorithm
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kUserInteraction));
+  abort_payment_result_callbacks_.Set(event_id,
+                                      WrapDisallowNew(std::move(remote)));
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker", "ServiceWorkerGlobalScope::DispatchAbortPaymentEvent",
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
@@ -2171,10 +2195,17 @@ void ServiceWorkerGlobalScope::StartCanMakePaymentEvent(
     int event_id) {
   DCHECK(IsContextThread());
   can_make_payment_event_callbacks_.Set(event_id, std::move(callback));
-  can_make_payment_result_callbacks_.Set(
-      event_id,
-      mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>(
-          std::move(response_callback)));
+  HeapMojoRemote<payments::mojom::blink::PaymentHandlerResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  // Payment task need to be processed on the user interaction task
+  // runner (TaskType::kUserInteraction).
+  // See:
+  // https://www.w3.org/TR/payment-request/#canmakepayment-method
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kUserInteraction));
+  can_make_payment_result_callbacks_.Set(event_id,
+                                         WrapDisallowNew(std::move(remote)));
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker", "ServiceWorkerGlobalScope::DispatchCanMakePaymentEvent",
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
@@ -2218,10 +2249,16 @@ void ServiceWorkerGlobalScope::StartPaymentRequestEvent(
     int event_id) {
   DCHECK(IsContextThread());
   payment_request_event_callbacks_.Set(event_id, std::move(callback));
-  payment_response_callbacks_.Set(
-      event_id,
-      mojo::Remote<payments::mojom::blink::PaymentHandlerResponseCallback>(
-          std::move(response_callback)));
+  HeapMojoRemote<payments::mojom::blink::PaymentHandlerResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  // Payment task need to be processed on the user interaction task
+  // runner (TaskType::kUserInteraction).
+  // See:
+  // https://www.w3.org/TR/payment-request/#user-accepts-the-payment-request-algorithm
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kUserInteraction));
+  payment_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker", "ServiceWorkerGlobalScope::DispatchPaymentRequestEvent",
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
@@ -2370,6 +2407,12 @@ void ServiceWorkerGlobalScope::NoteRespondedToFetchEvent(
   it->value -= 1;
   if (it->value == 0)
     unresponded_fetch_event_counts_.erase(it);
+}
+
+void ServiceWorkerGlobalScope::RecordQueuingTime(base::TimeTicks created_time) {
+  base::UmaHistogramMediumTimes(
+      "ServiceWorker.FetchEvent.QueuingTime",
+      base::TimeTicks::Now() - created_time);
 }
 
 }  // namespace blink

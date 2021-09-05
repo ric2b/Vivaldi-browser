@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.site_settings;
 import static org.junit.Assert.assertEquals;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -17,10 +18,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -30,10 +29,12 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.content_settings.CookieControlsObserver;
 import org.chromium.components.content_settings.CookieControlsStatus;
+import org.chromium.components.content_settings.PrefNames;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -99,12 +100,11 @@ public class CookieControlsBridgeTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCookieBridgeWithTPCookiesDisabled() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             // Set CookieControlsMode Pref to Off
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.OFF);
+                    PrefNames.COOKIE_CONTROLS_MODE, CookieControlsMode.OFF);
         });
         int currentCallCount = mCallbackHelper.getCallCount();
 
@@ -115,7 +115,7 @@ public class CookieControlsBridgeTest {
         // Create cookie bridge and wait for desired callbacks.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mCookieControlsBridge =
-                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents());
+                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents(), null);
         });
 
         mCallbackHelper.waitForCallback(currentCallCount, 2);
@@ -130,11 +130,10 @@ public class CookieControlsBridgeTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCookieBridgeWith3PCookiesEnabled() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
+                    PrefNames.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
         });
         int currentCallCount = mCallbackHelper.getCallCount();
 
@@ -145,7 +144,7 @@ public class CookieControlsBridgeTest {
         // Create cookie bridge and wait for desired callbacks.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mCookieControlsBridge =
-                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents());
+                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents(), null);
         });
 
         mCallbackHelper.waitForCallback(currentCallCount, 2);
@@ -160,11 +159,10 @@ public class CookieControlsBridgeTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCookieBridgeWithChangingBlockedCookiesCount() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
+                    PrefNames.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
             // Block all cookies
             WebsitePreferenceBridge.setCategoryEnabled(
                     Profile.getLastUsedRegularProfile(), ContentSettingsType.COOKIES, false);
@@ -178,7 +176,7 @@ public class CookieControlsBridgeTest {
         // Create cookie bridge and wait for desired callbacks.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mCookieControlsBridge =
-                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents());
+                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents(), null);
         });
 
         mCallbackHelper.waitForCallback(currentCallCount, 2);
@@ -198,12 +196,11 @@ public class CookieControlsBridgeTest {
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCookieBridgeWithIncognitoSetting() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             // Set CookieControlsMode Pref to IncognitoOnly
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.INCOGNITO_ONLY);
+                    PrefNames.COOKIE_CONTROLS_MODE, CookieControlsMode.INCOGNITO_ONLY);
         });
         int currentCallCount = mCallbackHelper.getCallCount();
 
@@ -214,7 +211,7 @@ public class CookieControlsBridgeTest {
         // Create cookie bridge and wait for desired callbacks.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mCookieControlsBridge =
-                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents());
+                    new CookieControlsBridge(mCallbackHandler, tab.getWebContents(), null);
         });
 
         mCallbackHelper.waitForCallback(currentCallCount, 2);
@@ -225,8 +222,9 @@ public class CookieControlsBridgeTest {
         // Make new incognito page now
         Tab incognitoTab = mActivityTestRule.loadUrlInNewTab(url, true);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mCookieControlsBridge =
-                    new CookieControlsBridge(mCallbackHandler, incognitoTab.getWebContents());
+            mCookieControlsBridge = new CookieControlsBridge(mCallbackHandler,
+                    incognitoTab.getWebContents(),
+                    Profile.fromWebContents(incognitoTab.getWebContents()).getOriginalProfile());
         });
         mCallbackHelper.waitForCallback(currentCallCount, 2);
         assertEquals(CookieControlsStatus.ENABLED, mStatus);

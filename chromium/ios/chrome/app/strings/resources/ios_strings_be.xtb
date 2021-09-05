@@ -6,6 +6,7 @@
 <translation id="1044891598689252897">Сайты будуць працаваць нармальна</translation>
 <translation id="1047726139967079566">Дадаць гэту старонку ў закладкі...</translation>
 <translation id="1049743911850919806">Інкогніта</translation>
+<translation id="105093091697134113">Наступныя ўліковыя запісы выкарыстоўваюць паролі, якія былі раскрыты пры ўцечцы даных на старонніх сэрвісах або ўведзены на падманным вэб-сайце. Каб абараніць свае ўліковыя запісы, неадкладна змяніце гэтыя паролі.</translation>
 <translation id="1063454504051558093">Выкарыстаць стары пароль...</translation>
 <translation id="1066060668811609597">Кіраванне сінхранізацыяй</translation>
 <translation id="1076421457278169141">Код сканіраваны</translation>
@@ -20,6 +21,7 @@
 <translation id="1176932207622159128">Не ўдалося захаваць відарыс</translation>
 <translation id="1180526666083833456">Сінхранізацыя і персаналізацыя на ўсіх прыладах.</translation>
 <translation id="1181037720776840403">Выдаліць</translation>
+<translation id="1185569544548277362">Новае: вы можаце зрабіць Chrome стандартным браўзерам. <ph name="BEGIN_LINK" />Адкрыць Налады<ph name="END_LINK" /></translation>
 <translation id="1207113853726624428">Новы пошук</translation>
 <translation id="1209206284964581585">Схаваць гэты раз</translation>
 <translation id="1219674500290482172">Не ўдалося падключыцца да інтэрнэту.</translation>
@@ -30,9 +32,11 @@
 <translation id="1272079795634619415">Спыніць</translation>
 <translation id="1283524564873030414">За апошнія 24 гадзіны</translation>
 <translation id="1285320974508926690">Ніколі не перакладаць гэты сайт</translation>
+<translation id="1321993286294231467">Памылка пры захаванні фота.</translation>
 <translation id="1323735185997015385">Выдаліць</translation>
 <translation id="132683371494960526">Каб змяніць бацькоўскую папку, націсніце двойчы.</translation>
 <translation id="1340643665687018190">Закрыць меню</translation>
+<translation id="1345319103680304157">Няма раскрытых пароляў</translation>
 <translation id="1358214951266274152">Перайсці па скапіраванай спасылцы</translation>
 <translation id="1360432990279830238">Выйсці і выключыць сінхранізацыю?</translation>
 <translation id="1375321115329958930">Захаваныя паролі</translation>
@@ -50,6 +54,8 @@
 <translation id="1509486075633541495">Уваход на вэб-сайт</translation>
 <translation id="1509960214886564027">Функцыі на многіх сайтах могуць перастаць працаваць</translation>
 <translation id="152234381334907219">Ніколі не захоўваліся</translation>
+<translation id="1523341279170789507">Дазволіць усе файлы cookie</translation>
+<translation id="1535268707340844072">Бягучыя налады могуць прывесці да збояў у рабоце некаторых сайтаў. Каб кіраваць файламі cookie для ўсіх сайтаў, перайдзіце ў <ph name="BEGIN_LINK" />Налады файлаў cookie<ph name="END_LINK" />.</translation>
 <translation id="1540800554400757039">Радок адраса 1</translation>
 <translation id="1545749641540134597">Сканіраваць QR-код</translation>
 <translation id="1552525382687785070">Сінхранізацыя выключана вашым адміністратарам</translation>
@@ -62,6 +68,7 @@
 <translation id="1644574205037202324">Гісторыя</translation>
 <translation id="1650222530560417226">Каб пачаць збор журналаў кансолі JavaScript і памылак з усіх укладак, націсніце кнопку "Пачаць вядзенне журнала". Журналы будуць збірацца (і захоўвацца толькі ў памяці), пакуль гэта старонка не будзе закрыта або пакуль вы не націснеце "Спыніць вядзенне журнала".</translation>
 <translation id="1657011748321897393">Абагуліць не ўдалося: няма падключэння да сеткі.</translation>
+<translation id="1657641691196698092">Заблакіраваныя файлы cookie</translation>
 <translation id="165877110639533037">Няма адкрытых укладак</translation>
 <translation id="1674504678466460478"><ph name="SOURCE_LANGUAGE" /> – <ph name="TARGET_LANGUAGE" /></translation>
 <translation id="168715261339224929">Уключыце сінхранізацыю, каб бачыць закладкі на ўсіх сваіх прыладах.</translation>
@@ -99,12 +106,10 @@
 <translation id="2139867232736819575">Пошук скапіраванага тэксту</translation>
 <translation id="2149973817440762519">Рэдагаваць закладку</translation>
 <translation id="2175927920773552910">QR-код</translation>
-<translation id="2179182049312275900">Сінхранізацыю можна ўключыць у любы момант у наладах.</translation>
 <translation id="2198757192731523470">Google можа выкарыстоўваць вашу гісторыю, каб персаналізаваць пошук, паказ рэкламы і іншыя сэрвісы Google.</translation>
 <translation id="2218443599109088993">Паменшыць</translation>
 <translation id="2230173723195178503">Вэб-старонка загружана</translation>
 <translation id="2239626343334228536">Ідзе ачыстка даных прагляду...</translation>
-<translation id="2245545499420671379">Блакіраваць староннія файлы cookie у рэжыме інкогніта</translation>
 <translation id="2257567812274161158">Сінхранізацыя не працуе.</translation>
 <translation id="225943865679747347">Код памылкі: <ph name="ERROR_CODE" /></translation>
 <translation id="2267753748892043616">Дадаць уліковы запіс</translation>
@@ -117,6 +122,9 @@
 <translation id="2359043044084662842">Перакласці</translation>
 <translation id="2359808026110333948">Працягнуць</translation>
 <translation id="2360196772093551345">Запытаць мабільную версію сайта</translation>
+<translation id="236977714248711277">Сайты не могуць выкарыстоўваць файлы cookie для паляпшэння сваёй функцыянальнасці: напрыклад, для захавання інфармацыі пра тое, што вы ўвайшлі ва ўліковы запіс, або каб запамінаць тавары ў кошыку.
+
+Сайты не могуць выкарыстоўваць файлы cookie для адсочвання вашых дзеянняў у браўзеры на розных сайтах, напрыклад, каб персаналізаваць рэкламу.</translation>
 <translation id="2379896346847637748">Адкрыць у новым акне</translation>
 <translation id="2381405137052800939">Асновы</translation>
 <translation id="2386793615875593361">1 выбрана</translation>
@@ -129,10 +137,11 @@
 <translation id="2529021024822217800">Адкрыць усе</translation>
 <translation id="2562041823070056534">Ідзе адпраўка на прыладу "<ph name="DEVICE_NAME" />"...</translation>
 <translation id="2570206273416014374">Адпраўляе вашай стандартнай пошукавай сістэме некаторыя файлы cookie, а таксама пошукавыя запыты, уведзеныя ў адрасным радку і полі пошуку.</translation>
-<translation id="2572712655377361602">Доступ да фота заблакіраваны палітыкай прылады</translation>
 <translation id="2578571896248130439">Адпраўка вэб-старонкі</translation>
 <translation id="2584132361465095047">Дадаць уліковы запіс…</translation>
+<translation id="2600682495497606169">Выдаліць файлы cookie сайта</translation>
 <translation id="2625189173221582860">Пароль скапіраваны</translation>
+<translation id="2647269890314209800">Файлы cookie, якія выкарыстоўваюцца</translation>
 <translation id="2648803196158606475">Выдаліць прачытанае</translation>
 <translation id="2653659639078652383">Адправіць</translation>
 <translation id="2690858294534178585">Камера выкарыстоўваецца</translation>
@@ -174,12 +183,16 @@
 <translation id="2989805286512600854">Адкрыць у новай укладцы</translation>
 <translation id="3037605927509011580">Якая неспадзяванка!</translation>
 <translation id="3112556859945124369">Пазначыць…</translation>
+<translation id="3131206671572504478">Блакіруюцца ўсе</translation>
 <translation id="3153862085237805241">Захаваць картку</translation>
 <translation id="3157684681743766797">Пазначыць усе…</translation>
 <translation id="3161291298470460782">Вы выйдзеце з уліковага запісу, сінхранізацыя будзе выключана, усе даныя Chrome будуць выдалены з гэтай прылады. Сінхранізаваныя даныя застануцца ва Уліковым запісе Google.</translation>
 <translation id="3175081911749765310">Вэб-сэрвісы</translation>
 <translation id="3178650076442119961">Апошнія дзеянні адбываліся сёння</translation>
 <translation id="3181954750937456830">Бяспечны прагляд (абараняе вас і прыладу ад небяспечных сайтаў)</translation>
+<translation id="3196681740617426482">Сайты могуць выкарыстоўваць файлы cookie для паляпшэння сваёй функцыянальнасці: напрыклад, для захавання інфармацыі пра тое, што вы ўвайшлі ва ўліковы запіс, або каб запамінаць тавары ў кошыку.
+
+У рэжыме інкогніта сайты не могуць выкарыстоўваць файлы cookie для адсочвання вашых дзеянняў у браўзеры на розных сайтах у мэтах персаналізацыі рэкламы.</translation>
 <translation id="3207960819495026254">Дададзена ў закладкі</translation>
 <translation id="3224641773458703735">Каб экспартаваць паролі, на прыладзе трэба спачатку задаць пароль.</translation>
 <translation id="3240426699337459095">Спасылка скапіравана</translation>
@@ -230,6 +243,7 @@
 <translation id="3789841737615482174">Усталяваць</translation>
 <translation id="3803696231112616155">Прапаноўваць перакласці гэты сайт</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3892144330757387737">Ваша гісторыя знаходзіцца тут</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3915450441834151894">Звесткі пра сайт</translation>
 <translation id="3922310737605261887">Шукаць скапіраваны тэкст</translation>
@@ -246,13 +260,13 @@
 <translation id="4038354071007134711">На прыладзе няма праграм, у якіх можна адкрыць гэты файл.</translation>
 <translation id="4042870976416480368">Знайсці на старонцы</translation>
 <translation id="4049507953662678203">Праверце, ці ёсць у вас падключэнне да сеткі, і паўтарыце спробу.</translation>
-<translation id="4071530748369333746">Скасаваць сінхранізацыю?</translation>
 <translation id="4082688844002261427">Кіраванне тым, як гісторыя прагляду сайтаў выкарыстоўваецца для персаналізацыі пошуку, рэкламы і інш.</translation>
 <translation id="408404951701638773">Панэллю пошуку цяпер карыстацца лягчэй</translation>
 <translation id="411254640334432676">Збой спампоўкі.</translation>
 <translation id="4112644173421521737">Пошук</translation>
 <translation id="4121993058175073134">Для экспарту даных па сетцы наладзьце электронную пошту праз праграму "Налады".</translation>
 <translation id="4124987746317609294">Прамежак часу</translation>
+<translation id="4152011295694446843">Вашы закладкі знаходзяцца тут</translation>
 <translation id="4172051516777682613">Заўсёды паказваць</translation>
 <translation id="418156467088430727">Паказаць пазасеткавую версію ў новай укладцы</translation>
 <translation id="4181841719683918333">Мовы</translation>
@@ -260,6 +274,7 @@
 <translation id="4263576668337963058">Паказаць даступныя дзеянні са старонкай</translation>
 <translation id="4272631900155121838">Каб сканіраваць QR-код, уключыце камеру ў наладах</translation>
 <translation id="4276041135170112053">Вырашыце праблему</translation>
+<translation id="4277990410970811858">Бяспечны прагляд</translation>
 <translation id="4281844954008187215">Умовы выкарыстання</translation>
 <translation id="430793432425771671">Сінхранізаваць усе</translation>
 <translation id="430967081421617822">За ўвесь час</translation>
@@ -271,8 +286,10 @@
 <translation id="4389019817280890563">Каб змяніць мову, націсніце.</translation>
 <translation id="441868831736628555">Паведамленне аб прыватнасці</translation>
 <translation id="4454246407045105932">Дадаванне мовы</translation>
+<translation id="4469418912670346607">Працягнуць наладку</translation>
 <translation id="4476574785019001431">Налады</translation>
 <translation id="4496373720959965247">Дадавайце ўкладкі і пераключайцеся паміж старонкамі</translation>
+<translation id="4502566650163919158">Праверыць</translation>
 <translation id="4508750114462689118">Закрыць рэкламны элемент уваходу</translation>
 <translation id="4526249700380860531">Праглядзець захаваныя паролі і кіраваць імі можна на старонцы <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Увайдзіце яшчэ раз.</translation>
@@ -297,12 +314,15 @@
 
 Каб змяніць гэту наладу, <ph name="BEGIN_LINK" />скіньце налады сінхранізацыі<ph name="END_LINK" /></translation>
 <translation id="4805759445554688327">Несапраўдны нумар карты</translation>
+<translation id="4808744395915275922">Абнаўленні</translation>
 <translation id="4818522717893377262">Дадаць мову...</translation>
 <translation id="481968316161811770">Файлы cookie, даныя сайта</translation>
+<translation id="4826218269716039351">Староннія файлы cookie блакіруюцца</translation>
 <translation id="4833786495304741580">Аўтаматычна адпраўляе ў Google статыстыку выкарыстання і справаздачы аб збоях.</translation>
 <translation id="4840495572919996524">Закладкі, гісторыя, паролі і іншае больш не будуць сінхранізавацца з Уліковым запісам Google.</translation>
 <translation id="4854345657858711387">Задайце пароль</translation>
 <translation id="4860895144060829044">Выклік</translation>
+<translation id="4872323082491632254">Праверка пароляў</translation>
 <translation id="4881695831933465202">Адкрыць</translation>
 <translation id="4901778704868714008">Захаваць...</translation>
 <translation id="4904877109095351937">Пазначыць як прачытанае</translation>
@@ -325,15 +345,19 @@
 <translation id="5150492518600715772">Адправіць на прыладу</translation>
 <translation id="5181140330217080051">Ідзе спампоўванне</translation>
 <translation id="5186185447130319458">Прыватнае</translation>
+<translation id="5188482106078495165">Налада файлаў cookie прымяняецца да ўсіх укладак. Каб прымяніць новую наладу да адкрытай укладкі, перазагрузіце ўкладку.</translation>
 <translation id="5190835502935405962">Панэль закладак</translation>
 <translation id="5197255632782567636">Інтэрнэт</translation>
 <translation id="5228579091201413441">Уключыць сінхранізацыю</translation>
 <translation id="5234764350956374838">Адхіліць</translation>
 <translation id="5245322853195994030">Скасаваць сінхранізацыю</translation>
 <translation id="5271549068863921519">Захаваць пароль</translation>
+<translation id="5295239312320826323">Выдаліць уліковы запіс <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Паказаць</translation>
 <translation id="5317780077021120954">Захаваць</translation>
 <translation id="5327248766486351172">Імя</translation>
+<translation id="5339316356165661760">Уключыць сінхранізацыю</translation>
+<translation id="5352285283572729470">Гэта налада знаходзіцца пад кіраваннем</translation>
 <translation id="5388358297987318779">Адкрыць відарыс</translation>
 <translation id="5407969256130905701">Адхіліць змяненні</translation>
 <translation id="5409365236829784218">Няма ўсталяваных праграм, у якіх можна адкрыць гэты файл.</translation>
@@ -342,6 +366,8 @@
 <translation id="54401264925851789">Інфармацыя пра бяспеку старонкі</translation>
 <translation id="5443952882982198570">Крэдытныя карты</translation>
 <translation id="5457907402803865181">Памылка пры сінхранізацыі пароляў.</translation>
+<translation id="5489208564673669003">Каб кіраваць файламі cookie для ўсіх сайтаў, перайдзіце ў <ph name="BEGIN_LINK" />Налады файлаў cookie<ph name="END_LINK" />.</translation>
+<translation id="5490005495580364134">Блакіраваць усе файлы cookie (не рэкамендуецца)</translation>
 <translation id="5508435575041083207">Выйсці і выдаліць даныя з гэтай прылады</translation>
 <translation id="5525269841082836315">Стварэнне фразы-пароля</translation>
 <translation id="5548760955356983418">Функцыя перадачы вэб-сайта дазваляе пачаць прагляд вэб-старонкі на адной прыладзе, а затым працягнуць, перайшоўшы на Mac. Адкрыты вэб-сайт з'явіцца ў док-панэлі камп'ютара Mac.
@@ -358,9 +384,11 @@
 <translation id="567881659373499783">Версія <ph name="PRODUCT_VERSION" /></translation>
 <translation id="5706552126692816153">Апошнія дзеянні: дзень таму</translation>
 <translation id="5711039611392265845">Дадатковыя налады прыватнасці, бяспекі і збору даных глядзіце ў раздзеле <ph name="BEGIN_LINK" />Сінхранізацыя і сэрвісы Google<ph name="END_LINK" />.</translation>
+<translation id="5724941645893276623">Дадайце новую ўкладку, каб праглядаць змесціва ў інтэрнэце ў прыватным рэжыме.</translation>
 <translation id="5728700505257787410">Праблема з уваходам у ваш уліковы запіс.</translation>
 <translation id="5737974891429562743">Даныя ўліковага запісу для ўваходу састарэлі. Каб запусціць сінхранізацыю, абнавіце іх.</translation>
 <translation id="5738887413654608789">Гэта дазваляе на аснове даных пра наваколле знаходзіць адпаведныя вэб-старонкі.</translation>
+<translation id="5758631781033351321">Ваш спіс чытання знаходзіцца тут</translation>
 <translation id="5782227691023083829">Ідзе пераклад...</translation>
 <translation id="5803566855766646066">Сапраўды адхіліць гэту новую картку?</translation>
 <translation id="5816228676161003208">Гэта дазваляе паскорыць пошук пры выкарыстанні голасу.</translation>
@@ -371,6 +399,7 @@
 <translation id="5869029295770560994">OK</translation>
 <translation id="5871497086027727873">1 элемент перамешчаны</translation>
 <translation id="5897956970858271241">Наведаць скапіраваную спасылку</translation>
+<translation id="5899314093904173337">Каб абагуліць гэта змесціва з карыстальнікамі паблізу, дайце ім адсканіраваць гэты QR-код камерай або з дапамогай праграмы сканіравання QR-кодаў.</translation>
 <translation id="5911030830365207728">Перакладчык Google</translation>
 <translation id="5913600720976431809">Параметры перакладу старонкі</translation>
 <translation id="5938160824633642847">Сховішча прылады амаль запоўнена. Вызваліце месца і паўтарыце спробу.</translation>
@@ -417,25 +446,33 @@
 <translation id="6362362396625799311">Няма ўкладак інкогніта</translation>
 <translation id="6363526231572697780">Адсутнічае імя карыстальніка</translation>
 <translation id="6374469231428023295">Паўтарыць спробу</translation>
+<translation id="6377118281273296434">Бяспека сайта</translation>
 <translation id="6380866119319257197">Калі вы забылі фразу-пароль або хочаце змяніць гэту наладу, <ph name="BEGIN_LINK" />скіньце параметры сінхранізацыі<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">Імя на картцы</translation>
 <translation id="6406506848690869874">Сінхранізаваць</translation>
+<translation id="6410883413783534063">Каб праглядаць некалькі старонак адначасова, карыстайцеся ўкладкамі</translation>
 <translation id="6417838470969808600">У вас ёсць закладкі, гісторыя, паролі і іншыя налады з уліковага запісу <ph name="USER_EMAIL1" />.</translation>
 <translation id="641799622251403418">Вы ўвайшлі як <ph name="EMAIL" />.
 
 Вашы даныя былі зашыфраваны з дапамогай фразы-пароля <ph name="TIME" />. Увядзіце яе, каб пачаць сінхранізацыю.</translation>
 <translation id="6418346271604475326">PDF рыхтуецца</translation>
-<translation id="6426067060178468363">Дазволіць файлы cookie</translation>
 <translation id="6434591244308415567">Адбылася памылка. Паўтарыце спробу пазней.</translation>
+<translation id="6439338047467462846">Дазволіць усе</translation>
 <translation id="6445051938772793705">Краіна</translation>
 <translation id="6445981559479772097">Паведамленне адпраўлена.</translation>
 <translation id="6447842834002726250">Файлы cookie</translation>
 <translation id="6464071786529933911">Адкрыць у новай укладцы інкогніта</translation>
+<translation id="6464397691496239022">Сайты могуць выкарыстоўваць файлы cookie для паляпшэння сваёй функцыянальнасці: напрыклад, для захавання інфармацыі пра тое, што вы ўвайшлі ва ўліковы запіс, або каб запамінаць тавары ў кошыку.
+
+Сайты не могуць выкарыстоўваць файлы cookie для адсочвання вашых дзеянняў у браўзеры на розных сайтах, напрыклад, каб персаналізаваць рэкламу.</translation>
 <translation id="6476800141292307438">Старонка перакладаецца на мову "<ph name="LANGUAGE" />". Параметры знаходзяцца ў ніжняй частцы экрана.</translation>
 <translation id="648164694371393720">Памылка аўтэнтыфікацыі</translation>
 <translation id="6482629121755362506">Выдалена элементаў: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
+<translation id="651505212789431520">Скасаваць сінхранізацыю? Сінхранізацыю можна ўключыць у любы момант у Наладах.</translation>
 <translation id="6561262006871132942">Павялічыць</translation>
+<translation id="6585618849026997638">Каб мець магчымасць вярнуцца да важнай для вас старонкі пазней, можна дадаць закладку</translation>
 <translation id="6610002944194042868">Параметры перакладу</translation>
+<translation id="6624219055418309072">Блакіроўка ў рэжыме інкогніта</translation>
 <translation id="6628106477656132239">Несапраўдны тэрмін дзеяння</translation>
 <translation id="6638511529934826365">Змяніць памер тэксту…</translation>
 <translation id="6642362222295953972">Пераключыцца на існуючую ўкладку</translation>
@@ -457,8 +494,10 @@
 <translation id="681368974849482173">Элемент створаны</translation>
 <translation id="6831043979455480757">Перакласці</translation>
 <translation id="6851516051005285358">Запытаць версію для настольнага камп'ютара</translation>
+<translation id="6856384753476268833">Пад кіраваннем вашай арганізацыі.</translation>
 <translation id="6858855187367714033">Сканіраваны</translation>
 <translation id="6859944681507688231">Каб сканіраваць QR-код ці крэдытную картку, уключыце ў наладах камеру.</translation>
+<translation id="6869389390665537774">Вы можаце прагледзець наведаныя старонкі або выдаліць іх з гісторыі</translation>
 <translation id="6873263987691478642">Раздзяленне экрана</translation>
 <translation id="6888009575607455378">Вы сапраўды хочаце адхіліць змяненні?</translation>
 <translation id="6896758677409633944">Капіраваць</translation>
@@ -477,6 +516,7 @@
 <translation id="7006788746334555276">Налады змесціва</translation>
 <translation id="7015203776128479407">Першапачатковая наладка сінхранізацыі не завершана. Сінхранізацыя выключана.</translation>
 <translation id="7029809446516969842">Паролі</translation>
+<translation id="7030675613184250187">Захоўвайце старонкі ў спісе чытання, каб вярнуцца да іх пазней або чытаць без падключэння да інтэрнэту</translation>
 <translation id="7053983685419859001">Заблакіраваць</translation>
 <translation id="7062545763355031412">Прыняць і пераключыцца на іншы ўліковы запіс</translation>
 <translation id="7099761977003084116">Нядаўнія ўкладкі</translation>
@@ -485,6 +525,7 @@
 <translation id="7133798577887235672">Поўнае імя</translation>
 <translation id="7136892417564438900">Камера недаступная</translation>
 <translation id="7159472599653637159">Запытаць мабільную версію сайта</translation>
+<translation id="7172852049901402487">Захоўвайце паролі ў бяспечным месцы, каб прадухіліць іх раскрыццё ў выпадку праблем з бяспекай</translation>
 <translation id="7173114856073700355">Адкрыць Налады</translation>
 <translation id="7189598951263744875">Абагуліць...</translation>
 <translation id="7192050974311852563">Пачаць вядзенне журнала</translation>
@@ -493,6 +534,7 @@
 <translation id="7272437679830969316">Не ўдалося спраўдзіць вашу асобу. Пароль не скапіраваны.</translation>
 <translation id="7291368939935408496">Ідзе падрыхтоўка пароляў...</translation>
 <translation id="7293171162284876153">Каб пачаць сінхранізацыю, уключыце "Сінхранізацыю даных Chrome".</translation>
+<translation id="7313347584264171202">Вашы ўкладкі ў рэжыме інкогніта знаходзяцца тут</translation>
 <translation id="7336264872878993241">Спампавана: <ph name="PERCENT" /> %</translation>
 <translation id="7346909386216857016">OK</translation>
 <translation id="734758817008927353">Параметры захавання карткі</translation>
@@ -516,6 +558,7 @@
 <translation id="7600965453749440009">Ніколі не перакладаць з мовы: <ph name="LANGUAGE" /></translation>
 <translation id="7603852183842204213">Успл. вокны заблак. (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7638584964844754484">Няправільная фраза-пароль</translation>
+<translation id="7649070708921625228">Даведка</translation>
 <translation id="7658239707568436148">Скасаваць</translation>
 <translation id="766891008101699113">Для прагляду інтэрнэт-змесціва ў прыватным рэжыме дадайце новую ўкладку.</translation>
 <translation id="7671141431838911305">УСТАЛЯВАЦЬ</translation>
@@ -529,25 +572,29 @@
 <translation id="7781829728241885113">Учора</translation>
 <translation id="778855399387580014">Пачаць пошук у новай укладцы Chrome.</translation>
 <translation id="7791543448312431591">Дадаць</translation>
-<translation id="7828557259026017104">Файлы cookie – гэта файлы, якія ствараюцца наведанымі вамі вэб-сайтамі, каб запамінаць вашы налады. Староннія файлы cookie ствараюцца іншымі сайтамі. Гэтым сайтам належыць пэўнае змесціва (напрыклад рэклама або відарысы), размешчанае на вэб-старонцы, якую вы наведваеце.</translation>
+<translation id="7839985698273989086">Пазасеткавая старонка</translation>
 <translation id="7840771868269352570">Выбраныя элементы будуць выдалены.</translation>
 <translation id="7856733331829174190">Не ўдалося спампаваць</translation>
 <translation id="7859704718976024901">Гісторыя прагляду сайтаў</translation>
 <translation id="7887198238286927132">У мэтах аховы вашай прыватнасці Chrome не будзе выкарыстоўваць аўтазапаўненне ў гэтым полі.</translation>
+<translation id="791251013315685175">Пад кіраваннем кампаніі "<ph name="COMPANY" />".</translation>
 <translation id="7918293828610777738">Спіс чытання даступны ў пазасеткавым рэжыме. Каб дадаць старонку ў спіс чытання, націсніце значок <ph name="SHARE_OPENING_ICON" />, затым <ph name="READ_LATER_TEXT" />.</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Экспарт пароляў...</translation>
 <translation id="7947953824732555851">Прыняць і ўвайсці</translation>
 <translation id="794799177247607889">Спыніць вядзенне журнала</translation>
 <translation id="7961015016161918242">Ніколі</translation>
+<translation id="7966516440812255683">Сайты могуць выкарыстоўваць файлы cookie для паляпшэння сваёй функцыянальнасці: напрыклад, для захавання інфармацыі пра тое, што вы ўвайшлі ва ўліковы запіс, або каб запамінаць тавары ў кошыку.
+
+Сайты могуць выкарыстоўваць файлы cookie для адсочвання вашых дзеянняў у браўзеры на розных сайтах, напрыклад, каб персаналізаваць рэкламу.</translation>
 <translation id="7971521879845308059">Блакіраваць усплывальныя вокны</translation>
 <translation id="7982789257301363584">Сетка</translation>
 <translation id="7993619969781047893">Функцыі на некаторых сайтах могуць перастаць працаваць</translation>
 <translation id="800361585186029508">Адкрывае ўведзеныя URL-адрасы ў Google Chrome.</translation>
 <translation id="8007420562015504427">Пошук у рэжыме інкогніта</translation>
-<translation id="8019783059653722575">Гэта дазваляе захоўваць і запампоўваць фота.</translation>
 <translation id="802154636333426148">Збой спампоўкі</translation>
 <translation id="8023878949384262191">Разгортвае раздзел.</translation>
+<translation id="804427445359061970">Вашы ўкладкі з іншых прылад знаходзяцца тут</translation>
 <translation id="8059533439631660104">Згортвае раздзел.</translation>
 <translation id="806745655614357130">Захоўваць мае даныя асобна</translation>
 <translation id="8073670137947914548">Спампоўванне завершана</translation>
@@ -555,9 +602,9 @@
 <translation id="8076014560081431679">Захаваныя налады сайтаў не будуць выдалены і могуць змяшчаць звесткі аб вашых тыповых дзеяннях у браўзеры. <ph name="BEGIN_LINK" />Даведацца больш<ph name="END_LINK" /></translation>
 <translation id="8114753159095730575">Файл даступны для спампоўвання. Параметры знаходзяцца ў ніжняй частцы экрана.</translation>
 <translation id="8131740175452115882">Пацвердзіць</translation>
-<translation id="8174524257672181687">Блакіраваць усе файлы cookie (не рэкамендуецца)</translation>
 <translation id="8197543752516192074">Перакласці старонку</translation>
 <translation id="8205564605687841303">Скасаваць</translation>
+<translation id="8206354486702514201">Гэтай наладай кіруе адміністратар.</translation>
 <translation id="8225985093977202398">Відарысы і файлы ў кэшы</translation>
 <translation id="8261506727792406068">Выдаліць</translation>
 <translation id="8281781826761538115">Стандартная мова: <ph name="DEFAULT_LOCALE" /></translation>
@@ -570,6 +617,8 @@
 <translation id="8428045167754449968">Горад або населены пункт</translation>
 <translation id="8428213095426709021">Налады</translation>
 <translation id="8458397775385147834">1 элемент выдалены</translation>
+<translation id="8459333855531264009">Небяспечны сайт</translation>
+<translation id="8484911814435057959">Паролі раскрыты</translation>
 <translation id="8487667956631253959">Уключаны</translation>
 <translation id="8487700953926739672">Даступна па-за сеткай</translation>
 <translation id="8490978609246021741">Захаваць змяненні</translation>
@@ -584,18 +633,22 @@
 <translation id="8548878600947630424">Знайсці на старонцы...</translation>
 <translation id="8574235780160508979">Умовы выкарыстання Chrome зменяцца 31 сакавіка. <ph name="BEGIN_LINK" />Азнаёмцеся з імі<ph name="END_LINK" /></translation>
 <translation id="8588404856427128947">Выключаны</translation>
+<translation id="8591976964826315682">Блакіраваць староннія файлы cookie у рэжыме інкогніта</translation>
 <translation id="8605219856220328675">Закрыць укладку.</translation>
 <translation id="8620640915598389714">Змяніць</translation>
 <translation id="8636825310635137004">Каб глядзець укладкі са сваіх іншых прылад, уключыце сінхранізацыю.</translation>
 <translation id="8654802032646794042">Скасаваць</translation>
 <translation id="8668210798914567634">Гэта старонка была захавана ў спіс чытання.</translation>
 <translation id="8680787084697685621">Даныя ўліковага запісу для ўваходу састарэлі.</translation>
+<translation id="8706588385081740091">Паролі</translation>
 <translation id="8721297211384281569">Меню "Інструменты"</translation>
 <translation id="8725066075913043281">Паўтарыць спробу</translation>
 <translation id="8730621377337864115">Гатова</translation>
 <translation id="8741995161408053644">На сайце <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> размешчаны іншыя формы запісу гісторыі прагляду сайтаў для вашага Уліковага запісу Google.</translation>
+<translation id="8750037785291841318">Вашы ўкладкі знаходзяцца тут</translation>
 <translation id="8756969031206844760">Абнавіць пароль?</translation>
 <translation id="8775144690796719618">Няправільны URL-адрас</translation>
+<translation id="8803639129939845298">Бяспечны сайт</translation>
 <translation id="8820817407110198400">Закладкі</translation>
 <translation id="8840513115188359703">З Уліковага запісу Google вы не выйдзеце.</translation>
 <translation id="8870413625673593573">Нядаўна закрытыя</translation>
@@ -626,7 +679,6 @@
 <translation id="9223358826628549784">Справаздача аб збоях адпраўлена.</translation>
 <translation id="952704832371081537">Скасаваць</translation>
 <translation id="988141524645182168">Іншыя прылады</translation>
-<translation id="989697783705943787">Бяспека сайта</translation>
 <translation id="989988560359834682">Рэдагаваць адрас</translation>
 <translation id="994757059139821576">Прапановы артыкулаў</translation>
 </translationbundle>

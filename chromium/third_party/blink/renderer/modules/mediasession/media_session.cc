@@ -181,13 +181,6 @@ void MediaSession::setActionHandler(const String& action,
     }
 
     UseCounter::Count(GetExecutionContext(), WebFeature::kMediaSessionSkipAd);
-  } else if (action == "seekto" &&
-             !RuntimeEnabledFeatures::MediaSessionSeekingEnabled(
-                 GetExecutionContext())) {
-    exception_state.ThrowTypeError(
-        "The provided value 'seekto' is not a valid enum "
-        "value of type MediaSessionAction.");
-    return;
   }
 
   if (handler) {
@@ -367,7 +360,7 @@ void MediaSession::DidReceiveAction(
   iter->value->InvokeAndReportException(this, blink_details);
 }
 
-void MediaSession::Trace(Visitor* visitor) {
+void MediaSession::Trace(Visitor* visitor) const {
   visitor->Trace(client_receiver_);
   visitor->Trace(metadata_);
   visitor->Trace(action_handlers_);

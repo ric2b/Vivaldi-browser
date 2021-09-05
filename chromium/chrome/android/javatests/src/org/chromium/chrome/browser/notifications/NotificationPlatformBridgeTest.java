@@ -18,8 +18,9 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
@@ -32,7 +33,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.engagement.SiteEngagementService;
@@ -200,7 +200,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testDefaultNotificationProperties() throws Exception {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
                 ContentSettingValues.ALLOW, mPermissionTestRule.getOrigin());
@@ -483,7 +482,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testNotificationVibratePreferenceDisabledDefault() throws Exception {
         verifyVibrationNotRequestedWhenDisabledInPrefs("{}");
     }
@@ -495,7 +493,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testNotificationVibratePreferenceDisabledCustomPattern() throws Exception {
         verifyVibrationNotRequestedWhenDisabledInPrefs("{ vibrate: 42 }");
     }
@@ -591,7 +588,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testShowNotificationWithIcon() throws Exception {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
                 ContentSettingValues.ALLOW, mPermissionTestRule.getOrigin());
@@ -614,7 +610,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testShowNotificationWithoutIcon() throws Exception {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
                 ContentSettingValues.ALLOW, mPermissionTestRule.getOrigin());
@@ -653,7 +648,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @LargeTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testNotificationContentIntentClosesNotification() throws Exception {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
                 ContentSettingValues.ALLOW, mPermissionTestRule.getOrigin());
@@ -699,7 +693,6 @@ public class NotificationPlatformBridgeTest {
     @Test
     @LargeTest
     @Feature({"Browser", "Notifications"})
-    @RetryOnFailure
     public void testNotificationContentIntentCreatesTab() throws Exception {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
                 ContentSettingValues.ALLOW, mPermissionTestRule.getOrigin());

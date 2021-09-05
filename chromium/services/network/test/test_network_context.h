@@ -34,7 +34,7 @@
 namespace net {
 class NetworkIsolationKey;
 class IsolationInfo;
-}
+}  // namespace net
 
 namespace network {
 
@@ -117,10 +117,12 @@ class TestNetworkContext : public mojom::NetworkContext {
                    base::Time expiry,
                    bool enforce,
                    const GURL& report_uri,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    AddExpectCTCallback callback) override {}
   void SetExpectCTTestReport(const GURL& report_uri,
                              SetExpectCTTestReportCallback callback) override {}
   void GetExpectCTState(const std::string& domain,
+                        const net::NetworkIsolationKey& network_isolation_key,
                         GetExpectCTStateCallback callback) override {}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
@@ -165,6 +167,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       const GURL& url,
       const url::Origin& origin,
       const net::NetworkIsolationKey& network_isolation_key,
+      std::vector<mojom::QuicTransportCertificateFingerprintPtr> fingerprints,
       mojo::PendingRemote<mojom::QuicTransportHandshakeClient> handshake_client)
       override {}
   void LookUpProxyForURL(
@@ -224,6 +227,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       bool allow_credentials,
       const net::NetworkIsolationKey& network_isolation_key) override {}
   void CreateP2PSocketManager(
+      const net::NetworkIsolationKey& network_isolation_key,
       mojo::PendingRemote<mojom::P2PTrustedSocketManagerClient> client,
       mojo::PendingReceiver<mojom::P2PTrustedSocketManager>
           trusted_socket_manager,

@@ -100,7 +100,8 @@ constexpr char kIcon[] = "icon";
 
 }  // namespace
 
-ContactsManager::ContactsManager() : contacts_manager_(nullptr) {}
+ContactsManager::ContactsManager(ExecutionContext* execution_context)
+    : contacts_manager_(execution_context) {}
 
 ContactsManager::~ContactsManager() = default;
 
@@ -234,7 +235,7 @@ ScriptPromise ContactsManager::getProperties(ScriptState* script_state) {
                              ToV8(GetProperties(script_state), script_state));
 }
 
-void ContactsManager::Trace(Visitor* visitor) {
+void ContactsManager::Trace(Visitor* visitor) const {
   visitor->Trace(contacts_manager_);
   ScriptWrappable::Trace(visitor);
 }

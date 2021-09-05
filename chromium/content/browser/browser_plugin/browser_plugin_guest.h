@@ -40,13 +40,14 @@
 #include "content/public/common/screen_info.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/web/web_drag_status.h"
-#include "third_party/blink/public/web/web_ime_text_span.h"
+#include "ui/base/ime/ime_text_span.h"
+#include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
@@ -71,7 +72,6 @@ class RenderWidgetHostViewBase;
 class SiteInstance;
 struct FrameVisualProperties;
 struct ScreenInfo;
-struct TextInputState;
 
 // A browser plugin guest provides functionality for WebContents to operate in
 // the guest role and implements guest-specific overrides for ViewHostMsg_*
@@ -173,7 +173,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   // Methods to handle events from InputEventShim.
   void DidSetHasTouchEventHandlers(bool accept);
-  void DidTextInputStateChange(const TextInputState& params);
+  void DidTextInputStateChange(const ui::mojom::TextInputState& params);
   void DidUnlockMouse();
 
   // WebContentsObserver implementation.
@@ -301,7 +301,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   void OnImeCommitText(int instance_id,
                        const base::string16& text,
-                       const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+                       const std::vector<ui::ImeTextSpan>& ime_text_spans,
                        const gfx::Range& replacement_range,
                        int relative_cursor_pos);
   void OnImeFinishComposingText(int instance_id, bool keep_selection);
@@ -346,7 +346,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   // Text input type states.
   // Using scoped_ptr to avoid including the header file: view_messages.h.
-  std::unique_ptr<const TextInputState> last_text_input_state_;
+  ui::mojom::TextInputStatePtr last_text_input_state_;
 
   // The is the routing ID for a swapped out RenderView for the guest
   // WebContents in the embedder's process.

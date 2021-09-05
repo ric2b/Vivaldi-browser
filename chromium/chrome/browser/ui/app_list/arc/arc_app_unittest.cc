@@ -64,10 +64,6 @@
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/services/app_service/public/cpp/app_registry_cache.h"
-#include "chrome/services/app_service/public/cpp/app_update.h"
-#include "chrome/services/app_service/public/cpp/stub_icon_loader.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
@@ -76,6 +72,10 @@
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "components/arc/test/fake_app_instance.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/stub_icon_loader.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_data.h"
@@ -315,6 +315,7 @@ class ArcAppModelBuilderTest
   ChromeLauncherController* CreateLauncherController() {
     launcher_controller_ = std::make_unique<ChromeLauncherController>(
         profile_.get(), model_.get());
+    launcher_controller_->Init();
     return launcher_controller_.get();
   }
 
@@ -1098,7 +1099,7 @@ TEST_P(ArcAppModelBuilderTest, IsUnknownSyncTest) {
   auto data_list = syncer::SyncDataList();
   sync_pb::EntitySpecifics specifics;
   specifics.mutable_arc_package()->set_package_name(sync_package_name);
-  data_list.push_back(syncer::SyncData::CreateRemoteData(1, specifics));
+  data_list.push_back(syncer::SyncData::CreateRemoteData(specifics));
   auto* sync_service = arc::ArcPackageSyncableServiceFactory::GetInstance()
                            ->GetForBrowserContext(profile_.get());
   ASSERT_NE(nullptr, sync_service);

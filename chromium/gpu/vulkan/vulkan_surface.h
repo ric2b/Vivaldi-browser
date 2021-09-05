@@ -46,6 +46,9 @@ class COMPONENT_EXPORT(VULKAN) VulkanSurface {
 
   gfx::SwapResult SwapBuffers();
   gfx::SwapResult PostSubBuffer(const gfx::Rect& rect);
+  void PostSubBufferAsync(
+      const gfx::Rect& rect,
+      VulkanSwapChain::PostSubBufferCompletionCallback callback);
 
   void Finish();
 
@@ -62,7 +65,6 @@ class COMPONENT_EXPORT(VULKAN) VulkanSurface {
   uint32_t swap_chain_generation() const { return swap_chain_generation_; }
   const gfx::Size& image_size() const { return image_size_; }
   gfx::OverlayTransform transform() const { return transform_; }
-  uint32_t image_count() const { return image_count_; }
   VkSurfaceFormatKHR surface_format() const { return surface_format_; }
 
  private:
@@ -86,9 +88,6 @@ class COMPONENT_EXPORT(VULKAN) VulkanSurface {
 
   // Swap chain pre-transform.
   gfx::OverlayTransform transform_ = gfx::OVERLAY_TRANSFORM_INVALID;
-
-  // Swap chain image count.
-  uint32_t image_count_ = 0u;
 
   std::unique_ptr<VulkanSwapChain> swap_chain_;
 

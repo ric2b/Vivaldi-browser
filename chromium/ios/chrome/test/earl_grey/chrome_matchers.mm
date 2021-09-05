@@ -135,10 +135,6 @@ id<GREYMatcher> ShareButton() {
   return [ChromeMatchersAppInterface shareButton];
 }
 
-id<GREYMatcher> TabletTabSwitcherOpenButton() {
-  return [ChromeMatchersAppInterface tabletTabSwitcherOpenButton];
-}
-
 id<GREYMatcher> ShowTabsButton() {
   return [ChromeMatchersAppInterface showTabsButton];
 }
@@ -193,6 +189,10 @@ id<GREYMatcher> AddAccountButton() {
 
 id<GREYMatcher> SignOutAccountsButton() {
   return [ChromeMatchersAppInterface signOutAccountsButton];
+}
+
+id<GREYMatcher> SignOutAndClearDataAccountsButton() {
+  return [ChromeMatchersAppInterface signOutAndClearDataAccountsButton];
 }
 
 id<GREYMatcher> ClearBrowsingDataCell() {
@@ -421,10 +421,6 @@ id<GREYMatcher> HistoryClearBrowsingDataButton() {
 
 id<GREYMatcher> OpenInButton() {
   return [ChromeMatchersAppInterface openInButton];
-}
-
-id<GREYMatcher> TabGridOpenButton() {
-  return [ChromeMatchersAppInterface tabGridOpenButton];
 }
 
 id<GREYMatcher> TabGridCellAtIndex(unsigned int index) {

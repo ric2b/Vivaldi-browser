@@ -185,10 +185,6 @@ class TestBrowserWindow : public BrowserWindow {
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
-  void ShowImeWarningBubble(
-      const extensions::Extension* extension,
-      const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
-          callback) override {}
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
   void ShowEmojiPanel() override {}
@@ -232,7 +228,7 @@ class TestBrowserWindow : public BrowserWindow {
   };
 
   autofill::TestAutofillBubbleHandler autofill_bubble_handler_;
-  TestDownloadShelf download_shelf_;
+  TestDownloadShelf download_shelf_{nullptr};
   TestLocationBar location_bar_;
   gfx::NativeWindow native_window_ = nullptr;
 

@@ -26,11 +26,14 @@
 #include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_device_observer.h"
 #include "third_party/blink/public/web/web_heap.h"
+#include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_content.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_constraint_factory.h"
@@ -302,13 +305,14 @@ enum RequestState {
 class UserMediaProcessorUnderTest : public UserMediaProcessor {
  public:
   UserMediaProcessorUnderTest(
+      LocalFrame* frame,
       std::unique_ptr<blink::WebMediaStreamDeviceObserver>
           media_stream_device_observer,
       mojo::PendingRemote<blink::mojom::blink::MediaDevicesDispatcherHost>
           media_devices_dispatcher,
       RequestState* state)
       : UserMediaProcessor(
-            nullptr,
+            frame,
             base::BindRepeating(
                 &UserMediaProcessorUnderTest::media_devices_dispatcher,
                 base::Unretained(this)),
@@ -402,7 +406,8 @@ class UserMediaProcessorUnderTest : public UserMediaProcessor {
   }
 
   void GetUserMediaRequestSucceeded(const blink::WebMediaStream& stream,
-                                    UserMediaRequest* request_info) override {
+                                    UserMediaRequest* request_info,
+                                    bool pan_tilt_zoom_allowed) override {
     last_generated_stream_ = stream;
     *state_ = REQUEST_SUCCEEDED;
   }
@@ -439,10 +444,11 @@ class UserMediaProcessorUnderTest : public UserMediaProcessor {
 
 class UserMediaClientUnderTest : public UserMediaClient {
  public:
-  UserMediaClientUnderTest(UserMediaProcessor* user_media_processor,
+  UserMediaClientUnderTest(LocalFrame* frame,
+                           UserMediaProcessor* user_media_processor,
                            RequestState* state)
       : UserMediaClient(
-            nullptr,
+            frame,
             user_media_processor,
             blink::scheduler::GetSingleThreadTaskRunnerForTesting()),
         state_(state) {}
@@ -463,6 +469,16 @@ class UserMediaClientUnderTest : public UserMediaClient {
   RequestState* state_;
 };
 
+class UserMediaChromeClient : public EmptyChromeClient {
+ public:
+  WebScreenInfo GetScreenInfo(LocalFrame&) const override {
+    WebScreenInfo info;
+    info.rect.width = blink::kDefaultScreenCastWidth;
+    info.rect.height = blink::kDefaultScreenCastHeight;
+    return info;
+  }
+};
+
 }  // namespace
 
 class UserMediaClientTest : public ::testing::Test {
@@ -475,14 +491,20 @@ class UserMediaClientTest : public ::testing::Test {
     // Create our test object.
     auto* msd_observer = new blink::WebMediaStreamDeviceObserver(nullptr);
 
+    ChromeClient* client = MakeGarbageCollected<UserMediaChromeClient>();
+    Page::PageClients page_clients;
+    page_clients.chrome_client = client;
+    dummy_page_holder_ =
+        std::make_unique<DummyPageHolder>(IntSize(1, 1), &page_clients);
+
     user_media_processor_ = MakeGarbageCollected<UserMediaProcessorUnderTest>(
-        base::WrapUnique(msd_observer),
+        &(dummy_page_holder_->GetFrame()), base::WrapUnique(msd_observer),
         user_media_processor_receiver_.BindNewPipeAndPassRemote(), &state_);
     user_media_processor_->set_media_stream_dispatcher_host_for_testing(
         mock_dispatcher_host_.CreatePendingRemoteAndBind());
 
     user_media_client_impl_ = MakeGarbageCollected<UserMediaClientUnderTest>(
-        user_media_processor_, &state_);
+        &(dummy_page_holder_->GetFrame()), user_media_processor_, &state_);
 
     user_media_client_impl_->SetMediaDevicesDispatcherForTesting(
         user_media_client_receiver_.BindNewPipeAndPassRemote());
@@ -631,6 +653,7 @@ class UserMediaClientTest : public ::testing::Test {
   mojo::Receiver<blink::mojom::blink::MediaDevicesDispatcherHost>
       user_media_client_receiver_;
 
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   WeakPersistent<UserMediaProcessorUnderTest> user_media_processor_;
   Persistent<UserMediaClientUnderTest> user_media_client_impl_;
   RequestState state_ = REQUEST_NOT_STARTED;
@@ -1437,81 +1460,48 @@ TEST_F(UserMediaClientTest, PanConstraintRequestPanTiltZoomPermission) {
   EXPECT_FALSE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
       CreateDefaultConstraints()));
 
-  blink::MockConstraintFactory exact_basic_factory;
-  exact_basic_factory.basic().pan.SetExact(1);
+  blink::MockConstraintFactory basic_factory;
+  basic_factory.basic().pan.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_basic_factory.CreateMediaConstraints()));
+      basic_factory.CreateMediaConstraints()));
 
-  blink::MockConstraintFactory ideal_basic_factory;
-  ideal_basic_factory.basic().pan.SetIdeal(1);
+  blink::MockConstraintFactory advanced_factory;
+  auto& exact_advanced = advanced_factory.AddAdvanced();
+  exact_advanced.pan.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_basic_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory exact_advanced_factory;
-  auto& exact_advanced = exact_advanced_factory.AddAdvanced();
-  exact_advanced.pan.SetExact(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_advanced_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory ideal_advanced_factory;
-  auto& ideal_advanced = ideal_advanced_factory.AddAdvanced();
-  ideal_advanced.pan.SetIdeal(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_advanced_factory.CreateMediaConstraints()));
+      advanced_factory.CreateMediaConstraints()));
 }
 
 TEST_F(UserMediaClientTest, TiltConstraintRequestPanTiltZoomPermission) {
   EXPECT_FALSE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
       CreateDefaultConstraints()));
 
-  blink::MockConstraintFactory exact_basic_factory;
-  exact_basic_factory.basic().tilt.SetExact(1);
+  blink::MockConstraintFactory basic_factory;
+  basic_factory.basic().tilt.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_basic_factory.CreateMediaConstraints()));
+      basic_factory.CreateMediaConstraints()));
 
-  blink::MockConstraintFactory ideal_basic_factory;
-  ideal_basic_factory.basic().tilt.SetIdeal(1);
+  blink::MockConstraintFactory advanced_factory;
+  auto& exact_advanced = advanced_factory.AddAdvanced();
+  exact_advanced.tilt.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_basic_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory exact_advanced_factory;
-  auto& exact_advanced = exact_advanced_factory.AddAdvanced();
-  exact_advanced.tilt.SetExact(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_advanced_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory ideal_advanced_factory;
-  auto& ideal_advanced = ideal_advanced_factory.AddAdvanced();
-  ideal_advanced.tilt.SetIdeal(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_advanced_factory.CreateMediaConstraints()));
+      advanced_factory.CreateMediaConstraints()));
 }
 
 TEST_F(UserMediaClientTest, ZoomConstraintRequestPanTiltZoomPermission) {
   EXPECT_FALSE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
       CreateDefaultConstraints()));
 
-  blink::MockConstraintFactory exact_basic_factory;
-  exact_basic_factory.basic().zoom.SetExact(1);
+  blink::MockConstraintFactory basic_factory;
+  basic_factory.basic().zoom.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_basic_factory.CreateMediaConstraints()));
+      basic_factory.CreateMediaConstraints()));
 
-  blink::MockConstraintFactory ideal_basic_factory;
-  ideal_basic_factory.basic().zoom.SetIdeal(1);
+  blink::MockConstraintFactory advanced_factory;
+  auto& exact_advanced = advanced_factory.AddAdvanced();
+  exact_advanced.zoom.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_basic_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory exact_advanced_factory;
-  auto& exact_advanced = exact_advanced_factory.AddAdvanced();
-  exact_advanced.zoom.SetExact(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      exact_advanced_factory.CreateMediaConstraints()));
-
-  blink::MockConstraintFactory ideal_advanced_factory;
-  auto& ideal_advanced = ideal_advanced_factory.AddAdvanced();
-  ideal_advanced.zoom.SetIdeal(1);
-  EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
-      ideal_advanced_factory.CreateMediaConstraints()));
+      advanced_factory.CreateMediaConstraints()));
 }
 
 }  // namespace blink

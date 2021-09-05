@@ -50,7 +50,7 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
   }
   bool fetch_tree_was_called() const { return fetch_tree_was_called_; }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   // Implements Modulator:
@@ -108,7 +108,7 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
   bool fetch_tree_was_called_ = false;
 };
 
-void DynamicModuleResolverTestModulator::Trace(Visitor* visitor) {
+void DynamicModuleResolverTestModulator::Trace(Visitor* visitor) const {
   visitor->Trace(script_state_);
   visitor->Trace(pending_client_);
   DummyModulator::Trace(visitor);
@@ -408,7 +408,8 @@ TEST_P(DynamicModuleResolverTest, ResolveWithReferrerScriptInfoBaseURL) {
   KURL correct_base_url("https://example.com/correct/baz.js");
   resolver->ResolveDynamically(
       "./dependency.js", wrong_base_url,
-      ReferrerScriptInfo(correct_base_url, ScriptFetchOptions()),
+      ReferrerScriptInfo(correct_base_url, ScriptFetchOptions(),
+                         ReferrerScriptInfo::BaseUrlSource::kOther),
       promise_resolver);
 
   v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());

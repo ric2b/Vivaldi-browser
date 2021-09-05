@@ -29,7 +29,6 @@ enum class CredentialSourceType;
 }  // namespace password_manager
 
 struct AccountInfo;
-class GURL;
 
 // An interface for ManagePasswordsBubbleModel implemented by
 // ManagePasswordsUIController. Allows to retrieve the current state of the tab
@@ -49,7 +48,7 @@ class PasswordsModelDelegate {
   GetPasswordFeatureManager() = 0;
 
   // Returns the URL of the site the current forms are retrieved for.
-  virtual const GURL& GetOrigin() const = 0;
+  virtual url::Origin GetOrigin() const = 0;
 
   // Returns the current tab state.
   virtual password_manager::ui::State GetState() const = 0;
@@ -75,6 +74,11 @@ class PasswordsModelDelegate {
   // the pending username.
   virtual const password_manager::InteractionsStats*
   GetCurrentInteractionStats() const = 0;
+
+  // Users need to reauth to their account to opt-in using their password
+  // account storage. This method returns whether account auth attempt during
+  // the last password save process failed or not.
+  virtual bool DidAuthForAccountStoreOptInFail() const = 0;
 
   // Returns true iff the current bubble is the manual fallback for saving.
   virtual bool BubbleIsManualFallbackForSaving() const = 0;
@@ -103,9 +107,23 @@ class PasswordsModelDelegate {
   virtual void SavePassword(const base::string16& username,
                             const base::string16& password) = 0;
 
+  // Called when the user chooses to save locally the unsynced credentials
+  // deleted from the account store on signout (the ones returned by
+  // GetUnsyncedCredentials()).
+  virtual void SaveUnsyncedCredentialsInProfileStore() = 0;
+
+  // Called when the user chooses not to save locally the unsynced credentials
+  // deleted from the account store on signout (the ones returned by
+  // GetUnsyncedCredentials()).
+  virtual void DiscardUnsyncedCredentials() = 0;
+
   // Called from the dialog controller when a user confirms moving the recently
   // used credential to their account store.
   virtual void MovePasswordToAccountStore() = 0;
+
+  // Called from the dialog controller when a user rejects moving the recently
+  // used credential to their account store.
+  virtual void BlockMovingPasswordToAccountStore() = 0;
 
   // Called from the dialog controller when the user chooses a credential.
   // Controller can be destroyed inside the method.
@@ -142,6 +160,11 @@ class PasswordsModelDelegate {
   virtual void AuthenticateUserForAccountStoreOptInAndSavePassword(
       const base::string16& username,
       const base::string16& password) = 0;
+
+  // Called from the Move bubble controller when gaia re-auth is needed
+  // to move passwords. This method triggers the reauth flow. Upon successful
+  // reauth, it moves the password.
+  virtual void AuthenticateUserForAccountStoreOptInAndMovePassword() = 0;
 
   // Returns true if the password values should be revealed when the bubble is
   // opened.

@@ -468,6 +468,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void LockToOrigin(const IsolationContext& isolation_context,
                             const GURL& lock_url) = 0;
 
+  // Returns true if this process is locked to a particular 'origin'.  See the
+  // LockToOrigin() call above.
+  virtual bool IsLockedToOriginForTesting() = 0;
+
   // The following several methods are for internal use only, and are only
   // exposed here to support MockRenderProcessHost usage in tests.
   virtual void BindCacheStorage(
@@ -572,6 +576,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // globally-used spare RenderProcessHost at any time.
   static RenderProcessHost* GetSpareRenderProcessHostForTesting();
 
+  // Registers a callback to be notified when the spare RenderProcessHost is
+  // changed. If a new spare RenderProcessHost is created, the callback is made
+  // when the host is ready (RenderProcessHostObserver::RenderProcessReady). If
+  // the spare RenderProcessHost is promoted to be a "real" RenderProcessHost or
+  // discarded for any reason, the callback is made with a null pointer.
+  static std::unique_ptr<
+      base::CallbackList<void(RenderProcessHost*)>::Subscription>
+  RegisterSpareRenderProcessHostChangedCallback(
+      const base::RepeatingCallback<void(RenderProcessHost*)>& cb);
+
   // Flag to run the renderer in process.  This is primarily
   // for debugging purposes.  When running "in process", the
   // browser maintains a single RenderProcessHost which communicates
@@ -597,12 +611,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // instance does not correspond to a live RenderProcessHost.
   static RenderProcessHost* FromRendererInstanceId(
       const base::Token& instance_id);
-
-  // Returns whether the process-per-site model is in use (globally or just for
-  // the current site), in which case we should ensure there is only one
-  // RenderProcessHost per site for the entire browser context.
-  static bool ShouldUseProcessPerSite(content::BrowserContext* browser_context,
-                                      const GURL& site_url);
 
   // Returns true if the caller should attempt to use an existing
   // RenderProcessHost rather than creating a new one.

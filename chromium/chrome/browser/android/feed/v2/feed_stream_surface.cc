@@ -4,11 +4,13 @@
 
 #include "chrome/browser/android/feed/v2/feed_stream_surface.h"
 
+#include <string>
 #include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/strings/string_piece.h"
 #include "chrome/android/chrome_jni_headers/FeedStreamSurface_jni.h"
 #include "chrome/browser/android/feed/v2/feed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,6 +18,7 @@
 #include "components/feed/core/proto/v2/ui.pb.h"
 #include "components/feed/core/v2/public/feed_service.h"
 #include "components/feed/core/v2/public/feed_stream_api.h"
+#include "components/variations/variations_http_header_provider.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -27,6 +30,17 @@ namespace feed {
 static jlong JNI_FeedStreamSurface_Init(JNIEnv* env,
                                         const JavaParamRef<jobject>& j_this) {
   return reinterpret_cast<intptr_t>(new FeedStreamSurface(j_this));
+}
+
+static base::android::ScopedJavaLocalRef<jintArray>
+JNI_FeedStreamSurface_GetExperimentIds(JNIEnv* env) {
+  auto* variations_http_header_provider =
+      variations::VariationsHttpHeaderProvider::GetInstance();
+  DCHECK(variations_http_header_provider != nullptr);
+
+  return base::android::ToJavaIntArray(
+      env, variations_http_header_provider
+               ->GetVariationsVectorForWebPropertiesKeys());
 }
 
 FeedStreamSurface::FeedStreamSurface(const JavaRef<jobject>& j_this)
@@ -61,27 +75,40 @@ void FeedStreamSurface::StreamUpdate(
 }
 
 void FeedStreamSurface::LoadMore(JNIEnv* env,
-                                 const JavaParamRef<jobject>& obj) {}
+                                 const JavaParamRef<jobject>& obj) {
+  feed_stream_api_->LoadMore(GetSurfaceId(), base::DoNothing());
+}
 
 void FeedStreamSurface::ProcessThereAndBackAgain(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jbyteArray>& data) {}
+    const JavaParamRef<jbyteArray>& data) {
+  std::string data_string;
+  base::android::JavaByteArrayToString(env, data, &data_string);
+  feed_stream_api_->ProcessThereAndBackAgain(data_string);
+}
 
 int FeedStreamSurface::ExecuteEphemeralChange(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& data) {
-  return 0;
+    const JavaParamRef<jbyteArray>& data) {
+  std::string data_string;
+  base::android::JavaByteArrayToString(env, data, &data_string);
+  return feed_stream_api_->CreateEphemeralChangeFromPackedData(data_string)
+      .GetUnsafeValue();
 }
 
 void FeedStreamSurface::CommitEphemeralChange(JNIEnv* env,
                                               const JavaParamRef<jobject>& obj,
-                                              int change_id) {}
+                                              int change_id) {
+  feed_stream_api_->CommitEphemeralChange(EphemeralChangeId(change_id));
+}
 
 void FeedStreamSurface::DiscardEphemeralChange(JNIEnv* env,
                                                const JavaParamRef<jobject>& obj,
-                                               int change_id) {}
+                                               int change_id) {
+  feed_stream_api_->RejectEphemeralChange(EphemeralChangeId(change_id));
+}
 
 void FeedStreamSurface::SurfaceOpened(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj) {
@@ -148,9 +175,7 @@ void FeedStreamSurface::ReportDownloadAction(JNIEnv* env,
 
 void FeedStreamSurface::ReportNavigationStarted(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& url,
-    jboolean in_new_tab) {
+    const JavaParamRef<jobject>& obj) {
   feed_stream_api_->ReportNavigationStarted();
 }
 
@@ -188,6 +213,12 @@ void FeedStreamSurface::ReportStreamScrolled(JNIEnv* env,
                                              const JavaParamRef<jobject>& obj,
                                              int distance_dp) {
   feed_stream_api_->ReportStreamScrolled(distance_dp);
+}
+
+void FeedStreamSurface::ReportStreamScrollStart(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  feed_stream_api_->ReportStreamScrollStart();
 }
 
 }  // namespace feed

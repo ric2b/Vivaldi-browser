@@ -16,6 +16,7 @@
 #include "chromeos/dbus/machine_learning/machine_learning_client.h"
 #include "chromeos/services/machine_learning/public/cpp/fake_service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/graph_executor.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/handwriting_recognizer.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/tensor.mojom.h"
@@ -80,6 +81,16 @@ TEST_F(ServiceConnectionTest, LoadTextClassifier) {
   mojo::Remote<mojom::TextClassifier> text_classifier;
   ServiceConnection::GetInstance()->LoadTextClassifier(
       text_classifier.BindNewPipeAndPassReceiver(),
+      base::BindOnce([](mojom::LoadModelResult result) {}));
+}
+
+// Tests that LoadHandwritingModelWithSpec runs OK (no crash) in a basic Mojo
+// environment.
+TEST_F(ServiceConnectionTest, LoadHandwritingModelWithSpec) {
+  mojo::Remote<mojom::HandwritingRecognizer> handwriting_recognizer;
+  ServiceConnection::GetInstance()->LoadHandwritingModelWithSpec(
+      mojom::HandwritingRecognizerSpec::New("en"),
+      handwriting_recognizer.BindNewPipeAndPassReceiver(),
       base::BindOnce([](mojom::LoadModelResult result) {}));
 }
 
@@ -299,6 +310,57 @@ TEST_F(ServiceConnectionTest,
             // Check if the suggestion is correct.
             EXPECT_EQ(suggested_span->start_offset, 1u);
             EXPECT_EQ(suggested_span->end_offset, 2u);
+          },
+          &infer_callback_done));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(infer_callback_done);
+}
+
+// Tests the fake ML service for handwriting.
+TEST_F(ServiceConnectionTest, FakeHandWritingRecognizerWithSpec) {
+  mojo::Remote<mojom::HandwritingRecognizer> recognizer;
+  bool callback_done = false;
+  FakeServiceConnectionImpl fake_service_connection;
+  ServiceConnection::UseFakeServiceConnectionForTesting(
+      &fake_service_connection);
+
+  ServiceConnection::GetInstance()->LoadHandwritingModelWithSpec(
+      mojom::HandwritingRecognizerSpec::New("en"),
+      recognizer.BindNewPipeAndPassReceiver(),
+      base::BindOnce(
+          [](bool* callback_done, mojom::LoadModelResult result) {
+            EXPECT_EQ(result, mojom::LoadModelResult::OK);
+            *callback_done = true;
+          },
+          &callback_done));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(callback_done);
+  ASSERT_TRUE(recognizer.is_bound());
+
+  // Construct fake output.
+  mojom::HandwritingRecognizerResultPtr result =
+      mojom::HandwritingRecognizerResult::New();
+  result->status = mojom::HandwritingRecognizerResult::Status::OK;
+  mojom::HandwritingRecognizerCandidatePtr candidate =
+      mojom::HandwritingRecognizerCandidate::New();
+  candidate->text = "cat";
+  candidate->score = 0.5f;
+  result->candidates.emplace_back(std::move(candidate));
+  fake_service_connection.SetOutputHandwritingRecognizerResult(result);
+
+  auto query = mojom::HandwritingRecognitionQuery::New();
+  bool infer_callback_done = false;
+  recognizer->Recognize(
+      std::move(query),
+      base::Bind(
+          [](bool* infer_callback_done,
+             mojom::HandwritingRecognizerResultPtr result) {
+            *infer_callback_done = true;
+            // Check if the annotation is correct.
+            ASSERT_EQ(result->status,
+                      mojom::HandwritingRecognizerResult::Status::OK);
+            EXPECT_EQ(result->candidates.at(0)->text, "cat");
+            EXPECT_EQ(result->candidates.at(0)->score, 0.5f);
           },
           &infer_callback_done));
   base::RunLoop().RunUntilIdle();

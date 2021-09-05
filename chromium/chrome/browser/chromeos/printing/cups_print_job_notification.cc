@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_notification.h"
 
 #include "ash/public/cpp/notification_utils.h"
+#include "base/feature_list.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -15,13 +16,16 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_notification_manager.h"
+#include "chrome/browser/chromeos/printing/print_management/print_management_uma.h"
 #include "chrome/browser/chromeos/printing/printer_error_codes.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
@@ -124,8 +128,13 @@ void CupsPrintJobNotification::Close(bool by_user) {
 void CupsPrintJobNotification::Click(
     const base::Optional<int>& button_index,
     const base::Optional<base::string16>& reply) {
-  if (!button_index)
+  if (!button_index) {
+    if (base::FeatureList::IsEnabled(features::kPrintJobManagementApp)) {
+      chrome::ShowPrintManagementApp(
+          profile_, PrintManagementAppEntryPoint::kNotification);
+    }
     return;
+  }
 
   DCHECK(*button_index >= 0 &&
          static_cast<size_t>(*button_index) < button_commands_.size());
@@ -135,10 +144,12 @@ void CupsPrintJobNotification::Click(
 
   switch (button_commands_[*button_index]) {
     case ButtonCommand::CANCEL_PRINTING:
-      DCHECK(print_job_);
       cancelled_by_user_ = true;
 
-      print_job_manager->CancelPrintJob(print_job_.get());
+      if (print_job_) {
+        print_job_manager->CancelPrintJob(print_job_.get());
+      }
+
       // print_job_ was deleted in CancelPrintJob.  Forget the pointer.
       print_job_ = nullptr;
 
@@ -164,6 +175,15 @@ void CupsPrintJobNotification::CleanUpNotification() {
 void CupsPrintJobNotification::UpdateNotification() {
   if (!print_job_)
     return;
+
+  if (print_job_->state() == CupsPrintJob::State::STATE_CANCELLED) {
+    // Handles the state in which print job was cancelled by the print
+    // management app.
+    print_job_ = nullptr;
+    CleanUpNotification();
+    return;
+  }
+
   UpdateNotificationTitle();
   UpdateNotificationIcon();
   UpdateNotificationBodyMessage();

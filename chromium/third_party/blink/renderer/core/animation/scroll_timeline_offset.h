@@ -29,7 +29,7 @@ class CORE_EXPORT ScrollTimelineOffset final
   // Create an element based offset.
   explicit ScrollTimelineOffset(ScrollTimelineElementBasedOffset*);
 
-  void Trace(blink::Visitor*);
+  void Trace(blink::Visitor*) const;
 
   // Resolves this offset against the scroll source and in the given orientation
   // returning eqiuvalent concrete scroll offset.
@@ -42,10 +42,12 @@ class CORE_EXPORT ScrollTimelineOffset final
   //
   // max offset is expected to be the maximum scroll offset in the scroll
   // orientation.
-  double ResolveOffset(Node* scroll_source,
-                       ScrollOrientation,
-                       double max_offset,
-                       double default_offset);
+  //
+  // Returns nullopt if the offset cannot be resolved.
+  base::Optional<double> ResolveOffset(Node* scroll_source,
+                                       ScrollOrientation,
+                                       double max_offset,
+                                       double default_offset);
 
   StringOrScrollTimelineElementBasedOffset
   ToStringOrScrollTimelineElementBasedOffset() const;

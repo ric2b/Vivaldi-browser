@@ -10,12 +10,15 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
+#include "components/feed/core/proto/v2/wire/there_and_back_again_data.pb.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
+#include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/enums.h"
 #include "components/feed/core/v2/feed_network.h"
 #include "components/feed/core/v2/feed_store.h"
@@ -37,7 +40,7 @@ namespace feed {
 namespace {
 
 void PopulateDebugStreamData(const LoadStreamTask::Result& load_result,
-                             PrefService* profile_prefs) {
+                             PrefService& profile_prefs) {
   DebugStreamData debug_data = ::feed::prefs::GetDebugStreamData(profile_prefs);
   std::stringstream ss;
   ss << "Code: " << load_result.final_status;
@@ -139,7 +142,7 @@ void FeedStream::TriggerStreamLoad() {
 }
 
 void FeedStream::InitialStreamLoadComplete(LoadStreamTask::Result result) {
-  PopulateDebugStreamData(result, profile_prefs_);
+  PopulateDebugStreamData(result, *profile_prefs_);
   metrics_reporter_->OnLoadStream(result.load_from_store_status,
                                   result.final_status);
 
@@ -156,11 +159,36 @@ void FeedStream::AttachSurface(SurfaceInterface* surface) {
   metrics_reporter_->SurfaceOpened(surface->GetSurfaceId());
   TriggerStreamLoad();
   surface_updater_->SurfaceAdded(surface);
+  // Cancel any scheduled model unload task.
+  ++unload_on_detach_sequence_number_;
 }
 
 void FeedStream::DetachSurface(SurfaceInterface* surface) {
   metrics_reporter_->SurfaceClosed(surface->GetSurfaceId());
   surface_updater_->SurfaceRemoved(surface);
+  if (!surface_updater_->HasSurfaceAttached()) {
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&FeedStream::AddUnloadModelIfNoSurfacesAttachedTask,
+                       GetWeakPtr(), unload_on_detach_sequence_number_),
+        GetFeedConfig().model_unload_timeout);
+  }
+}
+
+void FeedStream::AddUnloadModelIfNoSurfacesAttachedTask(int sequence_number) {
+  // Don't continue if unload_on_detach_sequence_number_ has changed.
+  if (unload_on_detach_sequence_number_ != sequence_number)
+    return;
+
+  task_queue_.AddTask(std::make_unique<offline_pages::ClosureTask>(
+      base::BindOnce(&FeedStream::UnloadModelIfNoSurfacesAttachedTask,
+                     base::Unretained(this))));
+}
+
+void FeedStream::UnloadModelIfNoSurfacesAttachedTask() {
+  if (surface_updater_->HasSurfaceAttached())
+    return;
+  UnloadModel();
 }
 
 void FeedStream::SetArticlesListVisible(bool is_visible) {
@@ -171,6 +199,10 @@ bool FeedStream::IsArticlesListVisible() {
   return profile_prefs_->GetBoolean(prefs::kArticlesListVisible);
 }
 
+bool FeedStream::IsFeedEnabledByEnterprisePolicy() {
+  return profile_prefs_->GetBoolean(prefs::kEnableSnippets);
+}
+
 void FeedStream::LoadMore(SurfaceId surface_id,
                           base::OnceCallback<void(bool)> callback) {
   metrics_reporter_->OnLoadMoreBegin(surface_id);
@@ -178,7 +210,16 @@ void FeedStream::LoadMore(SurfaceId surface_id,
     DLOG(ERROR) << "Ignoring LoadMore() before the model is loaded";
     return std::move(callback).Run(false);
   }
+  // We want to abort early to avoid showing a loading spinner if it's not
+  // necessary.
+  if (ShouldMakeFeedQueryRequest(/*is_load_more=*/true,
+                                 /*consume_quota=*/false) !=
+      LoadStreamStatus::kNoStatus) {
+    return std::move(callback).Run(false);
+  }
+
   surface_updater_->SetLoadingMore(true);
+
   // Have at most one in-flight LoadMore() request. Send the result to all
   // requestors.
   load_more_complete_callbacks_.push_back(std::move(callback));
@@ -191,8 +232,6 @@ void FeedStream::LoadMore(SurfaceId surface_id,
 
 void FeedStream::LoadMoreComplete(LoadMoreTask::Result result) {
   metrics_reporter_->OnLoadMore(result.final_status);
-  // TODO(harringtond): In the case of failure, do we need to load an error
-  // message slice?
   surface_updater_->SetLoadingMore(false);
   std::vector<base::OnceCallback<void(bool)>> moved_callbacks =
       std::move(load_more_complete_callbacks_);
@@ -220,6 +259,13 @@ EphemeralChangeId FeedStream::CreateEphemeralChange(
   return model_->CreateEphemeralChange(std::move(operations));
 }
 
+EphemeralChangeId FeedStream::CreateEphemeralChangeFromPackedData(
+    base::StringPiece data) {
+  feedpacking::DismissData msg;
+  msg.ParseFromArray(data.data(), data.size());
+  return CreateEphemeralChange(TranslateDismissData(clock_->Now(), msg));
+}
+
 bool FeedStream::CommitEphemeralChange(EphemeralChangeId id) {
   if (!model_)
     return false;
@@ -232,8 +278,18 @@ bool FeedStream::RejectEphemeralChange(EphemeralChangeId id) {
   return model_->RejectEphemeralChange(id);
 }
 
+void FeedStream::ProcessThereAndBackAgain(base::StringPiece data) {
+  feedwire::ThereAndBackAgainData msg;
+  msg.ParseFromArray(data.data(), data.size());
+  if (msg.has_action_payload()) {
+    feedwire::FeedAction action_msg;
+    *action_msg.mutable_action_payload() = std::move(msg.action_payload());
+    UploadAction(std::move(action_msg), /*upload_now=*/true, base::DoNothing());
+  }
+}
+
 DebugStreamData FeedStream::GetDebugStreamData() {
-  return ::feed::prefs::GetDebugStreamData(profile_prefs_);
+  return ::feed::prefs::GetDebugStreamData(*profile_prefs_);
 }
 
 void FeedStream::ForceRefreshForDebugging() {
@@ -315,13 +371,17 @@ LoadStreamStatus FeedStream::ShouldAttemptLoad(bool model_loading) {
   if (!IsArticlesListVisible())
     return LoadStreamStatus::kLoadNotAllowedArticlesListHidden;
 
+  if (!IsFeedEnabledByEnterprisePolicy())
+    return LoadStreamStatus::kLoadNotAllowedDisabledByEnterprisePolicy;
+
   if (!delegate_->IsEulaAccepted())
     return LoadStreamStatus::kLoadNotAllowedEulaNotAccepted;
 
   return LoadStreamStatus::kNoStatus;
 }
 
-LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more) {
+LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more,
+                                                        bool consume_quota) {
   if (!is_load_more) {
     // Time has passed since calling |ShouldAttemptLoad()|, call it again to
     // confirm we should still attempt loading.
@@ -329,6 +389,11 @@ LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more) {
         ShouldAttemptLoad(/*model_loading=*/true);
     if (should_not_attempt_reason != LoadStreamStatus::kNoStatus) {
       return should_not_attempt_reason;
+    }
+  } else {
+    // LoadMore requires a next page token.
+    if (!model_ || model_->GetNextPageToken().empty()) {
+      return LoadStreamStatus::kCannotLoadMoreNoNextPageToken;
     }
   }
 
@@ -346,7 +411,8 @@ LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more) {
     return LoadStreamStatus::kCannotLoadFromNetworkOffline;
   }
 
-  if (!request_throttler_.RequestQuota(NetworkRequestType::kFeedQuery)) {
+  if (consume_quota &&
+      !request_throttler_.RequestQuota(NetworkRequestType::kFeedQuery)) {
     return LoadStreamStatus::kCannotLoadFromNetworkThrottled;
   }
 
@@ -390,7 +456,7 @@ void FeedStream::OnSignedOut() {
 void FeedStream::ExecuteRefreshTask() {
   // Schedule the next refresh attempt. If a new refresh schedule is returned
   // through this refresh, it will be overwritten.
-  SetRequestSchedule(feed::prefs::GetRequestSchedule(profile_prefs_));
+  SetRequestSchedule(feed::prefs::GetRequestSchedule(*profile_prefs_));
 
   LoadStreamStatus do_not_attempt_reason = ShouldAttemptLoad();
   if (do_not_attempt_reason != LoadStreamStatus::kNoStatus) {
@@ -438,7 +504,7 @@ void FeedStream::SetRequestSchedule(RequestSchedule schedule) {
   } else {
     refresh_task_scheduler_->Cancel();
   }
-  feed::prefs::SetRequestSchedule(schedule, profile_prefs_);
+  feed::prefs::SetRequestSchedule(schedule, *profile_prefs_);
 }
 
 void FeedStream::UnloadModel() {
@@ -499,6 +565,9 @@ void FeedStream::ReportContextMenuOpened() {
 }
 void FeedStream::ReportStreamScrolled(int distance_dp) {
   metrics_reporter_->StreamScrolled(distance_dp);
+}
+void FeedStream::ReportStreamScrollStart() {
+  metrics_reporter_->StreamScrollStart();
 }
 
 }  // namespace feed

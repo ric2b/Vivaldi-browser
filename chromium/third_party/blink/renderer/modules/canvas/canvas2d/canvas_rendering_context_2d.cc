@@ -36,6 +36,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/rendering_context.h"
@@ -48,6 +50,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
 #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
 #include "third_party/blink/renderer/core/layout/hit_test_canvas_result.h"
@@ -133,7 +136,9 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(
           &CanvasRenderingContext2D::TryRestoreContextEvent),
       should_prune_local_font_cache_(false),
       random_generator_((uint32_t)base::RandUint64()),
-      bernoulli_distribution_(kRasterMetricProbability) {
+      bernoulli_distribution_(kRasterMetricProbability),
+      ukm_recorder_(canvas->GetDocument().UkmRecorder()),
+      ukm_source_id_(canvas->GetDocument().UkmSourceID()) {
   if (canvas->GetDocument().GetSettings() &&
       canvas->GetDocument().GetSettings()->GetAntialiasedClips2dCanvasEnabled())
     clip_antialiasing_ = kAntiAliased;
@@ -223,7 +228,7 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
   }
 }
 
-void CanvasRenderingContext2D::Trace(Visitor* visitor) {
+void CanvasRenderingContext2D::Trace(Visitor* visitor) const {
   visitor->Trace(hit_region_manager_);
   visitor->Trace(filter_operations_);
   CanvasRenderingContext::Trace(visitor);
@@ -497,6 +502,8 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
   // documents.
   if (!canvas()->GetDocument().GetFrame())
     return;
+  identifiability_study_helper_.MaybeUpdateDigest(CanvasOps::kSetFont,
+                                                  new_font);
 
   base::TimeTicks start_time = base::TimeTicks::Now();
   canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
@@ -570,9 +577,8 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
   }
 
   // The parse succeeded.
-  String new_font_safe_copy(
-      new_font);  // Create a string copy since newFont can be
-                  // deleted inside realizeSaves.
+  String new_font_safe_copy(new_font);  // Create a string copy since newFont
+                                        // can be deleted inside realizeSaves.
   ModifiableState().SetUnparsedFont(new_font_safe_copy);
   if (bernoulli_distribution_(random_generator_)) {
     base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
@@ -662,11 +668,25 @@ bool CanvasRenderingContext2D::CanCreateCanvas2dResourceProvider() const {
   return canvas()->GetOrCreateCanvas2DLayerBridge();
 }
 
-scoped_refptr<StaticBitmapImage> blink::CanvasRenderingContext2D::GetImage(
-    AccelerationHint hint) {
+scoped_refptr<StaticBitmapImage> blink::CanvasRenderingContext2D::GetImage() {
   if (!IsPaintable())
     return nullptr;
-  return canvas()->GetCanvas2DLayerBridge()->NewImageSnapshot(hint);
+  return canvas()->GetCanvas2DLayerBridge()->NewImageSnapshot();
+}
+
+ImageData* CanvasRenderingContext2D::getImageData(
+    int sx,
+    int sy,
+    int sw,
+    int sh,
+    ExceptionState& exception_state) {
+  blink::IdentifiabilityMetricBuilder(ukm_source_id_)
+      .Set(blink::IdentifiableSurface::FromTypeAndInput(
+               blink::IdentifiableSurface::Type::kCanvasReadback,
+               GetContextType()),
+           0)
+      .Record(ukm_recorder_);
+  return BaseRenderingContext2D::getImageData(sx, sy, sw, sh, exception_state);
 }
 
 void CanvasRenderingContext2D::FinalizeFrame() {
@@ -845,6 +865,12 @@ void CanvasRenderingContext2D::DrawTextInternal(
   if (max_width && (!std::isfinite(*max_width) || *max_width <= 0))
     return;
 
+  identifiability_study_helper_.MaybeUpdateDigest(
+      paint_type == CanvasRenderingContext2DState::kFillPaintType
+          ? CanvasOps::kFillText
+          : CanvasOps::kStrokeText,
+      IdentifiabilitySensitiveString(text), x, y, max_width ? *max_width : -1);
+
   const Font& font = AccessFont();
   const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
@@ -919,7 +945,7 @@ void CanvasRenderingContext2D::DrawTextInternal(
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
-      bounds, paint_type);
+      bounds, paint_type, CanvasRenderingContext2DState::kNoImage);
 }
 
 const Font& CanvasRenderingContext2D::AccessFont() {
@@ -963,6 +989,8 @@ CanvasRenderingContext2D::getContextAttributes() const {
     settings->setPixelFormat(PixelFormatAsString());
   }
   settings->setDesynchronized(Host()->LowLatencyEnabled());
+  if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled())
+    settings->setWillReadFrequently(CreationAttributes().will_read_frequently);
   return settings;
 }
 

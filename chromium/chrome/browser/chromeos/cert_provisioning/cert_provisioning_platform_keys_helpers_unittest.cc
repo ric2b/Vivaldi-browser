@@ -4,11 +4,10 @@
 
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_platform_keys_helpers.h"
 
-#include <map>
 #include <memory>
 
 #include "base/bind.h"
-#include "base/containers/flat_set.h"
+#include "base/containers/flat_map.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_test_helpers.h"
@@ -37,7 +36,8 @@ base::flat_set<typename MapType::key_type> GetKeys(const MapType& map) {
 
 class CallbackObserver {
  public:
-  using CertMap = std::map<CertProfileId, scoped_refptr<net::X509Certificate>>;
+  using CertMap =
+      base::flat_map<CertProfileId, scoped_refptr<net::X509Certificate>>;
 
   GetCertsWithIdsCallback GetCallback() {
     return base::BindOnce(&CallbackObserver::Callback, base::Unretained(this));

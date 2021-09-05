@@ -12,9 +12,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/frame_host/back_forward_cache_impl.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/media_devices_permission_checker.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
@@ -22,7 +25,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_device_id.h"
-#include "content/public/browser/render_frame_host.h"
 #include "media/audio/audio_system.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_facing.h"
@@ -71,6 +73,21 @@ void MediaDevicesDispatcherHost::Create(
       std::make_unique<MediaDevicesDispatcherHost>(
           render_process_id, render_frame_id, media_stream_manager),
       std::move(receiver));
+
+  base::PostTask(FROM_HERE, {BrowserThread::UI},
+                 base::BindOnce(
+                     [](int render_process_id, int render_frame_id) {
+                       RenderFrameHost* render_frame_host =
+                           RenderFrameHost::FromID(render_process_id,
+                                                   render_frame_id);
+
+                       if (!render_frame_host)
+                         return;
+
+                       BackForwardCache::DisableForRenderFrameHost(
+                           render_frame_host, "MediaDevicesDispatcherHost");
+                     },
+                     render_process_id, render_frame_id));
 }
 
 MediaDevicesDispatcherHost::MediaDevicesDispatcherHost(
@@ -132,7 +149,7 @@ void MediaDevicesDispatcherHost::GetVideoInputCapabilities(
     GetVideoInputCapabilitiesCallback client_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTaskAndReplyWithResult(
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}).get(), FROM_HERE,
+      GetUIThreadTaskRunner({}).get(), FROM_HERE,
       base::BindOnce(media_stream_manager_->media_devices_manager()
                          ->salt_and_origin_callback(),
                      render_process_id_, render_frame_id_),
@@ -159,7 +176,7 @@ void MediaDevicesDispatcherHost::GetAvailableVideoInputDeviceFormats(
 void MediaDevicesDispatcherHost::GetAudioInputCapabilities(
     GetAudioInputCapabilitiesCallback client_callback) {
   base::PostTaskAndReplyWithResult(
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}).get(), FROM_HERE,
+      GetUIThreadTaskRunner({}).get(), FROM_HERE,
       base::BindOnce(media_stream_manager_->media_devices_manager()
                          ->salt_and_origin_callback(),
                      render_process_id_, render_frame_id_),
@@ -249,6 +266,8 @@ void MediaDevicesDispatcherHost::FinalizeGetVideoInputCapabilities(
         media_stream_manager_->media_devices_manager()->GetVideoInputFormats(
             device_info.device_id, true /* try_in_use_first */);
     capabilities->facing_mode = device_info.video_facing;
+    capabilities->pan_tilt_zoom_supported =
+        device_info.pan_tilt_zoom_supported.value_or(false);
     if (device_info.device_id == default_device_id) {
       video_input_capabilities.insert(video_input_capabilities.begin(),
                                       std::move(capabilities));
@@ -266,7 +285,7 @@ void MediaDevicesDispatcherHost::GetVideoInputDeviceFormats(
     GetVideoInputDeviceFormatsCallback client_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTaskAndReplyWithResult(
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}).get(), FROM_HERE,
+      GetUIThreadTaskRunner({}).get(), FROM_HERE,
       base::BindOnce(media_stream_manager_->media_devices_manager()
                          ->salt_and_origin_callback(),
                      render_process_id_, render_frame_id_),

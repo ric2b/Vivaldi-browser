@@ -180,7 +180,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
       mojom::blink::ResourceTimingInfoPtr,
       const AtomicString& initiator_type,
       mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
-          worker_timing_receiver);
+          worker_timing_receiver,
+      ExecutionContext* context);
 
   void NotifyNavigationTimingToObservers();
 
@@ -304,7 +305,7 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // The caller owns the |clock|.
   void SetClocksForTesting(const base::Clock* clock,
@@ -322,13 +323,14 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
       base::Optional<String> end_mark,
       ExceptionState&);
 
-  PerformanceMeasure* MeasureWithDetail(ScriptState*,
-                                        const AtomicString& measure_name,
-                                        const StringOrDouble& start,
-                                        base::Optional<double> duration,
-                                        const StringOrDouble& end,
-                                        const ScriptValue& detail,
-                                        ExceptionState&);
+  PerformanceMeasure* MeasureWithDetail(
+      ScriptState*,
+      const AtomicString& measure_name,
+      const base::Optional<StringOrDouble>& start,
+      const base::Optional<double>& duration,
+      const base::Optional<StringOrDouble>& end,
+      const ScriptValue& detail,
+      ExceptionState&);
 
   void CopySecondaryBuffer();
   PerformanceEntryVector getEntriesByTypeInternal(

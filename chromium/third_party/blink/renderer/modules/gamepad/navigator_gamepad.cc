@@ -146,15 +146,14 @@ GamepadHapticActuator* NavigatorGamepad::GetVibrationActuatorForGamepad(
   int pad_index = gamepad.index();
   DCHECK_GE(pad_index, 0);
   if (!vibration_actuators_[pad_index]) {
-    ExecutionContext* context = DomWindow();
-    auto* actuator = GamepadHapticActuator::Create(context, pad_index);
-    actuator->SetType(gamepad.GetVibrationActuatorType());
+    auto* actuator = MakeGarbageCollected<GamepadHapticActuator>(
+        *DomWindow(), pad_index, gamepad.GetVibrationActuatorType());
     vibration_actuators_[pad_index] = actuator;
   }
   return vibration_actuators_[pad_index].Get();
 }
 
-void NavigatorGamepad::Trace(Visitor* visitor) {
+void NavigatorGamepad::Trace(Visitor* visitor) const {
   visitor->Trace(gamepads_);
   visitor->Trace(gamepads_back_);
   visitor->Trace(vibration_actuators_);
@@ -193,7 +192,7 @@ NavigatorGamepad::NavigatorGamepad(Navigator& navigator)
       ExecutionContextClient(navigator.DomWindow()),
       PlatformEventController(*navigator.DomWindow()),
       gamepad_dispatcher_(
-          MakeGarbageCollected<GamepadDispatcher>(navigator.DomWindow())) {
+          MakeGarbageCollected<GamepadDispatcher>(*navigator.DomWindow())) {
   navigator.DomWindow()->RegisterEventListenerObserver(this);
 
   // Fetch |window.performance.timing.navigationStart|. Gamepad timestamps are

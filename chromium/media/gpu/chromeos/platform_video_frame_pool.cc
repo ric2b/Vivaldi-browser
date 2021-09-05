@@ -25,9 +25,9 @@ scoped_refptr<VideoFrame> DefaultCreateFrame(
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
     base::TimeDelta timestamp) {
-  return CreatePlatformVideoFrame(gpu_memory_buffer_factory, format, coded_size,
-                                  visible_rect, natural_size, timestamp,
-                                  gfx::BufferUsage::SCANOUT_VDA_WRITE);
+  return CreateGpuMemoryBufferVideoFrame(
+      gpu_memory_buffer_factory, format, coded_size, visible_rect, natural_size,
+      timestamp, gfx::BufferUsage::SCANOUT_VDA_WRITE);
 }
 
 }  // namespace
@@ -51,6 +51,15 @@ PlatformVideoFramePool::~PlatformVideoFramePool() {
   weak_this_factory_.InvalidateWeakPtrs();
 }
 
+// static
+gfx::GpuMemoryBufferId PlatformVideoFramePool::GetGpuMemoryBufferId(
+    const VideoFrame& frame) {
+  DCHECK_EQ(frame.storage_type(),
+            VideoFrame::StorageType::STORAGE_GPU_MEMORY_BUFFER);
+  DCHECK(frame.GetGpuMemoryBuffer());
+  return frame.GetGpuMemoryBuffer()->GetId();
+}
+
 scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
   DCHECK(parent_task_runner_->RunsTasksInCurrentSequence());
   DVLOGF(4);
@@ -61,7 +70,7 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
     return nullptr;
   }
 
-  VideoPixelFormat format = frame_layout_->fourcc().ToVideoPixelFormat();
+  const VideoPixelFormat format = frame_layout_->fourcc().ToVideoPixelFormat();
   const gfx::Size& coded_size = frame_layout_->size();
   if (free_frames_.empty()) {
     if (GetTotalNumFrames_Locked() >= max_num_frames_)
@@ -88,14 +97,15 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
   scoped_refptr<VideoFrame> wrapped_frame = VideoFrame::WrapVideoFrame(
       origin_frame, format, visible_rect_, natural_size_);
   DCHECK(wrapped_frame);
-  frames_in_use_.emplace(GetDmabufId(*wrapped_frame), origin_frame.get());
+  frames_in_use_.emplace(GetGpuMemoryBufferId(*wrapped_frame),
+                         origin_frame.get());
   wrapped_frame->AddDestructionObserver(
       base::BindOnce(&PlatformVideoFramePool::OnFrameReleasedThunk, weak_this_,
                      parent_task_runner_, std::move(origin_frame)));
 
   // Clear all metadata before returning to client, in case origin frame has any
   // unrelated metadata.
-  wrapped_frame->metadata()->Clear();
+  wrapped_frame->clear_metadata();
   return wrapped_frame;
 }
 
@@ -134,7 +144,8 @@ base::Optional<GpuBufferLayout> PlatformVideoFramePool::Initialize(
         create_frame_cb_.Run(gpu_memory_buffer_factory_, format, coded_size,
                              visible_rect_, natural_size_, base::TimeDelta());
     if (!frame) {
-      VLOGF(1) << "Failed to create video frame";
+      VLOGF(1) << "Failed to create video frame " << format << " (fourcc "
+               << fourcc.ToString() << ")";
       return base::nullopt;
     }
     frame_layout_ = GpuBufferLayout::Create(fourcc, frame->coded_size(),
@@ -168,7 +179,7 @@ VideoFrame* PlatformVideoFramePool::UnwrapFrame(
   DVLOGF(4);
   base::AutoLock auto_lock(lock_);
 
-  auto it = frames_in_use_.find(GetDmabufId(wrapped_frame));
+  auto it = frames_in_use_.find(GetGpuMemoryBufferId(wrapped_frame));
   return (it == frames_in_use_.end()) ? nullptr : it->second;
 }
 
@@ -203,7 +214,7 @@ void PlatformVideoFramePool::OnFrameReleased(
   DVLOGF(4);
   base::AutoLock auto_lock(lock_);
 
-  DmabufId frame_id = GetDmabufId(*origin_frame);
+  gfx::GpuMemoryBufferId frame_id = GetGpuMemoryBufferId(*origin_frame);
   auto it = frames_in_use_.find(frame_id);
   DCHECK(it != frames_in_use_.end());
   frames_in_use_.erase(it);

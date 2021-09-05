@@ -15,25 +15,34 @@
 #include "third_party/blink/renderer/core/layout/layout_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_outside_list_marker.h"
+#include "third_party/blink/renderer/core/layout/layout_table.h"
 #include "third_party/blink/renderer/core/layout/layout_table_caption.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
+#include "third_party/blink/renderer/core/layout/layout_table_col.h"
+#include "third_party/blink/renderer/core/layout/layout_table_row.h"
+#include "third_party/blink/renderer/core/layout/layout_table_section.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/flex/layout_ng_flexible_box.h"
+#include "third_party/blink/renderer/core/layout/ng/grid/layout_ng_grid.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_fieldset.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_grid.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_progress.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_ruby_as_block.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_outside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/layout_ng_mathml_block.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_caption.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_cell.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_cell_legacy.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_column.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_row.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_section.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
@@ -141,10 +150,20 @@ LayoutObject* LayoutObjectFactory::CreateListMarker(Node& node,
       (IsA<HTMLLIElement>(parent) && !parent_style->IsInsideListElement());
   if (is_inside) {
     return CreateObject<LayoutObject, LayoutNGInsideListMarker,
-                        LayoutInsideListMarker>(node, style, legacy);
+                        LayoutListMarker>(node, style, legacy);
   }
   return CreateObject<LayoutObject, LayoutNGOutsideListMarker,
-                      LayoutOutsideListMarker>(node, style, legacy);
+                      LayoutListMarker>(node, style, legacy);
+}
+
+LayoutBlock* LayoutObjectFactory::CreateTable(Node& node,
+                                              const ComputedStyle& style,
+                                              LegacyLayout legacy) {
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGTableEnabled();
+  if (disable_ng_for_type)
+    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByTable);
+  return CreateObject<LayoutBlock, LayoutNGTable, LayoutTable>(
+      node, style, legacy, disable_ng_for_type);
 }
 
 LayoutTableCaption* LayoutObjectFactory::CreateTableCaption(
@@ -155,12 +174,47 @@ LayoutTableCaption* LayoutObjectFactory::CreateTableCaption(
                                                                 legacy);
 }
 
-LayoutTableCell* LayoutObjectFactory::CreateTableCell(
+LayoutBlockFlow* LayoutObjectFactory::CreateTableCell(
     Node& node,
     const ComputedStyle& style,
     LegacyLayout legacy) {
-  return CreateObject<LayoutTableCell, LayoutNGTableCellLegacy>(node, style,
-                                                                legacy);
+  if (RuntimeEnabledFeatures::LayoutNGTableEnabled()) {
+    return CreateObject<LayoutBlockFlow, LayoutNGTableCell, LayoutTableCell>(
+        node, style, legacy);
+  } else {
+    return CreateObject<LayoutBlockFlow, LayoutNGTableCellLegacy,
+                        LayoutTableCell>(node, style, legacy);
+  }
+}
+
+LayoutBox* LayoutObjectFactory::CreateTableColumn(Node& node,
+                                                  const ComputedStyle& style,
+                                                  LegacyLayout legacy) {
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGTableEnabled();
+  if (disable_ng_for_type)
+    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByTable);
+  return CreateObject<LayoutBox, LayoutNGTableColumn, LayoutTableCol>(
+      node, style, legacy, disable_ng_for_type);
+}
+
+LayoutBox* LayoutObjectFactory::CreateTableRow(Node& node,
+                                               const ComputedStyle& style,
+                                               LegacyLayout legacy) {
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGTableEnabled();
+  if (disable_ng_for_type)
+    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByTable);
+  return CreateObject<LayoutBox, LayoutNGTableRow, LayoutTableRow>(
+      node, style, legacy, disable_ng_for_type);
+}
+
+LayoutBox* LayoutObjectFactory::CreateTableSection(Node& node,
+                                                   const ComputedStyle& style,
+                                                   LegacyLayout legacy) {
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGTableEnabled();
+  if (disable_ng_for_type)
+    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByTable);
+  return CreateObject<LayoutBox, LayoutNGTableSection, LayoutTableSection>(
+      node, style, legacy, disable_ng_for_type);
 }
 
 LayoutBlock* LayoutObjectFactory::CreateFieldset(Node& node,
@@ -227,6 +281,64 @@ LayoutRubyAsBlock* LayoutObjectFactory::CreateRubyAsBlock(
     LegacyLayout legacy) {
   return CreateObject<LayoutRubyAsBlock, LayoutNGRubyAsBlock>(*node, style,
                                                               legacy);
+}
+
+LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
+    const LayoutObject& parent) {
+  scoped_refptr<ComputedStyle> new_style =
+      ComputedStyle::CreateAnonymousStyleWithDisplay(
+          parent.StyleRef(),
+          parent.IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
+  LegacyLayout legacy =
+      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+
+  LayoutBlock* new_table =
+      CreateTable(parent.GetDocument(), *new_style, legacy);
+  new_table->SetDocumentForAnonymous(&parent.GetDocument());
+  new_table->SetStyle(std::move(new_style));
+  return new_table;
+}
+
+LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
+    const LayoutObject& parent) {
+  scoped_refptr<ComputedStyle> new_style =
+      ComputedStyle::CreateAnonymousStyleWithDisplay(parent.StyleRef(),
+                                                     EDisplay::kTableRowGroup);
+  LegacyLayout legacy =
+      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+
+  LayoutBox* new_section =
+      CreateTableSection(parent.GetDocument(), *new_style, legacy);
+  new_section->SetDocumentForAnonymous(&parent.GetDocument());
+  new_section->SetStyle(std::move(new_style));
+  return new_section;
+}
+
+LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
+    const LayoutObject& parent) {
+  scoped_refptr<ComputedStyle> new_style =
+      ComputedStyle::CreateAnonymousStyleWithDisplay(parent.StyleRef(),
+                                                     EDisplay::kTableRow);
+  LegacyLayout legacy =
+      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+  LayoutBox* new_row = CreateTableRow(parent.GetDocument(), *new_style, legacy);
+  new_row->SetDocumentForAnonymous(&parent.GetDocument());
+  new_row->SetStyle(std::move(new_style));
+  return new_row;
+}
+
+LayoutBlockFlow* LayoutObjectFactory::CreateAnonymousTableCellWithParent(
+    const LayoutObject& parent) {
+  scoped_refptr<ComputedStyle> new_style =
+      ComputedStyle::CreateAnonymousStyleWithDisplay(parent.StyleRef(),
+                                                     EDisplay::kTableCell);
+  LegacyLayout legacy =
+      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+  LayoutBlockFlow* new_cell =
+      CreateTableCell(parent.GetDocument(), *new_style, legacy);
+  new_cell->SetDocumentForAnonymous(&parent.GetDocument());
+  new_cell->SetStyle(std::move(new_style));
+  return new_cell;
 }
 
 }  // namespace blink

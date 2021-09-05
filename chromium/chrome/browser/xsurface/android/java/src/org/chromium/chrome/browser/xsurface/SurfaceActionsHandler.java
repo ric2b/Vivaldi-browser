@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.xsurface;
 
+import android.view.View;
+
 /**
  * Interface to provide chromium calling points for an external surface.
  */
@@ -19,4 +21,24 @@ public interface SurfaceActionsHandler {
      * Navigates a new tab to a particular URL.
      */
     default void navigateNewTab(String url) {}
+
+    /**
+     * Navigate a new incognito tab to a URL.
+     */
+    default void navigateIncognitoTab(String url) {}
+
+    /**
+     * Get an offline page for a URL.
+     */
+    default void downloadLink(String url) {}
+
+    /**
+     * Open a bottom sheet with the view as contents.
+     */
+    default void showBottomSheet(View view) {}
+
+    /**
+     * Dismiss the open bottom sheet (or do nothing if there isn't one).
+     */
+    default void dismissBottomSheet() {}
 }

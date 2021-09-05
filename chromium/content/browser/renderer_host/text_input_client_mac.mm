@@ -13,11 +13,10 @@
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/renderer_host/render_view_host_delegate.h"
-#include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/text_input_client_messages.h"
+#include "ui/base/mojom/attributed_string.mojom.h"
 
 namespace content {
 
@@ -51,14 +50,13 @@ bool IsFullScreenRenderWidget(RenderWidgetHost* widget) {
 }
 
 RenderFrameHostImpl* GetFocusedRenderFrameHostImpl(RenderWidgetHost* widget) {
-  RenderViewHostImpl* rvhi = RenderViewHostImpl::From(widget);
-  if (!rvhi || !rvhi->GetDelegate()->GetFrameTree())
-    return nullptr;
-  FrameTreeNode* frame_tree_node =
-      rvhi->GetDelegate()->GetFrameTree()->GetFocusedFrame();
-  return frame_tree_node ? frame_tree_node->current_frame_host() : nullptr;
+  RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(widget);
+  FrameTree* tree = rwhi->delegate()->GetFrameTree();
+  FrameTreeNode* focused_node = tree->GetFocusedFrame();
+  return focused_node ? focused_node->current_frame_host() : nullptr;
 }
-}
+
+}  // namespace
 
 // The amount of time in milliseconds that the browser process will wait for a
 // response from the renderer.
@@ -92,10 +90,10 @@ void TextInputClientMac::GetStringAtPoint(RenderWidgetHost* rwh,
 }
 
 void TextInputClientMac::GetStringAtPointReply(
-    const mac::AttributedStringCoder::EncodedString& string,
+    ui::mojom::AttributedStringPtr string,
     const gfx::Point& point) {
   if (replyForPointHandler_) {
-    std::move(replyForPointHandler_).Run(string, point);
+    std::move(replyForPointHandler_).Run(std::move(string), point);
   }
 }
 
@@ -110,10 +108,10 @@ void TextInputClientMac::GetStringFromRange(RenderWidgetHost* rwh,
 }
 
 void TextInputClientMac::GetStringFromRangeReply(
-    const mac::AttributedStringCoder::EncodedString& string,
+    ui::mojom::AttributedStringPtr string,
     const gfx::Point& point) {
   if (replyForRangeHandler_) {
-    std::move(replyForRangeHandler_).Run(string, point);
+    std::move(replyForRangeHandler_).Run(std::move(string), point);
   }
 }
 

@@ -16,10 +16,14 @@ const base::Feature kIPHDummyFeature{"IPH_Dummy",
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
+const base::Feature kIPHDesktopTabGroupsNewGroupFeature{
+    "IPH_DesktopTabGroupsNewGroup", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFocusModeFeature{"IPH_FocusMode",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHGlobalMediaControlsFeature{
     "IPH_GlobalMediaControls", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHPasswordsAccountStorageFeature{
+    "IPH_PasswordsAccountStorage", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHReopenTabFeature{"IPH_ReopenTab",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHWebUITabStripFeature{"IPH_WebUITabStrip",
@@ -67,6 +71,9 @@ const base::Feature kIPHContextualSearchPromotePanelOpenFeature{
     "IPH_ContextualSearchPromotePanelOpen", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHContextualSearchOptInFeature{
     "IPH_ContextualSearchOptIn", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHContextualSearchTappedButShouldLongpressFeature{
+    "IPH_ContextualSearchTappedButShouldLongpress",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadSettingsFeature{
     "IPH_DownloadSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadInfoBarDownloadContinuingFeature{
@@ -105,6 +112,12 @@ const base::Feature kIPHExploreSitesTileFeature{
     "IPH_ExploreSitesTile", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFeedHeaderMenuFeature{
     "IPH_FeedHeaderMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHChromeReengagementNotification1Feature{
+    "IPH_ChromeReengagementNotification1", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHChromeReengagementNotification2Feature{
+    "IPH_ChromeReengagementNotification2", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHChromeReengagementNotification3Feature{
+    "IPH_ChromeReengagementNotification3", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_IOS)

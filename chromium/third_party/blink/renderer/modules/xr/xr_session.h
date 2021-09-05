@@ -148,25 +148,45 @@ class XRSession final
                                       ExceptionState&);
 
   // Helper, not IDL-exposed
-  // |native_origin_from_anchor| is a matrix describing transform from native
-  // origin to the initial anchor's position.
-  // |native_origin_information| describes native origin telative to which the
+  // |native_origin_from_anchor| is a matrix describing transform between native
+  // origin and the initial anchor's position.
+  // |native_origin_information| describes native origin relative to which the
   // transform is expressed.
   ScriptPromise CreateAnchorHelper(
       ScriptState* script_state,
       const blink::TransformationMatrix& native_origin_from_anchor,
-      const XRNativeOriginInformation& native_origin_information,
+      const device::mojom::blink::XRNativeOriginInformation&
+          native_origin_information,
       ExceptionState& exception_state);
 
   // Helper, not IDL-exposed
-  // |plane_from_anchor| is a matrix describing transform from plane to the
-  // initial anchor's position.
+  // |native_origin_from_anchor| is a matrix describing transform between native
+  // origin and the initial anchor's position.
+  // |native_origin_information| describes native origin relative to which the
+  // transform is expressed.
   // |plane_id| is the id of the plane to which the anchor should be attached.
   ScriptPromise CreatePlaneAnchorHelper(
       ScriptState* script_state,
-      const blink::TransformationMatrix& plane_from_anchor,
+      const blink::TransformationMatrix& native_origin_from_anchor,
+      const device::mojom::blink::XRNativeOriginInformation&
+          native_origin_information,
       uint64_t plane_id,
       ExceptionState& exception_state);
+
+  // Helper POD type containing the information needed for anchor creation in
+  // case the anchor needs to be transformed to be expressed relative to a
+  // stationary reference space.
+  struct ReferenceSpaceInformation {
+    device::mojom::blink::XRNativeOriginInformation native_origin;
+    blink::TransformationMatrix mojo_from_space;
+  };
+
+  // Helper for anchor creation - returns information about the reference space
+  // type and its transform. The resulting reference space will be well-suited
+  // for anchor creation (i.e. the native origin set in the struct will be
+  // describing a stationary space). If a stationary reference space is not
+  // available, the method returns nullopt.
+  base::Optional<ReferenceSpaceInformation> GetStationaryReferenceSpace() const;
 
   int requestAnimationFrame(V8XRFrameRequestCallback* callback);
   void cancelAnimationFrame(int id);
@@ -285,7 +305,7 @@ class XRSession final
   bool UsesInputEventing() { return uses_input_eventing_; }
   bool LightEstimationEnabled() { return !!world_light_probe_; }
 
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
   // ScriptWrappable
   bool HasPendingActivity() const override;
@@ -299,7 +319,7 @@ class XRSession final
   // stored elsewhere, this method will not work for those reference space
   // types.
   base::Optional<TransformationMatrix> GetMojoFrom(
-      XRReferenceSpace::Type space_type);
+      device::mojom::blink::XRReferenceSpaceType space_type) const;
 
   // Creates presentation frame based on current state of the session.
   // State currently used in XRFrame creation is mojo_from_viewer_ and

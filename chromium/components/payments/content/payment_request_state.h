@@ -114,24 +114,23 @@ class PaymentRequestState : public PaymentAppFactory::Delegate,
       base::OnceCallback<void(bool methods_supported,
                               const std::string& error_message)>;
 
-  PaymentRequestState(
-      content::WebContents* web_contents,
-      content::RenderFrameHost* initiator_render_frame_host,
-      const GURL& top_level_origin,
-      const GURL& frame_origin,
-      const url::Origin& frame_security_origin,
-      PaymentRequestSpec* spec,
-      Delegate* delegate,
-      const std::string& app_locale,
-      autofill::PersonalDataManager* personal_data_manager,
-      ContentPaymentRequestDelegate* payment_request_delegate,
-      const ServiceWorkerPaymentApp::IdentityCallback& sw_identity_callback,
-      JourneyLogger* journey_logger);
+  PaymentRequestState(content::WebContents* web_contents,
+                      content::RenderFrameHost* initiator_render_frame_host,
+                      const GURL& top_level_origin,
+                      const GURL& frame_origin,
+                      const url::Origin& frame_security_origin,
+                      PaymentRequestSpec* spec,
+                      Delegate* delegate,
+                      const std::string& app_locale,
+                      autofill::PersonalDataManager* personal_data_manager,
+                      ContentPaymentRequestDelegate* payment_request_delegate,
+                      JourneyLogger* journey_logger);
   ~PaymentRequestState() override;
 
   // PaymentAppFactory::Delegate
   content::WebContents* GetWebContents() override;
   ContentPaymentRequestDelegate* GetPaymentRequestDelegate() const override;
+  void ShowProcessingSpinner() override;
   PaymentRequestSpec* GetSpec() const override;
   const GURL& GetTopOrigin() override;
   const GURL& GetFrameOrigin() override;
@@ -144,15 +143,10 @@ class PaymentRequestState : public PaymentAppFactory::Delegate,
   const std::vector<autofill::AutofillProfile*>& GetBillingProfiles() override;
   bool IsRequestedAutofillDataAvailable() override;
   bool MayCrawlForInstallablePaymentApps() override;
-  void OnPaymentAppInstalled(const url::Origin& origin,
-                             int64_t registration_id) override;
+  bool IsOffTheRecord() const override;
   void OnPaymentAppCreated(std::unique_ptr<PaymentApp> app) override;
   void OnPaymentAppCreationError(const std::string& error_message) override;
   bool SkipCreatingNativePaymentApps() const override;
-  void OnCreatingNativePaymentAppsSkipped(
-      content::PaymentAppProvider::PaymentApps apps,
-      ServiceWorkerPaymentAppFinder::InstallablePaymentApps installable_apps)
-      override;
   void OnDoneCreatingPaymentApps() override;
 
   // PaymentResponseHelper::Delegate
@@ -416,7 +410,6 @@ class PaymentRequestState : public PaymentAppFactory::Delegate,
   std::vector<std::unique_ptr<PaymentApp>> available_apps_;
 
   ContentPaymentRequestDelegate* payment_request_delegate_;
-  ServiceWorkerPaymentApp::IdentityCallback sw_identity_callback_;
 
   std::unique_ptr<PaymentResponseHelper> response_helper_;
 

@@ -5,13 +5,13 @@
 import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 
 function resetDocument() {
-  window.viewer.viewport.goToPage(0);
-  window.viewer.viewport.setZoom(1);
-  window.viewer.isFormFieldFocused_ = false;
+  document.querySelector('pdf-viewer').viewport.goToPage(0);
+  document.querySelector('pdf-viewer').viewport.setZoom(1);
+  document.querySelector('pdf-viewer').isFormFieldFocused_ = false;
 }
 
 function getCurrentPage() {
-  return window.viewer.viewport.getMostVisiblePage();
+  return document.querySelector('pdf-viewer').viewport.getMostVisiblePage();
 }
 
 const tests = [
@@ -20,11 +20,11 @@ const tests = [
    */
   function testPageChangesWithArrows() {
     // Right arrow -> Go to page 2.
-    pressAndReleaseKeyOn(document, 39);
+    pressAndReleaseKeyOn(document, 39, '', 'ArrowRight');
     chrome.test.assertEq(1, getCurrentPage());
 
     // Left arrow -> Back to page 1.
-    pressAndReleaseKeyOn(document, 37);
+    pressAndReleaseKeyOn(document, 37, '', 'ArrowLeft');
     chrome.test.assertEq(0, getCurrentPage());
 
     resetDocument();
@@ -38,13 +38,13 @@ const tests = [
   function testPageDoesntChangeWhenFormFocused() {
     // This should be set by a message from plugin -> page when a field is
     // focused.
-    window.viewer.isFormFieldFocused_ = true;
+    document.querySelector('pdf-viewer').isFormFieldFocused_ = true;
 
     // Page should not change when left/right are pressed.
-    pressAndReleaseKeyOn(document, 39);
+    pressAndReleaseKeyOn(document, 39, '', 'ArrowLeft');
     chrome.test.assertEq(0, getCurrentPage());
 
-    pressAndReleaseKeyOn(document, 37);
+    pressAndReleaseKeyOn(document, 37, '', 'ArrowRight');
     chrome.test.assertEq(0, getCurrentPage());
 
     resetDocument();
@@ -56,14 +56,14 @@ const tests = [
    * changes page back/forth.
    */
   function testPageDownInFitPage() {
-    window.viewer.viewport.fitToPage();
+    document.querySelector('pdf-viewer').viewport.fitToPage();
 
     // Page down -> Go to page 2.
-    pressAndReleaseKeyOn(document, 34);
+    pressAndReleaseKeyOn(document, 34, '', 'PageDown');
     chrome.test.assertEq(1, getCurrentPage());
 
     // Page up -> Back to page 1.
-    pressAndReleaseKeyOn(document, 33);
+    pressAndReleaseKeyOn(document, 33, '', 'PageUp');
     chrome.test.assertEq(0, getCurrentPage());
 
     resetDocument();

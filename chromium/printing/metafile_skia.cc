@@ -17,6 +17,7 @@
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
 #include "cc/paint/skia_paint_canvas.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/print_settings.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPicture.h"
@@ -82,7 +83,7 @@ struct MetafileSkiaData {
   // meaningful for a vector canvas as for a raster canvas.
   float scale_factor;
   SkSize size;
-  SkiaDocumentType type;
+  mojom::SkiaDocumentType type;
 
 #if defined(OS_MACOSX)
   PdfMetafileCg pdf_cg;
@@ -90,10 +91,10 @@ struct MetafileSkiaData {
 };
 
 MetafileSkia::MetafileSkia() : data_(std::make_unique<MetafileSkiaData>()) {
-  data_->type = SkiaDocumentType::PDF;
+  data_->type = mojom::SkiaDocumentType::kPDF;
 }
 
-MetafileSkia::MetafileSkia(SkiaDocumentType type, int document_cookie)
+MetafileSkia::MetafileSkia(mojom::SkiaDocumentType type, int document_cookie)
     : data_(std::make_unique<MetafileSkiaData>()) {
   data_->type = type;
   data_->document_cookie = document_cookie;
@@ -116,7 +117,12 @@ bool MetafileSkia::InitFromData(base::span<const uint8_t> data) {
 
 void MetafileSkia::StartPage(const gfx::Size& page_size,
                              const gfx::Rect& content_area,
-                             float scale_factor) {
+                             float scale_factor,
+                             mojom::PageOrientation page_orientation) {
+  gfx::Size physical_page_size = page_size;
+  if (page_orientation != mojom::PageOrientation::kUpright)
+    physical_page_size.SetSize(page_size.height(), page_size.width());
+
   DCHECK_GT(page_size.width(), 0);
   DCHECK_GT(page_size.height(), 0);
   DCHECK_GT(scale_factor, 0.0f);
@@ -126,17 +132,26 @@ void MetafileSkia::StartPage(const gfx::Size& page_size,
 
   float inverse_scale = 1.0 / scale_factor;
   cc::PaintCanvas* canvas = data_->recorder.beginRecording(
-      inverse_scale * page_size.width(), inverse_scale * page_size.height());
+      inverse_scale * physical_page_size.width(),
+      inverse_scale * physical_page_size.height());
   // Recording canvas is owned by the |data_->recorder|.  No ref() necessary.
-  if (content_area != gfx::Rect(page_size)) {
+  if (content_area != gfx::Rect(page_size) ||
+      page_orientation != mojom::PageOrientation::kUpright) {
     canvas->scale(inverse_scale, inverse_scale);
+    if (page_orientation == mojom::PageOrientation::kRotateLeft) {
+      canvas->translate(0, physical_page_size.height());
+      canvas->rotate(-90);
+    } else if (page_orientation == mojom::PageOrientation::kRotateRight) {
+      canvas->translate(physical_page_size.width(), 0);
+      canvas->rotate(90);
+    }
     SkRect sk_content_area = gfx::RectToSkRect(content_area);
     canvas->clipRect(sk_content_area);
     canvas->translate(sk_content_area.x(), sk_content_area.y());
     canvas->scale(scale_factor, scale_factor);
   }
 
-  data_->size = gfx::SizeFToSkSize(gfx::SizeF(page_size));
+  data_->size = gfx::SizeFToSkSize(gfx::SizeF(physical_page_size));
   data_->scale_factor = scale_factor;
   // We scale the recording canvas's size so that
   // canvas->getTotalMatrix() returns a value that ignores the scale
@@ -147,8 +162,9 @@ void MetafileSkia::StartPage(const gfx::Size& page_size,
 cc::PaintCanvas* MetafileSkia::GetVectorCanvasForNewPage(
     const gfx::Size& page_size,
     const gfx::Rect& content_area,
-    float scale_factor) {
-  StartPage(page_size, content_area, scale_factor);
+    float scale_factor,
+    mojom::PageOrientation page_orientation) {
+  StartPage(page_size, content_area, scale_factor, page_orientation);
   return data_->recorder.getRecordingCanvas();
 }
 
@@ -180,10 +196,10 @@ bool MetafileSkia::FinishDocument() {
   sk_sp<SkDocument> doc;
   cc::PlaybackParams::CustomDataRasterCallback custom_callback;
   switch (data_->type) {
-    case SkiaDocumentType::PDF:
+    case mojom::SkiaDocumentType::kPDF:
       doc = MakePdfDocument(printing::GetAgent(), accessibility_tree_, &stream);
       break;
-    case SkiaDocumentType::MSKP:
+    case mojom::SkiaDocumentType::kMSKP:
       SkSerialProcs procs = SerializationProcs(&data_->subframe_content_info);
       doc = SkMakeMultiPictureDocument(&stream, &procs);
       // It is safe to use base::Unretained(this) because the callback
@@ -211,7 +227,7 @@ void MetafileSkia::FinishFrameContent() {
   // content.
   DCHECK_EQ(data_->pages.size(), 1u);
   // Also make sure it is in skia multi-picture document format.
-  DCHECK_EQ(data_->type, SkiaDocumentType::MSKP);
+  DCHECK_EQ(data_->type, mojom::SkiaDocumentType::kMSKP);
   DCHECK(!data_->data_stream);
 
   cc::PlaybackParams::CustomDataRasterCallback custom_callback =
@@ -344,7 +360,7 @@ bool MetafileSkia::SaveTo(base::File* file) const {
 #endif  // defined(OS_ANDROID)
 
 std::unique_ptr<MetafileSkia> MetafileSkia::GetMetafileForCurrentPage(
-    SkiaDocumentType type) {
+    mojom::SkiaDocumentType type) {
   // If we only ever need the metafile for the last page, should we
   // only keep a handle on one PaintRecord?
   auto metafile = std::make_unique<MetafileSkia>(type, data_->document_cookie);
@@ -416,7 +432,7 @@ void MetafileSkia::CustomDataToSkPictureCallback(SkCanvas* canvas,
   // Found the picture, draw it on canvas.
   sk_sp<SkPicture> pic = it->second;
   SkRect rect = pic->cullRect();
-  SkMatrix matrix = SkMatrix::MakeTrans(rect.x(), rect.y());
+  SkMatrix matrix = SkMatrix::Translate(rect.x(), rect.y());
   canvas->drawPicture(it->second, &matrix, nullptr);
 }
 

@@ -89,7 +89,8 @@ bool AutoplayPolicy::IsDocumentAllowedToPlay(const Document& document) {
     return false;
 
   bool feature_policy_enabled =
-      document.IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kAutoplay);
+      document.GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kAutoplay);
 
   for (Frame* frame = document.GetFrame(); frame;
        frame = frame->Tree().Parent()) {
@@ -343,6 +344,7 @@ void AutoplayPolicy::OnIntersectionChangedForAutoplay(
 
   if (ShouldAutoplay()) {
     element_->paused_ = false;
+    element_->SetShowPosterFlag(false);
     element_->ScheduleEvent(event_type_names::kPlay);
     element_->ScheduleNotifyPlaying();
 
@@ -361,11 +363,12 @@ void AutoplayPolicy::MaybeSetAutoplayInitiated() {
 
   autoplay_initiated_ = true;
 
-  const Document& document = element_->GetDocument();
   bool feature_policy_enabled =
-      document.IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kAutoplay);
+      element_->GetExecutionContext() &&
+      element_->GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kAutoplay);
 
-  for (Frame* frame = document.GetFrame(); frame;
+  for (Frame* frame = element_->GetDocument().GetFrame(); frame;
        frame = frame->Tree().Parent()) {
     if (frame->HasStickyUserActivation() ||
         frame->HadStickyUserActivationBeforeNavigation()) {
@@ -385,7 +388,7 @@ bool AutoplayPolicy::ShouldAutoplay() {
   return element_->can_autoplay_ && element_->paused_ && element_->Autoplay();
 }
 
-void AutoplayPolicy::Trace(Visitor* visitor) {
+void AutoplayPolicy::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
   visitor->Trace(autoplay_intersection_observer_);
   visitor->Trace(autoplay_uma_helper_);

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_container_fragment.h"
 
+#include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
@@ -19,11 +20,11 @@ namespace blink {
 namespace {
 
 struct SameSizeAsNGPhysicalContainerFragment : NGPhysicalFragment {
+  wtf_size_t size;
   void* break_token;
   std::unique_ptr<Vector<NGPhysicalOutOfFlowPositionedNode>>
       oof_positioned_descendants_;
   void* pointer;
-  wtf_size_t size;
 };
 
 static_assert(sizeof(NGPhysicalContainerFragment) ==
@@ -39,13 +40,13 @@ NGPhysicalContainerFragment::NGPhysicalContainerFragment(
     NGFragmentType type,
     unsigned sub_type)
     : NGPhysicalFragment(builder, type, sub_type),
+      num_children_(builder->children_.size()),
       break_token_(std::move(builder->break_token_)),
       oof_positioned_descendants_(
           builder->oof_positioned_descendants_.IsEmpty()
               ? nullptr
               : new Vector<NGPhysicalOutOfFlowPositionedNode>()),
-      buffer_(buffer),
-      num_children_(builder->children_.size()) {
+      buffer_(buffer) {
   has_floating_descendants_for_paint_ =
       builder->has_floating_descendants_for_paint_;
   has_adjoining_object_descendants_ =
@@ -71,11 +72,12 @@ NGPhysicalContainerFragment::NGPhysicalContainerFragment(
   // Because flexible arrays need to be the last member in a class, we need to
   // have the buffer passed as a constructor argument and have the actual
   // storage be part of the subclass.
+  const WritingModeConverter converter(
+      {block_or_line_writing_mode, builder->Direction()}, size);
   wtf_size_t i = 0;
   for (auto& child : builder->children_) {
-    buffer[i].offset = child.offset.ConvertToPhysical(
-        block_or_line_writing_mode, builder->Direction(), size,
-        child.fragment->Size());
+    buffer[i].offset =
+        converter.ToPhysical(child.offset, child.fragment->Size());
     // Call the move constructor to move without |AddRef|. Fragments in
     // |builder| are not used after |this| was constructed.
     static_assert(
@@ -110,6 +112,8 @@ void NGPhysicalContainerFragment::AddOutlineRectsForNormalChildren(
         }
         if (item.Type() == NGFragmentItem::kBox) {
           if (const NGPhysicalBoxFragment* child_box = item.BoxFragment()) {
+            if (const NGPhysicalFragment* post_layout = child_box->PostLayout())
+              child_box = To<NGPhysicalBoxFragment>(post_layout);
             DCHECK(!child_box->IsOutOfFlowPositioned());
             AddOutlineRectsForDescendant(
                 {child_box, item.OffsetInContainerBlock()}, outline_rects,

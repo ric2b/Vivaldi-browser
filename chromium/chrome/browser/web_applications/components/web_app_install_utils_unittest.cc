@@ -156,8 +156,8 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
   web_app_info.icon_infos.push_back(info);
 
   for (int i = 1; i < 4; ++i) {
-    WebApplicationShortcutInfo shortcut_item;
-    WebApplicationIconInfo icon;
+    WebApplicationShortcutsMenuItemInfo shortcut_item;
+    WebApplicationShortcutsMenuItemInfo::Icon icon;
     std::string shortcut_name = kShortcutItemName;
     shortcut_name += base::NumberToString(i);
     shortcut_item.name = base::UTF8ToUTF16(shortcut_name);
@@ -249,7 +249,7 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
 
   EXPECT_EQ(2u, web_app_info.shortcut_infos.size());
   EXPECT_EQ(1u, web_app_info.shortcut_infos[0].shortcut_icon_infos.size());
-  WebApplicationIconInfo web_app_shortcut_icon =
+  WebApplicationShortcutsMenuItemInfo::Icon web_app_shortcut_icon =
       web_app_info.shortcut_infos[0].shortcut_icon_infos[0];
   EXPECT_EQ(IconUrl2(), web_app_shortcut_icon.url);
 
@@ -304,7 +304,7 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
   WebApplicationInfo web_app_info;
   UpdateWebAppInfoFromManifest(manifest, &web_app_info);
 
-  std::vector<WebApplicationIconInfo> all_icons;
+  std::vector<WebApplicationShortcutsMenuItemInfo::Icon> all_icons;
   for (const auto& shortcut : web_app_info.shortcut_infos) {
     for (const auto& icon_info : shortcut.shortcut_icon_infos) {
       all_icons.push_back(std::move(icon_info));
@@ -356,7 +356,7 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
   WebApplicationInfo web_app_info;
   UpdateWebAppInfoFromManifest(manifest, &web_app_info);
 
-  std::vector<WebApplicationIconInfo> all_icons;
+  std::vector<WebApplicationShortcutsMenuItemInfo::Icon> all_icons;
   for (const auto& shortcut : web_app_info.shortcut_infos) {
     for (const auto& icon_info : shortcut.shortcut_icon_infos) {
       all_icons.push_back(std::move(icon_info));
@@ -369,8 +369,8 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
 // their own map in web_app_info.
 TEST(WebAppInstallUtils, PopulateShortcutItemIcons) {
   WebApplicationInfo web_app_info;
-  WebApplicationShortcutInfo shortcut_item;
-  WebApplicationIconInfo icon;
+  WebApplicationShortcutsMenuItemInfo shortcut_item;
+  WebApplicationShortcutsMenuItemInfo::Icon icon;
   std::string shortcut_name = kShortcutItemName;
   shortcut_name += base::NumberToString(1);
   shortcut_item.name = base::UTF8ToUTF16(shortcut_name);
@@ -401,8 +401,8 @@ TEST(WebAppInstallUtils, PopulateShortcutItemIcons) {
   PopulateShortcutItemIcons(&web_app_info, &icons_map);
 
   // Ensure that reused shortcut icons are processed correctly.
-  EXPECT_EQ(1U, web_app_info.shortcut_infos[0].shortcut_icon_bitmaps.size());
-  EXPECT_EQ(2U, web_app_info.shortcut_infos[1].shortcut_icon_bitmaps.size());
+  EXPECT_EQ(1U, web_app_info.shortcuts_menu_icons_bitmaps[0].size());
+  EXPECT_EQ(2U, web_app_info.shortcuts_menu_icons_bitmaps[1].size());
 }
 
 // Tests that when PopulateShortcutItemIcons is called with no shortcut icon
@@ -468,17 +468,20 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
   web_app_info.icon_infos.push_back(info);
 
   // Construct |shortcut_item| to add to |web_app_info.shortcut_infos|.
-  WebApplicationShortcutInfo shortcut_item;
+  WebApplicationShortcutsMenuItemInfo shortcut_item;
   shortcut_item.name = base::UTF8ToUTF16(kShortcutItemName);
   shortcut_item.url = ShortcutItemUrl();
   // Construct |icon| to add to |shortcut_item.shortcut_icon_infos|.
-  WebApplicationIconInfo icon;
+  WebApplicationShortcutsMenuItemInfo::Icon icon;
   icon.url = IconUrl2();
   icon.square_size_px = kIconSize;
   shortcut_item.shortcut_icon_infos.push_back(std::move(icon));
-  shortcut_item.shortcut_icon_bitmaps[kIconSize] =
-      CreateSquareIcon(kIconSize, SK_ColorBLUE);
   web_app_info.shortcut_infos.push_back(std::move(shortcut_item));
+  // Construct shortcut_icon_bitmap to add to
+  // |web_app_info.shortcuts_menu_icons_bitmaps|.
+  std::map<SquareSizePx, SkBitmap> shortcut_icon_bitmaps;
+  shortcut_icon_bitmaps[kIconSize] = CreateSquareIcon(kIconSize, SK_ColorBLUE);
+  web_app_info.shortcuts_menu_icons_bitmaps.emplace_back(shortcut_icon_bitmaps);
 
   FilterAndResizeIconsGenerateMissing(&web_app_info, &icons_map);
 

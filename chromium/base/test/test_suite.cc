@@ -42,6 +42,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/tracing_buildflags.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -592,6 +593,16 @@ void TestSuite::Initialize() {
   }
 #endif
 
+#if defined(DCHECK_IS_CONFIGURABLE)
+  // Default the configurable DCHECK level to FATAL when running death tests'
+  // child process, so that they behave as expected.
+  // TODO(crbug.com/1057995): Remove this in favor of the codepath in
+  // FeatureList::SetInstance() when/if OnTestStart() TestEventListeners
+  // are fixed to be invoked in the child process as expected.
+  if (command_line->HasSwitch("gtest_internal_run_death_test"))
+    logging::LOG_DCHECK = logging::LOG_FATAL;
+#endif
+
 #if defined(OS_IOS)
   InitIOSTestMessageLoop();
 #endif  // OS_IOS
@@ -652,7 +663,9 @@ void TestSuite::Initialize() {
 
   TestTimeouts::Initialize();
 
+#if BUILDFLAG(ENABLE_BASE_TRACING)
   trace_to_file_.BeginTracingFromCommandLineOptions();
+#endif  // BUILDFLAG(ENABLE_BASE_TRACING)
 
   debug::StartProfiling(GetProfileName());
 

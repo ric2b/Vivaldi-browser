@@ -311,8 +311,9 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
      */
     private void updateSyncPreferences() {
         String signedInAccountName = CoreAccountInfo.getEmailFrom(
-                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                        ConsentLevel.SYNC));
+                IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.SYNC));
         if (signedInAccountName == null) {
             // May happen if account is removed from the device while this screen is shown.
             getActivity().finish();
@@ -331,13 +332,24 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
      * and {@link PersonalDataManager}.
      */
     private void updateSyncStateFromSelectedModelTypes() {
-        mProfileSyncService.setChosenDataTypes(
-                mSyncEverything.isChecked(), getSelectedModelTypes());
+        Set<Integer> selectedModelTypes = getSelectedModelTypes();
+        mProfileSyncService.setChosenDataTypes(mSyncEverything.isChecked(), selectedModelTypes);
         // Note: mSyncPaymentsIntegration should be checked if mSyncEverything is checked, but if
         // mSyncEverything was just enabled, then that state may not have propagated to
         // mSyncPaymentsIntegration yet. See crbug.com/972863.
         PersonalDataManager.setPaymentsIntegrationEnabled(mSyncEverything.isChecked()
                 || (mSyncPaymentsIntegration.isChecked() && mSyncAutofill.isChecked()));
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            boolean atLeastOneDataTypeEnabled =
+                    mSyncEverything.isChecked() || selectedModelTypes.size() > 0;
+            if (mProfileSyncService.isSyncRequested() && !atLeastOneDataTypeEnabled) {
+                mProfileSyncService.requestStop();
+            } else if (!mProfileSyncService.isSyncRequested() && atLeastOneDataTypeEnabled) {
+                mProfileSyncService.requestStart();
+            }
+        }
+
         // Some calls to setChosenDataTypes don't trigger syncStateChanged, so schedule update here.
         PostTask.postTask(UiThreadTaskTraits.DEFAULT, this::updateSyncPreferences);
     }
@@ -512,8 +524,9 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
             displayPassphraseDialog();
         } else if (mProfileSyncService.isTrustedVaultKeyRequired()) {
             CoreAccountInfo primaryAccountInfo =
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                            ConsentLevel.SYNC);
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC);
             if (primaryAccountInfo != null) {
                 SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog(
                         this, primaryAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
@@ -604,8 +617,10 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
 
     private void cancelSync() {
         RecordUserAction.record("Signin_Signin_CancelAdvancedSyncSettings");
-        IdentityServicesProvider.get().getSigninManager().signOut(
-                org.chromium.components.signin.metrics.SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS);
+        IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .signOut(org.chromium.components.signin.metrics.SignoutReason
+                                 .USER_CLICKED_SIGNOUT_SETTINGS);
         getActivity().finish();
     }
 

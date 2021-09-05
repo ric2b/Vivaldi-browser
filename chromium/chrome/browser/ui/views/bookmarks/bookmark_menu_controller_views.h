@@ -55,12 +55,8 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
                          bool for_drop);
 
   void RunMenuAt(BookmarkBarView* bookmark_bar);
-  // Added by Vivaldi to allow bookmark menus from a generic view
-  void RunMenuAt(const views::View* parent, const gfx::Rect& rect);
-  void VivaldiSelectionChanged(views::MenuItemView* menu) override;
-  void clear_bookmark_bar() {
-    bookmark_bar_ = NULL;
-  }
+
+  void clear_bookmark_bar() { bookmark_bar_ = nullptr; }
 
   // Hides the menu.
   void Cancel();
@@ -71,7 +67,7 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
   // Returns the menu.
   views::MenuItemView* menu() const;
 
-  // Returns the context menu, or NULL if the context menu isn't showing.
+  // Returns the context menu, or nullptr if the context menu isn't showing.
   views::MenuItemView* context_menu() const;
 
   // Sets the page navigator.
@@ -114,17 +110,21 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
                                       views::MenuAnchorPosition* anchor,
                                       bool* has_mnemonics,
                                       views::MenuButton** button) override;
-  views::MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
-                                             const gfx::Point& screen_point,
-                                             gfx::Rect* rect) override;
-  views::MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
-                                          gfx::Rect* rect) override;
   int GetMaxWidthForMenu(views::MenuItemView* view) override;
   void WillShowMenu(views::MenuItemView* menu) override;
   bool ShouldTryPositioningBesideAnchor() const override;
 
   // bookmarks::BaseBookmarkModelObserver:
   void BookmarkModelChanged() override;
+
+  // Added by Vivaldi to allow bookmark menus from a generic view
+  void RunMenuAt(const views::View* parent, const gfx::Rect& rect);
+  void VivaldiSelectionChanged(views::MenuItemView* menu) override;
+  views::MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
+                                             const gfx::Point& screen_point,
+                                             gfx::Rect* rect) override;
+  views::MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
+                                          gfx::Rect* rect) override;
 
  private:
   // BookmarkMenuController deletes itself as necessary.

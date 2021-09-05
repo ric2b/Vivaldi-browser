@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_util.h"
@@ -213,7 +214,7 @@ SkCanvas* FakeSkiaOutputSurface::BeginPaintRenderPass(
 gpu::SyncToken FakeSkiaOutputSurface::SubmitPaint(
     base::OnceClosure on_finished) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  sk_surfaces_[current_render_pass_id_]->flush();
+  sk_surfaces_[current_render_pass_id_]->flushAndSubmit();
   current_render_pass_id_ = 0;
 
   if (on_finished)

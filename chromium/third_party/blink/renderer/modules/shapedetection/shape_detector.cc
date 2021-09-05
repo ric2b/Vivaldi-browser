@@ -72,8 +72,8 @@ ScriptPromise ShapeDetector::detect(
       canvas_image_source->ElementSize(FloatSize(), kRespectImageOrientation));
 
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
-  scoped_refptr<Image> image = canvas_image_source->GetSourceImageForCanvas(
-      &source_image_status, kPreferNoAcceleration, size);
+  scoped_refptr<Image> image =
+      canvas_image_source->GetSourceImageForCanvas(&source_image_status, size);
   if (!image || source_image_status != kNormalSourceImageStatus) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError, "Invalid element or state."));
@@ -150,15 +150,15 @@ ScriptPromise ShapeDetector::DetectShapesOnImageElement(
     return promise;
   }
 
-  ImageResourceContent* const image_resource = img->CachedImage();
-  if (!image_resource || image_resource->ErrorOccurred()) {
+  ImageResourceContent* const image_content = img->CachedImage();
+  if (!image_content || image_content->ErrorOccurred()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError,
         "Failed to load or decode HTMLImageElement."));
     return promise;
   }
 
-  Image* const blink_image = image_resource->GetImage();
+  Image* const blink_image = image_content->GetImage();
   if (!blink_image) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError,

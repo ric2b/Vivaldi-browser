@@ -73,11 +73,10 @@ class PageSchedulerImplTest;
 class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
                                            FrameTaskQueueController::Delegate {
  public:
-  static std::unique_ptr<FrameSchedulerImpl> Create(
-      PageSchedulerImpl* page_scheduler,
-      FrameScheduler::Delegate* delegate,
-      base::trace_event::BlameContext* blame_context,
-      FrameScheduler::FrameType frame_type);
+  FrameSchedulerImpl(PageSchedulerImpl* page_scheduler,
+                     FrameScheduler::Delegate* delegate,
+                     base::trace_event::BlameContext* blame_context,
+                     FrameScheduler::FrameType frame_type);
   ~FrameSchedulerImpl() override;
 
   // FrameOrWorkerScheduler implementation:
@@ -88,7 +87,6 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   bool IsFrameVisible() const override;
 
   bool IsPageVisible() const override;
-  bool IsAudioPlaying() const;
 
   void SetPaused(bool frame_paused) override;
   void SetShouldReportPostedTasksWhenDisabled(bool should_report) override;
@@ -121,8 +119,14 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void OnFirstContentfulPaint() override;
   void OnFirstMeaningfulPaint() override;
+  void OnLoad() override;
   bool IsWaitingForContentfulPaint() const;
   bool IsWaitingForMeaningfulPaint() const;
+
+  // An "ordinary" FrameScheduler is responsible for a frame whose parent page
+  // is a fully-featured page owned by a web view (as opposed to, e.g.: a Page
+  // created by an SVGImage). Virtual for testing.
+  virtual bool IsOrdinary() const;
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
   bool IsExemptFromBudgetBasedThrottling() const override;
@@ -135,13 +139,21 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
                              const SchedulingPolicy& policy) override;
 
   base::WeakPtr<FrameScheduler> GetWeakPtr() override;
+  base::WeakPtr<const FrameSchedulerImpl> GetWeakPtr() const;
 
   scoped_refptr<base::SingleThreadTaskRunner> ControlTaskRunner();
 
   void UpdatePolicy();
 
+  // Whether the frame is opted-out from any kind of throttling.
+  bool opted_out_from_all_throttling() const {
+    return opted_out_from_all_throttling_;
+  }
+  // Whether the frame is opted-out from CPU time throttling and intensive wake
+  // up throttling.
   bool opted_out_from_aggressive_throttling() const {
-    return opted_out_from_aggressive_throttling_;
+    return opted_out_from_all_throttling_ ||
+           opted_out_from_aggressive_throttling_;
   }
 
   void OnTraceLogEnabled() { tracing_controller_.OnTraceLogEnabled(); }
@@ -151,7 +163,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void SetPageFrozenForTracing(bool frozen);
 
   // Computes the priority of |task_queue| if it is associated to this frame
-  // scheduler. Note that the main's thread policy should be upto date to
+  // scheduler. Note that the main thread's policy should be upto date to
   // compute the correct priority.
   base::sequence_manager::TaskQueue::QueuePriority ComputePriority(
       MainThreadTaskQueue* task_queue) const;
@@ -209,6 +221,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   friend class main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest;
   friend class frame_scheduler_impl_unittest::FrameSchedulerImplTest;
   friend class page_scheduler_impl_unittest::PageSchedulerImplTest;
+  friend class PerAgentSchedulingBaseTest;
   friend class ResourceLoadingTaskRunnerHandleImpl;
   friend class ::blink::MainThreadSchedulerTest;
 
@@ -230,8 +243,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   };
 
   void DetachFromPageScheduler();
-  void RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool(
-      MainThreadTaskQueue*);
+  void RemoveThrottleableQueueFromBudgetPools(MainThreadTaskQueue*);
   void ApplyPolicyToThrottleableQueue();
   bool ShouldThrottleTaskQueues() const;
   SchedulingLifecycleState CalculateLifecycleState(
@@ -247,6 +259,9 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void AddPauseSubresourceLoadingHandle();
   void RemovePauseSubresourceLoadingHandle();
+
+  void OnAddedAllThrottlingOptOut();
+  void OnRemovedAllThrottlingOptOut();
 
   void OnAddedAggressiveThrottlingOptOut();
   void OnRemovedAggressiveThrottlingOptOut();
@@ -323,9 +338,11 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   TraceableState<bool, TracingCategoryName::kInfo> task_queues_throttled_;
   TraceableState<bool, TracingCategoryName::kInfo>
       preempted_for_cooperative_scheduling_;
-  // TODO(kraynov): https://crbug.com/827113
-  // Trace the count of aggressive throttling opt outs.
-  int aggressive_throttling_opt_out_count;
+  // TODO(https://crbug.com/827113): Trace the count of opt-outs.
+  int all_throttling_opt_out_count_;
+  int aggressive_throttling_opt_out_count_;
+  TraceableState<bool, TracingCategoryName::kInfo>
+      opted_out_from_all_throttling_;
   TraceableState<bool, TracingCategoryName::kInfo>
       opted_out_from_aggressive_throttling_;
   size_t subresource_loading_pause_count_;
@@ -361,7 +378,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   // and documents.
   base::WeakPtrFactory<FrameSchedulerImpl> document_bound_weak_factory_{this};
 
-  base::WeakPtrFactory<FrameSchedulerImpl> weak_factory_{this};
+  mutable base::WeakPtrFactory<FrameSchedulerImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FrameSchedulerImpl);
 };

@@ -35,11 +35,11 @@ namespace {
 
 base::Value NetLogSpdyStreamErrorParams(spdy::SpdyStreamId stream_id,
                                         int net_error,
-                                        const std::string* description) {
+                                        base::StringPiece description) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetIntKey("stream_id", static_cast<int>(stream_id));
   dict.SetStringKey("net_error", ErrorToShortString(net_error));
-  dict.SetStringKey("description", *description);
+  dict.SetStringKey("description", description);
   return dict;
 }
 
@@ -412,6 +412,10 @@ void SpdyStream::OnHeadersReceived(
       // in which case it needs to pass through so that the WebSocket layer
       // can signal an error.
       if (status / 100 == 1 && status != 101) {
+        // Record the timing of the 103 Early Hints response for the experiment
+        // (https://crbug.com/1093693).
+        if (status == 103 && first_early_hints_time_.is_null())
+          first_early_hints_time_ = recv_first_byte_time;
         return;
       }
 
@@ -660,9 +664,9 @@ int SpdyStream::OnDataSent(size_t frame_size) {
   }
 }
 
-void SpdyStream::LogStreamError(int error, const std::string& description) {
+void SpdyStream::LogStreamError(int error, base::StringPiece description) {
   net_log_.AddEvent(NetLogEventType::HTTP2_STREAM_ERROR, [&] {
-    return NetLogSpdyStreamErrorParams(stream_id_, error, &description);
+    return NetLogSpdyStreamErrorParams(stream_id_, error, description);
   });
 }
 
@@ -816,6 +820,7 @@ bool SpdyStream::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
   // first bytes of the HEADERS frame were received to BufferedSpdyFramer
   // (https://crbug.com/568024).
   load_timing_info->receive_headers_start = recv_first_byte_time_;
+  load_timing_info->first_early_hints_time = first_early_hints_time_;
   return result;
 }
 

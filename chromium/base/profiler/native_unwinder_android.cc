@@ -4,21 +4,22 @@
 
 #include "base/profiler/native_unwinder_android.h"
 
+#include <sys/mman.h>
+
 #include <string>
 #include <vector>
 
-#include <sys/mman.h>
-
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Elf.h"
-#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Maps.h"
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Memory.h"
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Regs.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/profiler/module_cache.h"
 #include "base/profiler/native_unwinder.h"
 #include "base/profiler/profile_builder.h"
-#include "base/profiler/unwindstack_internal_android.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "build/build_config.h"
 
 #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
@@ -32,20 +33,46 @@
 namespace base {
 namespace {
 
+// Returns the hex string build id given the binary build id from MapInfo.
+// Returns the empty string if no build id is present.
+//
+// Build IDs follow a cross-platform format consisting of two fields
+// concatenated together:
+// - the module's unique id encoded as a hex string, and
+// - the age suffix for incremental builds.
+//
+// On POSIX, the unique id comes from the ELF binary's .note.gnu.build-id
+// section. The age field is always 0.
+std::string EncodeBuildID(StringPiece map_info_build_id) {
+  if (map_info_build_id.empty())
+    return std::string();
+
+  return HexEncode(map_info_build_id.data(), map_info_build_id.size()) + "0";
+}
+
+// We assume this is a file-backed region if the name looks like an absolute
+// path, and return the basename. Otherwise we assume the region is not
+// associated with a file and return the full name string.
+FilePath CreateDebugBasename(StringPiece map_info_name) {
+  const FilePath path = FilePath(map_info_name);
+  return !map_info_name.empty() && map_info_name[0] == '/' ? path.BaseName()
+                                                           : path;
+}
+
 class AndroidModule : public ModuleCache::Module {
  public:
   AndroidModule(unwindstack::MapInfo* map_info)
       : start_(map_info->start),
         size_(map_info->end - map_info->start),
-        build_id_(map_info->GetBuildID()),
-        name_(map_info->name) {}
+        build_id_(EncodeBuildID(map_info->GetBuildID())),
+        debug_basename_(CreateDebugBasename(map_info->name)) {}
   ~AndroidModule() override = default;
 
   uintptr_t GetBaseAddress() const override { return start_; }
 
   std::string GetId() const override { return build_id_; }
 
-  FilePath GetDebugBasename() const override { return FilePath(name_); }
+  FilePath GetDebugBasename() const override { return debug_basename_; }
 
   // Gets the size of the module.
   size_t GetSize() const override { return size_; }
@@ -56,7 +83,7 @@ class AndroidModule : public ModuleCache::Module {
   const uintptr_t start_;
   const size_t size_;
   const std::string build_id_;
-  const std::string name_;
+  const FilePath debug_basename_;
 };
 
 std::unique_ptr<unwindstack::Regs> CreateFromRegisterContext(
@@ -88,6 +115,23 @@ void CopyToRegisterContext(unwindstack::Regs* regs,
 
 }  // namespace
 
+UnwindStackMemoryAndroid::UnwindStackMemoryAndroid(uintptr_t stack_ptr,
+                                                   uintptr_t stack_top)
+    : stack_ptr_(stack_ptr), stack_top_(stack_top) {
+  DCHECK_LE(stack_ptr_, stack_top_);
+}
+
+UnwindStackMemoryAndroid::~UnwindStackMemoryAndroid() = default;
+
+size_t UnwindStackMemoryAndroid::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr < stack_ptr_)
+    return 0;
+  if (size >= stack_top_ || addr > stack_top_ - size)
+    return 0;
+  memcpy(dst, reinterpret_cast<void*>(addr), size);
+  return size;
+}
+
 // static
 std::unique_ptr<unwindstack::Maps> NativeUnwinderAndroid::CreateMaps() {
   auto maps = std::make_unique<unwindstack::LocalMaps>();
@@ -99,19 +143,7 @@ std::unique_ptr<unwindstack::Maps> NativeUnwinderAndroid::CreateMaps() {
 // static
 std::unique_ptr<unwindstack::Memory>
 NativeUnwinderAndroid::CreateProcessMemory() {
-  return std::make_unique<unwindstack::MemoryLocal>();
-}
-
-void NativeUnwinderAndroid::AddInitialModulesFromMaps(
-    const unwindstack::Maps& memory_regions_map,
-    ModuleCache* module_cache) {
-  for (const auto& region : memory_regions_map) {
-    // Only add executable regions.
-    if (!(region->flags & PROT_EXEC))
-      continue;
-    module_cache->AddCustomNativeModule(
-        std::make_unique<AndroidModule>(region.get()));
-  }
+  return unwindstack::Memory::CreateLocalProcessMemory();
 }
 
 NativeUnwinderAndroid::NativeUnwinderAndroid(
@@ -160,7 +192,8 @@ UnwindResult NativeUnwinderAndroid::TryUnwind(RegisterContext* thread_context,
     uintptr_t rel_pc = elf->GetRelPc(cur_pc, map_info);
     bool finished = false;
     bool stepped =
-        elf->Step(rel_pc, rel_pc, regs.get(), &stack_memory, &finished);
+        elf->StepIfSignalHandler(rel_pc, regs.get(), &stack_memory) ||
+        elf->Step(rel_pc, regs.get(), &stack_memory, &finished);
     if (stepped && finished)
       return UnwindResult::COMPLETED;
 
@@ -205,6 +238,19 @@ UnwindResult NativeUnwinderAndroid::TryUnwind(RegisterContext* thread_context,
   // Restore registers necessary for further unwinding in |thread_context|.
   CopyToRegisterContext(regs.get(), thread_context);
   return UnwindResult::UNRECOGNIZED_FRAME;
+}
+
+// static
+void NativeUnwinderAndroid::AddInitialModulesFromMaps(
+    const unwindstack::Maps& memory_regions_map,
+    ModuleCache* module_cache) {
+  for (const auto& region : memory_regions_map) {
+    // Only add executable regions.
+    if (!(region->flags & PROT_EXEC))
+      continue;
+    module_cache->AddCustomNativeModule(
+        std::make_unique<AndroidModule>(region.get()));
+  }
 }
 
 void NativeUnwinderAndroid::EmitDexFrame(uintptr_t dex_pc,

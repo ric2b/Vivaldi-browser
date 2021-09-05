@@ -10,8 +10,6 @@
 #include "cc/input/layer_selection_bound.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/trees/layer_tree_host.h"
-#include "mojo/public/cpp/bindings/associated_receiver.h"
-#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_device.h"
@@ -25,6 +23,10 @@
 #include "third_party/blink/renderer/platform/graphics/apply_viewport_changes.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
+#include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
@@ -33,7 +35,7 @@
 namespace gfx {
 class Point;
 class PointF;
-}
+}  // namespace gfx
 
 namespace blink {
 class AnimationWorkletMutatorDispatcherImpl;
@@ -83,6 +85,11 @@ class CORE_EXPORT WebFrameWidgetBase
   void AutoscrollFling(const gfx::Vector2dF& position);
   void AutoscrollEnd();
 
+  // Notifies RenderWidgetHostImpl that the frame widget has painted something.
+  void DidMeaningfulLayout(WebMeaningfulLayout layout_type);
+
+  bool HandleCurrentKeyboardEvent();
+
   // Creates or returns cached mutator dispatcher. This usually requires a
   // round trip to the compositor. The returned WeakPtr must only be
   // dereferenced on the output |mutator_task_runner|.
@@ -117,6 +124,37 @@ class CORE_EXPORT WebFrameWidgetBase
   cc::EventListenerProperties EventListenerProperties(
       cc::EventListenerClass) const final;
   mojom::blink::DisplayMode DisplayMode() const override;
+  const WebVector<WebRect>& WindowSegments() const override;
+  void SetDelegatedInkMetadata(
+      std::unique_ptr<viz::DelegatedInkMetadata> metadata) final;
+  void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
+                     const gfx::Vector2dF& accumulated_overscroll,
+                     const gfx::PointF& position,
+                     const gfx::Vector2dF& velocity) override;
+  void InjectGestureScrollEvent(WebGestureDevice device,
+                                const gfx::Vector2dF& delta,
+                                ui::ScrollGranularity granularity,
+                                cc::ElementId scrollable_area_element_id,
+                                WebInputEvent::Type injected_type) override;
+  void DidChangeCursor(const ui::Cursor&) override;
+  void GetCompositionCharacterBoundsInWindow(
+      Vector<gfx::Rect>* bounds) override;
+  gfx::Range CompositionRange() override;
+  WebTextInputInfo TextInputInfo() override;
+  ui::mojom::VirtualKeyboardVisibilityRequest
+  GetLastVirtualKeyboardVisibilityRequest() override;
+  bool ShouldSuppressKeyboardForFocusedElement() override;
+  void GetEditContextBoundsInWindow(
+      base::Optional<gfx::Rect>* control_bounds,
+      base::Optional<gfx::Rect>* selection_bounds) override;
+  int32_t ComputeWebTextInputNextPreviousFlags() override;
+  void ResetVirtualKeyboardVisibilityRequest() override;
+  bool GetSelectionBoundsInWindow(gfx::Rect* focus,
+                                  gfx::Rect* anchor,
+                                  base::i18n::TextDirection* focus_dir,
+                                  base::i18n::TextDirection* anchor_dir,
+                                  bool* is_anchor_first) override;
+  void ClearTextInputState() override;
 
   // WebFrameWidget implementation.
   WebLocalFrame* LocalRoot() const override;
@@ -125,19 +163,10 @@ class CORE_EXPORT WebFrameWidgetBase
                                        const gfx::PointF& screen_point,
                                        WebDragOperationsMask operations_allowed,
                                        int modifiers) override;
-  WebDragOperation DragTargetDragOver(const gfx::PointF& point_in_viewport,
-                                      const gfx::PointF& screen_point,
-                                      WebDragOperationsMask operations_allowed,
-                                      int modifiers) override;
-  void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
-                           const gfx::PointF& screen_point) override;
   void DragTargetDrop(const WebDragData&,
                       const gfx::PointF& point_in_viewport,
                       const gfx::PointF& screen_point,
                       int modifiers) override;
-  void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
-                         const gfx::PointF& screen_point,
-                         WebDragOperation) override;
   void SendOverscrollEventFromImplSide(
       const gfx::Vector2dF& overscroll_delta,
       cc::ElementId scroll_latched_element_id) override;
@@ -152,6 +181,13 @@ class CORE_EXPORT WebFrameWidgetBase
       WebReportTimeCallback presentation_callback) override;
   scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
       override;
+  void WaitForDebuggerWhenShown() override;
+  void SetTextZoomFactor(float text_zoom_factor) override;
+  float TextZoomFactor() override;
+  void SetMainFrameOverlayColor(SkColor) override;
+  void AddEditCommandForNextKeyEvent(const WebString& name,
+                                     const WebString& value) override;
+  void ClearEditCommands() override;
 
   // Called when a drag-n-drop operation should begin.
   void StartDragging(network::mojom::ReferrerPolicy,
@@ -177,7 +213,21 @@ class CORE_EXPORT WebFrameWidgetBase
   void ShowContextMenu(WebMenuSourceType) override;
   void SetCompositorVisible(bool visible) override;
   void SetDisplayMode(mojom::blink::DisplayMode) override;
+  void SetWindowSegments(WebVector<WebRect> window_segments) override;
   void SetCursor(const ui::Cursor& cursor) override;
+  bool HandlingInputEvent() override;
+  void SetHandlingInputEvent(bool handling) override;
+  void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
+                                      HandledEventCallback) override;
+  void UpdateTextInputState() override;
+  void ForceTextInputStateUpdate() override;
+  void UpdateCompositionInfo() override;
+  void UpdateSelectionBounds() override;
+  void ShowVirtualKeyboard() override;
+  void RequestCompositionUpdates(bool immediate_request,
+                                 bool monitor_updates) override;
+  bool HasFocus() override;
+  void SetFocus(bool focus) override;
 
   // WidgetBaseClient methods.
   void DispatchRafAlignedInput(base::TimeTicks frame_time) override;
@@ -189,12 +239,55 @@ class CORE_EXPORT WebFrameWidgetBase
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
   void DidCompletePageScaleAnimation() override;
+  void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) override;
   void DidBeginMainFrame() override;
   void WillBeginMainFrame() override;
+  void SubmitThroughputData(ukm::SourceId source_id,
+                            int aggregated_percent,
+                            int impl_percent,
+                            base::Optional<int> main_percent) override;
+  void FocusChangeComplete() override;
+  bool WillHandleGestureEvent(const WebGestureEvent& event) override;
+  bool WillHandleMouseEvent(const WebMouseEvent& event) override;
+  void ObserveGestureEventAndResult(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) override;
+  bool SupportsBufferedTouchEvents() override { return true; }
+  void DidHandleKeyEvent() override;
+  void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent>) override;
+  WebTextInputType GetTextInputType() override;
+  void GetWidgetInputHandler(
+      mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+      mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) override;
+  bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) override;
+  blink::FrameWidget* FrameWidget() override { return this; }
+  void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) override;
+  void ScheduleAnimationForWebTests() override;
 
   // mojom::blink::FrameWidget methods.
+  void DragTargetDragOver(const gfx::PointF& point_in_viewport,
+                          const gfx::PointF& screen_point,
+                          WebDragOperationsMask operations_allowed,
+                          uint32_t modifiers,
+                          DragTargetDragOverCallback callback) override;
+  void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
+                           const gfx::PointF& screen_point) override;
+  void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
+                         const gfx::PointF& screen_point,
+                         WebDragOperation) override;
   void DragSourceSystemDragEnded() override;
   void SetBackgroundOpaque(bool opaque) override;
+
+  // For both mainframe and childframe change the text direction of the
+  // currently selected input field (if any).
+  void SetTextDirection(base::i18n::TextDirection direction) override;
 
   // Sets the inherited effective touch action on an out-of-process iframe.
   void SetInheritedEffectiveTouchActionForSubFrame(
@@ -221,7 +314,7 @@ class CORE_EXPORT WebFrameWidgetBase
   // focused frame has a different local root.
   LocalFrame* FocusedLocalFrameInWidget() const;
 
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
   // For when the embedder itself change scales on the page (e.g. devtools)
   // and wants all of the content at the new scale to be crisp
@@ -280,6 +373,15 @@ class CORE_EXPORT WebFrameWidgetBase
   // BeginMainFrame, and update the document lifecycle.
   void SynchronouslyCompositeForTesting(base::TimeTicks frame_time);
 
+  void SetToolTipText(const String& tooltip_text, TextDirection dir);
+
+  void ShowVirtualKeyboardOnElementFocus();
+  void ProcessTouchAction(WebTouchAction touch_action);
+
+  // Called when a gesture event has been processed.
+  void DidHandleGestureEvent(const WebGestureEvent& event,
+                             bool event_cancelled);
+
  protected:
   enum DragAction { kDragEnter, kDragOver };
 
@@ -301,8 +403,7 @@ class CORE_EXPORT WebFrameWidgetBase
   // the page is shutting down, but will be valid at all other times.
   Page* GetPage() const;
 
-  const mojo::AssociatedRemote<mojom::blink::FrameWidgetHost>&
-  GetAssociatedFrameWidgetHost() const;
+  mojom::blink::FrameWidgetHost* GetAssociatedFrameWidgetHost() const;
 
   // Helper function to process events while pointer locked.
   void PointerLockMouseEvent(const WebCoalescedInputEvent&);
@@ -334,6 +435,8 @@ class CORE_EXPORT WebFrameWidgetBase
  private:
   void CancelDrag();
   void RequestAnimationAfterDelayTimerFired(TimerBase*);
+  void PresentationCallbackForMeaningfulLayout(blink::WebSwapResult,
+                                               base::TimeTicks);
 
   static bool ignore_input_events_;
 
@@ -345,6 +448,8 @@ class CORE_EXPORT WebFrameWidgetBase
   Member<WebLocalFrameImpl> local_root_;
 
   mojom::blink::DisplayMode display_mode_;
+
+  WebVector<WebRect> window_segments_;
 
   // This is owned by the LayerTreeHostImpl, and should only be used on the
   // compositor thread, so we keep the TaskRunner where you post tasks to
@@ -363,12 +468,21 @@ class CORE_EXPORT WebFrameWidgetBase
   std::unique_ptr<TaskRunnerTimer<WebFrameWidgetBase>>
       request_animation_after_delay_timer_;
 
-  mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host_;
-  mojo::AssociatedReceiver<mojom::blink::FrameWidget> receiver_;
+  // WebFrameWidgetBase is not tied to ExecutionContext
+  HeapMojoAssociatedRemote<mojom::blink::FrameWidgetHost,
+                           HeapMojoWrapperMode::kWithoutContextObserver>
+      frame_widget_host_{nullptr};
+  // WebFrameWidgetBase is not tied to ExecutionContext
+  HeapMojoAssociatedReceiver<mojom::blink::FrameWidget,
+                             WebFrameWidgetBase,
+                             HeapMojoWrapperMode::kWithoutContextObserver>
+      receiver_{this, nullptr};
 
   // Different consumers in the browser process makes different assumptions, so
   // must always send the first IPC regardless of value.
   base::Optional<bool> has_touch_handlers_;
+
+  Vector<mojom::blink::EditCommandPtr> edit_commands_;
 
   friend class WebViewImpl;
   friend class ReportTimeSwapPromise;

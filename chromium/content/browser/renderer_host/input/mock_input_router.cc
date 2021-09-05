@@ -45,13 +45,8 @@ base::Optional<cc::TouchAction> MockInputRouter::ActiveTouchAction() {
   return cc::TouchAction::kAuto;
 }
 
-mojo::PendingRemote<mojom::WidgetInputHandlerHost>
+mojo::PendingRemote<blink::mojom::WidgetInputHandlerHost>
 MockInputRouter::BindNewHost() {
-  return mojo::NullRemote();
-}
-
-mojo::PendingRemote<mojom::WidgetInputHandlerHost>
-MockInputRouter::BindNewFrameHost() {
   return mojo::NullRemote();
 }
 

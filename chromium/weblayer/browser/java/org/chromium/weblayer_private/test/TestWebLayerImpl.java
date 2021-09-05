@@ -6,6 +6,8 @@ package org.chromium.weblayer_private.test;
 
 import android.os.IBinder;
 
+import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.PermissionDialogController;
@@ -14,6 +16,13 @@ import org.chromium.device.geolocation.LocationProviderOverrider;
 import org.chromium.device.geolocation.MockLocationProvider;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.weblayer_private.InfoBarContainer;
+import org.chromium.weblayer_private.InfoBarUiItem;
+import org.chromium.weblayer_private.TabImpl;
+import org.chromium.weblayer_private.WebLayerAccessibilityUtil;
+import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.ITab;
+import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.test_interfaces.ITestWebLayer;
 
 import java.util.concurrent.ExecutionException;
@@ -21,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 /**
  * Root implementation class for TestWebLayer.
  */
+@JNINamespace("weblayer")
 @UsedByReflection("WebLayer")
 public final class TestWebLayerImpl extends ITestWebLayer.Stub {
     private MockLocationProvider mMockLocationProvider;
@@ -85,5 +95,71 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
                 };
             });
         });
+    }
+
+    @Override
+    public void waitForBrowserControlsMetadataState(
+            ITab tab, int topHeight, int bottomHeight, IObjectWrapper runnable) {
+        TestWebLayerImplJni.get().waitForBrowserControlsMetadataState(
+                ((TabImpl) tab).getNativeTab(), topHeight, bottomHeight,
+                ObjectWrapper.unwrap(runnable, Runnable.class));
+    }
+
+    @Override
+    public void setAccessibilityEnabled(boolean value) {
+        WebLayerAccessibilityUtil.get().setAccessibilityEnabledForTesting(value);
+    }
+
+    @Override
+    public void addInfoBar(ITab tab, IObjectWrapper runnable) {
+        Runnable unwrappedRunnable = ObjectWrapper.unwrap(runnable, Runnable.class);
+        TabImpl tabImpl = (TabImpl) tab;
+
+        InfoBarContainer infoBarContainer = tabImpl.getInfoBarContainerForTesting();
+        infoBarContainer.addAnimationListener(new InfoBarContainer.InfoBarAnimationListener() {
+            @Override
+            public void notifyAnimationFinished(int animationType) {}
+            @Override
+            public void notifyAllAnimationsFinished(InfoBarUiItem frontInfoBar) {
+                unwrappedRunnable.run();
+                infoBarContainer.removeAnimationListener(this);
+            }
+        });
+
+        TestInfoBar.show((TabImpl) tab);
+    }
+
+    @Override
+    public IObjectWrapper getInfoBarContainerView(ITab tab) {
+        return ObjectWrapper.wrap(
+                ((TabImpl) tab).getInfoBarContainerForTesting().getViewForTesting());
+    }
+
+    @Override
+    public boolean canBrowserControlsScroll(ITab tab) {
+        return ((TabImpl) tab).canBrowserControlsScrollForTesting();
+    }
+
+    @Override
+    public void setIgnoreMissingKeyForTranslateManager(boolean ignore) {
+        TestWebLayerImplJni.get().setIgnoreMissingKeyForTranslateManager(ignore);
+    }
+
+    @Override
+    public void forceNetworkConnectivityState(boolean networkAvailable) {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { NetworkChangeNotifier.forceConnectivityState(true); });
+    }
+
+    @NativeMethods
+    interface Natives {
+        void waitForBrowserControlsMetadataState(
+                long tabImpl, int top, int bottom, Runnable runnable);
+        void setIgnoreMissingKeyForTranslateManager(boolean ignore);
+    }
+
+    @Override
+    public boolean canInfoBarContainerScroll(ITab tab) {
+        return ((TabImpl) tab).canInfoBarContainerScrollForTesting();
     }
 }

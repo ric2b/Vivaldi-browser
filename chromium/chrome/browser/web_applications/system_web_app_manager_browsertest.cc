@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -31,9 +32,9 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/services/app_service/public/cpp/app_registry_cache.h"
-#include "chrome/services/app_service/public/cpp/app_update.h"
 #include "components/permissions/permission_util.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_update.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller_factory.h"
@@ -50,6 +51,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/chromeos/file_manager/file_manager_test_util.h"
 #include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
@@ -218,21 +220,15 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest,
 
 class SystemWebAppManagerFileHandlingBrowserTestBase
     : public SystemWebAppManagerBrowserTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<bool> {
  public:
   using IncludeLaunchDirectory =
       TestSystemWebAppInstallation::IncludeLaunchDirectory;
   explicit SystemWebAppManagerFileHandlingBrowserTestBase(
       IncludeLaunchDirectory include_launch_directory)
       : SystemWebAppManagerBrowserTestBase(/*install_mock=*/false) {
-    bool enable_origin_scoped_permission_context;
-    bool enable_desktop_pwas_without_extensions;
-    std::tie(enable_origin_scoped_permission_context,
-             enable_desktop_pwas_without_extensions) = GetParam();
+    bool enable_desktop_pwas_without_extensions = GetParam();
 
-    scoped_feature_permission_context_.InitWithFeatureState(
-        features::kNativeFileSystemOriginScopedPermissions,
-        enable_origin_scoped_permission_context);
     scoped_feature_web_app_provider_type_.InitWithFeatureState(
         features::kDesktopPWAsWithoutExtensions,
         enable_desktop_pwas_without_extensions);
@@ -247,7 +243,6 @@ class SystemWebAppManagerFileHandlingBrowserTestBase
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_permission_context_;
   base::test::ScopedFeatureList scoped_feature_web_app_provider_type_;
   base::test::ScopedFeatureList scoped_feature_blink_api_;
 };
@@ -349,15 +344,16 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
       : SystemWebAppManagerFileHandlingBrowserTestBase(
             IncludeLaunchDirectory::kYes) {}
 
-  // Returns the content of |jsIdentifier| file handle.
-  std::string ReadContentFromJsFileHandle(content::WebContents* web_contents,
-                                          const std::string& jsIdentifier) {
+  // Returns the content of |file_handle_or_promise| file handle.
+  std::string ReadContentFromJsFileHandle(
+      content::WebContents* web_contents,
+      const std::string& file_handle_or_promise) {
     std::string js_file_content;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
         web_contents,
-        "Promise.resolve(" + jsIdentifier + ")" +
-            ".then(async (identifier) => {"
-            "  const file = await identifier.getFile();"
+        "Promise.resolve(" + file_handle_or_promise + ")" +
+            ".then(async (fileHandle) => {"
+            "  const file = await fileHandle.getFile();"
             "  const content = await file.text();"
             "  window.domAutomationController.send(content);"
             "});",
@@ -365,36 +361,36 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
     return js_file_content;
   }
 
-  // Writes |contentToWrite| to |jsIdentifier| file handle. Returns whether
-  // JavaScript execution finishes.
+  // Writes |content_to_write| to |file_handle_or_promise| file handle. Returns
+  // whether JavaScript execution finishes.
   bool WriteContentToJsFileHandle(content::WebContents* web_contents,
-                                  const std::string& jsIdentifier,
-                                  const std::string& contentToWrite) {
+                                  const std::string& file_handle_or_promise,
+                                  const std::string& content_to_write) {
     bool file_written;
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
         web_contents,
         content::JsReplace(
-            "Promise.resolve(" + jsIdentifier + ")" +
-                ".then(async (file_handle) => {"
-                "  const writable = await file_handle.createWritable();"
+            "Promise.resolve(" + file_handle_or_promise + ")" +
+                ".then(async (fileHandle) => {"
+                "  const writable = await fileHandle.createWritable();"
                 "  await writable.write($1);"
                 "  await writable.close();"
                 "  window.domAutomationController.send(true);"
                 "});",
-            contentToWrite),
+            content_to_write),
         &file_written));
     return file_written;
   }
 
-  // Remove file by |file_name| from |jsIdentifier| directory handle. Returns
-  // whether JavaScript execution finishes.
+  // Remove file by |file_name| from |dir_handle_or_promise| directory handle.
+  // Returns whether JavaScript execution finishes.
   bool RemoveFileFromJsDirectoryHandle(content::WebContents* web_contents,
-                                       const std::string& jsIdentifier,
+                                       const std::string& dir_handle_or_promise,
                                        const std::string& file_name) {
     bool file_removed;
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
         web_contents,
-        content::JsReplace("Promise.resolve(" + jsIdentifier + ")" +
+        content::JsReplace("Promise.resolve(" + dir_handle_or_promise + ")" +
                                ".then(async (dir_handle) => {"
                                "  await dir_handle.removeEntry($1);"
                                "  domAutomationController.send(true);"
@@ -671,6 +667,222 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
   TestPermissionsForLaunchDirectory(sensitive_dir);
 }
 
+#if defined(OS_CHROMEOS)
+
+// Base class for testing File Handling and Native File System with Chrome OS
+// File System Provider features.
+class SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest
+    : public SystemWebAppManagerLaunchDirectoryBrowserTest {
+ public:
+  bool CheckFileIsGif(content::WebContents* web_contents,
+                      const std::string& file_handle_or_promise) {
+    bool is_gif_signature;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        "Promise.resolve(" + file_handle_or_promise + ")" +
+            ".then(async file => {"
+            "  const arrayBuf = await file.arrayBuffer();"
+            "  const bytes = new Uint8Array(arrayBuf.slice(0, 3));"
+            "  const isGifSignature = bytes[0] === 0x47        /* G */"
+            "                         && bytes[1] === 0x49     /* I */ "
+            "                         && bytes[2] === 0x46;    /* F */"
+            "  domAutomationController.send(isGifSignature);"
+            "});",
+        &is_gif_signature));
+    return is_gif_signature;
+  }
+
+  bool CheckFileIsPng(content::WebContents* web_contents,
+                      const std::string& file_handle_or_promise) {
+    bool is_png_signature;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        "Promise.resolve(" + file_handle_or_promise + ")" +
+            ".then(async file => {"
+            "  const arrayBuf = await file.arrayBuffer();"
+            "  const bytes = new Uint8Array(arrayBuf.slice(0, 4));"
+            "  const isPngSignature = bytes[0] === 0x89        /* 0x89 */"
+            "                         && bytes[1] === 0x50     /* P */"
+            "                         && bytes[2] === 0x4E     /* N */"
+            "                         && bytes[3] === 0x47;    /* G */"
+            "  domAutomationController.send(isPngSignature);"
+            "});",
+        &is_png_signature));
+    return is_png_signature;
+  }
+
+  // Returns whether the file is written.
+  bool CheckCanWriteFile(content::WebContents* web_contents,
+                         const std::string& file_handle_or_promise) {
+    bool file_written;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        "Promise.resolve(" + file_handle_or_promise + ")" +
+            ".then(async fileHandle => {"
+            "  try {"
+            "    const writable = await fileHandle.createWritable();"
+            "    await writable.write('test');"
+            "    await writable.close();"
+            "    domAutomationController.send(true);"
+            "  } catch(err) {"
+            "    console.error('write failed: ' + err.message);"
+            "    domAutomationController.send(false);"
+            "  }"
+            "});",
+        &file_written));
+    return file_written;
+  }
+
+  void InstallTestFileSystemProvider(Profile* profile) {
+    volume_ = file_manager::test::InstallFileSystemProviderChromeApp(profile);
+  }
+
+  base::FilePath GetFileSystemProviderFilePath(const std::string& file_name) {
+    return volume_->mount_path().AppendASCII(file_name);
+  }
+
+  // Wait for System App Launch.
+  content::WebContents* WaitForApplicationLaunch(
+      Profile* profile,
+      const base::FilePath& launch_file) {
+    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
+    params.launch_files = {launch_file};
+
+    content::WebContents* web_contents = LaunchApp(params);
+    EXPECT_TRUE(WaitForLoadStop(web_contents));
+    return web_contents;
+  }
+
+  // Install a File Handling API launchQueue consumer, which copies the provided
+  // launch params to a JavaScript global named |js_property_name|.
+  bool WaitAndExposeLaunchParamsToWindow(
+      content::WebContents* web_contents,
+      const std::string js_property_name = "launchParams") {
+    bool launch_params_received;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        content::JsReplace("launchQueue.setConsumer(launchParams => {"
+                           "  window[$1] = launchParams;"
+                           "  domAutomationController.send(true);"
+                           "});",
+                           js_property_name),
+        &launch_params_received));
+    return launch_params_received;
+  }
+
+ private:
+  base::WeakPtr<file_manager::Volume> volume_;
+};
+
+IN_PROC_BROWSER_TEST_P(
+    SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest,
+    LaunchFromFileSystemProvider_ReadFiles) {
+  Profile* profile = browser()->profile();
+
+  WaitForTestSystemAppInstall();
+  InstallTestFileSystemProvider(profile);
+
+  // Launch from FileSystemProvider path.
+  const char kTestGifFile[] = "readwrite.gif";
+  const char kTestPngFile[] = "readonly.png";
+  const base::FilePath launch_file =
+      GetFileSystemProviderFilePath(kTestGifFile);
+
+  content::WebContents* web_contents =
+      WaitForApplicationLaunch(profile, launch_file);
+
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
+
+  // Check the launch file is the one we expect.
+  std::string file_name;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents,
+      "domAutomationController.send(window.launchParams.files[1].name);",
+      &file_name));
+  EXPECT_EQ(kTestGifFile, file_name);
+
+  // Check we can read the file by looking for GIF file signature.
+  EXPECT_TRUE(
+      CheckFileIsGif(web_contents, "window.launchParams.files[1].getFile()"));
+
+  // Check we can list the directory.
+  std::string file_names;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents,
+      "(async function() {"
+      "  let fileNames = [];"
+      "  const files = await window.launchParams.files[0].getEntries();"
+      "  for await (const f of files)"
+      "    fileNames.push(f.name);"
+      "  domAutomationController.send(fileNames.sort().join(';'));"
+      "})();",
+      &file_names));
+  EXPECT_EQ(base::StrCat({kTestPngFile, ";", kTestGifFile}), file_names);
+
+  // Verify we can read a file (other than launch file) inside the directory.
+  EXPECT_TRUE(CheckFileIsPng(
+      web_contents,
+      content::JsReplace("window.launchParams.files[0].getFile($1).then("
+                         "  fileHandle => fileHandle.getFile())",
+                         kTestPngFile)));
+}
+
+// Test that the Native File System implementation doesn't cause a crash when
+// writing to readonly files.
+IN_PROC_BROWSER_TEST_P(
+    SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest,
+    LaunchFromFileSystemProvider_WriteFileFails) {
+  Profile* profile = browser()->profile();
+
+  WaitForTestSystemAppInstall();
+  InstallTestFileSystemProvider(profile);
+  content::WebContents* web_contents = WaitForApplicationLaunch(
+      profile, GetFileSystemProviderFilePath("readonly.png"));
+
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
+
+  // Try to write the file.
+  EXPECT_FALSE(CheckCanWriteFile(web_contents, "window.launchParams.files[1]"));
+
+  // Do a no-op JavaScript to check the page is still operational. If the page
+  // crashed, the following call will fail.
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "(function() {})();"));
+}
+
+// Test that the Native File System implementation doesn't cause a crash when
+// deleting readonly files.
+IN_PROC_BROWSER_TEST_P(
+    SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest,
+    LaunchFromFileSystemProvider_DeleteFileFails) {
+  Profile* profile = browser()->profile();
+
+  WaitForTestSystemAppInstall();
+  InstallTestFileSystemProvider(profile);
+  content::WebContents* web_contents = WaitForApplicationLaunch(
+      profile, GetFileSystemProviderFilePath("readonly.png"));
+
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
+
+  // Try to delete the file.
+  bool file_deleted;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      web_contents,
+      content::JsReplace("window.launchParams.files[0].removeEntry($1)"
+                         ".then("
+                         "  _ => domAutomationController.send(true),"
+                         "  error => domAutomationController.send(false)"
+                         ");",
+                         "readonly.png"),
+      &file_deleted));
+  EXPECT_FALSE(file_deleted);
+
+  // Do a no-op JavaScript to check the page is still operational. If the page
+  // crashed, the following call will fail.
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "(function() {})();"));
+}
+#endif  //  defined(OS_CHROMEOS)
+
 class SystemWebAppManagerFileHandlingOriginTrialsBrowserTest
     : public SystemWebAppManagerBrowserTest {
  public:
@@ -808,6 +1020,37 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAdditionalSearchTermsTest,
         EXPECT_EQ(std::vector<std::string>({"Security"}),
                   update.AdditionalSearchTerms());
       });
+}
+
+// Tests that SWA are correctly uninstalled across restarts.
+class SystemWebAppManagerUninstallBrowserTest
+    : public SystemWebAppManagerBrowserTest {
+ public:
+  SystemWebAppManagerUninstallBrowserTest()
+      : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
+    if (content::IsPreTest()) {
+      // Use an app with FileHandling enabled since it will perform extra setup
+      // steps.
+      maybe_installation_ =
+          TestSystemWebAppInstallation::SetUpAppWithEnabledOriginTrials(
+              OriginTrialsMap(
+                  {{url::Origin::Create(GURL("chrome://test-system-app/")),
+                    {"NativeFileSystem2", "FileHandling"}}}));
+    } else {
+      maybe_installation_ = TestSystemWebAppInstallation::SetUpWithoutApps();
+    }
+  }
+  ~SystemWebAppManagerUninstallBrowserTest() override = default;
+};
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUninstallBrowserTest, PRE_Uninstall) {
+  WaitForTestSystemAppInstall();
+  EXPECT_TRUE(GetManager().GetAppIdForSystemApp(GetMockAppType()).has_value());
+}
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUninstallBrowserTest, Uninstall) {
+  WaitForTestSystemAppInstall();
+  EXPECT_TRUE(GetManager().GetAppIds().empty());
 }
 
 // Tests that SWA-specific data is correctly migrated to Web Apps without
@@ -1193,19 +1436,20 @@ INSTANTIATE_TEST_SUITE_P(All,
                                            ProviderType::kWebApps),
                          ProviderTypeParamToString);
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SystemWebAppManagerLaunchFilesBrowserTest,
-    testing::Combine(
-        /* enable_origin_scoped_permission_context */ testing::Bool(),
-        /* enable_pwas_without_extensions */ testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(All,
+                         SystemWebAppManagerLaunchFilesBrowserTest,
+                         testing::Bool());
 
+INSTANTIATE_TEST_SUITE_P(All,
+                         SystemWebAppManagerLaunchDirectoryBrowserTest,
+                         testing::Bool());
+
+#if defined(OS_CHROMEOS)
 INSTANTIATE_TEST_SUITE_P(
     All,
-    SystemWebAppManagerLaunchDirectoryBrowserTest,
-    testing::Combine(
-        /* enable_origin_scoped_permission_context */ testing::Bool(),
-        /* enable_desktop_pwas_without_extensions */ testing::Bool()));
+    SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest,
+    testing::Bool());
+#endif
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SystemWebAppManagerNotShownInLauncherTest,
@@ -1239,6 +1483,12 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SystemWebAppManagerUninstallBrowserTest,
                          ::testing::Values(ProviderType::kBookmarkApps,
                                            ProviderType::kWebApps),
                          ProviderTypeParamToString);

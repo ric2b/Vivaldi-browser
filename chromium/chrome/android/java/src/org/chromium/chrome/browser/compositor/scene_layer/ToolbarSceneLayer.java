@@ -9,7 +9,10 @@ import android.graphics.RectF;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.Layout.ViewportMode;
 import org.chromium.chrome.browser.compositor.layouts.LayoutProvider;
@@ -18,7 +21,7 @@ import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar.DrawingInfo;
@@ -49,16 +52,26 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
     /** A LayoutRenderHost for accessing drawing information about the toolbar. */
     private LayoutRenderHost mRenderHost;
 
+    /** A Layout for browser controls. */
+    private final ControlContainer mToolbarContainer;
+
+    /** Provides current tab. */
+    private final Supplier<Tab> mCurrentTab;
+
     /**
      * @param context An Android context to use.
      * @param provider A LayoutProvider for accessing the current layout.
      * @param renderHost A LayoutRenderHost for accessing drawing information about the toolbar.
+     * @param toolbarContainer A Layout for browser controls.
+     * @param currentTab A supplier for the current tab.
      */
-    public ToolbarSceneLayer(Context context, LayoutProvider provider,
-            LayoutRenderHost renderHost) {
+    public ToolbarSceneLayer(Context context, LayoutProvider provider, LayoutRenderHost renderHost,
+            ControlContainer toolbarContainer, Supplier<Tab> currentTab) {
         mContext = context;
         mLayoutProvider = provider;
         mRenderHost = renderHost;
+        mToolbarContainer = toolbarContainer;
+        mCurrentTab = currentTab;
     }
 
     /**
@@ -66,7 +79,7 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
      *
      * @param browserControlsBackgroundColor The background color of the browser controls.
      * @param browserControlsUrlBarAlpha The alpha of the URL bar.
-     * @param fullscreenManager A ChromeFullscreenManager instance.
+     * @param browserControlsStateProvider A BrowserControlsStateProvider instance.
      * @param resourceManager A ResourceManager for loading static resources.
      * @param forceHideAndroidBrowserControls True if the Android browser controls are being hidden.
      * @param viewportMode The sizing mode of the viewport being drawn in.
@@ -74,29 +87,29 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
      * @param windowHeight The height of the window.
      */
     private void update(int browserControlsBackgroundColor, float browserControlsUrlBarAlpha,
-            ChromeFullscreenManager fullscreenManager, ResourceManager resourceManager,
-            boolean forceHideAndroidBrowserControls, @ViewportMode int viewportMode,
-            boolean isTablet, float windowHeight) {
+            BrowserControlsStateProvider browserControlsStateProvider,
+            ResourceManager resourceManager, boolean forceHideAndroidBrowserControls,
+            @ViewportMode int viewportMode, boolean isTablet, float windowHeight) {
         if (!DeviceClassManager.enableFullscreen()) return;
 
-        if (fullscreenManager == null) return;
-        ControlContainer toolbarContainer = fullscreenManager.getControlContainer();
-        if (!isTablet && toolbarContainer != null) {
+        if (browserControlsStateProvider == null) return;
+        if (!isTablet && mToolbarContainer != null) {
             if (mProgressBarDrawingInfo == null) mProgressBarDrawingInfo = new DrawingInfo();
-            toolbarContainer.getProgressBarDrawingInfo(mProgressBarDrawingInfo);
+            mToolbarContainer.getProgressBarDrawingInfo(mProgressBarDrawingInfo);
         } else {
             assert mProgressBarDrawingInfo == null;
         }
 
         // Texture is always used unless it is completely off-screen.
-        boolean useTexture = !fullscreenManager.areBrowserControlsOffScreen()
+        boolean useTexture =
+                !BrowserControlsUtils.areBrowserControlsOffScreen(browserControlsStateProvider)
                 && viewportMode != ViewportMode.ALWAYS_FULLSCREEN;
-        boolean showShadow = fullscreenManager.drawControlsAsTexture()
-                || forceHideAndroidBrowserControls;
+        boolean drawControlsAsTexture =
+                BrowserControlsUtils.drawControlsAsTexture(browserControlsStateProvider);
+        boolean showShadow = drawControlsAsTexture || forceHideAndroidBrowserControls;
 
-        int textBoxColor =
-                ToolbarColors.getTextBoxColorForToolbarBackground(mContext.getResources(),
-                        fullscreenManager.getTab(), browserControlsBackgroundColor);
+        int textBoxColor = ToolbarColors.getTextBoxColorForToolbarBackground(
+                mContext.getResources(), mCurrentTab.get(), browserControlsBackgroundColor);
 
         int textBoxResourceId = R.drawable.modern_location_bar;
 
@@ -107,7 +120,8 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
             ToolbarSceneLayerJni.get().updateToolbarLayer(mNativePtr, ToolbarSceneLayer.this,
                     resourceManager, R.id.control_container, browserControlsBackgroundColor,
                     textBoxResourceId, browserControlsUrlBarAlpha, textBoxColor,
-                    fullscreenManager.getTopControlOffset(), windowHeight, useTexture, showShadow);
+                    browserControlsStateProvider.getTopControlOffset(), windowHeight, useTexture,
+                    showShadow);
         } else
         // The content offset is passed to the toolbar layer so that it can position itself at the
         // bottom of the space available for top controls. The main reason for using content offset
@@ -117,7 +131,8 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
         ToolbarSceneLayerJni.get().updateToolbarLayer(mNativePtr, ToolbarSceneLayer.this,
                 resourceManager, R.id.control_container, browserControlsBackgroundColor,
                 textBoxResourceId, browserControlsUrlBarAlpha, textBoxColor,
-                fullscreenManager.getContentOffset(), windowHeight, useTexture, showShadow);
+                browserControlsStateProvider.getContentOffset(), windowHeight, useTexture,
+                showShadow);
 
         if (mProgressBarDrawingInfo == null) return;
         ToolbarSceneLayerJni.get().updateProgressBar(mNativePtr, ToolbarSceneLayer.this,

@@ -300,8 +300,6 @@ void VivaldiAccountManager::ClearTokens() {
   token_received_time_ = base::Time();
   refresh_token_.clear();
   profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountRefreshToken);
-  device_id_.clear();
-  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountDeviceId);
   has_encrypted_refresh_token_ = false;
 
   last_token_fetch_error_ = FetchError();
@@ -319,6 +317,8 @@ void VivaldiAccountManager::Reset() {
   account_info_ = AccountInfo();
   account_info_.username.swap(username);
   profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountId);
+  device_id_.clear();
+  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountDeviceId);
 }
 
 void VivaldiAccountManager::OnTokenRequestDone(

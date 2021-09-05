@@ -24,6 +24,7 @@
 #include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/os_user_manager.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
+#include "chrome/credential_provider/gaiacp/user_policies_manager.h"
 #include "chrome/credential_provider/gaiacp/win_http_url_fetcher.h"
 
 namespace credential_provider {
@@ -139,7 +140,28 @@ HRESULT ModifyUserAccess(const std::unique_ptr<ScopedLsaPolicy>& policy,
     return hr;
   }
 
-  return manager->ModifyUserAccessWithLogonHours(domain, username, allow);
+  PSID psid;
+  if (!::ConvertStringSidToSidW(sid.c_str(), &psid)) {
+    hr = HRESULT_FROM_WIN32(::GetLastError());
+    LOGFN(ERROR) << "ConvertStringSidToSidW sid=" << sid << " hr=" << putHR(hr);
+    return hr;
+  }
+
+  std::vector<base::string16> account_rights{
+      SE_DENY_INTERACTIVE_LOGON_NAME, SE_DENY_NETWORK_LOGON_NAME,
+      SE_DENY_REMOTE_INTERACTIVE_LOGON_NAME};
+  if (!allow) {
+    return policy->AddAccountRights(psid, account_rights);
+  } else {
+    // Note: We are still going to keep this time restrictions flow to avoid
+    // any cornercase scenario where user is blocked on login UI because
+    // time restrictions were set but were never added back.
+    hr = manager->ModifyUserAccessWithLogonHours(domain, username, allow);
+    if (FAILED(hr))
+      LOGFN(ERROR) << "Failed to remove time restrictions for sid : " << sid;
+
+    return policy->RemoveAccountRights(psid, account_rights);
+  }
 }
 
 }  // namespace
@@ -192,39 +214,54 @@ AssociatedUserValidator::~AssociatedUserValidator() = default;
 
 bool AssociatedUserValidator::IsOnlineLoginStale(
     const base::string16& sid) const {
-  wchar_t last_login_millis[512];
-  ULONG last_login_size = base::size(last_login_millis);
-  HRESULT hr = GetUserProperty(
-      sid, base::UTF8ToUTF16(kKeyLastSuccessfulOnlineLoginMillis),
-      last_login_millis, &last_login_size);
+  wchar_t last_token_valid_millis[512];
+  ULONG last_token_valid_size = base::size(last_token_valid_millis);
+  HRESULT hr = GetUserProperty(sid, base::UTF8ToUTF16(kKeyLastTokenValid),
+                               last_token_valid_millis, &last_token_valid_size);
 
   if (FAILED(hr)) {
-    LOGFN(VERBOSE) << "GetUserProperty for "
-                   << kKeyLastSuccessfulOnlineLoginMillis
+    LOGFN(VERBOSE) << "GetUserProperty for " << kKeyLastTokenValid
                    << " failed. hr=" << putHR(hr);
-    // Fallback to the less obstructive option to not enforce login via google
-    // when fetching the registry entry fails.
-    return false;
+    // DEPRECATED FLOW. Keeping it for backward compatibility.
+    HRESULT hr = GetUserProperty(
+        sid, base::UTF8ToUTF16(kKeyLastSuccessfulOnlineLoginMillis),
+        last_token_valid_millis, &last_token_valid_size);
+
+    if (FAILED(hr)) {
+      LOGFN(VERBOSE) << "GetUserProperty for "
+                     << kKeyLastSuccessfulOnlineLoginMillis
+                     << " failed. hr=" << putHR(hr);
+      // Fallback to the less obstructive option to not enforce
+      // login via google when fetching the registry entry fails.
+      return false;
+    }
   }
-  int64_t last_login_millis_int64;
-  base::StringToInt64(last_login_millis, &last_login_millis_int64);
+
+  int64_t last_token_valid_millis_int64;
+  base::StringToInt64(last_token_valid_millis, &last_token_valid_millis_int64);
 
   DWORD validity_period_days;
-  hr = GetGlobalFlag(base::UTF8ToUTF16(kKeyValidityPeriodInDays),
-                     &validity_period_days);
-  if (FAILED(hr)) {
-    LOGFN(VERBOSE) << "GetGlobalFlag for " << kKeyValidityPeriodInDays
-                   << " failed. hr=" << putHR(hr);
-    // Fallback to the less obstructive option to not enforce login via google
-    // when fetching the registry entry fails.
-    return false;
+  if (UserPoliciesManager::Get()->CloudPoliciesEnabled()) {
+    UserPolicies user_policies;
+    UserPoliciesManager::Get()->GetUserPolicies(sid, &user_policies);
+    validity_period_days = user_policies.validity_period_days;
+  } else {
+    hr = GetGlobalFlag(base::UTF8ToUTF16(kKeyValidityPeriodInDays),
+                       &validity_period_days);
+    if (FAILED(hr)) {
+      LOGFN(VERBOSE) << "GetGlobalFlag for " << kKeyValidityPeriodInDays
+                     << " failed. hr=" << putHR(hr);
+      // Fallback to the less obstructive option to not enforce login via google
+      // when fetching the registry entry fails.
+      return false;
+    }
   }
 
   int64_t validity_period_in_millis =
       kDayInMillis * static_cast<int64_t>(validity_period_days);
   int64_t time_delta_from_last_login =
       base::Time::Now().ToDeltaSinceWindowsEpoch().InMilliseconds() -
-      last_login_millis_int64;
+      last_token_valid_millis_int64;
   return time_delta_from_last_login >= validity_period_in_millis;
 }
 
@@ -510,9 +547,9 @@ AssociatedUserValidator::GetAuthEnforceReason(const base::string16& sid) {
     return AssociatedUserValidator::EnforceAuthReason::ONLINE_LOGIN_STALE;
   }
 
-  // If mdm enrollment is needed, then force a reauth for all users so
-  // that they enroll.
-  if (NeedsToEnrollWithMdm())
+  // Force a reauth only for this user if mdm enrollment is needed, so that they
+  // enroll.
+  if (NeedsToEnrollWithMdm(sid))
     return AssociatedUserValidator::EnforceAuthReason::NOT_ENROLLED_WITH_MDM;
 
   if (PasswordRecoveryEnabled()) {
@@ -598,6 +635,14 @@ bool AssociatedUserValidator::IsTokenHandleValidForUser(
     validity_it->second->last_update = now > validity_it->second->last_update
                                            ? validity_it->second->last_update
                                            : now;
+  }
+
+  if (validity_it->second->is_valid) {
+    // Update the last token valid timestamp.
+    int64_t current_time = static_cast<int64_t>(
+        base::Time::Now().ToDeltaSinceWindowsEpoch().InMilliseconds());
+    SetUserProperty(sid, base::UTF8ToUTF16(kKeyLastTokenValid),
+                    base::NumberToString16(current_time));
   }
 
   return validity_it->second->is_valid;

@@ -90,7 +90,7 @@ WebSecurityOrigin WebDocument::GetSecurityOrigin() const {
 
 bool WebDocument::IsSecureContext() const {
   const Document* document = ConstUnwrap<Document>();
-  return document && document->IsSecureContext();
+  return document && document->GetExecutionContext()->IsSecureContext();
 }
 
 WebString WebDocument::Encoding() const {
@@ -233,11 +233,12 @@ void WebDocument::WatchCSSSelectors(const WebVector<WebString>& web_selectors) {
 }
 
 network::mojom::ReferrerPolicy WebDocument::GetReferrerPolicy() const {
-  return ConstUnwrap<Document>()->GetReferrerPolicy();
+  return ConstUnwrap<Document>()->GetExecutionContext()->GetReferrerPolicy();
 }
 
 WebString WebDocument::OutgoingReferrer() {
-  return WebString(Unwrap<Document>()->OutgoingReferrer());
+  return WebString(
+      Unwrap<Document>()->GetExecutionContext()->OutgoingReferrer());
 }
 
 WebVector<WebDraggableRegion> WebDocument::DraggableRegions() const {

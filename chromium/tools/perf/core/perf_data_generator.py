@@ -93,7 +93,12 @@ class TEST_TYPES(object):
 # This is an opt-in list for tester which will skip the perf data handling.
 # The perf data will be handled on a separated 'processor' VM.
 # This list will be removed or replace by an opt-out list.
-LIGHTWEIGHT_TESTERS = ['linux-perf-fyi', 'android-pixel2-perf-fyi']
+LIGHTWEIGHT_TESTERS = [
+    'android-pixel2-perf', 'android-pixel2_webview-perf', 'linux-perf',
+    'mac-10_12_laptop_low_end-perf', 'mac-10_13_laptop_high_end-perf',
+    'win-10-perf', 'win-10_laptop_low_end-perf', 'android-pixel2-perf-fyi',
+    'linux-perf-fyi', 'win-10_laptop_low_end-perf_HP-Candidate'
+]
 
 FYI_BUILDERS = {
     'android-nexus5x-perf-fyi': {
@@ -108,7 +113,7 @@ FYI_BUILDERS = {
         'platform':
         'android-chrome',
         'dimension': {
-            'pool': 'chrome.tests.perf-fyi.template',
+            'pool': 'chrome.tests.perf-fyi',
             'os': 'Android',
             'device_type': 'bullhead',
             'device_os': 'MMB29Q',
@@ -122,7 +127,7 @@ FYI_BUILDERS = {
         'platform': 'android-chrome',
         'browser': 'bin/monochrome_64_32_bundle',
         'dimension': {
-            'pool': 'chrome.tests.perf-fyi.template',
+            'pool': 'chrome.tests.perf-fyi',
             'os': 'Android',
             'device_type': 'walleye',
             'device_os': 'O',
@@ -139,7 +144,7 @@ FYI_BUILDERS = {
         'platform':
         'android-chrome-bundle',
         'dimension': {
-            'pool': 'chrome.tests.perf-fyi.template',
+            'pool': 'chrome.tests.perf-fyi',
             'os': 'Android',
             'device_type': 'walleye',
             'device_os': 'O',
@@ -161,7 +166,7 @@ FYI_BUILDERS = {
             'gpu': '10de',
             'id': 'build186-b7',
             'os': 'Ubuntu-14.04',
-            'pool': 'chrome.tests.perf-fyi.template',
+            'pool': 'chrome.tests.perf-fyi',
         },
     },
     'win-10_laptop_low_end-perf_HP-Candidate': {
@@ -173,7 +178,7 @@ FYI_BUILDERS = {
         'platform': 'win',
         'target_bits': 64,
         'dimension': {
-            'pool': 'chrome.tests.perf-fyi.template',
+            'pool': 'chrome.tests.perf-fyi',
             'id': 'build370-a7',
             # TODO(crbug.com/971204): Explicitly set the gpu to None to make
             # chromium_swarming recipe_module ignore this dimension.
@@ -213,6 +218,10 @@ FYI_BUILDERS = {
         'platform': 'linux',
         'perf_processor': True,
     },
+    'win-10_laptop_low_end-perf_HP-Candidate-processor': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
 }
 
 # These configurations are taken from chromium_perf.py in
@@ -236,16 +245,6 @@ BUILDERS = {
         ['microdump_stackwalk', 'angle_perftests', 'chrome_apk'],
         'tests': [
             {
-                'name': 'resource_sizes_chrome_apk',
-                'isolate': 'resource_sizes_chrome_apk',
-                'type': TEST_TYPES.GENERIC,
-            },
-            {
-                'name': 'resource_sizes_chrome_public_apk',
-                'isolate': 'resource_sizes_chrome_public_apk',
-                'type': TEST_TYPES.GENERIC,
-            },
-            {
                 'name': 'resource_sizes_monochrome_minimal_apks',
                 'isolate': 'resource_sizes_monochrome_minimal_apks',
                 'type': TEST_TYPES.GENERIC,
@@ -271,19 +270,19 @@ BUILDERS = {
                 'type': TEST_TYPES.GENERIC,
             },
             {
-                'name': 'resource_sizes_system_webview_apk',
-                'isolate': 'resource_sizes_system_webview_apk',
+                'name': 'resource_sizes_system_webview_bundle',
+                'isolate': 'resource_sizes_system_webview_bundle',
                 'type': TEST_TYPES.GENERIC,
             },
             {
-                'name': 'resource_sizes_system_webview_google_apk',
-                'isolate': 'resource_sizes_system_webview_google_apk',
+                'name': 'resource_sizes_system_webview_google_bundle',
+                'isolate': 'resource_sizes_system_webview_google_bundle',
                 'type': TEST_TYPES.GENERIC,
             },
         ],
         'dimension': {
             'os': 'Ubuntu-16.04',
-            'pool': 'chrome.tests.template',
+            'pool': 'chrome.tests',
         },
         'perf_trigger':
         False,
@@ -293,11 +292,6 @@ BUILDERS = {
         ['microdump_stackwalk', 'angle_perftests', 'chrome_apk'],
         'tests': [
             {
-                'name': 'resource_sizes_chrome_public_apk',
-                'isolate': 'resource_sizes_chrome_public_apk',
-                'type': TEST_TYPES.GENERIC,
-            },
-            {
                 'name': 'resource_sizes_monochrome_minimal_apks',
                 'isolate': 'resource_sizes_monochrome_minimal_apks',
                 'type': TEST_TYPES.GENERIC,
@@ -318,24 +312,29 @@ BUILDERS = {
                 'type': TEST_TYPES.GENERIC,
             },
             {
+                'name': 'resource_sizes_trichrome',
+                'isolate': 'resource_sizes_trichrome',
+                'type': TEST_TYPES.GENERIC,
+            },
+            {
                 'name': 'resource_sizes_trichrome_google',
                 'isolate': 'resource_sizes_trichrome_google',
                 'type': TEST_TYPES.GENERIC,
             },
             {
-                'name': 'resource_sizes_system_webview_apk',
-                'isolate': 'resource_sizes_system_webview_apk',
+                'name': 'resource_sizes_system_webview_bundle',
+                'isolate': 'resource_sizes_system_webview_bundle',
                 'type': TEST_TYPES.GENERIC,
             },
             {
-                'name': 'resource_sizes_system_webview_google_apk',
-                'isolate': 'resource_sizes_system_webview_google_apk',
+                'name': 'resource_sizes_system_webview_google_bundle',
+                'isolate': 'resource_sizes_system_webview_google_bundle',
                 'type': TEST_TYPES.GENERIC,
             },
         ],
         'dimension': {
             'os': 'Ubuntu-16.04',
-            'pool': 'chrome.tests.template',
+            'pool': 'chrome.tests',
         },
         'perf_trigger':
         False,
@@ -363,7 +362,7 @@ BUILDERS = {
             'device_os': 'OMB1.180119.001',
             'device_type': 'gobo',
             'device_os_flavor': 'google',
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'os': 'Android',
         },
     },
@@ -373,7 +372,7 @@ BUILDERS = {
         }],
         'platform': 'android-webview-google',
         'dimension': {
-            'pool': 'chrome.tests.perf-webview.template',
+            'pool': 'chrome.tests.perf-webview',
             'os': 'Android',
             'device_type': 'gobo',
             'device_os': 'OMB1.180119.001',
@@ -392,7 +391,7 @@ BUILDERS = {
         'platform':
         'android',
         'dimension': {
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'os': 'Android',
             'device_type': 'hammerhead',
             'device_os': 'M4B30Z',
@@ -409,7 +408,7 @@ BUILDERS = {
         'platform':
         'android-webview',
         'dimension': {
-            'pool': 'chrome.tests.perf-webview.template',
+            'pool': 'chrome.tests.perf-webview',
             'os': 'Android',
             'device_type': 'bullhead',
             'device_os': 'MOB30K',
@@ -422,7 +421,7 @@ BUILDERS = {
         }],
         'platform': 'android-webview-google',
         'dimension': {
-            'pool': 'chrome.tests.perf-webview.template',
+            'pool': 'chrome.tests.perf-webview',
             'os': 'Android',
             'device_type': 'walleye',
             'device_os': 'OPM1.171019.021',
@@ -435,7 +434,7 @@ BUILDERS = {
         }],
         'platform': 'android-weblayer',
         'dimension': {
-            'pool': 'chrome.tests.perf-weblayer.template',
+            'pool': 'chrome.tests.perf-weblayer',
             'os': 'Android',
             'device_type': 'walleye',
             'device_os': 'OPM1.171019.021',
@@ -448,7 +447,7 @@ BUILDERS = {
         }],
         'platform': 'android-chrome',
         'dimension': {
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'os': 'Android',
             'device_type': 'walleye',
             'device_os': 'OPM1.171019.021',
@@ -469,7 +468,7 @@ BUILDERS = {
         'target_bits':
         64,
         'dimension': {
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             # Explicitly set GPU driver version and Windows OS version such
             # that we can be informed if this
             # version ever changes or becomes inconsistent. It is important
@@ -495,7 +494,7 @@ BUILDERS = {
         'target_bits':
         64,
         'dimension': {
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             # Explicitly set GPU driver version and Windows OS version such
             # that we can be informed if this
             # version ever changes or becomes inconsistent. It is important
@@ -516,7 +515,7 @@ BUILDERS = {
         'dimension': {
             'gpu': '102b:0532-6.1.7600.16385',
             'os': 'Windows-2008ServerR2-SP1',
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'synthetic_product_name': 'PowerEdge R210 II (Dell Inc.)',
         },
     },
@@ -536,7 +535,7 @@ BUILDERS = {
         'dimension': {
             'gpu': '10de:1cb3-23.21.13.8792',
             'os': 'Windows-2008ServerR2-SP1',
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'synthetic_product_name': 'PowerEdge R220 [01] (Dell Inc.)'
         },
     },
@@ -557,7 +556,7 @@ BUILDERS = {
             'os':
             'Mac-10.12.6',
             'pool':
-            'chrome.tests.perf.template',
+            'chrome.tests.perf',
             'synthetic_product_name':
             'MacBookAir7,2_x86-64-i5-5350U_Intel Broadwell HD Graphics 6000_8192_APPLE SSD SM0128G'
         },
@@ -576,7 +575,7 @@ BUILDERS = {
         'dimension': {
             'gpu': '10de:1cb3-384.90',
             'os': 'Ubuntu-14.04',
-            'pool': 'chrome.tests.perf.template',
+            'pool': 'chrome.tests.perf',
             'synthetic_product_name': 'PowerEdge R230 (Dell Inc.)'
         },
     },
@@ -597,10 +596,38 @@ BUILDERS = {
             'os':
             'Mac-10.13.3',
             'pool':
-            'chrome.tests.perf.template',
+            'chrome.tests.perf',
             'synthetic_product_name':
             'MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_APPLE SSD SM0512G',
         },
+    },
+    'linux-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'android-pixel2-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'android-pixel2_webview-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'win-10-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'win-10_laptop_low_end-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'mac-10_12_laptop_low_end-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'mac-10_13_laptop_high_end-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
     },
 }
 
@@ -712,15 +739,14 @@ RESOURCE_SIZES_METADATA = BenchmarkMetadata(
 
 
 OTHER_BENCHMARKS = {
-    'resource_sizes_chrome_apk': RESOURCE_SIZES_METADATA,
-    'resource_sizes_chrome_public_apk': RESOURCE_SIZES_METADATA,
     'resource_sizes_chrome_modern_minimal_apks': RESOURCE_SIZES_METADATA,
     'resource_sizes_chrome_modern_public_minimal_apks': RESOURCE_SIZES_METADATA,
     'resource_sizes_monochrome_minimal_apks': RESOURCE_SIZES_METADATA,
     'resource_sizes_monochrome_public_minimal_apks': RESOURCE_SIZES_METADATA,
+    'resource_sizes_trichrome': RESOURCE_SIZES_METADATA,
     'resource_sizes_trichrome_google': RESOURCE_SIZES_METADATA,
-    'resource_sizes_system_webview_apk': RESOURCE_SIZES_METADATA,
-    'resource_sizes_system_webview_google_apk': RESOURCE_SIZES_METADATA,
+    'resource_sizes_system_webview_bundle': RESOURCE_SIZES_METADATA,
+    'resource_sizes_system_webview_google_bundle': RESOURCE_SIZES_METADATA,
 }
 
 

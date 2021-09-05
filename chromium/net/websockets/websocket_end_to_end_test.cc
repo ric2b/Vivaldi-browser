@@ -100,8 +100,7 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
   void OnAddChannelResponse(
       std::unique_ptr<WebSocketHandshakeResponseInfo> response,
       const std::string& selected_subprotocol,
-      const std::string& extensions,
-      int64_t send_flow_control_quota) override;
+      const std::string& extensions) override;
 
   void OnDataFrame(bool fin,
                    WebSocketMessageType type,
@@ -109,7 +108,7 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
 
   bool HasPendingDataFrames() override { return false; }
 
-  void OnSendFlowControlQuotaAdded(int64_t quota) override;
+  void OnSendDataFrameDone() override;
 
   void OnClosingHandshake() override;
 
@@ -170,8 +169,7 @@ std::string ConnectTestingEventInterface::extensions() const {
 void ConnectTestingEventInterface::OnAddChannelResponse(
     std::unique_ptr<WebSocketHandshakeResponseInfo> response,
     const std::string& selected_subprotocol,
-    const std::string& extensions,
-    int64_t send_flow_control_quota) {
+    const std::string& extensions) {
   selected_subprotocol_ = selected_subprotocol;
   extensions_ = extensions;
   QuitNestedEventLoop();
@@ -182,7 +180,7 @@ void ConnectTestingEventInterface::OnDataFrame(bool fin,
                                                base::span<const char> payload) {
 }
 
-void ConnectTestingEventInterface::OnSendFlowControlQuotaAdded(int64_t quota) {}
+void ConnectTestingEventInterface::OnSendDataFrameDone() {}
 
 void ConnectTestingEventInterface::OnClosingHandshake() {}
 

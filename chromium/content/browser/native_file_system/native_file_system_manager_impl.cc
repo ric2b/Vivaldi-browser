@@ -10,7 +10,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "content/browser/native_file_system/file_system_chooser.h"
 #include "content/browser/native_file_system/fixed_native_file_system_permission_grant.h"
@@ -25,6 +24,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/url_utils.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "net/base/escape.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -47,13 +47,20 @@ using storage::FileSystemContext;
 
 namespace {
 
+#if defined(OS_CHROMEOS)
+// Path prefix for Chrome OS File System Provider (FSP) file systems. Copied
+// here to avoid complex dependencies. See |kProvidedMountPointRoot| in
+// chrome/browser/chromeos/file_system_provider/mount_path_util.cc.
+// Files and directories provided by FSP API resides in this directory.
+static constexpr char kProvidedMountPointRoot[] = "/provided";
+#endif  // OS_CHROMEOS
+
 void ShowFilePickerOnUIThread(const url::Origin& requesting_origin,
-                              int render_process_id,
-                              int frame_id,
+                              GlobalFrameRoutingId frame_id,
                               const FileSystemChooser::Options& options,
                               FileSystemChooser::ResultCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderFrameHost* rfh = RenderFrameHost::FromID(render_process_id, frame_id);
+  RenderFrameHost* rfh = RenderFrameHost::FromID(frame_id);
   WebContents* web_contents = WebContents::FromRenderFrameHost(rfh);
 
   if (!web_contents) {
@@ -101,7 +108,7 @@ bool IsValidTransferToken(
     return false;
   }
 
-  if (token->url().origin() != expected_origin) {
+  if (!token->MatchesOrigin(expected_origin)) {
     return false;
   }
   return true;
@@ -183,8 +190,8 @@ void NativeFileSystemManagerImpl::GetSandboxedFileSystem(
       weak_factory_.GetWeakPtr(), receivers_.current_context(),
       std::move(callback), base::SequencedTaskRunnerHandle::Get());
 
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&FileSystemContext::OpenFileSystem, context(),
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&FileSystemContext::OpenFileSystem, context(),
                                 receivers_.current_context().origin,
                                 storage::kFileSystemTypeTemporary,
                                 storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
@@ -218,8 +225,7 @@ void NativeFileSystemManagerImpl::ChooseEntries(
     return;
   }
 
-  RenderFrameHost* rfh =
-      RenderFrameHost::FromID(context.process_id, context.frame_id);
+  RenderFrameHost* rfh = RenderFrameHost::FromID(context.frame_id);
   if (!rfh) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
@@ -244,7 +250,7 @@ void NativeFileSystemManagerImpl::ChooseEntries(
   FileSystemChooser::Options options(type, std::move(accepts),
                                      include_accepts_all);
   ShowFilePickerOnUIThread(
-      context.origin, context.process_id, context.frame_id, options,
+      context.origin, context.frame_id, options,
       base::BindOnce(&NativeFileSystemManagerImpl::DidChooseEntries,
                      weak_factory_.GetWeakPtr(), context, options,
                      std::move(callback)));
@@ -306,10 +312,12 @@ base::FilePath DeserializePath(const std::string& bytes) {
 void NativeFileSystemManagerImpl::DidResolveForSerializeHandle(
     SerializeHandleCallback callback,
     NativeFileSystemTransferTokenImpl* resolved_token) {
-  if (!resolved_token) {
+  if (!resolved_token || !resolved_token->GetAsFileSystemURL()) {
     std::move(callback).Run({});
     return;
   }
+
+  const storage::FileSystemURL& url = *resolved_token->GetAsFileSystemURL();
 
   NativeFileSystemHandleData data;
   data.set_handle_type(
@@ -318,13 +326,12 @@ void NativeFileSystemManagerImpl::DidResolveForSerializeHandle(
           ? NativeFileSystemHandleData::kFile
           : NativeFileSystemHandleData::kDirectory);
 
-  switch (resolved_token->url().type()) {
+  switch (url.type()) {
     case storage::kFileSystemTypeNativeLocal: {
-      DCHECK_EQ(resolved_token->url().mount_type(),
-                storage::kFileSystemTypeIsolated);
+      DCHECK_EQ(url.mount_type(), storage::kFileSystemTypeIsolated);
       base::FilePath root_path;
       storage::IsolatedContext::GetInstance()->GetRegisteredPath(
-          resolved_token->shared_handle_state().file_system.id(), &root_path);
+          url.filesystem_id(), &root_path);
       data.mutable_native()->set_root_path(SerializePath(root_path));
 
       base::FilePath relative_path;
@@ -333,19 +340,29 @@ void NativeFileSystemManagerImpl::DidResolveForSerializeHandle(
       // but fails if the path we're looking for is equal to the |root_path|.
       // So special case that case (in which case relative path would be empty
       // anyway).
-      if (root_path != resolved_token->url().path()) {
-        bool relative_path_result = root_path.AppendRelativePath(
-            resolved_token->url().path(), &relative_path);
+      if (root_path != url.path()) {
+        bool relative_path_result =
+            root_path.AppendRelativePath(url.path(), &relative_path);
         DCHECK(relative_path_result);
       }
       data.mutable_native()->set_relative_path(SerializePath(relative_path));
       break;
     }
     case storage::kFileSystemTypeTemporary: {
-      base::FilePath virtual_path = resolved_token->url().virtual_path();
+      base::FilePath virtual_path = url.virtual_path();
       data.mutable_sandboxed()->set_virtual_path(SerializePath(virtual_path));
       break;
     }
+
+#if defined(OS_CHROMEOS)
+    // For now, we don't support serializing handles for Chrome OS specific
+    // types, run |callback| with an empty vector to indicate an error.
+    case storage::kFileSystemTypeProvided:
+    case storage::kFileSystemTypeNativeForPlatformApp:
+      std::move(callback).Run({});
+      return;
+#endif
+
     default:
       NOTREACHED();
   }
@@ -399,35 +416,13 @@ void NativeFileSystemManagerImpl::DeserializeHandle(
       const bool is_directory =
           data.handle_type() == NativeFileSystemHandleData::kDirectory;
 
-      scoped_refptr<NativeFileSystemPermissionGrant> read_grant, write_grant;
-      if (permission_context_) {
-        const bool permission_is_directory =
-            is_directory || !relative_path.empty();
-        read_grant = permission_context_->GetReadPermissionGrant(
-            origin, root_path, permission_is_directory,
-            /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-            /*frame_id=*/MSG_ROUTING_NONE,
-            NativeFileSystemPermissionContext::UserAction::kLoadFromStorage);
-        write_grant = permission_context_->GetWritePermissionGrant(
-            origin, root_path, permission_is_directory,
-            /*process_id=*/ChildProcessHost::kInvalidUniqueID,
-            /*frame_id=*/MSG_ROUTING_NONE,
-            NativeFileSystemPermissionContext::UserAction::kLoadFromStorage);
-      } else {
-        // Auto-deny all grants if no permission context is available,
-        // unless Experimental Web Platform features are enabled.
-        // This happens for example in content_shell.
-        read_grant = write_grant =
-            base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-                base::CommandLine::ForCurrentProcess()->HasSwitch(
-                    switches::kEnableExperimentalWebPlatformFeatures)
-                    ? PermissionStatus::GRANTED
-                    : PermissionStatus::DENIED);
-      }
+      SharedHandleState handle_state = GetSharedHandleStateForPath(
+          root_path, origin, std::move(root.file_system),
+          is_directory || !relative_path.empty(),
+          NativeFileSystemPermissionContext::UserAction::kLoadFromStorage);
 
-      CreateTransferTokenImpl(
-          child, SharedHandleState(read_grant, write_grant, root.file_system),
-          is_directory, std::move(token));
+      CreateTransferTokenImpl(child, handle_state, is_directory,
+                              std::move(token));
       break;
     }
     case NativeFileSystemHandleData::DATA_NOT_SET:
@@ -447,42 +442,18 @@ NativeFileSystemManagerImpl::CreateFileEntryFromPath(
 blink::mojom::NativeFileSystemEntryPtr
 NativeFileSystemManagerImpl::CreateDirectoryEntryFromPath(
     const BindingContext& binding_context,
-    const base::FilePath& directory_path) {
+    const base::FilePath& file_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto url =
-      CreateFileSystemURLFromPath(binding_context.origin, directory_path);
+  auto url = CreateFileSystemURLFromPath(binding_context.origin, file_path);
 
-  scoped_refptr<NativeFileSystemPermissionGrant> read_grant, write_grant;
-  if (permission_context_) {
-    read_grant = permission_context_->GetReadPermissionGrant(
-        binding_context.origin, directory_path, /*is_directory=*/true,
-        binding_context.process_id, binding_context.frame_id,
-        NativeFileSystemPermissionContext::UserAction::kOpen);
-    write_grant = permission_context_->GetWritePermissionGrant(
-        binding_context.origin, directory_path, /*is_directory=*/true,
-        binding_context.process_id, binding_context.frame_id,
-        NativeFileSystemPermissionContext::UserAction::kOpen);
-  } else {
-    // Grant read permission even without a permission_context_, as the picker
-    // itself is enough UI to assume user intent.
-    read_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-        PermissionStatus::GRANTED);
-    // Auto-deny all write grants if no permisson context is available, unless
-    // Experimental Web Platform features are enabled.
-    // TODO(mek): Remove experimental web platform check when permission UI is
-    // implemented.
-    write_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableExperimentalWebPlatformFeatures)
-            ? PermissionStatus::GRANTED
-            : PermissionStatus::DENIED);
-  }
+  SharedHandleState shared_handle_state = GetSharedHandleStateForPath(
+      file_path, binding_context.origin, std::move(url.file_system),
+      /*is_directory=*/true,
+      NativeFileSystemPermissionContext::UserAction::kOpen);
 
   return blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewDirectory(CreateDirectoryHandle(
-          binding_context, url.url,
-          SharedHandleState(std::move(read_grant), std::move(write_grant),
-                            std::move(url.file_system)))),
+      blink::mojom::NativeFileSystemHandle::NewDirectory(
+          CreateDirectoryHandle(binding_context, url.url, shared_handle_state)),
       url.base_name);
 }
 
@@ -542,8 +513,7 @@ NativeFileSystemManagerImpl::CreateFileWriter(
 
   mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter> result;
 
-  RenderFrameHost* rfh = RenderFrameHost::FromID(binding_context.process_id,
-                                                 binding_context.frame_id);
+  RenderFrameHost* rfh = RenderFrameHost::FromID(binding_context.frame_id);
   bool has_transient_user_activation = rfh && rfh->HasTransientUserActivation();
   writer_receivers_.Add(std::make_unique<NativeFileSystemFileWriterImpl>(
                             this, binding_context, url, swap_url, handle_state,
@@ -605,9 +575,7 @@ void NativeFileSystemManagerImpl::DidResolveTransferTokenForFileHandle(
     return;
   }
 
-  file_receivers_.Add(std::make_unique<NativeFileSystemFileHandleImpl>(
-                          this, binding_context, resolved_token->url(),
-                          resolved_token->shared_handle_state()),
+  file_receivers_.Add(resolved_token->CreateFileHandle(binding_context),
                       std::move(file_handle_receiver));
 }
 
@@ -627,9 +595,7 @@ void NativeFileSystemManagerImpl::DidResolveTransferTokenForDirectoryHandle(
   }
 
   directory_receivers_.Add(
-      std::make_unique<NativeFileSystemDirectoryHandleImpl>(
-          this, binding_context, resolved_token->url(),
-          resolved_token->shared_handle_state()),
+      resolved_token->CreateDirectoryHandle(binding_context),
       std::move(directory_handle_receiver));
 }
 
@@ -696,7 +662,7 @@ void NativeFileSystemManagerImpl::DidChooseEntries(
       options.type() == blink::mojom::ChooseFileSystemEntryType::kOpenDirectory;
   permission_context_->ConfirmSensitiveDirectoryAccess(
       binding_context.origin, entries_copy, is_directory,
-      binding_context.process_id, binding_context.frame_id,
+      binding_context.frame_id,
       base::BindOnce(
           &NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess,
           weak_factory_.GetWeakPtr(), binding_context, options,
@@ -722,8 +688,7 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
   }
   if (result == SensitiveDirectoryResult::kTryAgain) {
     ShowFilePickerOnUIThread(
-        binding_context.origin, binding_context.process_id,
-        binding_context.frame_id, options,
+        binding_context.origin, binding_context.frame_id, options,
         base::BindOnce(&NativeFileSystemManagerImpl::DidChooseEntries,
                        weak_factory_.GetWeakPtr(), binding_context, options,
                        std::move(callback)));
@@ -735,8 +700,7 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
     DCHECK_EQ(entries.size(), 1u);
     if (permission_context_) {
       permission_context_->ConfirmDirectoryReadAccess(
-          binding_context.origin, entries.front(), binding_context.process_id,
-          binding_context.frame_id,
+          binding_context.origin, entries.front(), binding_context.frame_id,
           base::BindOnce(&NativeFileSystemManagerImpl::DidChooseDirectory, this,
                          binding_context, entries.front(),
                          std::move(callback)));
@@ -818,7 +782,7 @@ void NativeFileSystemManagerImpl::CreateTransferTokenImpl(
         receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto token_impl = std::make_unique<NativeFileSystemTransferTokenImpl>(
+  auto token_impl = NativeFileSystemTransferTokenImpl::Create(
       url, handle_state,
       is_directory ? NativeFileSystemTransferTokenImpl::HandleType::kDirectory
                    : NativeFileSystemTransferTokenImpl::HandleType::kFile,
@@ -859,10 +823,22 @@ NativeFileSystemManagerImpl::CreateFileSystemURLFromPath(
   DCHECK(isolated_context);
 
   FileSystemURLAndFSHandle result;
+  storage::FileSystemType fs_type = storage::kFileSystemTypeNativeLocal;
+
+#if defined(OS_CHROMEOS)
+  // TODO(crbug.com/1093653): Support Chrome OS File System Provider in all Web
+  // Apps. For now, we only support FSP for WebUIs.
+  bool is_web_ui = HasWebUIScheme(origin.GetURL());
+  // Check the path prefix to determine if a file is provided by FSP API.
+  bool is_provided_path =
+      base::StartsWith(path.AsUTF8Unsafe(), kProvidedMountPointRoot,
+                       base::CompareCase::SENSITIVE);
+  if (is_web_ui && is_provided_path)
+    fs_type = storage::kFileSystemTypeNativeForPlatformApp;
+#endif
 
   result.file_system = isolated_context->RegisterFileSystemForPath(
-      storage::kFileSystemTypeNativeLocal, std::string(), path,
-      &result.base_name);
+      fs_type, std::string(), path, &result.base_name);
 
   base::FilePath root_path =
       isolated_context->CreateVirtualRootPath(result.file_system.id());
@@ -884,19 +860,30 @@ NativeFileSystemManagerImpl::CreateFileEntryFromPathImpl(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto url = CreateFileSystemURLFromPath(binding_context.origin, file_path);
 
+  SharedHandleState shared_handle_state = GetSharedHandleStateForPath(
+      file_path, binding_context.origin, std::move(url.file_system),
+      /*is_directory=*/false, user_action);
+
+  return blink::mojom::NativeFileSystemEntry::New(
+      blink::mojom::NativeFileSystemHandle::NewFile(
+          CreateFileHandle(binding_context, url.url, shared_handle_state)),
+      url.base_name);
+}
+
+NativeFileSystemManagerImpl::SharedHandleState
+NativeFileSystemManagerImpl::GetSharedHandleStateForPath(
+    const base::FilePath& path,
+    const url::Origin& origin,
+    storage::IsolatedContext::ScopedFSHandle file_system,
+    bool is_directory,
+    NativeFileSystemPermissionContext::UserAction user_action) {
   scoped_refptr<NativeFileSystemPermissionGrant> read_grant, write_grant;
   if (permission_context_) {
     read_grant = permission_context_->GetReadPermissionGrant(
-        binding_context.origin, file_path, /*is_directory=*/false,
-        binding_context.process_id, binding_context.frame_id, user_action);
+        origin, path, is_directory, user_action);
     write_grant = permission_context_->GetWritePermissionGrant(
-        binding_context.origin, file_path, /*is_directory=*/false,
-        binding_context.process_id, binding_context.frame_id, user_action);
+        origin, path, is_directory, user_action);
   } else {
-    // Grant read permission even without a permission_context_, as the picker
-    // itself is enough UI to assume user intent.
-    read_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-        PermissionStatus::GRANTED);
     // Auto-deny all write grants if no permisson context is available, unless
     // Experimental Web Platform features are enabled.
     // TODO(mek): Remove experimental web platform check when permission UI is
@@ -906,14 +893,18 @@ NativeFileSystemManagerImpl::CreateFileEntryFromPathImpl(
             switches::kEnableExperimentalWebPlatformFeatures)
             ? PermissionStatus::GRANTED
             : PermissionStatus::DENIED);
+    if (user_action ==
+        NativeFileSystemPermissionContext::UserAction::kLoadFromStorage) {
+      read_grant = write_grant;
+    } else {
+      // Grant read permission even without a permission_context_, as the picker
+      // itself is enough UI to assume user intent.
+      read_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+          PermissionStatus::GRANTED);
+    }
   }
-
-  return blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewFile(CreateFileHandle(
-          binding_context, url.url,
-          SharedHandleState(std::move(read_grant), std::move(write_grant),
-                            std::move(url.file_system)))),
-      url.base_name);
+  return SharedHandleState(std::move(read_grant), std::move(write_grant),
+                           file_system);
 }
 
 }  // namespace content

@@ -4,33 +4,51 @@
 
 #include <deque>
 
-#include "base/android/jni_android.h"
 #include "base/command_line.h"
+#include "base/metrics/metrics_hashes.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/no_destructor.h"
 #include "base/test/bind_test_util.h"
+#include "components/metrics/log_decoder.h"
+#include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_switches.h"
+#include "content/public/test/browser_test_utils.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 #include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/public/navigation_controller.h"
 #include "weblayer/public/profile.h"
 #include "weblayer/public/tab.h"
+#include "weblayer/shell/android/browsertests_apk/metrics_test_helper.h"
 #include "weblayer/shell/browser/shell.h"
 #include "weblayer/test/weblayer_browser_test.h"
-#include "weblayer/test/weblayer_browsertests_jni/MetricsTestHelper_jni.h"
+#include "weblayer/test/weblayer_browser_test_utils.h"
 
 namespace weblayer {
+
+namespace {
+
+bool HasHistogramWithHash(const metrics::ChromeUserMetricsExtension& uma_log,
+                          uint64_t hash) {
+  for (int i = 0; i < uma_log.histogram_event_size(); ++i) {
+    if (uma_log.histogram_event(i).name_hash() == hash) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
 
 class MetricsBrowserTest : public WebLayerBrowserTest {
  public:
   void SetUp() override {
-    instance_ = this;
-
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitch(metrics::switches::kForceEnableMetricsReporting);
 
-    Java_MetricsTestHelper_installTestGmsBridge(
-        base::android::AttachCurrentThread(), HasUserConsent());
+    InstallTestGmsBridge(HasUserConsent(),
+                         base::BindRepeating(&MetricsBrowserTest::OnLogMetrics,
+                                             base::Unretained(this)));
     WebLayerMetricsServiceClient::GetInstance()->SetFastStartupForTesting(true);
     WebLayerMetricsServiceClient::GetInstance()->SetUploadIntervalForTesting(
         base::TimeDelta::FromMilliseconds(10));
@@ -38,20 +56,17 @@ class MetricsBrowserTest : public WebLayerBrowserTest {
   }
 
   void TearDown() override {
-    Java_MetricsTestHelper_removeTestGmsBridge(
-        base::android::AttachCurrentThread());
-    instance_ = nullptr;
+    RemoveTestGmsBridge();
     WebLayerBrowserTest::TearDown();
   }
 
-  static void OnLogMetrics(const metrics::ChromeUserMetricsExtension& metric) {
-    if (!instance_)
-      return;
-    instance_->metrics_logs_.push_back(metric);
-    std::move(instance_->on_new_log_).Run();
+  void OnLogMetrics(metrics::ChromeUserMetricsExtension metric) {
+    metrics_logs_.push_back(metric);
+    if (on_new_log_)
+      std::move(on_new_log_).Run();
   }
 
-  metrics::ChromeUserMetricsExtension waitForNextMetricsLog() {
+  metrics::ChromeUserMetricsExtension WaitForNextMetricsLog() {
     if (metrics_logs_.empty()) {
       base::RunLoop run_loop;
       on_new_log_ = run_loop.QuitClosure();
@@ -71,23 +86,10 @@ class MetricsBrowserTest : public WebLayerBrowserTest {
   std::unique_ptr<Profile> profile_;
   std::deque<metrics::ChromeUserMetricsExtension> metrics_logs_;
   base::OnceClosure on_new_log_;
-  static MetricsBrowserTest* instance_;
 };
 
-MetricsBrowserTest* MetricsBrowserTest::instance_ = nullptr;
-
-void JNI_MetricsTestHelper_OnLogMetrics(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jbyteArray>& data) {
-  metrics::ChromeUserMetricsExtension proto;
-  jbyte* src_bytes = env->GetByteArrayElements(data, nullptr);
-  proto.ParseFromArray(src_bytes, env->GetArrayLength(data.obj()));
-  env->ReleaseByteArrayElements(data, src_bytes, JNI_ABORT);
-  MetricsBrowserTest::OnLogMetrics(proto);
-}
-
 IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, ProtoHasExpectedFields) {
-  metrics::ChromeUserMetricsExtension log = waitForNextMetricsLog();
+  metrics::ChromeUserMetricsExtension log = WaitForNextMetricsLog();
   EXPECT_EQ(metrics::ChromeUserMetricsExtension::ANDROID_WEBLAYER,
             log.product());
   EXPECT_TRUE(log.has_client_id());
@@ -118,7 +120,7 @@ IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, ProtoHasExpectedFields) {
 }
 
 IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, PageLoadsEnableMultipleUploads) {
-  waitForNextMetricsLog();
+  WaitForNextMetricsLog();
 
   // At this point, the MetricsService should be asleep, and should not have
   // created any more metrics logs.
@@ -133,7 +135,7 @@ IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, PageLoadsEnableMultipleUploads) {
   // This may take slightly longer than UPLOAD_INTERVAL_MS, due to the time
   // spent processing the metrics log, but should be well within the timeout
   // (unless something is broken).
-  waitForNextMetricsLog();
+  WaitForNextMetricsLog();
 
   // If we get here, we got a second metrics log (and the test may pass). If
   // there was no second metrics log, then the above call will check fail with a
@@ -141,6 +143,35 @@ IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, PageLoadsEnableMultipleUploads) {
   // possible we got a metrics log between onPageStarted & onPageFinished, in
   // which case onPageFinished would *also* wake up the metrics service, and we
   // might potentially have a third metrics log in the queue.
+}
+
+IN_PROC_BROWSER_TEST_F(MetricsBrowserTest, RendererHistograms) {
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  NavigateAndWaitForCompletion(
+      embedded_test_server()->GetURL("/simple_page.html"), shell());
+
+  uint64_t hash = base::HashMetricName("Android.SeccompStatus.RendererSandbox");
+
+  bool collect_final_metrics_for_log_called = false;
+
+  WebLayerMetricsServiceClient::GetInstance()
+      ->SetCollectFinalMetricsForLogClosureForTesting(
+          base::BindLambdaForTesting(
+              [&]() { collect_final_metrics_for_log_called = true; }));
+
+  // Not every WaitForNextMetricsLog call will end up calling
+  // MetricsServiceClient::CollectFinalMetricsForLog since there may already be
+  // staged logs to send (see ReportingService::SendNextLog). Since we need to
+  // wait for CollectFinalMetricsForLog to be run after the navigate call above,
+  // keep calling WaitForNextMetricsLog until CollectFinalMetricsForLog is
+  // called.
+  metrics::ChromeUserMetricsExtension uma_log;
+  while (!collect_final_metrics_for_log_called)
+    uma_log = WaitForNextMetricsLog();
+
+  ASSERT_TRUE(HasHistogramWithHash(uma_log, hash));
 }
 
 class MetricsBrowserTestWithUserOptOut : public MetricsBrowserTest {

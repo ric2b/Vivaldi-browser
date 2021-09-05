@@ -33,7 +33,7 @@ class FidoTask;
 class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
     : public FidoAuthenticator {
  public:
-  FidoDeviceAuthenticator(std::unique_ptr<FidoDevice> device);
+  explicit FidoDeviceAuthenticator(std::unique_ptr<FidoDevice> device);
   ~FidoDeviceAuthenticator() override;
 
   // FidoAuthenticator:
@@ -45,9 +45,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   void GetNextAssertion(GetAssertionCallback callback) override;
   void GetTouch(base::OnceCallback<void()> callback) override;
   void GetPinRetries(GetRetriesCallback callback) override;
-  void GetPINToken(std::string pin, GetTokenCallback callback) override;
+  void GetPINToken(std::string pin,
+                   const std::vector<pin::Permissions>& permissions,
+                   base::Optional<std::string> rp_id,
+                   GetTokenCallback callback) override;
   void GetUvRetries(GetRetriesCallback callback) override;
-  void GetUvToken(GetTokenCallback callback) override;
+  bool CanGetUvToken() override;
+  void GetUvToken(base::Optional<std::string> rp_id,
+                  GetTokenCallback callback) override;
   void SetPIN(const std::string& pin,
               SetPINCallback callback) override;
   void ChangePIN(const std::string& old_pin,
@@ -87,11 +92,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
                        std::vector<uint8_t> template_id,
                        BioEnrollmentCallback) override;
 
+  base::Optional<base::span<const int32_t>> GetAlgorithms() override;
   void Reset(ResetCallback callback) override;
   void Cancel() override;
   std::string GetId() const override;
   base::string16 GetDisplayName() const override;
   ProtocolVersion SupportedProtocol() const override;
+  bool SupportsHMACSecretExtension() const override;
   const base::Optional<AuthenticatorSupportedOptions>& Options() const override;
   base::Optional<FidoTransportProtocol> AuthenticatorTransport() const override;
   bool IsInPairingMode() const override;
@@ -122,8 +129,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
                               base::Optional<pin::KeyAgreementResponse>)>;
   void InitializeAuthenticatorDone(base::OnceClosure callback);
   void GetEphemeralKey(GetEphemeralKeyCallback callback);
+  void OnHaveEphemeralKey(GetEphemeralKeyCallback callback,
+                          CtapDeviceResponseCode status,
+                          base::Optional<pin::KeyAgreementResponse> key);
   void OnHaveEphemeralKeyForGetPINToken(
       std::string pin,
+      uint8_t permissions,
+      base::Optional<std::string> rp_id,
       GetTokenCallback callback,
       CtapDeviceResponseCode status,
       base::Optional<pin::KeyAgreementResponse> key);
@@ -139,6 +151,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
       CtapDeviceResponseCode status,
       base::Optional<pin::KeyAgreementResponse> key);
   void OnHaveEphemeralKeyForUvToken(
+      base::Optional<std::string> rp_id,
       GetTokenCallback callback,
       CtapDeviceResponseCode status,
       base::Optional<pin::KeyAgreementResponse> key);
@@ -148,8 +161,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   template <typename... Args>
   void OperationClearProxy(base::OnceCallback<void(Args...)> callback,
                            Args... args);
-  template <typename Task, typename Request, typename Response>
-  void RunTask(Request request,
+  template <typename Task, typename Response, typename... RequestArgs>
+  void RunTask(RequestArgs&&... request_args,
                base::OnceCallback<void(CtapDeviceResponseCode,
                                        base::Optional<Response>)> callback);
   template <typename Request, typename Response>
@@ -174,6 +187,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   base::Optional<AuthenticatorSupportedOptions> options_;
   std::unique_ptr<FidoTask> task_;
   std::unique_ptr<GenericDeviceOperation> operation_;
+  base::Optional<pin::KeyAgreementResponse> cached_ephemeral_key_;
   base::WeakPtrFactory<FidoDeviceAuthenticator> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FidoDeviceAuthenticator);

@@ -21,7 +21,6 @@
 #include "content/common/background_fetch/background_fetch_types.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/referrer_type_converters.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "net/http/http_response_headers.h"
@@ -274,11 +273,8 @@ class CacheStorageDispatcherHost::CacheImpl
 
     CacheStorageSchedulerPriority priority =
         CacheStorageSchedulerPriority::kNormal;
-    if (in_related_fetch_event &&
-        base::FeatureList::IsEnabled(
-            features::kCacheStorageHighPriorityMatch)) {
+    if (in_related_fetch_event)
       priority = CacheStorageSchedulerPriority::kHigh;
-    }
 
     cache->Match(std::move(request), std::move(match_options), priority,
                  trace_id, std::move(cb));
@@ -727,11 +723,8 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
 
     CacheStorageSchedulerPriority priority =
         CacheStorageSchedulerPriority::kNormal;
-    if (in_related_fetch_event &&
-        base::FeatureList::IsEnabled(
-            features::kCacheStorageHighPriorityMatch)) {
+    if (in_related_fetch_event)
       priority = CacheStorageSchedulerPriority::kHigh;
-    }
 
     if (!match_options->cache_name) {
       cache_storage->MatchAllCaches(std::move(request),

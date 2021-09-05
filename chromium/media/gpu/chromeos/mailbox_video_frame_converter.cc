@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/scheduler.h"
+#include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/format_utils.h"
@@ -154,7 +155,7 @@ void MailboxVideoFrameConverter::ConvertFrame(scoped_refptr<VideoFrame> frame) {
   DCHECK(parent_task_runner_->RunsTasksInCurrentSequence());
   DVLOGF(4);
 
-  if (!frame || !frame->HasDmaBufs())
+  if (!frame || frame->storage_type() != VideoFrame::STORAGE_GPU_MEMORY_BUFFER)
     return OnError(FROM_HERE, "Invalid frame.");
 
   VideoFrame* origin_frame = unwrap_frame_cb_.Run(*frame);
@@ -225,9 +226,9 @@ void MailboxVideoFrameConverter::WrapMailboxAndVideoFrameAndOutput(
       frame->format(), mailbox_holders, std::move(release_mailbox_cb),
       frame->coded_size(), frame->visible_rect(), frame->natural_size(),
       frame->timestamp());
-  mailbox_frame->metadata()->MergeMetadataFrom(frame->metadata());
-  mailbox_frame->metadata()->SetBoolean(
-      VideoFrameMetadata::READ_LOCK_FENCES_ENABLED, true);
+  mailbox_frame->set_color_space(frame->ColorSpace());
+  mailbox_frame->set_metadata(*(frame->metadata()));
+  mailbox_frame->metadata()->read_lock_fences_enabled = true;
 
   output_cb_.Run(mailbox_frame);
 }
@@ -336,7 +337,7 @@ bool MailboxVideoFrameConverter::GenerateSharedImageOnGPUThread(
   const uint32_t shared_image_usage =
       gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
   const bool success = shared_image_stub->CreateSharedImage(
-      mailbox, shared_image_stub->channel()->client_id(),
+      mailbox, gpu::kPlatformVideoFramePoolClientId,
       std::move(gpu_memory_buffer_handle), *buffer_format,
       gpu::kNullSurfaceHandle, destination_visible_rect.size(),
       video_frame->ColorSpace(), shared_image_usage);

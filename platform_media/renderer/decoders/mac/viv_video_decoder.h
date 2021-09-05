@@ -25,15 +25,12 @@ namespace media {
 class VivVideoDecoder : public VideoDecoder {
  public:
 
-  // Creates a VivVideoDecoder. The returned unique_ptr can be safely upcast to
-  // unique_ptr<VideoDecoder>.
-  static std::unique_ptr<VivVideoDecoder, std::default_delete<VideoDecoder>>
+  static std::unique_ptr<VideoDecoder>
   Create(scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
          MediaLog* media_log);
 
-  VivVideoDecoder(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
-      MediaLog* media_log);
+  ~VivVideoDecoder() override;
+  static void DestroyAsync(std::unique_ptr<VivVideoDecoder>);
 
   // media::VideoDecoder implementation.
   std::string GetDisplayName() const override;
@@ -50,16 +47,11 @@ class VivVideoDecoder : public VideoDecoder {
   void Reset(base::OnceClosure reset_cb) override;
   int GetMaxDecodeRequests() const override;
 
-
- protected:
-  // Owners should call Destroy(). This is automatic via
-  // std::default_delete<media::VideoDecoder> when held by a
-  // std::unique_ptr<media::VideoDecoder>.
-  ~VivVideoDecoder() override;
-
-
  private:
-  void Destroy() override;
+  VivVideoDecoder(
+      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
+      MediaLog* media_log);
+
   bool FinishDelayedFrames();
   void WriteToMediaLog(MediaLogMessageLevel level,
                        const std::string& message);
@@ -101,9 +93,8 @@ class VivVideoDecoder : public VideoDecoder {
   // NotifyError() before returning false.
   bool ConfigureDecoder();
 
-
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
-  std::unique_ptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
   bool has_error_ = false;
 

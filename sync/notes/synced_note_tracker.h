@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -139,6 +140,10 @@ class SyncedNoteTracker {
       sync_pb::NotesModelMetadata model_metadata);
 
   ~SyncedNoteTracker();
+
+  // This method is used to denote that all notes are reuploaded and there
+  // is no need to reupload them again after next browser startup.
+  void SetNotesFullTitleReuploaded();
 
   // Returns null if no entity is found.
   const Entity* GetEntityForSyncId(const std::string& sync_id) const;
@@ -306,7 +311,8 @@ class SyncedNoteTracker {
   // A map of note nodes to sync entities. It's keyed by the note node
   // pointers which get assigned when loading the note model. This map is
   // first initialized in the constructor.
-  std::map<const vivaldi::NoteNode*, Entity*> note_node_to_entities_map_;
+  std::unordered_map<const vivaldi::NoteNode*, Entity*>
+      note_node_to_entities_map_;
 
   // A list of pending local note deletions. They should be sent to the
   // server in the same order as stored in the list. The same order should also

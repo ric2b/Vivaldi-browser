@@ -113,6 +113,13 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
                 mNativeNavigationController, index);
     }
 
+    @Override
+    public boolean isNavigationEntrySkippable(int index) {
+        StrictModeWorkaround.apply();
+        return NavigationControllerImplJni.get().isNavigationEntrySkippable(
+                mNativeNavigationController, index);
+    }
+
     @CalledByNative
     private NavigationImpl createNavigation(long nativeNavigationImpl) {
         return new NavigationImpl(mNavigationControllerClient, nativeNavigationImpl);
@@ -159,6 +166,12 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         mNavigationControllerClient.onFirstContentfulPaint();
     }
 
+    @CalledByNative
+    private void onOldPageNoLongerRendered(String uri) throws RemoteException {
+        if (WebLayerFactoryImpl.getClientMajorVersion() < 85) return;
+        mNavigationControllerClient.onOldPageNoLongerRendered(uri);
+    }
+
     @NativeMethods
     interface Natives {
         void setNavigationControllerImpl(
@@ -178,5 +191,6 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         int getNavigationListCurrentIndex(long nativeNavigationControllerImpl);
         String getNavigationEntryDisplayUri(long nativeNavigationControllerImpl, int index);
         String getNavigationEntryTitle(long nativeNavigationControllerImpl, int index);
+        boolean isNavigationEntrySkippable(long nativeNavigationControllerImpl, int index);
     }
 }

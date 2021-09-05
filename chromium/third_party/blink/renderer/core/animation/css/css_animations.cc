@@ -449,7 +449,7 @@ AnimationTimeDelta IterationElapsedTime(const AnimationEffect& effect,
                                         : current_iteration;
   const double iteration_start = effect.SpecifiedTiming().iteration_start;
   const AnimationTimeDelta iteration_duration =
-      effect.SpecifiedTiming().iteration_duration.value();
+      effect.SpecifiedTiming().IterationDuration();
   return iteration_duration * (iteration_boundary - iteration_start);
 }
 
@@ -852,6 +852,12 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
       if (auto* effect = DynamicTo<KeyframeEffect>(animation->effect()))
         effect->DowngradeToNormal();
     }
+  }
+
+  if (!pending_update_.NewTransitions().IsEmpty()) {
+    element->GetDocument()
+        .GetDocumentAnimations()
+        .IncrementTrasitionGeneration();
   }
 
   for (const auto& entry : pending_update_.NewTransitions()) {
@@ -1484,7 +1490,7 @@ void CSSAnimations::AnimationEventDelegate::OnEventCondition(
   previous_phase_ = current_phase;
 }
 
-void CSSAnimations::AnimationEventDelegate::Trace(Visitor* visitor) {
+void CSSAnimations::AnimationEventDelegate::Trace(Visitor* visitor) const {
   visitor->Trace(animation_target_);
   AnimationEffect::EventDelegate::Trace(visitor);
 }
@@ -1498,13 +1504,6 @@ void CSSAnimations::TransitionEventDelegate::OnEventCondition(
     Timing::Phase current_phase) {
   if (current_phase == previous_phase_)
     return;
-  // Our implement of transition_generation is slightly different from the spec
-  // We increment the transition_generation per transition event instead of per
-  // style change event. A state transition would trigger one or more events.
-  // Thus, the spec version increments more than is necessary to ensure a change
-  // in transition generation. Spec defines style-change-event:
-  // https://drafts.csswg.org/css-transitions-1/#style-change-event
-  GetDocument().GetDocumentAnimations().IncrementTrasitionGeneration();
 
   if (GetDocument().HasListenerType(Document::kTransitionRunListener)) {
     if (previous_phase_ == Timing::kPhaseNone) {
@@ -1527,9 +1526,8 @@ void CSSAnimations::TransitionEventDelegate::OnEventCondition(
                previous_phase_ == Timing::kPhaseAfter) {
       // If the transition is progressing backwards it is considered to have
       // started at the end position.
-      DCHECK(animation_node.SpecifiedTiming().iteration_duration.has_value());
       EnqueueEvent(event_type_names::kTransitionstart,
-                   animation_node.SpecifiedTiming().iteration_duration.value());
+                   animation_node.SpecifiedTiming().IterationDuration());
     }
   }
 
@@ -1538,9 +1536,8 @@ void CSSAnimations::TransitionEventDelegate::OnEventCondition(
         (previous_phase_ == Timing::kPhaseActive ||
          previous_phase_ == Timing::kPhaseBefore ||
          previous_phase_ == Timing::kPhaseNone)) {
-      DCHECK(animation_node.SpecifiedTiming().iteration_duration.has_value());
       EnqueueEvent(event_type_names::kTransitionend,
-                   animation_node.SpecifiedTiming().iteration_duration.value());
+                   animation_node.SpecifiedTiming().IterationDuration());
     } else if (current_phase == Timing::kPhaseBefore &&
                (previous_phase_ == Timing::kPhaseActive ||
                 previous_phase_ == Timing::kPhaseAfter)) {
@@ -1590,7 +1587,7 @@ void CSSAnimations::TransitionEventDelegate::EnqueueEvent(
   GetDocument().EnqueueAnimationFrameEvent(event);
 }
 
-void CSSAnimations::TransitionEventDelegate::Trace(Visitor* visitor) {
+void CSSAnimations::TransitionEventDelegate::Trace(Visitor* visitor) const {
   visitor->Trace(transition_target_);
   AnimationEffect::EventDelegate::Trace(visitor);
 }
@@ -1630,6 +1627,7 @@ bool CSSAnimations::IsAnimationAffectingProperty(const CSSProperty& property) {
     case CSSPropertyID::kAnimationIterationCount:
     case CSSPropertyID::kAnimationName:
     case CSSPropertyID::kAnimationPlayState:
+    case CSSPropertyID::kAnimationTimeline:
     case CSSPropertyID::kAnimationTimingFunction:
     case CSSPropertyID::kContain:
     case CSSPropertyID::kDirection:
@@ -1693,7 +1691,7 @@ bool CSSAnimations::IsAnimatingRevert(
   return element_animations && element_animations->GetEffectStack().HasRevert();
 }
 
-void CSSAnimations::Trace(Visitor* visitor) {
+void CSSAnimations::Trace(Visitor* visitor) const {
   visitor->Trace(transitions_);
   visitor->Trace(pending_update_);
   visitor->Trace(running_animations_);

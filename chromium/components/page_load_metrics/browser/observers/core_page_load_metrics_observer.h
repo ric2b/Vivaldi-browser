@@ -6,7 +6,6 @@
 #define COMPONENTS_PAGE_LOAD_METRICS_BROWSER_OBSERVERS_CORE_PAGE_LOAD_METRICS_OBSERVER_H_
 
 #include "components/page_load_metrics/browser/observers/click_input_tracker.h"
-#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "services/metrics/public/cpp/ukm_source.h"
 
@@ -32,6 +31,11 @@ extern const char kHistogramLargestContentfulPaint[];
 extern const char kHistogramLargestContentfulPaintContentType[];
 extern const char kHistogramLargestContentfulPaintMainFrame[];
 extern const char kHistogramLargestContentfulPaintMainFrameContentType[];
+extern const char kHistogramExperimentalLargestContentfulPaint[];
+extern const char kHistogramExperimentalLargestContentfulPaintContentType[];
+extern const char kHistogramExperimentalLargestContentfulPaintMainFrame[];
+extern const char
+    kHistogramExperimentalLargestContentfulPaintMainFrameContentType[];
 extern const char kHistogramParseDuration[];
 extern const char kHistogramParseBlockedOnScriptLoad[];
 extern const char kHistogramParseBlockedOnScriptExecution[];
@@ -105,16 +109,41 @@ extern const char kHistogramBackForwardCacheEvent[];
 extern const char kHistogramFontPreloadFirstPaint[];
 extern const char kHistogramFontPreloadFirstContentfulPaint[];
 extern const char kHistogramFontPreloadLargestContentfulPaint[];
+extern const char kHistogramFontPreloadLargestImagePaint[];
+extern const char kHistogramFontPreloadLargestTextPaint[];
 
 // Navigation metrics from the navigation start.
 extern const char
     kHistogramNavigationTimingNavigationStartToFirstRequestStart[];
 extern const char
     kHistogramNavigationTimingNavigationStartToFirstResponseStart[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToFirstLoaderCallback[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToFinalRequestStart[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToFinalResponseStart[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToFinalLoaderCallback[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToNavigationCommitSent[];
 
 // Navigation metrics between milestones.
 extern const char
     kHistogramNavigationTimingFirstRequestStartToFirstResponseStart[];
+extern const char
+    kHistogramNavigationTimingFirstResponseStartToFirstLoaderCallback[];
+extern const char
+    kHistogramNavigationTimingFinalRequestStartToFinalResponseStart[];
+extern const char
+    kHistogramNavigationTimingFinalResponseStartToFinalLoaderCallback[];
+extern const char
+    kHistogramNavigationTimingFinalLoaderCallbackToNavigationCommitSent[];
+
+// 103 Early Hints metrics for experiment (https://crbug.com/1093693).
+extern const char kHistogramEarlyHintsFirstRequestStartToEarlyHints[];
+extern const char kHistogramEarlyHintsFinalRequestStartToEarlyHints[];
+extern const char kHistogramEarlyHintsEarlyHintsToFinalResponseStart[];
 
 enum FirstMeaningfulPaintStatus {
   FIRST_MEANINGFUL_PAINT_RECORDED,
@@ -181,14 +210,9 @@ class CorePageLoadMetricsObserver
       content::RenderFrameHost* rfh,
       const std::vector<page_load_metrics::mojom::ResourceDataUpdatePtr>&
           resources) override;
-  void OnTimingUpdate(
-      content::RenderFrameHost* subframe_rfh,
-      const page_load_metrics::mojom::PageLoadTiming& timing) override;
   void OnCpuTimingUpdate(
       content::RenderFrameHost* subframe_rfh,
       const page_load_metrics::mojom::CpuTiming& timing) override;
-  void OnDidFinishSubFrameNavigation(
-      content::NavigationHandle* navigation_handle) override;
   ObservePolicy OnEnterBackForwardCache(
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
   void OnRestoreFromBackForwardCache(
@@ -197,8 +221,7 @@ class CorePageLoadMetricsObserver
                                  int behavior_flags) override;
 
  private:
-  void RecordNavigationTimingHistograms(
-      content::NavigationHandle* navigation_handle);
+  void RecordNavigationTimingHistograms();
   void RecordTimingHistograms(
       const page_load_metrics::mojom::PageLoadTiming& main_frame_timing);
   void RecordByteAndResourceHistograms(
@@ -207,6 +230,8 @@ class CorePageLoadMetricsObserver
   void RecordForegroundDurationHistograms(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       base::TimeTicks app_background_time);
+
+  content::NavigationHandleTiming navigation_handle_timing_;
 
   ui::PageTransition transition_;
   bool was_no_store_main_resource_;
@@ -243,9 +268,6 @@ class CorePageLoadMetricsObserver
   bool font_preload_started_before_rendering_observed_ = false;
 
   base::TimeTicks first_paint_;
-
-  page_load_metrics::LargestContentfulPaintHandler
-      largest_contentful_paint_handler_;
 
   // Tracks user input clicks for possible click burst.
   page_load_metrics::ClickInputTracker click_tracker_;

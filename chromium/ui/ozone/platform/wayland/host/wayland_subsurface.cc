@@ -7,6 +7,7 @@
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
+#include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
 
 namespace ui {
@@ -15,7 +16,7 @@ namespace {
 
 gfx::Rect AdjustSubsurfaceBounds(const gfx::Rect& bounds_px,
                                  const gfx::Rect& parent_bounds_px,
-                                 int32_t ui_scale,
+                                 float ui_scale,
                                  int32_t buffer_scale) {
   const auto parent_bounds_dip =
       gfx::ScaleToRoundedRect(parent_bounds_px, 1.0 / ui_scale);
@@ -78,7 +79,7 @@ void WaylandSubsurface::CreateSubsurface() {
     // windows. If we are in a drag process, use the entered window. Otherwise,
     // it must be a tooltip.
     if (connection()->IsDragInProgress()) {
-      parent = connection()->wayland_data_device()->entered_window();
+      parent = connection()->data_drag_controller()->entered_window();
       set_parent_window(parent);
     } else {
       // If Aura does not not provide a reference parent window, needed by
@@ -114,6 +115,11 @@ void WaylandSubsurface::CreateSubsurface() {
   wl_subsurface_set_desync(subsurface_.get());
   wl_surface_commit(parent->surface());
   connection()->ScheduleFlush();
+
+  // Notify the observers the window has been configured. Please note that
+  // subsurface doesn't send ack configure events. Thus, notify the observers as
+  // soon as the subsurface is created.
+  connection()->wayland_window_manager()->NotifyWindowConfigured(this);
 }
 
 bool WaylandSubsurface::OnInitialize(PlatformWindowInitProperties properties) {

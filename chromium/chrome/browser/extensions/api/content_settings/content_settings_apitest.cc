@@ -18,15 +18,19 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/permissions/features.h"
+#include "components/permissions/permission_manager.h"
+#include "components/permissions/permission_result.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
@@ -36,12 +40,15 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/common/scoped_worker_based_extensions_channel.h"
 
 namespace extensions {
 
+using ContextType = ExtensionApiTest::ContextType;
+
 class ExtensionContentSettingsApiTest : public ExtensionApiTest {
  public:
-  ExtensionContentSettingsApiTest() : profile_(NULL) {}
+  ExtensionContentSettingsApiTest() : profile_(nullptr) {}
 
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
@@ -89,7 +96,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
         map->GetContentSetting(example_url, example_url,
                                ContentSettingsType::JAVASCRIPT, std::string()));
     EXPECT_EQ(
-        CONTENT_SETTING_ALLOW,
+        CONTENT_SETTING_BLOCK,
         map->GetContentSetting(example_url, example_url,
                                ContentSettingsType::PLUGINS, std::string()));
     EXPECT_EQ(
@@ -134,7 +141,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
               map->GetContentSetting(url, url, ContentSettingsType::JAVASCRIPT,
                                      std::string()));
-    EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
+    EXPECT_EQ(CONTENT_SETTING_BLOCK,
               map->GetContentSetting(url, url, ContentSettingsType::PLUGINS,
                                      std::string()));
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -256,6 +263,42 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 };
 
+class ExtensionContentSettingsApiLazyTest
+    : public ExtensionContentSettingsApiTest,
+      public testing::WithParamInterface<ContextType> {
+ public:
+  void SetUp() override {
+    ExtensionContentSettingsApiTest::SetUp();
+    // Service Workers are currently only available on certain channels, so set
+    // the channel for those tests.
+    if (GetParam() == ContextType::kServiceWorker)
+      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
+  }
+
+ protected:
+  bool RunLazyTest(const std::string& extension_name) {
+    return RunLazyTestWithArg(extension_name, nullptr);
+  }
+
+  bool RunLazyTestWithArg(const std::string& extension_name, const char* arg) {
+    int browser_test_flags = kFlagNone;
+    if (GetParam() == ContextType::kServiceWorker)
+      browser_test_flags |= kFlagRunAsServiceWorkerBasedExtension;
+
+    return RunExtensionTestWithFlagsAndArg(extension_name, arg,
+                                           browser_test_flags, kFlagNone);
+  }
+
+  std::unique_ptr<ScopedWorkerBasedExtensionsChannel> current_channel_;
+};
+
+INSTANTIATE_TEST_SUITE_P(EventPage,
+                         ExtensionContentSettingsApiLazyTest,
+                         ::testing::Values(ContextType::kEventPage));
+INSTANTIATE_TEST_SUITE_P(ServiceWorker,
+                         ExtensionContentSettingsApiLazyTest,
+                         ::testing::Values(ContextType::kServiceWorker));
+
 IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, Standard) {
   CheckContentSettingsDefault();
 
@@ -285,7 +328,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, Standard) {
 // brittle or just have the JS side look for the additional plugins.
 //
 // Flaky on the trybots. See http://crbug.com/96725.
-IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest,
                        DISABLED_GetResourceIdentifiers) {
   base::FilePath::CharType kFooPath[] =
       FILE_PATH_LITERAL("/plugins/foo.plugin");
@@ -307,21 +350,22 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
                            base::ASCIIToUTF16("bar")),
       false);
 
-  EXPECT_TRUE(RunExtensionTest("content_settings/getresourceidentifiers"))
+  EXPECT_TRUE(RunLazyTest("content_settings/getresourceidentifiers"))
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest,
                        UnsupportedDefaultSettings) {
   const char kExtensionPath[] = "content_settings/unsupporteddefaultsettings";
-  EXPECT_TRUE(RunExtensionSubtest(kExtensionPath, "test.html")) << message_;
+  EXPECT_TRUE(RunExtensionTest(kExtensionPath)) << message_;
 }
 
 // Tests if an extension clearing content settings for one content type leaves
 // the others unchanged.
-IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, ClearProperlyGranular) {
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest,
+                       ClearProperlyGranular) {
   const char kExtensionPath[] = "content_settings/clearproperlygranular";
-  EXPECT_TRUE(RunExtensionSubtest(kExtensionPath, "test.html")) << message_;
+  EXPECT_TRUE(RunLazyTest(kExtensionPath)) << message_;
 }
 
 // Tests if changing permissions in incognito mode keeps the previous state of
@@ -333,9 +377,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, IncognitoIsolation) {
   std::vector<int> content_settings_before = GetContentSettingsSnapshot(url);
 
   // Run extension, set all permissions to allow, and check if they are changed.
-  EXPECT_TRUE(RunExtensionSubtest("content_settings/incognitoisolation",
-                                  "test.html?allow", kFlagEnableIncognito,
-                                  kFlagUseIncognito))
+  EXPECT_TRUE(RunExtensionSubtestWithArgAndFlags(
+      "content_settings/incognitoisolation", "test.html", "allow",
+      kFlagEnableIncognito, kFlagUseIncognito))
       << message_;
 
   // Get content settings after running extension to ensure nothing is changed.
@@ -343,9 +387,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, IncognitoIsolation) {
   EXPECT_EQ(content_settings_before, content_settings_after);
 
   // Run extension, set all permissions to block, and check if they are changed.
-  EXPECT_TRUE(RunExtensionSubtest("content_settings/incognitoisolation",
-                                  "test.html?block", kFlagEnableIncognito,
-                                  kFlagUseIncognito))
+  EXPECT_TRUE(RunExtensionSubtestWithArgAndFlags(
+      "content_settings/incognitoisolation", "test.html", "block",
+      kFlagEnableIncognito, kFlagUseIncognito))
       << message_;
 
   // Get content settings after running extension to ensure nothing is changed.
@@ -356,16 +400,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, IncognitoIsolation) {
 // Tests if changing incognito mode permissions in regular profile are rejected.
 IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
                        IncognitoNotAllowedInRegular) {
-  EXPECT_FALSE(RunExtensionSubtest("content_settings/incognitoisolation",
-                                   "test.html?allow"))
+  EXPECT_FALSE(RunExtensionSubtestWithArg("content_settings/incognitoisolation",
+                                          "test.html", "allow"))
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest,
                        EmbeddedSettingsMetric) {
   base::HistogramTester histogram_tester;
   const char kExtensionPath[] = "content_settings/embeddedsettingsmetric";
-  EXPECT_TRUE(RunExtensionSubtest(kExtensionPath, "test.html")) << message_;
+  EXPECT_TRUE(RunLazyTest(kExtensionPath)) << message_;
 
   size_t num_values = 0;
   int images_type = ContentSettingTypeToHistogramValue(
@@ -391,7 +435,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
 }
 
 class ExtensionContentSettingsApiTestWithPermissionDelegationDisabled
-    : public ExtensionContentSettingsApiTest {
+    : public ExtensionContentSettingsApiLazyTest {
  public:
   ExtensionContentSettingsApiTestWithPermissionDelegationDisabled() {
     feature_list_.InitAndDisableFeature(
@@ -402,8 +446,18 @@ class ExtensionContentSettingsApiTestWithPermissionDelegationDisabled
   base::test::ScopedFeatureList feature_list_;
 };
 
+INSTANTIATE_TEST_SUITE_P(
+    EventPage,
+    ExtensionContentSettingsApiTestWithPermissionDelegationDisabled,
+    ::testing::Values(ContextType::kEventPage));
+
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    ExtensionContentSettingsApiTestWithPermissionDelegationDisabled,
+    ::testing::Values(ContextType::kServiceWorker));
+
 class ExtensionContentSettingsApiTestWithPermissionDelegationEnabled
-    : public ExtensionContentSettingsApiTest {
+    : public ExtensionContentSettingsApiLazyTest {
  public:
   ExtensionContentSettingsApiTestWithPermissionDelegationEnabled() {
     feature_list_.InitAndEnableFeature(
@@ -414,20 +468,76 @@ class ExtensionContentSettingsApiTestWithPermissionDelegationEnabled
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(
+INSTANTIATE_TEST_SUITE_P(
+    EventPage,
+    ExtensionContentSettingsApiTestWithPermissionDelegationEnabled,
+    ::testing::Values(ContextType::kEventPage));
+
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    ExtensionContentSettingsApiTestWithPermissionDelegationEnabled,
+    ::testing::Values(ContextType::kServiceWorker));
+
+IN_PROC_BROWSER_TEST_P(
     ExtensionContentSettingsApiTestWithPermissionDelegationDisabled,
     EmbeddedSettings) {
   const char kExtensionPath[] = "content_settings/embeddedsettings";
-  EXPECT_TRUE(RunExtensionSubtest(kExtensionPath, "test.html")) << message_;
+  EXPECT_TRUE(RunLazyTestWithArg(kExtensionPath, nullptr)) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(
+IN_PROC_BROWSER_TEST_P(
     ExtensionContentSettingsApiTestWithPermissionDelegationEnabled,
     EmbeddedSettings) {
   const char kExtensionPath[] = "content_settings/embeddedsettings";
-  EXPECT_TRUE(
-      RunExtensionSubtest(kExtensionPath, "test.html?permission_delegation"))
-      << message_;
+  EXPECT_TRUE(RunLazyTestWithArg(kExtensionPath, "permission")) << message_;
+}
+
+class ExtensionContentSettingsApiTestWithWildcardMatchingDisabled
+    : public ExtensionContentSettingsApiLazyTest {
+ public:
+  ExtensionContentSettingsApiTestWithWildcardMatchingDisabled() {
+    scoped_feature_list_.InitAndEnableFeature(
+        content_settings::kDisallowWildcardsInPluginContentSettings);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    EventPage,
+    ExtensionContentSettingsApiTestWithWildcardMatchingDisabled,
+    ::testing::Values(ContextType::kEventPage));
+
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    ExtensionContentSettingsApiTestWithWildcardMatchingDisabled,
+    ::testing::Values(ContextType::kServiceWorker));
+
+IN_PROC_BROWSER_TEST_P(
+    ExtensionContentSettingsApiTestWithWildcardMatchingDisabled,
+    PluginTest) {
+  constexpr char kExtensionPath[] = "content_settings/pluginswildcardmatching";
+  EXPECT_TRUE(RunLazyTest(kExtensionPath)) << message_;
+
+  constexpr char kGoogleMailUrl[] = "http://mail.google.com:443";
+  constexpr char kGoogleDriveUrl[] = "http://drive.google.com:443";
+
+  permissions::PermissionManager* permission_manager =
+      PermissionManagerFactory::GetForProfile(browser()->profile());
+  EXPECT_EQ(
+      permission_manager
+          ->GetPermissionStatus(ContentSettingsType::PLUGINS,
+                                GURL(kGoogleMailUrl), GURL(kGoogleMailUrl))
+          .content_setting,
+      ContentSetting::CONTENT_SETTING_BLOCK);
+
+  EXPECT_EQ(
+      permission_manager
+          ->GetPermissionStatus(ContentSettingsType::PLUGINS,
+                                GURL(kGoogleDriveUrl), GURL(kGoogleDriveUrl))
+          .content_setting,
+      ContentSetting::CONTENT_SETTING_ALLOW);
 }
 
 }  // namespace extensions

@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.share;
 
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -57,11 +57,6 @@ public class ShareDelegateImplTest {
         mockTab.isShowingErrorPage = true;
         Assert.assertFalse(ShareDelegateImpl.shouldFetchCanonicalUrl(mockTab));
         mockTab.isShowingErrorPage = false;
-
-        // Disabled if showing interstitial page.
-        mockTab.isShowingInterstitialPage = true;
-        Assert.assertFalse(ShareDelegateImpl.shouldFetchCanonicalUrl(mockTab));
-        mockTab.isShowingInterstitialPage = false;
 
         // Disabled if showing sad tab page.
         mSadTabRule.show(true);
@@ -123,11 +118,6 @@ public class ShareDelegateImplTest {
         @Override
         public boolean isShowingErrorPage() {
             return isShowingErrorPage;
-        }
-
-        @Override
-        public boolean isShowingInterstitialPage() {
-            return isShowingInterstitialPage;
         }
     }
 }
