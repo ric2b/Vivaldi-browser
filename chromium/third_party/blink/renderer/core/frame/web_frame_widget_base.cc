@@ -22,12 +22,18 @@
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_widget_client.h"
+#include "third_party/blink/renderer/core/content_capture/content_capture_manager.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
+#include "third_party/blink/renderer/core/events/current_input_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
+#include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
+#include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -37,6 +43,7 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/html/html_plugin_element.h"
 #include "third_party/blink/renderer/core/html/portal/document_portals.h"
 #include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
@@ -53,6 +60,11 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
+#include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
+#include "third_party/blink/renderer/core/page/validation_message_client.h"
+#include "third_party/blink/renderer/core/paint/first_meaningful_paint_detector.h"
+#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
+#include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/graphics/animation_worklet_mutator_dispatcher_impl.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_mutator_client.h"
@@ -73,6 +85,9 @@
 #include "ui/gfx/geometry/point.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+#include "third_party/blink/renderer/core/exported/web_settings_impl.h"
+
 namespace WTF {
 template <>
 struct CrossThreadCopier<blink::WebReportTimeCallback>
@@ -83,6 +98,12 @@ struct CrossThreadCopier<blink::WebReportTimeCallback>
 }  // namespace WTF
 
 namespace blink {
+
+class VivaldiDoubleClickMenu {
+ public:
+  base::TimeTicks click_timestamp_;
+  base::Optional<base::CancelableClosure> tripple_click_timer_;
+};
 
 namespace {
 
@@ -118,7 +139,7 @@ void ForEachRemoteFrameChildrenControlledByWidget(
     }
   }
 
-  // Iterate on any portals owned by a local frame.
+    // Iterate on any portals owned by a local frame.
   if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
     if (Document* document = local_frame->GetDocument()) {
       for (PortalContents* portal :
@@ -146,24 +167,13 @@ viz::FrameSinkId GetRemoteFrameSinkId(const HitTestResult& result) {
     return viz::FrameSinkId();
 
   IntPoint local_point = RoundedIntPoint(result.LocalPoint());
-  if (!ToLayoutBox(object)->ComputedCSSContentBoxRect().Contains(local_point))
+  if (!To<LayoutBox>(object)->ComputedCSSContentBoxRect().Contains(local_point))
     return viz::FrameSinkId();
 
   return remote_frame->GetFrameSinkId();
 }
 
 }  // namespace
-
-// Ensure that the DragOperation enum values stay in sync with the original
-// DragOperation constants.
-// STATIC_ASSERT_ENUM(kDragOperationNone, kDragOperationNone);
-// STATIC_ASSERT_ENUM(kDragOperationCopy, kDragOperationCopy);
-// STATIC_ASSERT_ENUM(kDragOperationLink, kDragOperationLink);
-// STATIC_ASSERT_ENUM(kDragOperationGeneric, kDragOperationGeneric);
-// STATIC_ASSERT_ENUM(kDragOperationPrivate, kDragOperationPrivate);
-// STATIC_ASSERT_ENUM(kDragOperationMove, kDragOperationMove);
-// STATIC_ASSERT_ENUM(kDragOperationDelete, kDragOperationDelete);
-// STATIC_ASSERT_ENUM(kDragOperationEvery, kDragOperationEvery);
 
 bool WebFrameWidgetBase::ignore_input_events_ = false;
 
@@ -177,22 +187,32 @@ WebFrameWidgetBase::WebFrameWidgetBase(
         widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
         widget,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    const viz::FrameSinkId& frame_sink_id,
     bool hidden,
-    bool never_composited)
+    bool never_composited,
+    bool is_for_child_local_root)
     : widget_base_(std::make_unique<WidgetBase>(this,
                                                 std::move(widget_host),
                                                 std::move(widget),
+                                                task_runner,
                                                 hidden,
-                                                never_composited)),
-      client_(&client) {
-  frame_widget_host_.Bind(
-      std::move(frame_widget_host),
-      ThreadScheduler::Current()->DeprecatedDefaultTaskRunner());
-  receiver_.Bind(std::move(frame_widget),
-                 ThreadScheduler::Current()->DeprecatedDefaultTaskRunner());
+                                                never_composited,
+                                                is_for_child_local_root)),
+      client_(&client),
+      frame_sink_id_(frame_sink_id) {
+  DCHECK(task_runner);
+  frame_widget_host_.Bind(std::move(frame_widget_host), task_runner);
+  receiver_.Bind(std::move(frame_widget), task_runner);
 }
 
-WebFrameWidgetBase::~WebFrameWidgetBase() = default;
+WebFrameWidgetBase::~WebFrameWidgetBase() {
+  // Ensure that Close is called and we aren't releasing |widget_base_| in the
+  // destructor.
+  // TODO(crbug.com/1139104): This CHECK can be changed to a DCHECK once
+  // the issue is solved.
+  CHECK(!widget_base_);
+}
 
 void WebFrameWidgetBase::BindLocalRoot(WebLocalFrame& local_root) {
   local_root_ = To<WebLocalFrameImpl>(local_root);
@@ -253,19 +273,21 @@ WebRect WebFrameWidgetBase::ComputeBlockBound(
   return WebRect();
 }
 
-DragOperation WebFrameWidgetBase::DragTargetDragEnter(
+void WebFrameWidgetBase::DragTargetDragEnter(
     const WebDragData& web_drag_data,
     const gfx::PointF& point_in_viewport,
     const gfx::PointF& screen_point,
     DragOperationsMask operations_allowed,
-    uint32_t key_modifiers) {
+    uint32_t key_modifiers,
+    DragTargetDragEnterCallback callback) {
   DCHECK(!current_drag_data_);
 
   current_drag_data_ = DataObject::Create(web_drag_data);
   operations_allowed_ = operations_allowed;
 
-  return DragTargetDragEnterOrOver(point_in_viewport, screen_point, kDragEnter,
-                                   key_modifiers);
+  blink::DragOperation operation = DragTargetDragEnterOrOver(
+      point_in_viewport, screen_point, kDragEnter, key_modifiers);
+  std::move(callback).Run(operation);
 }
 
 void WebFrameWidgetBase::DragTargetDragOver(
@@ -444,27 +466,25 @@ viz::FrameSinkId WebFrameWidgetBase::GetFrameSinkIdAtPoint(
   // call the hit-testing API. Either way it might be better to have
   // a DCHECK for the node rather than a null check here.
   if (!result_node) {
-    return client_->GetFrameSinkId();
+    return frame_sink_id_;
   }
 
-  viz::FrameSinkId frame_sink_id = GetRemoteFrameSinkId(result);
-  if (frame_sink_id.is_valid()) {
+  viz::FrameSinkId remote_frame_sink_id = GetRemoteFrameSinkId(result);
+  if (remote_frame_sink_id.is_valid()) {
     FloatPoint local_point = FloatPoint(result.LocalPoint());
     LayoutObject* object = result.GetLayoutObject();
-    if (object->IsBox()) {
-      LayoutBox* box = ToLayoutBox(object);
+    if (auto* box = DynamicTo<LayoutBox>(object))
       local_point.MoveBy(-FloatPoint(box->PhysicalContentBoxOffset()));
-    }
 
     *local_point_in_dips =
         widget_base_->BlinkSpaceToDIPs(gfx::PointF(local_point));
-    return frame_sink_id;
+    return remote_frame_sink_id;
   }
 
   // Return the FrameSinkId for the current widget if the point did not hit
   // test to a remote frame, or the point is outside of the remote frame's
   // content box, or the remote frame doesn't have a valid FrameSinkId yet.
-  return client_->GetFrameSinkId();
+  return frame_sink_id_;
 }
 
 gfx::RectF WebFrameWidgetBase::BlinkSpaceToDIPs(const gfx::RectF& rect) {
@@ -498,6 +518,242 @@ float WebFrameWidgetBase::DIPsToBlinkSpace(float scalar) {
 
 void WebFrameWidgetBase::SetActive(bool active) {
   View()->SetIsActive(active);
+}
+
+void WebFrameWidgetBase::HandleMouseDown(LocalFrame& main_frame,
+                                         const WebMouseEvent& event) {
+  WebViewImpl* view_impl = View();
+  // If there is a popup open, close it as the user is clicking on the page
+  // (outside of the popup). We also save it so we can prevent a click on an
+  // element from immediately reopening the same popup.
+  scoped_refptr<WebPagePopupImpl> page_popup;
+  if (event.button == WebMouseEvent::Button::kLeft) {
+    page_popup = view_impl->GetPagePopup();
+    view_impl->CancelPagePopup();
+  }
+
+  // Take capture on a mouse down on a plugin so we can send it mouse events.
+  // If the hit node is a plugin but a scrollbar is over it don't start mouse
+  // capture because it will interfere with the scrollbar receiving events.
+  PhysicalOffset point(LayoutUnit(event.PositionInWidget().x()),
+                       LayoutUnit(event.PositionInWidget().y()));
+  if (event.button == WebMouseEvent::Button::kLeft) {
+    HitTestLocation location(
+        LocalRootImpl()->GetFrameView()->ConvertFromRootFrame(point));
+    HitTestResult result(
+        LocalRootImpl()->GetFrame()->GetEventHandler().HitTestResultAtLocation(
+            location));
+    result.SetToShadowHostIfInRestrictedShadowRoot();
+    Node* hit_node = result.InnerNode();
+    auto* html_element = DynamicTo<HTMLElement>(hit_node);
+    if (!result.GetScrollbar() && hit_node && hit_node->GetLayoutObject() &&
+        hit_node->GetLayoutObject()->IsEmbeddedObject() && html_element &&
+        html_element->IsPluginElement()) {
+      mouse_capture_element_ = To<HTMLPlugInElement>(hit_node);
+      SetMouseCapture(true);
+      TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("input", "capturing mouse",
+                                        TRACE_ID_LOCAL(this));
+    }
+  }
+
+  PageWidgetEventHandler::HandleMouseDown(main_frame, event);
+  // PageWidgetEventHandler may have detached the frame.
+  if (!LocalRootImpl())
+    return;
+
+  if (view_impl->GetPagePopup() && page_popup &&
+      view_impl->GetPagePopup()->HasSamePopupClient(page_popup.get())) {
+    // That click triggered a page popup that is the same as the one we just
+    // closed.  It needs to be closed.
+    view_impl->CancelPagePopup();
+  }
+
+  // Dispatch the contextmenu event regardless of if the click was swallowed.
+  if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
+#if defined(OS_MAC)
+    if (event.button == WebMouseEvent::Button::kRight ||
+        (event.button == WebMouseEvent::Button::kLeft &&
+         event.GetModifiers() & WebMouseEvent::kControlKey))
+      MouseContextMenu(event);
+#else
+    if (event.button == WebMouseEvent::Button::kRight)
+      MouseContextMenu(event);
+#endif
+  }
+#if defined(OS_MAC)
+  else if (vivaldi::IsVivaldiRunning()) {
+    // On Mac show Ctrl-click menu on mouse down irrespective of
+    // ShowContextMenuOnMouseUp, see VB-45970.
+    if (event.button == WebMouseEvent::Button::kLeft &&
+        event.GetModifiers() & WebMouseEvent::kControlKey)
+      MouseContextMenu(event);
+  }
+#endif
+}
+
+void WebFrameWidgetBase::MouseContextMenu(const WebMouseEvent& event) {
+  GetPage()->GetContextMenuController().ClearContextMenu();
+
+  WebMouseEvent transformed_event =
+      TransformWebMouseEvent(LocalRootImpl()->GetFrameView(), event);
+  transformed_event.menu_source_type = kMenuSourceMouse;
+
+  // Find the right target frame. See issue 1186900.
+  HitTestResult result = HitTestResultForRootFramePos(
+      FloatPoint(transformed_event.PositionInRootFrame()));
+  Frame* target_frame;
+  if (result.InnerNodeOrImageMapImage())
+    target_frame = result.InnerNodeOrImageMapImage()->GetDocument().GetFrame();
+  else
+    target_frame = GetPage()->GetFocusController().FocusedOrMainFrame();
+
+  // This will need to be changed to a nullptr check when focus control
+  // is refactored, at which point focusedOrMainFrame will never return a
+  // RemoteFrame.
+  // See https://crbug.com/341918.
+  LocalFrame* target_local_frame = DynamicTo<LocalFrame>(target_frame);
+  if (!target_local_frame)
+    return;
+
+  {
+    ContextMenuAllowedScope scope;
+    target_local_frame->GetEventHandler().SendContextMenuEvent(
+        transformed_event);
+  }
+  // Actually showing the context menu is handled by the ContextMenuClient
+  // implementation...
+}
+
+WebInputEventResult WebFrameWidgetBase::HandleMouseUp(
+    LocalFrame& main_frame,
+    const WebMouseEvent& event) {
+  WebInputEventResult result =
+      PageWidgetEventHandler::HandleMouseUp(main_frame, event);
+  // PageWidgetEventHandler may have detached the frame.
+  if (!LocalRootImpl())
+    return result;
+
+  if (GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
+    // Dispatch the contextmenu event regardless of if the click was swallowed.
+    // On Mac/Linux, we handle it on mouse down, not up.
+    if (event.button == WebMouseEvent::Button::kRight)
+      MouseContextMenu(event);
+  }
+
+  // NOTE(igor@vivaldi.com): show context menu on double click if enabled.
+  // In Opera 12 after the double menu is shown the user can continue to click
+  // on the page to extend the selection to the sentence and the paragraph. As
+  // this is not possible with the current context menu implementation, we show
+  // the menu after a pause sufficient to register the tripple click before the
+  // menu is shown so the tripple click can select a paragraph in Chromium.
+  if (vivaldi::IsVivaldiRunning() &&
+      GetPage()->GetSettings().GetVivaldiShowContextMenuOnDoubleClick()) {
+    if (!vivaldi_double_click_menu_) {
+      vivaldi_double_click_menu_ = std::make_unique<VivaldiDoubleClickMenu>();
+    }
+    bool reset_timestamp = true;
+    bool reset_timer = true;
+    if (event.button == WebMouseEvent::Button::kLeft &&
+        !(event.GetModifiers() & WebInputEvent::kKeyModifiers)) {
+      if (event.click_count == 1) {
+        vivaldi_double_click_menu_->click_timestamp_ = event.TimeStamp();
+        reset_timestamp = false;
+      } else if (event.click_count == 2) {
+        // Defend against missed initial clicks when the timestamp is null or
+        // too old for a double click.
+        if (!vivaldi_double_click_menu_->click_timestamp_.is_null()) {
+          float click_delta =
+              (event.TimeStamp() - vivaldi_double_click_menu_->click_timestamp_)
+                  .InMillisecondsF();
+          if (click_delta < 1000.0f) {
+            // Assume that the tripple click if any comes no later than 1.3
+            // times the time between the first and the second click.
+            vivaldi_double_click_menu_->tripple_click_timer_.emplace(
+                base::BindRepeating(&WebFrameWidgetBase::MouseContextMenu,
+                               base::Unretained(this), event));
+            base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+                FROM_HERE,
+                vivaldi_double_click_menu_->tripple_click_timer_->callback(),
+                base::TimeDelta::FromMilliseconds(click_delta * 1.33f));
+            reset_timer = false;
+          }
+        }
+      } else if (event.click_count == 3 &&
+                 vivaldi_double_click_menu_->tripple_click_timer_) {
+        MouseContextMenu(event);
+      }
+    }
+    if (reset_timestamp) {
+      vivaldi_double_click_menu_->click_timestamp_ = base::TimeTicks();
+    }
+    if (reset_timer) {
+      vivaldi_double_click_menu_->tripple_click_timer_.reset();
+    }
+  }
+  return result;
+}
+
+WebInputEventResult WebFrameWidgetBase::HandleMouseWheel(
+    LocalFrame& frame,
+    const WebMouseWheelEvent& event) {
+  View()->CancelPagePopup();
+  return PageWidgetEventHandler::HandleMouseWheel(frame, event);
+  // PageWidgetEventHandler may have detached the frame.
+}
+
+WebInputEventResult WebFrameWidgetBase::HandleCharEvent(
+    const WebKeyboardEvent& event) {
+  DCHECK_EQ(event.GetType(), WebInputEvent::Type::kChar);
+
+  // Please refer to the comments explaining the m_suppressNextKeypressEvent
+  // member.  The m_suppressNextKeypressEvent is set if the KeyDown is
+  // handled by Webkit. A keyDown event is typically associated with a
+  // keyPress(char) event and a keyUp event. We reset this flag here as it
+  // only applies to the current keyPress event.
+  bool suppress = suppress_next_keypress_event_;
+  suppress_next_keypress_event_ = false;
+
+  // If there is a popup open, it should be the one processing the event,
+  // not the page.
+  scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
+  if (page_popup)
+    return page_popup->HandleKeyEvent(event);
+
+  LocalFrame* frame = To<LocalFrame>(FocusedCoreFrame());
+  if (!frame) {
+    return suppress ? WebInputEventResult::kHandledSuppressed
+                    : WebInputEventResult::kNotHandled;
+  }
+
+  EventHandler& handler = frame->GetEventHandler();
+
+  if (!event.IsCharacterKey())
+    return WebInputEventResult::kHandledSuppressed;
+
+  // NOTE(daniel@vivaldi.com): In Vivaldi we should to be able to turn this off.
+  if (View()->SettingsImpl()->AllowAccessKeys()) {
+  // Accesskeys are triggered by char events and can't be suppressed.
+  // It is unclear whether a keypress should be dispatched as well
+  // crbug.com/563507
+  if (handler.HandleAccessKey(event))
+    return WebInputEventResult::kHandledSystem;
+  }
+
+  // Safari 3.1 does not pass off windows system key messages (WM_SYSCHAR) to
+  // the eventHandler::keyEvent. We mimic this behavior on all platforms since
+  // for now we are converting other platform's key events to windows key
+  // events.
+  if (event.is_system_key)
+    return WebInputEventResult::kNotHandled;
+
+  if (suppress)
+    return WebInputEventResult::kHandledSuppressed;
+
+  WebInputEventResult result = handler.KeyEvent(event);
+  if (result != WebInputEventResult::kNotHandled)
+    return result;
+
+  return WebInputEventResult::kNotHandled;
 }
 
 void WebFrameWidgetBase::CancelDrag() {
@@ -588,6 +844,13 @@ void WebFrameWidgetBase::SendScrollEndEventFromImplSide(
     target_node->GetDocument().EnqueueScrollEndEventForNode(target_node);
 }
 
+WebInputMethodController*
+WebFrameWidgetBase::GetActiveWebInputMethodController() const {
+  WebLocalFrameImpl* local_frame =
+      WebLocalFrameImpl::FromFrame(FocusedLocalFrameInWidget());
+  return local_frame ? local_frame->GetInputMethodController() : nullptr;
+}
+
 gfx::PointF WebFrameWidgetBase::ViewportToRootFrame(
     const gfx::PointF& point_in_viewport) const {
   return GetPage()->GetVisualViewport().ViewportToRootFrame(
@@ -607,23 +870,6 @@ WebFrameWidgetBase::GetAssociatedFrameWidgetHost() const {
   return frame_widget_host_.get();
 }
 
-void WebFrameWidgetBase::DidAcquirePointerLock() {
-  GetPage()->GetPointerLockController().DidAcquirePointerLock();
-
-  LocalFrame* focusedFrame = FocusedLocalFrameInWidget();
-  if (focusedFrame) {
-    focusedFrame->GetEventHandler().ReleaseMousePointerCapture();
-  }
-}
-
-void WebFrameWidgetBase::DidNotAcquirePointerLock() {
-  GetPage()->GetPointerLockController().DidNotAcquirePointerLock();
-}
-
-void WebFrameWidgetBase::DidLosePointerLock() {
-  GetPage()->GetPointerLockController().DidLosePointerLock();
-}
-
 void WebFrameWidgetBase::RequestDecode(
     const PaintImage& image,
     base::OnceCallback<void(bool)> callback) {
@@ -641,6 +887,7 @@ void WebFrameWidgetBase::Trace(Visitor* visitor) const {
   visitor->Trace(frame_widget_host_);
   visitor->Trace(receiver_);
   visitor->Trace(input_target_receiver_);
+  visitor->Trace(mouse_capture_element_);
 }
 
 void WebFrameWidgetBase::SetNeedsRecalculateRasterScales() {
@@ -683,11 +930,6 @@ void WebFrameWidgetBase::RequestBeginMainFrameNotExpected(bool request) {
   widget_base_->LayerTreeHost()->RequestBeginMainFrameNotExpected(request);
 }
 
-void WebFrameWidgetBase::EndCommitCompositorFrame(
-    base::TimeTicks commit_start_time) {
-  Client()->DidCommitCompositorFrame(commit_start_time);
-}
-
 void WebFrameWidgetBase::DidCommitAndDrawCompositorFrame() {
   ForEachLocalFrameControlledByWidget(
       local_root_->GetFrame(),
@@ -711,21 +953,28 @@ void WebFrameWidgetBase::DidObserveFirstScrollDelay(
   }
 }
 
-void WebFrameWidgetBase::RequestNewLayerTreeFrameSink(
-    LayerTreeFrameSinkCallback callback) {
-  Client()->RequestNewLayerTreeFrameSink(std::move(callback));
-}
-
-void WebFrameWidgetBase::DidCompletePageScaleAnimation() {
-  Client()->DidCompletePageScaleAnimation();
+std::unique_ptr<cc::LayerTreeFrameSink>
+WebFrameWidgetBase::AllocateNewLayerTreeFrameSink() {
+  return Client()->AllocateNewLayerTreeFrameSink();
 }
 
 void WebFrameWidgetBase::DidBeginMainFrame() {
   Client()->DidBeginMainFrame();
+  DCHECK(LocalRootImpl()->GetFrame());
+  PageWidgetDelegate::DidBeginFrame(*LocalRootImpl()->GetFrame());
 }
 
 void WebFrameWidgetBase::WillBeginMainFrame() {
   Client()->WillBeginMainFrame();
+}
+
+void WebFrameWidgetBase::DidCompletePageScaleAnimation() {
+  // Page scale animations only happen on the main frame.
+  DCHECK(ForMainFrame());
+  if (auto* focused_frame = View()->FocusedFrame()) {
+    if (focused_frame->AutofillClient())
+      focused_frame->AutofillClient()->DidCompleteFocusChangeInFrame();
+  }
 }
 
 void WebFrameWidgetBase::ScheduleAnimation() {
@@ -938,7 +1187,7 @@ void WebFrameWidgetBase::SetLayerTreeDebugState(
 
 void WebFrameWidgetBase::SynchronouslyCompositeForTesting(
     base::TimeTicks frame_time) {
-  widget_base_->LayerTreeHost()->Composite(frame_time, false);
+  widget_base_->LayerTreeHost()->CompositeForTest(frame_time, false);
 }
 
 // TODO(665924): Remove direct dispatches of mouse events from
@@ -986,6 +1235,12 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
             coalesced_event.GetPredictedEventsPointers()),
         event_type);
   }
+}
+bool WebFrameWidgetBase::IsPointerLocked() {
+  if (GetPage()) {
+    return GetPage()->GetPointerLockController().IsPointerLocked();
+  }
+  return false;
 }
 
 void WebFrameWidgetBase::ShowContextMenu(
@@ -1062,9 +1317,68 @@ void WebFrameWidgetBase::SetCompositorVisible(bool visible) {
   widget_base_->SetCompositorVisible(visible);
 }
 
-void WebFrameWidgetBase::RecordTimeToFirstActivePaint(
-    base::TimeDelta duration) {
-  Client()->RecordTimeToFirstActivePaint(duration);
+void WebFrameWidgetBase::BeginMainFrame(base::TimeTicks last_frame_time) {
+  TRACE_EVENT1("blink", "WebFrameWidgetBase::BeginMainFrame", "frameTime",
+               last_frame_time);
+  DCHECK(!last_frame_time.is_null());
+  CHECK(LocalRootImpl());
+
+  // Dirty bit on MouseEventManager is not cleared in OOPIFs after scroll
+  // or layout changes. Ensure the hover state is recomputed if necessary.
+  LocalRootImpl()
+      ->GetFrame()
+      ->GetEventHandler()
+      .RecomputeMouseHoverStateIfNeeded();
+
+  // Adjusting frame anchor only happens on the main frame.
+  if (ForMainFrame()) {
+    if (LocalFrameView* view = LocalRootImpl()->GetFrameView()) {
+      if (FragmentAnchor* anchor = view->GetFragmentAnchor())
+        anchor->PerformPreRafActions();
+    }
+  }
+
+  base::Optional<LocalFrameUkmAggregator::ScopedUkmHierarchicalTimer> ukm_timer;
+  if (WidgetBase::ShouldRecordBeginMainFrameMetrics()) {
+    ukm_timer.emplace(LocalRootImpl()
+                          ->GetFrame()
+                          ->View()
+                          ->EnsureUkmAggregator()
+                          .GetScopedTimer(LocalFrameUkmAggregator::kAnimate));
+  }
+
+  PageWidgetDelegate::Animate(*GetPage(), last_frame_time);
+  // Animate can cause the local frame to detach.
+  if (!LocalRootImpl())
+    return;
+
+  GetPage()->GetValidationMessageClient().LayoutOverlay();
+}
+
+void WebFrameWidgetBase::BeginCommitCompositorFrame() {
+  commit_compositor_frame_start_time_.emplace(base::TimeTicks::Now());
+}
+
+void WebFrameWidgetBase::EndCommitCompositorFrame(
+    base::TimeTicks commit_start_time) {
+  DCHECK(commit_compositor_frame_start_time_.has_value());
+  CHECK(LocalRootImpl());
+  CHECK(LocalRootImpl()->GetFrame());
+  CHECK(LocalRootImpl()->GetFrame()->View());
+
+  if (ForMainFrame()) {
+    View()->Client()->DidCommitCompositorFrameForLocalMainFrame(
+        commit_start_time);
+    View()->UpdatePreferredSize();
+  }
+
+  LocalRootImpl()
+      ->GetFrame()
+      ->View()
+      ->EnsureUkmAggregator()
+      .RecordImplCompositorSample(commit_compositor_frame_start_time_.value(),
+                                  commit_start_time, base::TimeTicks::Now());
+  commit_compositor_frame_start_time_.reset();
 }
 
 void WebFrameWidgetBase::RecordDispatchRafAlignedInputTime(
@@ -1076,18 +1390,107 @@ void WebFrameWidgetBase::RecordDispatchRafAlignedInputTime(
   }
 }
 
+void WebFrameWidgetBase::SetSuppressFrameRequestsWorkaroundFor704763Only(
+    bool suppress_frame_requests) {
+  GetPage()->Animator().SetSuppressFrameRequestsWorkaroundFor704763Only(
+      suppress_frame_requests);
+}
+
+std::unique_ptr<cc::BeginMainFrameMetrics>
+WebFrameWidgetBase::GetBeginMainFrameMetrics() {
+  if (!LocalRootImpl())
+    return nullptr;
+
+  return LocalRootImpl()
+      ->GetFrame()
+      ->View()
+      ->EnsureUkmAggregator()
+      .GetBeginMainFrameMetrics();
+}
+
+void WebFrameWidgetBase::BeginUpdateLayers() {
+  if (LocalRootImpl())
+    update_layers_start_time_.emplace(base::TimeTicks::Now());
+}
+
+void WebFrameWidgetBase::EndUpdateLayers() {
+  if (LocalRootImpl()) {
+    DCHECK(update_layers_start_time_);
+    LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator().RecordSample(
+        LocalFrameUkmAggregator::kUpdateLayers,
+        update_layers_start_time_.value(), base::TimeTicks::Now());
+    probe::LayerTreeDidChange(LocalRootImpl()->GetFrame());
+  }
+  update_layers_start_time_.reset();
+}
+
+void WebFrameWidgetBase::RecordStartOfFrameMetrics() {
+  if (!LocalRootImpl())
+    return;
+
+  LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator().BeginMainFrame();
+}
+
+void WebFrameWidgetBase::RecordEndOfFrameMetrics(
+    base::TimeTicks frame_begin_time,
+    cc::ActiveFrameSequenceTrackers trackers) {
+  if (!LocalRootImpl())
+    return;
+
+  LocalRootImpl()
+      ->GetFrame()
+      ->View()
+      ->EnsureUkmAggregator()
+      .RecordEndOfFrameMetrics(frame_begin_time, base::TimeTicks::Now(),
+                               trackers);
+}
+
 bool WebFrameWidgetBase::WillHandleGestureEvent(const WebGestureEvent& event) {
   possible_drag_event_info_.source = ui::mojom::blink::DragEventSource::kTouch;
   possible_drag_event_info_.location =
       gfx::ToFlooredPoint(event.PositionInScreen());
+
+  bool move_cursor = false;
+  switch (event.GetType()) {
+    case WebInputEvent::Type::kGestureScrollBegin: {
+      if (event.data.scroll_begin.cursor_control) {
+        swipe_to_move_cursor_activated_ = true;
+        move_cursor = true;
+      }
+      break;
+    }
+    case WebInputEvent::Type::kGestureScrollUpdate: {
+      if (swipe_to_move_cursor_activated_)
+        move_cursor = true;
+      break;
+    }
+    case WebInputEvent::Type::kGestureScrollEnd: {
+      if (swipe_to_move_cursor_activated_) {
+        swipe_to_move_cursor_activated_ = false;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  // TODO(crbug.com/1140106): Place cursor for scroll begin other than just move
+  // cursor.
+  if (move_cursor) {
+    WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+    if (focused_frame) {
+      gfx::Point base(event.PositionInWidget().x(),
+                      event.PositionInWidget().y());
+      focused_frame->MoveCaretSelection(base);
+    }
+    return true;
+  }
   return false;
 }
 
-bool WebFrameWidgetBase::WillHandleMouseEvent(const WebMouseEvent& event) {
+void WebFrameWidgetBase::WillHandleMouseEvent(const WebMouseEvent& event) {
   possible_drag_event_info_.source = ui::mojom::blink::DragEventSource::kMouse;
   possible_drag_event_info_.location =
       gfx::Point(event.PositionInScreen().x(), event.PositionInScreen().y());
-  return Client()->WillHandleMouseEvent(event);
 }
 
 void WebFrameWidgetBase::ObserveGestureEventAndResult(
@@ -1113,13 +1516,18 @@ void WebFrameWidgetBase::DidHandleKeyEvent() {
 }
 
 WebTextInputType WebFrameWidgetBase::GetTextInputType() {
-  if (Client()->ShouldDispatchImeEventsToPepper())
-    return Client()->GetPepperTextInputType();
+  if (ShouldDispatchImeEventsToPlugin()) {
+    return GetFocusedPluginContainer()->GetPluginTextInputType();
+  }
 
   WebInputMethodController* controller = GetActiveWebInputMethodController();
   if (!controller)
     return WebTextInputType::kWebTextInputTypeNone;
   return controller->TextInputType();
+}
+
+void WebFrameWidgetBase::SetCursorVisibilityState(bool is_visible) {
+  GetPage()->SetIsCursorVisible(is_visible);
 }
 
 void WebFrameWidgetBase::ApplyViewportChangesForTesting(
@@ -1168,7 +1576,169 @@ void WebFrameWidgetBase::SetHandlingInputEvent(bool handling) {
 void WebFrameWidgetBase::ProcessInputEventSynchronouslyForTesting(
     const WebCoalescedInputEvent& event,
     HandledEventCallback callback) {
-  widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
+  widget_base_->input_handler().HandleInputEvent(event, nullptr,
+                                                 std::move(callback));
+}
+
+WebInputEventResult WebFrameWidgetBase::DispatchBufferedTouchEvents() {
+  CHECK(LocalRootImpl());
+
+  if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl())
+    devtools->DispatchBufferedTouchEvents();
+
+  return LocalRootImpl()
+      ->GetFrame()
+      ->GetEventHandler()
+      .DispatchBufferedTouchEvents();
+}
+
+WebInputEventResult WebFrameWidgetBase::HandleInputEvent(
+    const WebCoalescedInputEvent& coalesced_event) {
+  const WebInputEvent& input_event = coalesced_event.Event();
+  TRACE_EVENT1("input,rail", "WebFrameWidgetBase::HandleInputEvent", "type",
+               WebInputEvent::GetName(input_event.GetType()));
+  DCHECK(!WebInputEvent::IsTouchEventType(input_event.GetType()));
+  CHECK(LocalRootImpl());
+
+  // Only record metrics for the main frame.
+  if (ForMainFrame()) {
+    GetPage()->GetVisualViewport().StartTrackingPinchStats();
+  }
+
+  // If a drag-and-drop operation is in progress, ignore input events except
+  // PointerCancel.
+  if (doing_drag_and_drop_ &&
+      input_event.GetType() != WebInputEvent::Type::kPointerCancel)
+    return WebInputEventResult::kHandledSuppressed;
+
+  // Don't handle events once we've started shutting down.
+  if (!GetPage())
+    return WebInputEventResult::kNotHandled;
+
+  if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl()) {
+    auto result = devtools->HandleInputEvent(input_event);
+    if (result != WebInputEventResult::kNotHandled)
+      return result;
+  }
+
+  // Report the event to be NOT processed by WebKit, so that the browser can
+  // handle it appropriately.
+  if (IgnoreInputEvents())
+    return WebInputEventResult::kNotHandled;
+
+  base::AutoReset<const WebInputEvent*> current_event_change(
+      &CurrentInputEvent::current_input_event_, &input_event);
+  UIEventWithKeyState::ClearNewTabModifierSetFromIsolatedWorld();
+
+  if (GetPage()->GetPointerLockController().IsPointerLocked() &&
+      WebInputEvent::IsMouseEventType(input_event.GetType())) {
+    PointerLockMouseEvent(coalesced_event);
+    return WebInputEventResult::kHandledSystem;
+  }
+
+  /// These metrics are only captured for the main frame.
+  if (ForMainFrame()) {
+    Document& main_frame_document = *LocalRootImpl()->GetFrame()->GetDocument();
+
+    if (input_event.GetType() != WebInputEvent::Type::kMouseMove) {
+      FirstMeaningfulPaintDetector::From(main_frame_document)
+          .NotifyInputEvent();
+    }
+
+    if (input_event.GetType() != WebInputEvent::Type::kMouseMove &&
+        input_event.GetType() != WebInputEvent::Type::kMouseEnter &&
+        input_event.GetType() != WebInputEvent::Type::kMouseLeave) {
+      InteractiveDetector* interactive_detector(
+          InteractiveDetector::From(main_frame_document));
+      if (interactive_detector) {
+        interactive_detector->OnInvalidatingInputEvent(input_event.TimeStamp());
+      }
+    }
+  }
+
+  NotifyInputObservers(coalesced_event);
+
+  // Notify the focus frame of the input. Note that the other frames are not
+  // notified as input is only handled by the focused frame.
+  Frame* frame = FocusedCoreFrame();
+  if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+    if (auto* content_capture_manager =
+            local_frame->LocalFrameRoot().GetContentCaptureManager()) {
+      content_capture_manager->NotifyInputEvent(input_event.GetType(),
+                                                *local_frame);
+    }
+  }
+
+  // Skip the pointerrawupdate for mouse capture case.
+  if (mouse_capture_element_ &&
+      input_event.GetType() == WebInputEvent::Type::kPointerRawUpdate)
+    return WebInputEventResult::kHandledSystem;
+
+  if (mouse_capture_element_ &&
+      WebInputEvent::IsMouseEventType(input_event.GetType()))
+    return HandleCapturedMouseEvent(coalesced_event);
+
+  // FIXME: This should take in the intended frame, not the local frame
+  // root.
+  return PageWidgetDelegate::HandleInputEvent(*this, coalesced_event,
+                                              LocalRootImpl()->GetFrame());
+}
+
+WebInputEventResult WebFrameWidgetBase::HandleCapturedMouseEvent(
+    const WebCoalescedInputEvent& coalesced_event) {
+  const WebInputEvent& input_event = coalesced_event.Event();
+  TRACE_EVENT1("input", "captured mouse event", "type", input_event.GetType());
+  // Save |mouse_capture_element_| since |MouseCaptureLost()| will clear it.
+  HTMLPlugInElement* element = mouse_capture_element_;
+
+  // Not all platforms call mouseCaptureLost() directly.
+  if (input_event.GetType() == WebInputEvent::Type::kMouseUp) {
+    SetMouseCapture(false);
+    MouseCaptureLost();
+  }
+
+  AtomicString event_type;
+  switch (input_event.GetType()) {
+    case WebInputEvent::Type::kMouseEnter:
+      event_type = event_type_names::kMouseover;
+      break;
+    case WebInputEvent::Type::kMouseMove:
+      event_type = event_type_names::kMousemove;
+      break;
+    case WebInputEvent::Type::kPointerRawUpdate:
+      // There will be no mouse event for rawupdate events.
+      event_type = event_type_names::kPointerrawupdate;
+      break;
+    case WebInputEvent::Type::kMouseLeave:
+      event_type = event_type_names::kMouseout;
+      break;
+    case WebInputEvent::Type::kMouseDown:
+      event_type = event_type_names::kMousedown;
+      LocalFrame::NotifyUserActivation(
+          element->GetDocument().GetFrame(),
+          mojom::blink::UserActivationNotificationType::kInteraction);
+      break;
+    case WebInputEvent::Type::kMouseUp:
+      event_type = event_type_names::kMouseup;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  WebMouseEvent transformed_event =
+      TransformWebMouseEvent(LocalRootImpl()->GetFrameView(),
+                             static_cast<const WebMouseEvent&>(input_event));
+  if (LocalFrame* frame = element->GetDocument().GetFrame()) {
+    frame->GetEventHandler().HandleTargetedMouseEvent(
+        element, transformed_event, event_type,
+        TransformWebMouseEventVector(
+            LocalRootImpl()->GetFrameView(),
+            coalesced_event.GetCoalescedEventsPointers()),
+        TransformWebMouseEventVector(
+            LocalRootImpl()->GetFrameView(),
+            coalesced_event.GetPredictedEventsPointers()));
+  }
+  return WebInputEventResult::kHandledSystem;
 }
 
 void WebFrameWidgetBase::UpdateTextInputState() {
@@ -1193,24 +1763,22 @@ void WebFrameWidgetBase::CancelCompositionForPepper() {
 
 void WebFrameWidgetBase::RequestMouseLock(
     bool has_transient_user_activation,
-    bool priviledged,
     bool request_unadjusted_movement,
-    base::OnceCallback<void(
-        mojom::blink::PointerLockResult,
-        CrossVariantMojoRemote<mojom::blink::PointerLockContextInterfaceBase>)>
-        callback) {
-  widget_base_->RequestMouseLock(has_transient_user_activation, priviledged,
-                                 request_unadjusted_movement,
-                                 std::move(callback));
-}
+    mojom::blink::WidgetInputHandlerHost::RequestMouseLockCallback callback) {
+  mojom::blink::WidgetInputHandlerHost* host =
+      widget_base_->widget_input_handler_manager()->GetWidgetInputHandlerHost();
 
-#if defined(OS_ANDROID)
-SynchronousCompositorRegistry*
-WebFrameWidgetBase::GetSynchronousCompositorRegistry() {
-  return widget_base_->widget_input_handler_manager()
-      ->GetSynchronousCompositorRegistry();
+  // If we don't have a host just leave the callback uncalled. This simulates
+  // the browser indefinitely postponing the mouse request which is valid.
+  // Note that |callback| is not a mojo bound callback (until it is passed
+  // into the mojo interface) and can be destructed without invoking the
+  // callback. It does share the same signature as the mojo definition
+  // for simplicity.
+  if (host) {
+    host->RequestMouseLock(has_transient_user_activation,
+                           request_unadjusted_movement, std::move(callback));
+  }
 }
-#endif
 
 void WebFrameWidgetBase::ApplyVisualProperties(
     const VisualProperties& visual_properties) {
@@ -1241,6 +1809,18 @@ void WebFrameWidgetBase::UpdateScreenInfo(const ScreenInfo& new_screen_info) {
   widget_base_->UpdateScreenInfo(new_screen_info);
 }
 
+void WebFrameWidgetBase::UpdateSurfaceAndCompositorRect(
+    const viz::LocalSurfaceId& new_local_surface_id,
+    const gfx::Rect& compositor_viewport_pixel_rect) {
+  widget_base_->UpdateSurfaceAndCompositorRect(new_local_surface_id,
+                                               compositor_viewport_pixel_rect);
+}
+
+void WebFrameWidgetBase::UpdateCompositorViewportRect(
+    const gfx::Rect& compositor_viewport_pixel_rect) {
+  widget_base_->UpdateCompositorViewportRect(compositor_viewport_pixel_rect);
+}
+
 const ScreenInfo& WebFrameWidgetBase::GetScreenInfo() {
   return widget_base_->GetScreenInfo();
 }
@@ -1263,12 +1843,20 @@ gfx::Size WebFrameWidgetBase::VisibleViewportSizeInDIPs() {
 }
 
 void WebFrameWidgetBase::SetPendingWindowRect(
-    const gfx::Rect* window_screen_rect) {
+    const gfx::Rect& window_screen_rect) {
   widget_base_->SetPendingWindowRect(window_screen_rect);
+}
+
+void WebFrameWidgetBase::AckPendingWindowRect() {
+  widget_base_->AckPendingWindowRect();
 }
 
 bool WebFrameWidgetBase::IsHidden() const {
   return widget_base_->is_hidden();
+}
+
+WebString WebFrameWidgetBase::GetLastToolTipTextForTesting() const {
+  return GetPage()->GetChromeClient().GetLastToolTipTextForTesting();
 }
 
 void WebFrameWidgetBase::AutoscrollStart(const gfx::PointF& position) {
@@ -1335,6 +1923,14 @@ WebFrameWidgetBase::EnsureCompositorMutatorDispatcher(
   DCHECK(mutator_task_runner_);
   *mutator_task_runner = mutator_task_runner_;
   return mutator_dispatcher_;
+}
+
+HitTestResult WebFrameWidgetBase::CoreHitTestResultAt(
+    const gfx::PointF& point_in_viewport) {
+  LocalFrameView* view = LocalRootImpl()->GetFrameView();
+  FloatPoint point_in_root_frame(
+      view->ViewportToFrame(FloatPoint(point_in_viewport)));
+  return HitTestResultForRootFramePos(point_in_root_frame);
 }
 
 cc::AnimationHost* WebFrameWidgetBase::AnimationHost() const {
@@ -1620,26 +2216,26 @@ bool WebFrameWidgetBase::GetSelectionBoundsInWindow(
     base::i18n::TextDirection* focus_dir,
     base::i18n::TextDirection* anchor_dir,
     bool* is_anchor_first) {
-  if (Client()->ShouldDispatchImeEventsToPepper()) {
+  if (ShouldDispatchImeEventsToPlugin()) {
     // TODO(kinaba) http://crbug.com/101101
     // Current Pepper IME API does not handle selection bounds. So we simply
     // use the caret position as an empty range for now. It will be updated
     // after Pepper API equips features related to surrounding text retrieval.
     gfx::Rect pepper_caret_in_dips = widget_base_->BlinkSpaceToEnclosedDIPs(
-        Client()->GetPepperCaretBounds());
+        GetFocusedPluginContainer()->GetPluginCaretBounds());
     if (pepper_caret_in_dips == *focus && pepper_caret_in_dips == *anchor)
       return false;
     *focus = pepper_caret_in_dips;
     *anchor = *focus;
     return true;
   }
-  WebRect focus_webrect;
-  WebRect anchor_webrect;
-  SelectionBounds(focus_webrect, anchor_webrect);
+  gfx::Rect focus_root_frame;
+  gfx::Rect anchor_root_frame;
+  CalculateSelectionBounds(focus_root_frame, anchor_root_frame);
   gfx::Rect focus_rect_in_dips =
-      widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(focus_webrect));
+      widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(focus_root_frame));
   gfx::Rect anchor_rect_in_dips =
-      widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(anchor_webrect));
+      widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(anchor_root_frame));
 
   // if the bounds are the same return false.
   if (focus_rect_in_dips == *focus && anchor_rect_in_dips == *anchor)
@@ -1881,8 +2477,9 @@ void WebFrameWidgetBase::SetMouseCapture(bool capture) {
 
 gfx::Range WebFrameWidgetBase::CompositionRange() {
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
-  if (!focused_frame)
+  if (!focused_frame || ShouldDispatchImeEventsToPlugin())
     return gfx::Range::InvalidRange();
+
   blink::WebInputMethodController* controller =
       focused_frame->GetInputMethodController();
   WebRange web_range = controller->CompositionRange();
@@ -1894,7 +2491,7 @@ gfx::Range WebFrameWidgetBase::CompositionRange() {
 void WebFrameWidgetBase::GetCompositionCharacterBoundsInWindow(
     Vector<gfx::Rect>* bounds_in_dips) {
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
-  if (!focused_frame)
+  if (!focused_frame || ShouldDispatchImeEventsToPlugin())
     return;
   blink::WebInputMethodController* controller =
       focused_frame->GetInputMethodController();
@@ -2239,7 +2836,7 @@ void WebFrameWidgetBase::SetPageScaleStateAndLimits(
 }
 
 void WebFrameWidgetBase::OrientationChanged() {
-  LocalRoot()->SendOrientationChangeEvent();
+  local_root_->SendOrientationChangeEvent();
 }
 
 void WebFrameWidgetBase::DidUpdateSurfaceAndScreen(
@@ -2311,6 +2908,123 @@ void WebFrameWidgetBase::WasShown(bool was_evicted) {
           remote_frame->Client()->WasEvicted();
         }));
   }
+}
+
+void WebFrameWidgetBase::NotifyInputObservers(
+    const WebCoalescedInputEvent& coalesced_event) {
+  LocalFrame* frame = FocusedLocalFrameInWidget();
+  if (!frame)
+    return;
+
+  LocalFrameView* frame_view = frame->View();
+  if (!frame_view)
+    return;
+
+  const WebInputEvent& input_event = coalesced_event.Event();
+  auto& paint_timing_detector = frame_view->GetPaintTimingDetector();
+
+  if (paint_timing_detector.NeedToNotifyInputOrScroll())
+    paint_timing_detector.NotifyInputEvent(input_event.GetType());
+}
+
+Frame* WebFrameWidgetBase::FocusedCoreFrame() const {
+  return GetPage() ? GetPage()->GetFocusController().FocusedOrMainFrame()
+                   : nullptr;
+}
+
+HitTestResult WebFrameWidgetBase::HitTestResultForRootFramePos(
+    const FloatPoint& pos_in_root_frame) {
+  FloatPoint doc_point =
+      LocalRootImpl()->GetFrame()->View()->ConvertFromRootFrame(
+          pos_in_root_frame);
+  HitTestLocation location(doc_point);
+  HitTestResult result =
+      LocalRootImpl()->GetFrame()->View()->HitTestWithThrottlingAllowed(
+          location, HitTestRequest::kReadOnly | HitTestRequest::kActive);
+  result.SetToShadowHostIfInRestrictedShadowRoot();
+  return result;
+}
+
+KURL WebFrameWidgetBase::GetURLForDebugTrace() {
+  WebFrame* main_frame = View()->MainFrame();
+  if (main_frame->IsWebLocalFrame())
+    return main_frame->ToWebLocalFrame()->GetDocument().Url();
+  return {};
+}
+
+void WebFrameWidgetBase::ReleaseMouseLockAndPointerCaptureForTesting() {
+  GetPage()->GetPointerLockController().ExitPointerLock();
+  MouseCaptureLost();
+}
+
+const viz::FrameSinkId& WebFrameWidgetBase::GetFrameSinkId() {
+  // It is valid to create a WebFrameWidget with an invalid frame sink id for
+  // printing and placeholders. But if we go to use it, it should be valid.
+  DCHECK(frame_sink_id_.is_valid());
+  return frame_sink_id_;
+}
+
+WebHitTestResult WebFrameWidgetBase::HitTestResultAt(const gfx::PointF& point) {
+  return CoreHitTestResultAt(point);
+}
+
+WebPlugin* WebFrameWidgetBase::GetFocusedPluginContainer() {
+  LocalFrame* focused_frame = FocusedLocalFrameInWidget();
+  if (!focused_frame)
+    return nullptr;
+  if (auto* container = focused_frame->GetWebPluginContainer())
+    return container->Plugin();
+  return nullptr;
+}
+
+bool WebFrameWidgetBase::CanComposeInline() {
+  if (auto* plugin = GetFocusedPluginContainer())
+    return plugin->CanComposeInline();
+  return true;
+}
+
+bool WebFrameWidgetBase::ShouldDispatchImeEventsToPlugin() {
+  if (auto* plugin = GetFocusedPluginContainer())
+    return plugin->ShouldDispatchImeEventsToPlugin();
+  return false;
+}
+
+void WebFrameWidgetBase::ImeSetCompositionForPlugin(
+    const String& text,
+    const Vector<ui::ImeTextSpan>& ime_text_spans,
+    const gfx::Range& replacement_range,
+    int selection_start,
+    int selection_end) {
+  if (auto* plugin = GetFocusedPluginContainer()) {
+    plugin->ImeSetCompositionForPlugin(
+        text,
+        std::vector<ui::ImeTextSpan>(ime_text_spans.begin(),
+                                     ime_text_spans.end()),
+        replacement_range, selection_start, selection_end);
+  }
+}
+
+void WebFrameWidgetBase::ImeCommitTextForPlugin(
+    const String& text,
+    const Vector<ui::ImeTextSpan>& ime_text_spans,
+    const gfx::Range& replacement_range,
+    int relative_cursor_pos) {
+  if (auto* plugin = GetFocusedPluginContainer()) {
+    plugin->ImeCommitTextForPlugin(
+        text,
+        std::vector<ui::ImeTextSpan>(ime_text_spans.begin(),
+                                     ime_text_spans.end()),
+        replacement_range, relative_cursor_pos);
+  }
+}
+
+void WebFrameWidgetBase::ImeFinishComposingTextForPlugin(bool keep_selection) {
+  if (auto* plugin = GetFocusedPluginContainer())
+    plugin->ImeFinishComposingTextForPlugin(keep_selection);
+}
+
+void WebFrameWidgetBase::LoadImageAt(const gfx::Point& point) {
+  View()->LoadImageAt(point);
 }
 
 }  // namespace blink

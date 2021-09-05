@@ -13,10 +13,7 @@ namespace blink {
 
 NGTableSectionLayoutAlgorithm::NGTableSectionLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
-    : NGLayoutAlgorithm(params) {
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-}
+    : NGLayoutAlgorithm(params) {}
 
 MinMaxSizesResult NGTableSectionLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesInput&) const {
@@ -51,9 +48,8 @@ scoped_refptr<const NGLayoutResult> NGTableSectionLayoutAlgorithm::Layout() {
                              table_data.sections[section_index].rowspan);
     NGConstraintSpaceBuilder row_space_builder(
         table_data.table_writing_direction.GetWritingMode(),
-        table_data.table_writing_direction.GetWritingMode(),
+        table_data.table_writing_direction,
         /* is_new_fc */ true);
-    row_space_builder.SetTextDirection(row.Style().Direction());
     row_space_builder.SetAvailableSize(
         {container_builder_.InlineSize(), kIndefiniteSize});
     row_space_builder.SetIsFixedInlineSize(true);
@@ -79,6 +75,7 @@ scoped_refptr<const NGLayoutResult> NGTableSectionLayoutAlgorithm::Layout() {
   container_builder_.SetFragmentBlockSize(offset.block_offset);
   if (section_baseline)
     container_builder_.SetBaseline(*section_baseline);
+  container_builder_.SetIsTableNGPart();
 
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
   return container_builder_.ToBoxFragment();

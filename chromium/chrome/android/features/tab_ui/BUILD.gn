@@ -7,6 +7,7 @@ import("//build/config/locales.gni")
 import("//chrome/android/features/tab_ui/buildflags.gni")
 import("//chrome/common/features.gni")
 import("//components/module_installer/android/module_desc_java.gni")
+import("//tools/grit/grit_rule.gni")
 
 java_strings_grd("java_strings_grd") {
   defines = chrome_grit_defines
@@ -36,8 +37,12 @@ android_resources("java_resources") {
     "java/res/drawable/iph_drag_and_drop_animated_drawable.xml",
     "java/res/drawable/iph_drag_and_drop_drawable.xml",
     "java/res/drawable/message_card_background.xml",
+    "java/res/drawable/message_card_background_incognito.xml",
     "java/res/drawable/message_card_background_with_inset.xml",
+    "java/res/drawable/message_card_background_with_inset_incognito.xml",
     "java/res/drawable/popup_bg_dark.xml",
+    "java/res/drawable/price_card_background.xml",
+    "java/res/drawable/price_card_scrim.xml",
     "java/res/drawable/selected_tab_background.xml",
     "java/res/drawable/selected_tab_background_incognito.xml",
     "java/res/drawable/single_tab_background.xml",
@@ -58,6 +63,8 @@ android_resources("java_resources") {
     "java/res/layout/incognito_description_container_layout.xml",
     "java/res/layout/iph_drag_and_drop_dialog_layout.xml",
     "java/res/layout/new_tab_tile_card_item.xml",
+    "java/res/layout/price_card.xml",
+    "java/res/layout/price_welcome_message_card_item.xml",
     "java/res/layout/selectable_tab_grid_card_item.xml",
     "java/res/layout/selectable_tab_list_card_item.xml",
     "java/res/layout/single_tab_view_layout.xml",
@@ -116,6 +123,11 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/NewTabTileView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/NewTabTileViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/NewTabTileViewProperties.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceCardView.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceWelcomeMessageCardView.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceWelcomeMessageCardViewBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceWelcomeMessageCardViewModel.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceWelcomeMessageService.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/SelectableTabGridView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMediator.java",
@@ -200,6 +212,7 @@ android_library("java") {
     "//components/content_settings/android:content_settings_enums_java",
     "//components/embedder_support/android:util_java",
     "//components/embedder_support/android:web_contents_delegate_java",
+    "//components/favicon/android:java",
     "//components/feature_engagement:feature_engagement_java",
     "//components/infobars/core:infobar_enums_java",
     "//components/policy/android:policy_java",

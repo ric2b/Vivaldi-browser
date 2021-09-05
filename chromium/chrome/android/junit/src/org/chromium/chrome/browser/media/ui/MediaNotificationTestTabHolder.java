@@ -15,8 +15,8 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.components.browser_ui.media.MediaSessionHelper;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.url_formatter.UrlFormatterJni;
 import org.chromium.content_public.browser.MediaSession;
@@ -80,7 +80,7 @@ public class MediaNotificationTestTabHolder {
 
         MediaSessionHelper.sOverriddenMediaSession = mMediaSession;
         mMediaSessionTabHelper = new MediaSessionTabHelper(mTab);
-        mMediaSessionTabHelper.mLargeIconBridge = new TestLargeIconBridge();
+        mMediaSessionTabHelper.mMediaSessionHelper.mLargeIconBridge = new TestLargeIconBridge();
 
         simulateNavigation(url, false);
         simulateTitleUpdated(title);

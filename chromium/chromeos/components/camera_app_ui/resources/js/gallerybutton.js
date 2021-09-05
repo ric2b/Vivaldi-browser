@@ -22,15 +22,6 @@ import * as util from './util.js';
 const THUMBNAIL_WIDTH = 240;
 
 /**
- * The maximum size of video used to generate the thumbnail. The file would be
- * truncated to that size before generating the thumbnail, which speeds up the
- * generation process significantly when the file is large. 32MB should be more
- * than enough for getting the first frame from a video.
- * @type {number}
- */
-const VIDEO_THUMBNAIL_SIZE_LIMIT = 32 << 20;
-
-/**
  * Cover photo of gallery button.
  */
 class CoverPhoto {
@@ -74,12 +65,8 @@ class CoverPhoto {
    */
   static async create(file) {
     const isVideo = filesystem.hasVideoPrefix(file);
-    const limit = isVideo ? VIDEO_THUMBNAIL_SIZE_LIMIT : Infinity;
-    const fileUrl = await filesystem.pictureURL(file, {limit});
     const thumbnail =
-        await util.scalePicture(fileUrl, isVideo, THUMBNAIL_WIDTH);
-    URL.revokeObjectURL(fileUrl);
-
+        await util.scalePicture(await file.file(), isVideo, THUMBNAIL_WIDTH);
     return new CoverPhoto(file, URL.createObjectURL(thumbnail));
   }
 }
@@ -193,15 +180,7 @@ export class GalleryButton {
    * @override
    */
   async savePhoto(blob, name) {
-    const orientedPhoto = await new Promise((resolve) => {
-      // Ignore errors since it is better to save something than
-      // nothing.
-      // TODO(yuli): Support showing images by EXIF orientation
-      // instead.
-      util.orientPhoto(blob, resolve, () => resolve(blob));
-    });
-    const file = await filesystem.saveBlob(orientedPhoto, name);
-    assert(file !== null);
+    const file = await filesystem.saveBlob(blob, name);
     await this.updateCover_(file);
   }
 

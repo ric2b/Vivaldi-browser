@@ -28,14 +28,18 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils.OfflinePageLoadUrlDelegate;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
+import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.previews.PreviewsUma;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.site_settings.ChromeSiteSettingsClient;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsClient;
 import org.chromium.components.content_settings.CookieControlsBridge;
@@ -237,6 +241,26 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
+    public boolean isShowingPaintPreviewPage() {
+        Tab tab = TabUtils.fromWebContents(mWebContents);
+        return tab != null && TabbedPaintPreview.get(tab).isShowing();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Nullable
+    public String getPaintPreviewPageConnectionMessage() {
+        if (!isShowingPaintPreviewPage()) return null;
+
+        return mContext.getString(R.string.page_info_connection_paint_preview);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public boolean shouldShowPerformanceBadge(String url) {
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PAGE_INFO_PERFORMANCE_HINTS)) {
             return false;
@@ -294,7 +318,10 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         Resources resources = mContext.getResources();
         int size = resources.getDimensionPixelSize(R.dimen.page_info_favicon_size);
         new FaviconHelper().getLocalFaviconImageForURL(mProfile, url, size, (image, iconUrl) -> {
-            if (image != null) {
+            if (isShowingPreview()) {
+                callback.onResult(SettingsUtils.getTintedIcon(mContext,
+                        R.drawable.preview_pin_round, R.color.infobar_icon_drawable_color));
+            } else if (image != null) {
                 callback.onResult(new BitmapDrawable(resources, image));
             } else if (UrlUtilities.isInternalScheme(new GURL(url))) {
                 callback.onResult(
@@ -303,6 +330,12 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
                 callback.onResult(null);
             }
         });
+    }
+
+    @Override
+    public Drawable getPreviewUiIcon() {
+        return SettingsUtils.getTintedIcon(mContext,
+            R.drawable.preview_pin_round, R.color.infobar_icon_drawable_color);
     }
 
     @VisibleForTesting

@@ -21,7 +21,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_SVG_SVG_RESOURCES_CACHE_H_
 
 #include <memory>
-#include "third_party/blink/renderer/core/style/style_difference.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 
@@ -42,27 +41,18 @@ class SVGResourcesCache {
 
   static SVGResources* CachedResourcesForLayoutObject(const LayoutObject&);
 
-  // Called from all SVG layoutObjects addChild() methods.
-  static void ClientWasAddedToTree(LayoutObject&);
+  // Called when an SVG LayoutObject has been added to the tree.
+  // Returns true if an SVGResources object was created.
+  static bool AddResources(LayoutObject&);
 
-  // Called from all SVG layoutObjects removeChild() methods.
-  static void ClientWillBeRemovedFromTree(LayoutObject&);
-
-  // Called from all SVG layoutObjects destroy() methods - except for
-  // LayoutSVGResourceContainer.
-  static void ClientDestroyed(LayoutObject&);
-
-  // Called from all SVG layoutObjects layout() methods.
-  static void ClientLayoutChanged(LayoutObject&);
-
-  // Called from all SVG layoutObjects styleDidChange() methods.
-  static void ClientStyleChanged(LayoutObject&,
-                                 StyleDifference,
-                                 const ComputedStyle& new_style);
+  // Called when an SVG LayoutObject has been removed from the tree.
+  // Returns true if an SVGResources object was destroyed.
+  static bool RemoveResources(LayoutObject&);
 
   // Called when the target element of a resource referenced by the
-  // LayoutObject may have changed.
-  static void ResourceReferenceChanged(LayoutObject&);
+  // LayoutObject may have changed and we need to recreate the
+  // associated SVGResources object.
+  static bool UpdateResources(LayoutObject&);
 
   class TemporaryStyleScope {
     STACK_ALLOCATED();
@@ -85,17 +75,9 @@ class SVGResourcesCache {
   };
 
  private:
-  struct ResourceUpdateInfo {
-    bool changed;
-    bool needs_layout;
-
-    explicit operator bool() const { return changed; }
-  };
-  SVGResources* AddResourcesFromLayoutObject(LayoutObject&,
-                                             const ComputedStyle&);
+  bool AddResourcesFromLayoutObject(LayoutObject&, const ComputedStyle&);
   bool RemoveResourcesFromLayoutObject(LayoutObject&);
-  ResourceUpdateInfo UpdateResourcesFromLayoutObject(LayoutObject&,
-                                                     const ComputedStyle&);
+  bool UpdateResourcesFromLayoutObject(LayoutObject&, const ComputedStyle&);
 
   typedef HashMap<const LayoutObject*, std::unique_ptr<SVGResources>> CacheMap;
   CacheMap cache_;

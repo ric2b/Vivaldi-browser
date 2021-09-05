@@ -36,10 +36,7 @@ class LayoutSVGImage final : public LayoutSVGModelObject {
   explicit LayoutSVGImage(SVGImageElement*);
   ~LayoutSVGImage() override;
 
-  void SetNeedsBoundariesUpdate() override {
-    NOT_DESTROYED();
-    needs_boundaries_update_ = true;
-  }
+  void SetNeedsBoundariesUpdate() override { NOT_DESTROYED(); }
   void SetNeedsTransformUpdate() override {
     NOT_DESTROYED();
     needs_transform_update_ = true;
@@ -104,7 +101,6 @@ class LayoutSVGImage final : public LayoutSVGModelObject {
   FloatSize CalculateObjectSize() const;
   bool HasOverriddenIntrinsicSize() const;
 
-  bool needs_boundaries_update_ : 1;
   bool needs_transform_update_ : 1;
   bool transform_uses_reference_box_ : 1;
   AffineTransform local_transform_;
@@ -112,7 +108,12 @@ class LayoutSVGImage final : public LayoutSVGModelObject {
   Persistent<LayoutImageResource> image_resource_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGImage, IsSVGImage());
+template <>
+struct DowncastTraits<LayoutSVGImage> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsSVGImage();
+  }
+};
 
 }  // namespace blink
 

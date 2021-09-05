@@ -13,13 +13,13 @@
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/search/ntp_user_data_types.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/ntp_tiles/metrics.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -551,6 +551,9 @@ void NTPUserDataLogger::LogEvent(NTPLoggingEventType event,
       break;
     case NTP_MODULES_SHOWN:
       UMA_HISTOGRAM_LOAD_TIME("NewTabPage.Modules.ShownTime", time);
+      break;
+    case NTP_APP_RENDERED:
+      UMA_HISTOGRAM_LOAD_TIME("NewTabPage.MainUi.ShownTime", time);
       break;
   }
 }

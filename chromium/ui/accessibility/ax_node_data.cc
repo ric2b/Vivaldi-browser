@@ -959,8 +959,12 @@ bool AXNodeData::IsIgnored() const {
          role == ax::mojom::Role::kIgnored;
 }
 
+bool AXNodeData::IsInvisible() const {
+  return HasState(ax::mojom::State::kInvisible);
+}
+
 bool AXNodeData::IsInvisibleOrIgnored() const {
-  return IsIgnored() || HasState(ax::mojom::State::kInvisible);
+  return IsIgnored() || IsInvisible();
 }
 
 bool AXNodeData::IsInvocable() const {
@@ -1431,6 +1435,9 @@ std::string AXNodeData::ToString() const {
         break;
       case ax::mojom::StringAttribute::kAriaInvalidValue:
         result += " aria_invalid_value=" + value;
+        break;
+      case ax::mojom::StringAttribute::kCheckedStateDescription:
+        result += " checked_state_description=" + value;
         break;
       case ax::mojom::StringAttribute::kAutoComplete:
         result += " autocomplete=" + value;

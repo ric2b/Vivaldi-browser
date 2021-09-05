@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/file_system_access/file_system_chooser_test_helpers.h"
 #include "content/public/test/browser_task_environment.h"
@@ -33,7 +33,7 @@ class FileSystemChooserTest : public testing::Test {
         /*web_contents=*/nullptr,
         FileSystemChooser::Options(
             blink::mojom::ChooseFileSystemEntryType::kOpenFile,
-            std::move(accepts), include_accepts_all),
+            std::move(accepts), include_accepts_all, base::FilePath()),
         base::BindLambdaForTesting(
             [&](blink::mojom::NativeFileSystemErrorPtr,
                 std::vector<FileSystemChooser::ResultEntry> entries) {
@@ -180,6 +180,32 @@ TEST_F(FileSystemChooserTest, AcceptsExtensionsAndMimeTypes) {
             dialog_params.file_types->extension_description_overrides[0]);
 }
 
+TEST_F(FileSystemChooserTest, IgnoreShellIntegratedExtensions) {
+  SelectFileDialogParams dialog_params;
+  ui::SelectFileDialog::SetFactory(
+      new CancellingSelectFileDialogFactory(&dialog_params));
+  std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr> accepts;
+  accepts.emplace_back(blink::mojom::ChooseFileSystemEntryAcceptsOption::New(
+      base::ASCIIToUTF16(""), std::vector<std::string>({}),
+      std::vector<std::string>(
+          {"lnk", "foo.lnk", "foo.bar.local", "text", "local"})));
+  SyncShowDialog(std::move(accepts), /*include_accepts_all=*/false);
+
+  ASSERT_TRUE(dialog_params.file_types);
+  EXPECT_FALSE(dialog_params.file_types->include_all_files);
+  ASSERT_EQ(1u, dialog_params.file_types->extensions.size());
+  EXPECT_EQ(1, dialog_params.file_type_index);
+
+  ASSERT_EQ(1u, dialog_params.file_types->extensions[0].size());
+  EXPECT_EQ(dialog_params.file_types->extensions[0][0],
+            FILE_PATH_LITERAL("text"));
+
+  ASSERT_EQ(1u,
+            dialog_params.file_types->extension_description_overrides.size());
+  EXPECT_EQ(base::ASCIIToUTF16(""),
+            dialog_params.file_types->extension_description_overrides[0]);
+}
+
 TEST_F(FileSystemChooserTest, LocalPath) {
   const base::FilePath local_path(FILE_PATH_LITERAL("/foo/bar"));
   ui::SelectedFileInfo selected_file(local_path, local_path);
@@ -205,6 +231,45 @@ TEST_F(FileSystemChooserTest, ExternalPath) {
   ASSERT_EQ(results.size(), 1u);
   EXPECT_EQ(results[0].type, FileSystemChooser::PathType::kExternal);
   EXPECT_EQ(results[0].path, virtual_path);
+}
+
+TEST_F(FileSystemChooserTest, DescriptionSanitization) {
+  SelectFileDialogParams dialog_params;
+  ui::SelectFileDialog::SetFactory(
+      new CancellingSelectFileDialogFactory(&dialog_params));
+  std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr> accepts;
+  accepts.emplace_back(blink::mojom::ChooseFileSystemEntryAcceptsOption::New(
+      base::UTF8ToUTF16("Description        with \t      a  \r   lot   of  \n "
+                        "                                 spaces"),
+      std::vector<std::string>({}), std::vector<std::string>({"txt"})));
+  accepts.emplace_back(blink::mojom::ChooseFileSystemEntryAcceptsOption::New(
+      base::UTF8ToUTF16("Description that is very long and should be "
+                        "truncated to 64 code points if it works"),
+      std::vector<std::string>({}), std::vector<std::string>({"js"})));
+  accepts.emplace_back(blink::mojom::ChooseFileSystemEntryAcceptsOption::New(
+      base::UTF8ToUTF16("Unbalanced RTL \xe2\x80\xae section"),
+      std::vector<std::string>({}), std::vector<std::string>({"js"})));
+  accepts.emplace_back(blink::mojom::ChooseFileSystemEntryAcceptsOption::New(
+      base::UTF8ToUTF16("Unbalanced RTL \xe2\x80\xae section in a otherwise "
+                        "very long description that will be truncated"),
+      std::vector<std::string>({}), std::vector<std::string>({"js"})));
+  SyncShowDialog(std::move(accepts), /*include_accepts_all=*/false);
+
+  ASSERT_TRUE(dialog_params.file_types);
+  ASSERT_EQ(4u,
+            dialog_params.file_types->extension_description_overrides.size());
+  EXPECT_EQ(base::UTF8ToUTF16("Description with a lot of spaces"),
+            dialog_params.file_types->extension_description_overrides[0]);
+  EXPECT_EQ(
+      base::UTF8ToUTF16(
+          "Description that is very long and should be truncated to 64 cod…"),
+      dialog_params.file_types->extension_description_overrides[1]);
+  EXPECT_EQ(
+      base::UTF8ToUTF16("Unbalanced RTL \xe2\x80\xae section\xe2\x80\xac"),
+      dialog_params.file_types->extension_description_overrides[2]);
+  EXPECT_EQ(base::UTF8ToUTF16("Unbalanced RTL \xe2\x80\xae section in a "
+                              "otherwise very long description t…\xe2\x80\xac"),
+            dialog_params.file_types->extension_description_overrides[3]);
 }
 
 }  // namespace content

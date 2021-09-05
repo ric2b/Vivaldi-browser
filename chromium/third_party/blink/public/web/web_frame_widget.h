@@ -34,10 +34,10 @@
 #include <stdint.h>
 
 #include "base/callback_forward.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
-#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
 #include "third_party/blink/public/web/web_swap_result.h"
@@ -65,6 +65,7 @@ class WebFrameWidget : public WebWidget {
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      const viz::FrameSinkId& frame_sink_id,
       bool is_for_nested_main_frame = false,
       bool hidden = false,
       bool never_composited = false);
@@ -80,16 +81,12 @@ class WebFrameWidget : public WebWidget {
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      const viz::FrameSinkId& frame_sink_id,
       bool hidden = false,
       bool never_composited = false);
 
   // Returns the local root of this WebFrameWidget.
   virtual WebLocalFrame* LocalRoot() const = 0;
-
-  // Called when the root LocalFrame of this WebFrameWidget (and implicitly its
-  // subtree) are being detached. The frame pointer and the WebWidgetClient are
-  // still valid while this is called, for them to be used for any cleanup.
-  virtual void DidDetachLocalFrameTree() = 0;
 
   // Current instance of the active WebInputMethodController, that is, the
   // WebInputMethodController corresponding to (and owned by) the focused
@@ -100,12 +97,13 @@ class WebFrameWidget : public WebWidget {
 
   // Callback methods when a drag-and-drop operation is trying to drop something
   // on the WebFrameWidget.
-  virtual DragOperation DragTargetDragEnter(
+  virtual void DragTargetDragEnter(
       const WebDragData&,
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
       DragOperationsMask operations_allowed,
-      uint32_t key_modifiers) = 0;
+      uint32_t key_modifiers,
+      base::OnceCallback<void(blink::DragOperation)> callback) = 0;
   virtual void DragTargetDragOver(
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
@@ -127,13 +125,6 @@ class WebFrameWidget : public WebWidget {
   // Notifies the WebFrameWidget that the system drag and drop operation has
   // ended.
   virtual void DragSourceSystemDragEnded() = 0;
-
-  // Constrains the viewport intersection for use by IntersectionObserver,
-  // and indicates whether the frame may be painted over or obscured in the
-  // parent. This is needed for out-of-process iframes to know if they are
-  // clipped or obscured by ancestor frames in another process.
-  virtual void SetRemoteViewportIntersection(const ViewportIntersectionState&) {
-  }
 
   // Sets the inherited effective touch action on an out-of-process iframe.
   virtual void SetInheritedEffectiveTouchAction(WebTouchAction) {}
@@ -192,9 +183,6 @@ class WebFrameWidget : public WebWidget {
   // If the widget is currently selecting a range.
   virtual bool HandlingSelectRange() = 0;
 
-  // If fullscreen has been granted.
-  virtual bool IsFullscreenGranted() = 0;
-
   // Returns true if a pinch gesture is currently active in main frame.
   virtual bool PinchGestureActiveInMainFrame() = 0;
 
@@ -213,6 +201,14 @@ class WebFrameWidget : public WebWidget {
   // Get the window segments for this widget.
   // See https://github.com/webscreens/window-segments/blob/master/EXPLAINER.md
   virtual const WebVector<gfx::Rect>& WindowSegments() const = 0;
+
+  // Release any mouse lock or pointer capture held. This is used to reset
+  // state between WebTest runs.
+  virtual void ReleaseMouseLockAndPointerCaptureForTesting() = 0;
+
+  // Returns the FrameSinkId for this widget which is used for identifying
+  // frames submitted from the compositor.
+  virtual const viz::FrameSinkId& GetFrameSinkId() = 0;
 
  private:
   // This private constructor and the class/friend declaration ensures that

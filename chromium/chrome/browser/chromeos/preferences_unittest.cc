@@ -24,14 +24,14 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_member.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_data.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/model/syncable_service.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
@@ -86,7 +86,6 @@ class MyMockInputMethodManager : public MockInputMethodManagerImpl {
     void ChangeInputMethod(const std::string& input_method_id,
                            bool show_message) override {
       manager_->last_input_method_id_ = input_method_id;
-      // Do the same thing as BrowserStateMonitor::UpdateUserPreferences.
       const std::string current_input_method_on_pref =
           manager_->current_->GetValue();
       if (current_input_method_on_pref == input_method_id)
@@ -128,7 +127,7 @@ class MyMockInputMethodManager : public MockInputMethodManagerImpl {
 
   std::unique_ptr<InputMethodDescriptors> GetSupportedInputMethods()
       const override {
-    return allowlist_.GetSupportedInputMethods();
+    return allowlist::GetSupportedInputMethods();
   }
 
   std::string last_input_method_id_;
@@ -136,7 +135,6 @@ class MyMockInputMethodManager : public MockInputMethodManagerImpl {
  private:
   StringPrefMember* previous_;
   StringPrefMember* current_;
-  InputMethodAllowlist allowlist_;
 };
 
 }  // anonymous namespace
@@ -254,8 +252,8 @@ class InputMethodPreferencesTest : public PreferencesTest {
 
   void InitComponentExtensionIMEManager() {
     // Set our custom IME list on the mock delegate.
-    input_method::MockComponentExtIMEManagerDelegate* mock_delegate =
-        new input_method::MockComponentExtIMEManagerDelegate();
+    input_method::MockComponentExtensionIMEManagerDelegate* mock_delegate =
+        new input_method::MockComponentExtensionIMEManagerDelegate();
     mock_delegate->set_ime_list(CreateImeList());
 
     // Pass the mock delegate to a new ComponentExtensionIMEManager.

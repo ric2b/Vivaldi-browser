@@ -17,6 +17,8 @@
 #include "base/rand_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversion_utils.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
@@ -42,6 +44,7 @@
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/fido_parsing_utils.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/get_assertion_request_handler.h"
 #include "device/fido/make_credential_request_handler.h"
@@ -77,6 +80,9 @@ enum class RequestExtension {
   kHMACSecret,
   kPRF,
   kCredProps,
+  kLargeBlobEnable,
+  kLargeBlobRead,
+  kLargeBlobWrite,
 };
 
 namespace client_data {
@@ -233,6 +239,13 @@ device::CtapGetAssertionRequest CreateCtapGetAssertionRequest(
   if (!options->cable_authentication_data.empty()) {
     request_parameter.cable_extension = options->cable_authentication_data;
   }
+  if (options->large_blob_read) {
+    request_parameter.large_blob_read = true;
+    request_parameter.large_blob_key = true;
+  }
+  if (options->large_blob_write) {
+    request_parameter.large_blob_key = true;
+  }
   request_parameter.is_incognito_mode = is_incognito;
   return request_parameter;
 }
@@ -388,7 +401,14 @@ CreateMakeCredentialResponse(
           response->cred_props_rk = *response_data.is_resident_key;
         }
         break;
+      case RequestExtension::kLargeBlobEnable:
+        response->echo_large_blob = true;
+        response->supports_large_blob =
+            response_data.large_blob_key().has_value();
+        break;
       case RequestExtension::kAppID:
+      case RequestExtension::kLargeBlobRead:
+      case RequestExtension::kLargeBlobWrite:
         NOTREACHED();
         break;
     }
@@ -476,8 +496,18 @@ blink::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
         }
         break;
       }
+      case RequestExtension::kLargeBlobRead:
+        response->echo_large_blob = true;
+        response->large_blob = response_data.large_blob();
+        break;
+      case RequestExtension::kLargeBlobWrite:
+        response->echo_large_blob = true;
+        response->echo_large_blob_written = true;
+        response->large_blob_written = response_data.large_blob_written();
+        break;
       case RequestExtension::kHMACSecret:
       case RequestExtension::kCredProps:
+      case RequestExtension::kLargeBlobEnable:
         NOTREACHED();
         break;
     }
@@ -486,29 +516,57 @@ blink::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
   return response;
 }
 
-bool IsUserVerifyingPlatformAuthenticatorAvailableImpl(
+void IsUserVerifyingPlatformAuthenticatorAvailableImpl(
     AuthenticatorRequestClientDelegate* delegate,
     device::FidoDiscoveryFactory* discovery_factory,
-    BrowserContext* browser_context) {
+    BrowserContext* browser_context,
+    blink::mojom::Authenticator::
+        IsUserVerifyingPlatformAuthenticatorAvailableCallback callback) {
+  if (!delegate) {
+    // TODO(crbug/1110081): Investigate why this can be nullptr.
+    NOTREACHED();
+    std::move(callback).Run(false);
+    return;
+  }
+
   base::Optional<bool> is_uvpaa_override =
       delegate->IsUserVerifyingPlatformAuthenticatorAvailableOverride();
   if (is_uvpaa_override) {
-    return *is_uvpaa_override;
+    std::move(callback).Run(*is_uvpaa_override);
+    return;
   }
 
 #if defined(OS_MAC)
   const base::Optional<device::fido::mac::AuthenticatorConfig> config =
       delegate->GetTouchIdAuthenticatorConfig();
-  return config && IsUVPlatformAuthenticatorAvailable(*config);
+  std::move(callback).Run(config &&
+                          IsUVPlatformAuthenticatorAvailable(*config));
+  return;
 #elif defined(OS_WIN)
-  return !browser_context->IsOffTheRecord() &&
-         IsUVPlatformAuthenticatorAvailable(
-             discovery_factory->win_webauthn_api());
+  if (browser_context->IsOffTheRecord()) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  std::move(callback).Run(IsUVPlatformAuthenticatorAvailable(
+      discovery_factory->win_webauthn_api()));
+  return;
 #elif defined(OS_CHROMEOS)
-  return !browser_context->IsOffTheRecord() &&
-         IsUVPlatformAuthenticatorAvailable();
+  if (browser_context->IsOffTheRecord()) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  // ChromeOS needs to do a dbus call to determine platform authenticator
+  // availability. The call is fast in practice, but nonetheless may
+  // theoretically block.
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
+      base::BindOnce(&IsUVPlatformAuthenticatorAvailable), std::move(callback));
+  return;
 #else
-  return false;
+  std::move(callback).Run(false);
+  return;
 #endif
 }
 
@@ -532,26 +590,23 @@ base::flat_set<device::FidoTransportProtocol> GetAvailableTransports(
   base::flat_set<device::FidoTransportProtocol> transports;
   transports.insert(device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(crbug.com/1157651): Work around CrOS platform authenticator being
+  // unavailable in Incognito.
+  if (!content::WebContents::FromRenderFrameHost(render_frame_host)
+           ->GetBrowserContext()
+           ->IsOffTheRecord()) {
+    transports.insert(device::FidoTransportProtocol::kInternal);
+  }
+#else
+  transports.insert(device::FidoTransportProtocol::kInternal);
+#endif
+
   if (discovery_factory->IsTestOverride()) {
     // The desktop implementation does not support BLE or NFC, but we emulate
     // them if the testing API is enabled.
     transports.insert(device::FidoTransportProtocol::kBluetoothLowEnergy);
     transports.insert(device::FidoTransportProtocol::kNearFieldCommunication);
-
-    // Instantiate a virtual platform discovery regardless of IsUVPAA() to
-    // support non-uv, platform authenticators.
-    transports.insert(device::FidoTransportProtocol::kInternal);
-  } else {
-    // Don't instantiate a platform discovery in contexts where IsUVPAA() would
-    // return false. This avoids platform authenticators mistakenly being
-    // available when e.g. an embedder provided implementation of
-    // IsUserVerifyingPlatformAuthenticatorAvailableOverride() returned false.
-    if (IsUserVerifyingPlatformAuthenticatorAvailableImpl(
-            delegate, discovery_factory,
-            content::WebContents::FromRenderFrameHost(render_frame_host)
-                ->GetBrowserContext())) {
-      transports.insert(device::FidoTransportProtocol::kInternal);
-    }
   }
 
   if (base::FeatureList::IsEnabled(features::kWebAuthCable) ||
@@ -597,13 +652,9 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
 #endif  // defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
-  // Ignore the ChromeOS u2fd virtual U2F HID device for WebAuthn requests so
-  // that it doesn't collide with the ChromeOS platform authenticator, also
-  // implemented in u2fd.
-  if (base::FeatureList::IsEnabled(device::kWebAuthCrosPlatformAuthenticator) &&
-      !is_u2f_api_request) {
-    constexpr device::VidPid kChromeOsU2fdVidPid{0x18d1, 0x502c};
-    discovery_factory->set_hid_ignore_list({kChromeOsU2fdVidPid});
+  if (base::FeatureList::IsEnabled(device::kWebAuthCrosPlatformAuthenticator)) {
+    discovery_factory->set_generate_request_id_callback(
+        request_delegate->GetGenerateRequestIdCallback(render_frame_host));
   }
 #endif  // defined(OS_CHROMEOS)
 
@@ -720,6 +771,25 @@ void AuthenticatorCommon::StartGetAssertionRequest(
 
 bool AuthenticatorCommon::IsFocused() const {
   return render_frame_host_->IsCurrent() && request_delegate_->IsFocused();
+}
+
+void AuthenticatorCommon::OnLargeBlobCompressed(
+    data_decoder::DataDecoder::ResultOrError<mojo_base::BigBuffer> result) {
+  ctap_get_assertion_request_->large_blob_write =
+      device::fido_parsing_utils::MaterializeOrNull(result.value);
+  StartGetAssertionRequest(/*allow_skipping_pin_touch=*/true);
+}
+
+void AuthenticatorCommon::OnLargeBlobUncompressed(
+    device::AuthenticatorGetAssertionResponse response,
+    data_decoder::DataDecoder::ResultOrError<mojo_base::BigBuffer> result) {
+  response.set_large_blob(
+      device::fido_parsing_utils::MaterializeOrNull(result.value));
+  InvokeCallbackAndCleanup(
+      std::move(get_assertion_response_callback_),
+      blink::mojom::AuthenticatorStatus::SUCCESS,
+      CreateGetAssertionResponse(client_data_json_, std::move(response),
+                                 app_id_, requested_extensions_));
 }
 
 // static
@@ -941,20 +1011,15 @@ void AuthenticatorCommon::MakeCredential(
   if (options->cred_props) {
     requested_extensions_.insert(RequestExtension::kCredProps);
   }
+  if (options->large_blob_enable != device::LargeBlobSupport::kNotRequested) {
+    requested_extensions_.insert(RequestExtension::kLargeBlobEnable);
+  }
+  make_credential_options_->large_blob_support = options->large_blob_enable;
   ctap_make_credential_request_->app_id = std::move(appid_exclude);
   ctap_make_credential_request_->is_incognito_mode =
       browser_context()->IsOffTheRecord();
   // On dual protocol CTAP2/U2F devices, force credential creation over U2F.
   ctap_make_credential_request_->is_u2f_only = origin_is_crypto_token_extension;
-
-  if (make_credential_options_->resident_key ==
-          device::ResidentKeyRequirement::kRequired &&
-      caller_origin.scheme() == "chrome-extension") {
-    // The large blob key extension is set for every request since we cannot
-    // know in advance if the RP will attempt storing a blob on a future
-    // GetAssertion request.
-    ctap_make_credential_request_->large_blob_key = true;
-  }
 
   if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport) &&
       !origin_is_crypto_token_extension && !is_cross_origin) {
@@ -1088,6 +1153,25 @@ void AuthenticatorCommon::GetAssertion(
     }
   }
 
+  if (options->large_blob_read && options->large_blob_write) {
+    InvokeCallbackAndCleanup(
+        std::move(callback),
+        blink::mojom::AuthenticatorStatus::CANNOT_READ_AND_WRITE_LARGE_BLOB);
+    return;
+  }
+
+  if (options->large_blob_read) {
+    requested_extensions_.insert(RequestExtension::kLargeBlobRead);
+  } else if (options->large_blob_write) {
+    if (options->allow_credentials.size() != 1) {
+      InvokeCallbackAndCleanup(std::move(callback),
+                               blink::mojom::AuthenticatorStatus::
+                                   INVALID_ALLOW_CREDENTIALS_FOR_LARGE_BLOB);
+      return;
+    }
+    requested_extensions_.insert(RequestExtension::kLargeBlobWrite);
+  }
+
   UMA_HISTOGRAM_COUNTS_100(
       "WebAuthentication.CredentialRequestAllowCredentialsCount",
       options->allow_credentials.size());
@@ -1164,6 +1248,14 @@ void AuthenticatorCommon::GetAssertion(
         client_data::kGetType, caller_origin_, options->challenge);
   }
 
+  if (options->large_blob_write) {
+    data_decoder_.GzipCompress(
+        *options->large_blob_write,
+        base::BindOnce(&AuthenticatorCommon::OnLargeBlobCompressed,
+                       weak_factory_.GetWeakPtr()));
+    return;
+  }
+
   StartGetAssertionRequest(/*allow_skipping_pin_touch=*/true);
 }
 
@@ -1189,10 +1281,18 @@ void AuthenticatorCommon::IsUserVerifyingPlatformAuthenticatorAvailable(
       discovery_factory_testing_override ? discovery_factory_testing_override
                                          : discovery_factory.get();
 
-  const bool result = IsUserVerifyingPlatformAuthenticatorAvailableImpl(
-      request_delegate_ptr, discovery_factory_ptr, browser_context());
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  auto post_done_callback = base::BindOnce(
+      [](blink::mojom::Authenticator::
+             IsUserVerifyingPlatformAuthenticatorAvailableCallback callback,
+         bool is_available) {
+        base::SequencedTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::BindOnce(std::move(callback), is_available));
+      },
+      std::move(callback));
+
+  IsUserVerifyingPlatformAuthenticatorAvailableImpl(
+      request_delegate_ptr, discovery_factory_ptr, browser_context(),
+      std::move(post_done_callback));
 }
 
 void AuthenticatorCommon::Cancel() {
@@ -1269,6 +1369,13 @@ void AuthenticatorCommon::OnRegisterResponse(
           authenticator,
           AuthenticatorRequestClientDelegate::InterestingFailureReason::
               kAuthenticatorMissingUserVerification,
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+      return;
+    case device::MakeCredentialStatus::kAuthenticatorMissingLargeBlob:
+      SignalFailureToRequestDelegate(
+          authenticator,
+          AuthenticatorRequestClientDelegate::InterestingFailureReason::
+              kAuthenticatorMissingLargeBlob,
           blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
       return;
     case device::MakeCredentialStatus::kNoCommonAlgorithms:
@@ -1556,6 +1663,13 @@ void AuthenticatorCommon::OnSignResponse(
 
 void AuthenticatorCommon::OnAccountSelected(
     device::AuthenticatorGetAssertionResponse response) {
+  if (response.large_blob()) {
+    std::vector<uint8_t> blob = std::move(*response.large_blob());
+    data_decoder_.GzipUncompress(
+        blob, base::BindOnce(&AuthenticatorCommon::OnLargeBlobUncompressed,
+                             weak_factory_.GetWeakPtr(), std::move(response)));
+    return;
+  }
   InvokeCallbackAndCleanup(
       std::move(get_assertion_response_callback_),
       blink::mojom::AuthenticatorStatus::SUCCESS,
@@ -1687,7 +1801,6 @@ device::FidoDiscoveryFactory* AuthenticatorCommon::discovery_factory() {
 }
 
 void AuthenticatorCommon::InitDiscoveryFactory() {
-  DCHECK(!discovery_factory_ && !discovery_factory_testing_override_);
   const bool is_u2f_api_request =
       WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
           caller_origin_);

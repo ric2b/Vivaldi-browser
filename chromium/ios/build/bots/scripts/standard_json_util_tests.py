@@ -4,6 +4,7 @@
 """Unittests for standard_json_util.py."""
 
 import collections
+import os
 import unittest
 
 import standard_json_util as sju
@@ -82,6 +83,14 @@ class UnitTest(unittest.TestCase):
     self.assertTrue(output.tests['e']['is_flaky'])
     self.assertIsNot(output.tests['e'].get('is_unexpected'), True)
 
+  def test_skip(self):
+    """Test setting expected skip."""
+    test = 'f'
+    output = sju.StdJson()
+    output.mark_skipped(test)
+    self.assertEqual(output.tests['f']['actual'], 'SKIP')
+    self.assertFalse(output.tests['f'].get('is_unexpected', False))
+
   def test_timeout(self):
     """Test setting timeout"""
     test = 'e'
@@ -96,6 +105,14 @@ class UnitTest(unittest.TestCase):
     output.mark_timeout(test)
     self.assertTrue(output.tests['e']['actual'], 'FAIL TIMEOUT')
     self.assertTrue(output.tests['e']['is_unexpected'], True)
+
+  def test_shard(self):
+    """Test shard into is written to test result."""
+    test = 'f'
+    output = sju.StdJson()
+    output.mark_passed(test)
+    self.assertEqual(output.tests['f']['shard'],
+                     os.getenv('GTEST_SHARD_INDEX', 0))
 
 
 if __name__ == '__main__':

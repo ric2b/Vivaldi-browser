@@ -54,7 +54,8 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"  // nogncheck
-#include "ash/public/cpp/window_state_type.h"  // nogncheck
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"  // nogncheck
 #include "ui/aura/window_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #endif
@@ -98,11 +99,11 @@ aura::Window* GetWindowForTabDraggingProperties(const TabDragContext* context) {
 // Returns true if |context| browser window is snapped.
 bool IsSnapped(const TabDragContext* context) {
   DCHECK(context);
-  ash::WindowStateType type =
+  chromeos::WindowStateType type =
       GetWindowForTabDraggingProperties(context)->GetProperty(
-          ash::kWindowStateTypeKey);
-  return type == ash::WindowStateType::kLeftSnapped ||
-         type == ash::WindowStateType::kRightSnapped;
+          chromeos::kWindowStateTypeKey);
+  return type == chromeos::WindowStateType::kLeftSnapped ||
+         type == chromeos::WindowStateType::kRightSnapped;
 }
 
 // In Chrome OS tablet mode, when dragging a tab/tabs around, the desired
@@ -139,7 +140,7 @@ void StoreCurrentDraggedBrowserBoundsInTabletMode(
 // OS.
 bool IsShowingInOverview(TabDragContext* context) {
   return context && GetWindowForTabDraggingProperties(context)->GetProperty(
-                        ash::kIsShowingInOverviewKey);
+                        chromeos::kIsShowingInOverviewKey);
 }
 
 // Returns true if we should attach the dragged tabs into |target_context|
@@ -566,7 +567,7 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
         did_restore_window_ = true;
         // When all tabs in a maximized browser are dragged the browser gets
         // restored during the drag and maximized back when the drag ends.
-        const int tab_area_width = attached_context_->GetTabAreaWidth();
+        const int tab_area_width = attached_context_->GetTabDragAreaWidth();
         std::vector<gfx::Rect> drag_bounds =
             attached_context_->CalculateBoundsForDraggedViews(attached_views_);
         OffsetX(GetAttachedDragPoint(point_in_screen).x(), &drag_bounds);
@@ -1216,6 +1217,9 @@ void TabDragController::Attach(TabDragContext* attached_context,
       if (drag_data_[i].pinned)
         add_types |= TabStripModel::ADD_PINNED;
 
+      // We should have owned_contents here, this CHECK is used to gather data
+      // for https://crbug.com/677806.
+      CHECK(drag_data_[i].owned_contents);
       attached_context_->GetTabStripModel()->InsertWebContentsAt(
           index + i - first_tab_index(),
           std::move(drag_data_[i].owned_contents), add_types, group_);
@@ -1336,7 +1340,7 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
     return;
   }
 
-  const int tab_area_width = attached_context_->GetTabAreaWidth();
+  const int tab_area_width = attached_context_->GetTabDragAreaWidth();
   std::vector<gfx::Rect> drag_bounds =
       attached_context_->CalculateBoundsForDraggedViews(attached_views_);
   OffsetX(GetAttachedDragPoint(point_in_screen).x(), &drag_bounds);
@@ -1755,6 +1759,9 @@ void TabDragController::CompleteDrag() {
     std::vector<TabStripModelDelegate::NewStripContents> contentses;
     for (size_t i = 0; i < drag_data_.size(); ++i) {
       TabStripModelDelegate::NewStripContents item;
+      // We should have owned_contents here, this CHECK is used to gather data
+      // for https://crbug.com/677806.
+      CHECK(drag_data_[i].owned_contents);
       item.web_contents = std::move(drag_data_[i].owned_contents);
       item.add_types = drag_data_[i].pinned ? TabStripModel::ADD_PINNED
                                             : TabStripModel::ADD_NONE;
@@ -1969,9 +1976,9 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
     gfx::Vector2d* drag_offset,
     std::vector<gfx::Rect>* drag_bounds) {
   attached_context_->ForceLayout();
-  const int dragged_context_width = attached_context_->GetTabAreaWidth();
+  const int dragged_context_width = attached_context_->GetTabDragAreaWidth();
 
-  // If the new tabstrip is smaller than the old resize the tabs.
+  // If the new tabstrip region is smaller than the old, resize the tabs.
   if (dragged_context_width < tab_area_width) {
     const float leading_ratio =
         drag_bounds->front().x() / float{tab_area_width};
@@ -2027,7 +2034,7 @@ Browser* TabDragController::CreateBrowserForDrag(
   // Don't copy the initial workspace since the *current* workspace might be
   // different and copying the workspace will move the tab to the initial one.
   create_params.initial_workspace = "";
-  Browser* browser = new Browser(create_params);
+  Browser* browser = Browser::Create(create_params);
   is_dragging_new_browser_ = true;
   // If the window is created maximized then the bounds we supplied are ignored.
   // We need to reset them again so they are honored.

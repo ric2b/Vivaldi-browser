@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "build/build_config.h"
@@ -366,8 +365,7 @@ ContentSetting GeolocationPermissionContextTests::GetGeolocationContentSetting(
     GURL frame_1) {
   return PermissionsClient::Get()
       ->GetSettingsMap(browser_context())
-      ->GetContentSetting(frame_0, frame_1, ContentSettingsType::GEOLOCATION,
-                          std::string());
+      ->GetContentSetting(frame_0, frame_1, ContentSettingsType::GEOLOCATION);
 }
 
 void GeolocationPermissionContextTests::SetGeolocationContentSetting(
@@ -376,9 +374,8 @@ void GeolocationPermissionContextTests::SetGeolocationContentSetting(
     ContentSetting content_setting) {
   return PermissionsClient::Get()
       ->GetSettingsMap(browser_context())
-      ->SetContentSettingDefaultScope(frame_0, frame_1,
-                                      ContentSettingsType::GEOLOCATION,
-                                      std::string(), content_setting);
+      ->SetContentSettingDefaultScope(
+          frame_0, frame_1, ContentSettingsType::GEOLOCATION, content_setting);
 }
 
 bool GeolocationPermissionContextTests::HasActivePrompt() {

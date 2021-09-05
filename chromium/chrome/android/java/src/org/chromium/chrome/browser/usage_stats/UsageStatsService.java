@@ -5,15 +5,15 @@
 package org.chromium.chrome.browser.usage_stats;
 
 import android.app.Activity;
+import android.os.Build;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.CollectionUtil;
 import org.chromium.base.Log;
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -22,6 +22,8 @@ import org.chromium.components.user_prefs.UserPrefs;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.chromium.base.BuildConfig;
 
 /**
  * Public interface for all usage stats related functionality. All calls to instances of
@@ -48,7 +50,9 @@ public class UsageStatsService {
 
     /** Returns if the UsageStatsService is enabled on this device */
     public static boolean isEnabled() {
-        return BuildInfo.isAtLeastQ() && ChromeFeatureList.isEnabled(ChromeFeatureList.USAGE_STATS);
+        // Vivaldi: no usage stats.
+        if (BuildConfig.IS_VIVALDI) return false;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
     }
 
     /** Get the global instance of UsageStatsService */
@@ -100,17 +104,7 @@ public class UsageStatsService {
     /** @return Whether the user has authorized DW to access usage stats data. */
     boolean getOptInState() {
         ThreadUtils.assertOnUiThread();
-        boolean enabledByPref = UserPrefs.get(mProfile).getBoolean(Pref.USAGE_STATS_ENABLED);
-        boolean enabledByFeature = ChromeFeatureList.isEnabled(ChromeFeatureList.USAGE_STATS);
-        // If the user has previously opted in, but the feature has been turned off, we need to
-        // treat it as if they opted out; otherwise they'll have no UI affordance for clearing
-        // whatever data Digital Wellbeing has stored.
-        if (enabledByPref && !enabledByFeature) {
-            onAllHistoryDeleted();
-            setOptInState(false);
-        }
-
-        return enabledByPref && enabledByFeature;
+        return UserPrefs.get(mProfile).getBoolean(Pref.USAGE_STATS_ENABLED);
     }
 
     /** Sets the user's opt in state. */
@@ -249,12 +243,9 @@ public class UsageStatsService {
     }
 
     private void notifyObserversOfSuspensions(List<String> fqdns, boolean suspended) {
-        for (WeakReference<PageViewObserver> observerRef : mPageViewObservers) {
-            PageViewObserver observer = observerRef.get();
-            if (observer != null) {
-                for (String fqdn : fqdns) {
-                    observer.notifySiteSuspensionChanged(fqdn, suspended);
-                }
+        for (PageViewObserver observer : CollectionUtil.strengthen(mPageViewObservers)) {
+            for (String fqdn : fqdns) {
+                observer.notifySiteSuspensionChanged(fqdn, suspended);
             }
         }
     }

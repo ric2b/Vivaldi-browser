@@ -110,6 +110,11 @@
     "dependencies": [ "permission:notes" ],
     "contexts": [ "blessed_extension" ]
   },
+  "pageActions": {
+    "vivaldi": true,
+    "dependencies": [ "permission:pageActions" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "pipPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:pipPrivate" ],

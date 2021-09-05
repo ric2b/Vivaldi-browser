@@ -97,6 +97,15 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
   }
 
   // First find out if we know what to do with this event type from flutter.
+  if (event_data->event_type() ==
+      gallium::castos::OnAccessibilityEventRequest_EventType_ANNOUNCEMENT) {
+    if (!event_data->has_text())
+      return;
+
+    SubmitTTS(event_data->text());
+    return;
+  }
+
   ax::mojom::Event translated_event = ToAXEvent(event_data->event_type());
   if (translated_event == ax::mojom::Event::kNone) {
     LOG(INFO) << "Ignoring unknown flutter ax event "
@@ -257,7 +266,8 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
 
   if (event_data->event_type() ==
       gallium::castos::OnAccessibilityEventRequest_EventType_CONTENT_CHANGED) {
-    current_tree_serializer_->InvalidateSubtree(GetFromId(event.id));
+    current_tree_serializer_->InvalidateSubtree(
+        GetFromId(event_data->source_id()));
   }
 
   if (event_data->event_type() !=
@@ -285,8 +295,8 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
     HandleRoutes(&event_bundle.events);
 
     event_bundle.updates.emplace_back();
-    current_tree_serializer_->SerializeChanges(GetFromId(event.id),
-                                               &event_bundle.updates.back());
+    current_tree_serializer_->SerializeChanges(
+        GetFromId(event_data->source_id()), &event_bundle.updates.back());
 
     HandleLiveRegions(&event_bundle.events);
 
@@ -566,13 +576,7 @@ void AXTreeSourceFlutter::HandleNativeTTS() {
     if (prev_it != native_tts_name_cache_.end() &&
         prev_it->second != it.second) {
       // Send to TTS controller.
-      std::unique_ptr<content::TtsUtterance> utterance =
-          content::TtsUtterance::Create(browser_context_);
-      utterance->SetText(it.second);
-
-      auto* tts_controller = content::TtsController::GetInstance();
-      tts_controller->Stop();
-      tts_controller->SpeakOrEnqueue(std::move(utterance));
+      SubmitTTS(it.second);
     }
   }
 
@@ -639,11 +643,13 @@ void AXTreeSourceFlutter::HandleRoutes(std::vector<ui::AXEvent>* events) {
       continue;
     }
 
-    scopes_route_cache_.push_back(node->GetId());
-
     // Find a node in the sub-tree with names route flag set.
     FlutterSemanticsNode* sub_node = FindRoutesNode(node);
     if (sub_node) {
+      // Only register the scopes route node in our cache
+      // if a names route is found.
+      scopes_route_cache_.push_back(node->GetId());
+
       ui::AXNodeData data;
       SerializeNode(sub_node, &data);
       std::string name;
@@ -658,25 +664,20 @@ void AXTreeSourceFlutter::HandleRoutes(std::vector<ui::AXEvent>* events) {
         focus_event.event_type = ax::mojom::Event::kFocus;
         focus_event.id = focused_id_;
         focus_event.event_from = ax::mojom::EventFrom::kNone;
-
-        // Speak it.
-        std::unique_ptr<content::TtsUtterance> utterance =
-            content::TtsUtterance::Create(browser_context_);
-        utterance->SetText(name);
-        auto* tts_controller = content::TtsController::GetInstance();
-        tts_controller->Stop();
-        tts_controller->SpeakOrEnqueue(std::move(utterance));
       }
     }
   }
 
-  // Detect any removed nodes with scopes_route flag.
+  // Clean up the cache for those nodes that should not be in the cache anymore.
   bool need_refocus = false;
   for (std::vector<int32_t>::iterator it = scopes_route_cache_.begin();
        it != scopes_route_cache_.end();) {
     int32_t id = *it;
-    if (GetFromId(id) == nullptr) {
-      // This was removed.
+    FlutterSemanticsNode* scopes_route_node = GetFromId(id);
+    if (scopes_route_node == nullptr || !scopes_route_node->HasScopesRoute() ||
+        FindRoutesNode(scopes_route_node) == nullptr) {
+      // This was removed in the latest tree update or there are no more
+      // RoutesNode child.
       it = scopes_route_cache_.erase(it++);
       need_refocus = true;
     } else {
@@ -752,6 +753,17 @@ int32_t AXTreeSourceFlutter::FindFirstFocusableNodeId() {
 
   // Fallback to root if none found.
   return root_id_;
+}
+
+void AXTreeSourceFlutter::SubmitTTS(const std::string& text) {
+  std::unique_ptr<content::TtsUtterance> utterance =
+      content::TtsUtterance::Create(browser_context_);
+
+  utterance->SetText(text);
+
+  auto* tts_controller = content::TtsController::GetInstance();
+  tts_controller->Stop();
+  tts_controller->SpeakOrEnqueue(std::move(utterance));
 }
 
 void AXTreeSourceFlutter::UpdateTree() {

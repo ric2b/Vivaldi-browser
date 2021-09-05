@@ -79,7 +79,7 @@ Polymer({
       /* This method is called as observer. Skip if if current mode does not
        * match expected.
        */
-      if (perUserTimeZoneMode !=
+      if (perUserTimeZoneMode !==
           this.getPref('cros.flags.per_user_timezone_enabled').value) {
         return;
       }
@@ -99,7 +99,7 @@ Polymer({
             .value) {
       const isPerUserTimezone =
           this.getPref('cros.flags.per_user_timezone_enabled').value;
-      if (this.timeZoneList_[0].value ==
+      if (this.timeZoneList_[0].value ===
           (isPerUserTimezone ? this.getPref('settings.timezone').value :
                                this.getPref('cros.system.timezone').value)) {
         return;
@@ -108,8 +108,9 @@ Polymer({
     // Setting several preferences at once will trigger several
     // |maybeGetTimeZoneList_| calls, which we don't want.
     this.getTimeZonesRequestSent_ = true;
-    cr.sendWithPromise('getTimeZones')
-        .then((timezones) => {
+    settings.TimeZoneBrowserProxyImpl.getInstance()
+        .getTimeZones()
+        .then(timezones => {
           this.setTimeZoneList_(timezones);
         })
         .finally(() => {
@@ -156,7 +157,7 @@ Polymer({
    */
   updateActiveTimeZoneName_(activeTimeZoneId) {
     const activeTimeZone = this.timeZoneList_.find(
-        (timeZone) => timeZone.value == activeTimeZoneId);
+        (timeZone) => timeZone.value.toString() === activeTimeZoneId);
     if (activeTimeZone) {
       this.activeTimeZoneDisplayName = activeTimeZone.name;
     }

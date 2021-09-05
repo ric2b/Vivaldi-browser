@@ -117,6 +117,19 @@ class CanvasRenderingContext2DAutoRestoreSkCanvas {
   int save_count_;
 };
 
+CanvasRenderingContext* CanvasRenderingContext2D::Factory::Create(
+    CanvasRenderingContextHost* host,
+    const CanvasContextCreationAttributesCore& attrs) {
+  DCHECK(!host->IsOffscreenCanvas());
+  CanvasRenderingContext* rendering_context =
+      MakeGarbageCollected<CanvasRenderingContext2D>(
+          static_cast<HTMLCanvasElement*>(host), attrs);
+  DCHECK(rendering_context);
+  rendering_context->RecordUKMCanvasRenderingAPI(
+      CanvasRenderingContext::CanvasRenderingAPI::k2D);
+  return rendering_context;
+}
+
 CanvasRenderingContext2D::CanvasRenderingContext2D(
     HTMLCanvasElement* canvas,
     const CanvasContextCreationAttributesCore& attrs)
@@ -364,7 +377,7 @@ void CanvasRenderingContext2D::ScrollPathIntoViewInternal(const Path& path) {
 
   // Apply transformation and get the bounding rect
   Path transformed_path = path;
-  transformed_path.Transform(GetState().Transform());
+  transformed_path.Transform(GetState().GetAffineTransform());
   FloatRect bounding_rect = transformed_path.BoundingRect();
 
   // We first map canvas coordinates to layout coordinates.
@@ -416,7 +429,8 @@ void CanvasRenderingContext2D::clearRect(double x,
       std::isfinite(width) && std::isfinite(height)) {
     FloatRect rect(clampTo<float>(x), clampTo<float>(y), clampTo<float>(width),
                    clampTo<float>(height));
-    hit_region_manager_->RemoveHitRegionsInRect(rect, GetState().Transform());
+    hit_region_manager_->RemoveHitRegionsInRect(
+        rect, GetState().GetAffineTransform());
   }
 }
 
@@ -793,6 +807,101 @@ void CanvasRenderingContext2D::setDirection(const String& direction_string) {
   ModifiableState().SetDirection(direction);
 }
 
+void CanvasRenderingContext2D::setTextLetterSpacing(
+    const double letter_spacing) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float letter_spacing_float = clampTo<float>(letter_spacing);
+  ModifiableState().SetTextLetterSpacing(letter_spacing_float,
+                                         Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setTextWordSpacing(const double word_spacing) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float word_spacing_float = clampTo<float>(word_spacing);
+  ModifiableState().SetTextWordSpacing(word_spacing_float,
+                                       Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setTextRendering(
+    const String& text_rendering_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  TextRenderingMode text_rendering_mode;
+  String text_rendering = text_rendering_string.LowerASCII();
+
+  if (text_rendering == kAutoRendering)
+    text_rendering_mode = TextRenderingMode::kAutoTextRendering;
+  else if (text_rendering == kOptimizeSpeedRendering)
+    text_rendering_mode = TextRenderingMode::kOptimizeSpeed;
+  else if (text_rendering == kOptimizeLegibilityRendering)
+    text_rendering_mode = TextRenderingMode::kOptimizeLegibility;
+  else if (text_rendering == kGeometricPrecisionRendering)
+    text_rendering_mode = TextRenderingMode::kGeometricPrecision;
+  else
+    return;
+
+  if (GetState().GetTextRendering() == text_rendering_mode)
+    return;
+
+  ModifiableState().SetTextRendering(text_rendering_mode,
+                                     Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setFontKerning(
+    const String& font_kerning_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+  FontDescription::Kerning kerning;
+  String font_kerning = font_kerning_string.LowerASCII();
+  if (font_kerning == kAutoKerningString)
+    kerning = FontDescription::kAutoKerning;
+  else if (font_kerning == kNoneKerningString)
+    kerning = FontDescription::kNoneKerning;
+  else if (font_kerning == kNormalKerningString)
+    kerning = FontDescription::kNormalKerning;
+  else
+    return;
+
+  if (GetState().GetFontKerning() == kerning)
+    return;
+
+  ModifiableState().SetFontKerning(kerning, Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setFontVariantCaps(
+    const String& font_variant_caps_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+  FontDescription::FontVariantCaps variant_caps;
+  String variant_caps_lower = font_variant_caps_string.LowerASCII();
+  if (variant_caps_lower == kNormalVariantString)
+    variant_caps = FontDescription::kCapsNormal;
+  else if (variant_caps_lower == kSmallCapsVariantString)
+    variant_caps = FontDescription::kSmallCaps;
+  else if (variant_caps_lower == kAllSmallCapsVariantString)
+    variant_caps = FontDescription::kAllSmallCaps;
+  else if (variant_caps_lower == kPetiteVariantString)
+    variant_caps = FontDescription::kPetiteCaps;
+  else if (variant_caps_lower == kAllPetiteVariantString)
+    variant_caps = FontDescription::kAllPetiteCaps;
+  else if (variant_caps_lower == kUnicaseVariantString)
+    variant_caps = FontDescription::kUnicase;
+  else if (variant_caps_lower == kTitlingCapsVariantString)
+    variant_caps = FontDescription::kTitlingCaps;
+  else
+    return;
+
+  if (GetState().GetFontVariantCaps() == variant_caps)
+    return;
+
+  ModifiableState().SetFontVariantCaps(variant_caps, Host()->GetFontSelector());
+}
+
 void CanvasRenderingContext2D::fillText(const String& text,
                                         double x,
                                         double y) {
@@ -976,8 +1085,8 @@ bool CanvasRenderingContext2D::IsTransformInvertible() const {
   return GetState().IsTransformInvertible();
 }
 
-AffineTransform CanvasRenderingContext2D::Transform() const {
-  return GetState().Transform();
+TransformationMatrix CanvasRenderingContext2D::GetTransform() const {
+  return GetState().GetTransform();
 }
 
 cc::Layer* CanvasRenderingContext2D::CcLayer() const {
@@ -1071,7 +1180,7 @@ void CanvasRenderingContext2D::UpdateElementAccessibility(const Path& path,
 
   // Get the transformed path.
   Path transformed_path = path;
-  transformed_path.Transform(GetState().Transform());
+  transformed_path.Transform(GetState().GetAffineTransform());
 
   // Add border and padding to the bounding rect.
   LayoutRect element_rect =
@@ -1111,7 +1220,7 @@ void CanvasRenderingContext2D::addHitRegion(const HitRegionOptions* options,
     return;
   }
 
-  hit_region_path.Transform(GetState().Transform());
+  hit_region_path.Transform(GetState().GetAffineTransform());
 
   if (GetState().HasClip()) {
     hit_region_path.IntersectPath(GetState().GetCurrentClipPath());

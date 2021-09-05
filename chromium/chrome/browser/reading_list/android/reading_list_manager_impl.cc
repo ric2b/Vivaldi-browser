@@ -8,9 +8,13 @@
 
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/reading_list/core/reading_list_model.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 using BookmarkNode = bookmarks::BookmarkNode;
@@ -44,10 +48,14 @@ bool SyncToBookmark(const ReadingListEntry& entry, BookmarkNode* bookmark) {
 
 ReadingListManagerImpl::ReadingListManagerImpl(
     ReadingListModel* reading_list_model)
-    : reading_list_model_(reading_list_model), maximum_id_(0L) {
+    : reading_list_model_(reading_list_model),
+      maximum_id_(0L),
+      loaded_(false),
+      performing_batch_update_(false) {
   DCHECK(reading_list_model_);
   root_ = std::make_unique<BookmarkNode>(maximum_id_++, base::GenerateGUID(),
                                          GURL());
+  root_->SetTitle(l10n_util::GetStringUTF16(IDS_READ_LATER_TITLE));
   DCHECK(root_->is_folder());
   reading_list_model_->AddObserver(this);
 }
@@ -61,7 +69,64 @@ void ReadingListManagerImpl::ReadingListModelLoaded(
   // Constructs the bookmark tree.
   root_->DeleteAll();
   for (const auto& url : model->Keys())
-    AddBookmark(model->GetEntryByURL(url));
+    AddOrUpdateBookmark(model->GetEntryByURL(url));
+
+  loaded_ = true;
+
+  for (Observer& observer : observers_)
+    observer.ReadingListLoaded();
+}
+
+void ReadingListManagerImpl::ReadingListDidAddEntry(
+    const ReadingListModel* model,
+    const GURL& url,
+    reading_list::EntrySource source) {
+  AddOrUpdateBookmark(model->GetEntryByURL(url));
+}
+
+void ReadingListManagerImpl::ReadingListWillRemoveEntry(
+    const ReadingListModel* model,
+    const GURL& url) {
+  RemoveBookmark(url);
+}
+
+void ReadingListManagerImpl::ReadingListDidMoveEntry(
+    const ReadingListModel* model,
+    const GURL& url) {
+  DCHECK(reading_list_model_->loaded());
+  const auto* moved_entry = reading_list_model_->GetEntryByURL(url);
+  DCHECK(moved_entry);
+  AddOrUpdateBookmark(moved_entry);
+}
+
+void ReadingListManagerImpl::ReadingListDidApplyChanges(
+    ReadingListModel* model) {
+  // Ignores ReadingListDidApplyChanges() invocations during batch update.
+  if (performing_batch_update_)
+    return;
+
+  NotifyReadingListChanged();
+}
+
+void ReadingListManagerImpl::ReadingListModelBeganBatchUpdates(
+    const ReadingListModel* model) {
+  performing_batch_update_ = true;
+}
+
+void ReadingListManagerImpl::ReadingListModelCompletedBatchUpdates(
+    const ReadingListModel* model) {
+  performing_batch_update_ = false;
+
+  // Batch update is done, notify the observer only once.
+  NotifyReadingListChanged();
+}
+
+void ReadingListManagerImpl::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void ReadingListManagerImpl::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 const BookmarkNode* ReadingListManagerImpl::Add(const GURL& url,
@@ -71,18 +136,61 @@ const BookmarkNode* ReadingListManagerImpl::Add(const GURL& url,
   // Add or swap the reading list entry.
   const auto& new_entry = reading_list_model_->AddEntry(
       url, title, reading_list::ADDED_VIA_CURRENT_APP);
-  return AddBookmark(&new_entry);
+  const auto* node = FindBookmarkByURL(new_entry.URL());
+  DCHECK(node)
+      << "Bookmark node should have been create in ReadingListDidAddEntry().";
+  return node;
 }
 
-const BookmarkNode* ReadingListManagerImpl::Get(const GURL& url) {
+const BookmarkNode* ReadingListManagerImpl::Get(const GURL& url) const {
   DCHECK(reading_list_model_->loaded());
   return FindBookmarkByURL(url);
 }
 
+const BookmarkNode* ReadingListManagerImpl::GetNodeByID(int64_t id) const {
+  if (root_->id() == id)
+    return root_.get();
+
+  for (const auto& child : root_->children()) {
+    if (child->id() == id)
+      return child.get();
+  }
+
+  return nullptr;
+}
+
+void ReadingListManagerImpl::GetMatchingNodes(
+    const bookmarks::QueryFields& query,
+    size_t max_count,
+    std::vector<const BookmarkNode*>* results) {
+  if (results->size() >= max_count)
+    return;
+
+  auto query_words = bookmarks::ParseBookmarkQuery(query);
+  if (query_words.empty())
+    return;
+
+  for (const auto& node : root_->children()) {
+    if (bookmarks::DoesBookmarkContainWords(node->GetTitle(), node->url(),
+                                            query_words)) {
+      results->push_back(node.get());
+      if (results->size() == max_count)
+        break;
+    }
+  }
+}
+
+bool ReadingListManagerImpl::IsReadingListBookmark(
+    const BookmarkNode* node) const {
+  if (!node)
+    return false;
+
+  // Not recursive since there is only one level of children.
+  return (root_.get() == node) || (node->parent() == root_.get());
+}
+
 void ReadingListManagerImpl::Delete(const GURL& url) {
   DCHECK(reading_list_model_->loaded());
-
-  RemoveBookmark(url);
   reading_list_model_->RemoveEntryByURL(url);
 }
 
@@ -115,7 +223,31 @@ void ReadingListManagerImpl::SetReadStatus(const GURL& url, bool read) {
   }
 }
 
-BookmarkNode* ReadingListManagerImpl::FindBookmarkByURL(const GURL& url) {
+bool ReadingListManagerImpl::GetReadStatus(
+    const bookmarks::BookmarkNode* node) {
+  if (node == root_.get())
+    return false;
+
+  std::string value;
+  node->GetMetaInfo(kReadStatusKey, &value);
+
+  if (value == kReadStatusRead)
+    return true;
+  if (value == kReadStatusUnread)
+    return false;
+
+  NOTREACHED() << "May not be reading list node.";
+  return false;
+}
+
+bool ReadingListManagerImpl::IsLoaded() const {
+  return loaded_;
+}
+
+BookmarkNode* ReadingListManagerImpl::FindBookmarkByURL(const GURL& url) const {
+  if (!url.is_valid())
+    return nullptr;
+
   for (const auto& child : root_->children()) {
     if (url == child->url())
       return child.get();
@@ -130,8 +262,7 @@ void ReadingListManagerImpl::RemoveBookmark(const GURL& url) {
     root_->Remove(root_->GetIndexOf(node));
 }
 
-// Adds a reading list entry to the bookmark tree.
-const BookmarkNode* ReadingListManagerImpl::AddBookmark(
+const BookmarkNode* ReadingListManagerImpl::AddOrUpdateBookmark(
     const ReadingListEntry* entry) {
   if (!entry)
     return nullptr;
@@ -148,4 +279,9 @@ const BookmarkNode* ReadingListManagerImpl::AddBookmark(
       maximum_id_++, base::GenerateGUID(), entry->URL());
   bool success = SyncToBookmark(*entry, new_node.get());
   return success ? root_->Add(std::move(new_node)) : nullptr;
+}
+
+void ReadingListManagerImpl::NotifyReadingListChanged() {
+  for (Observer& observer : observers_)
+    observer.ReadingListChanged();
 }

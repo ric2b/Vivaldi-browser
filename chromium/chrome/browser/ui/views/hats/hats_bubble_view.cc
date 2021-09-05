@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/views/hats/hats_bubble_view.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/ui/browser.h"
@@ -61,7 +61,9 @@ views::BubbleDialogDelegateView* HatsBubbleView::GetHatsBubble() {
 
 // static
 void HatsBubbleView::ShowOnContentReady(Browser* browser,
-                                        const std::string& site_id) {
+                                        const std::string& site_id,
+                                        base::OnceClosure success_callback,
+                                        base::OnceClosure failure_callback) {
   if (site_id == "test_site_id") {
     // Directly show the bubble during tests.
     HatsBubbleView::Show(browser, base::DoNothing());
@@ -75,7 +77,8 @@ void HatsBubbleView::ShowOnContentReady(Browser* browser,
   if (base::FeatureList::IsEnabled(
           features::kHappinessTrackingSurveysForDesktopMigration)) {
     // Self deleting on close.
-    new HatsNextWebDialog(browser, site_id);
+    new HatsNextWebDialog(browser, site_id, std::move(success_callback),
+                          std::move(failure_callback));
   } else {
     HatsWebDialog::Create(browser, site_id);
   }

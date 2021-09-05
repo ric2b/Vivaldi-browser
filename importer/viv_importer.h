@@ -13,7 +13,7 @@ namespace base {
 class DictionaryValue;
 }
 
-namespace autofill {
+namespace password_manager {
 struct PasswordForm;
 }
 
@@ -41,14 +41,16 @@ class OperaImporter : public Importer {
   bool ImportSpeedDial(std::string* error);
 
   bool ImportWand(std::string* error);
-  bool ImportWand_ReadEntryHTML(std::string::iterator* buffer,
-                                const std::string::iterator& buffer_end,
-                                std::vector<autofill::PasswordForm>* passwords,
-                                bool ignore_entry = false);
-  bool ImportWand_ReadEntryAuth(std::string::iterator* buffer,
-                                const std::string::iterator& buffer_end,
-                                std::vector<autofill::PasswordForm>* passwords,
-                                bool ignore_entry = false);
+  bool ImportWand_ReadEntryHTML(
+      std::string::iterator* buffer,
+      const std::string::iterator& buffer_end,
+      std::vector<importer::ImportedPasswordForm>* passwords,
+      bool ignore_entry = false);
+  bool ImportWand_ReadEntryAuth(
+      std::string::iterator* buffer,
+      const std::string::iterator& buffer_end,
+      std::vector<importer::ImportedPasswordForm>* passwords,
+      bool ignore_entry = false);
   bool GetMasterPasswordInfo();
 
  private:

@@ -31,8 +31,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_SETTINGS_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_SETTINGS_IMPL_H_
 
-#include "third_party/blink/public/common/web_preferences/editing_behavior_types.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -52,7 +52,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   bool ShrinksViewportContentToFit() const override;
   bool ViewportEnabled() const override;
   void SetAccelerated2dCanvasMSAASampleCount(int) override;
-  void SetAutoplayPolicy(web_pref::AutoplayPolicy) override;
+  void SetAutoplayPolicy(mojom::blink::AutoplayPolicy) override;
   void SetPreferCompositingToLCDTextEnabled(bool) override;
   void SetAccessibilityPasswordValuesEnabled(bool) override;
   void SetAllowFileAccessFromFileURLs(bool) override;
@@ -83,7 +83,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetDontSendKeyEventsToJavascript(bool) override;
   void SetDoubleTapToZoomEnabled(bool) override;
   void SetDownloadableBinaryFontsEnabled(bool) override;
-  void SetEditingBehavior(web_pref::EditingBehaviorType) override;
+  void SetEditingBehavior(mojom::blink::EditingBehavior) override;
   void SetEnableScrollAnimator(bool) override;
   void SetPrefersReducedMotion(bool) override;
   void SetWebGL1Enabled(bool) override;
@@ -101,7 +101,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetHighlightAds(bool) override;
   void SetHyperlinkAuditingEnabled(bool) override;
   void SetIgnoreMainFrameOverflowHiddenQuirk(bool) override;
-  void SetImageAnimationPolicy(web_pref::ImageAnimationPolicy) override;
+  void SetImageAnimationPolicy(mojom::blink::ImageAnimationPolicy) override;
   void SetImagesEnabled(bool) override;
   void SetInlineTextBoxAccessibilityEnabled(bool) override;
   void SetJavaScriptCanAccessClipboard(bool) override;
@@ -162,6 +162,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetSupportDeprecatedTargetDensityDPI(bool) override;
   void SetSupportsMultipleWindows(bool) override;
   void SetSyncXHRInDocumentsEnabled(bool) override;
+  void SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(bool) override;
   void SetTextAreasAreResizable(bool) override;
   void SetTextAutosizingEnabled(bool) override;
   void SetAccessibilityFontScaleFactor(float) override;
@@ -183,7 +184,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetTouchDragEndContextMenu(bool) override;
   void SetBarrelButtonForDragEnabled(bool) override;
   void SetUseLegacyBackgroundSizeShorthandBehavior(bool) override;
-  void SetViewportStyle(web_pref::ViewportStyle) override;
+  void SetViewportStyle(mojom::blink::ViewportStyle) override;
   void SetUseWideViewport(bool) override;
   void SetV8CacheOptions(mojom::blink::V8CacheOptions) override;
   void SetValidationMessageTimerMagnification(int) override;
@@ -222,7 +223,8 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetLazyImageFirstKFullyLoad4G(int) override;
 
   void SetForceDarkModeEnabled(bool) override;
-  void SetPreferredColorScheme(PreferredColorScheme) override;
+  void SetPreferredColorScheme(mojom::blink::PreferredColorScheme) override;
+  void SetPreferredContrast(mojom::blink::PreferredContrast) override;
   void SetNavigationControls(NavigationControls) override;
 
   void SetAriaModalPrunesAXTree(bool) override;

@@ -27,7 +27,6 @@
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -66,38 +65,6 @@ namespace content {
 
 namespace {
 
-void CreateChildFrameOnUI(
-    int process_id,
-    int parent_routing_id,
-    blink::mojom::TreeScopeType scope,
-    const std::string& frame_name,
-    const std::string& frame_unique_name,
-    bool is_created_by_script,
-    const base::UnguessableToken& frame_token,
-    const base::UnguessableToken& devtools_frame_token,
-    const blink::FramePolicy& frame_policy,
-    const blink::mojom::FrameOwnerProperties& frame_owner_properties,
-    blink::mojom::FrameOwnerElementType owner_type,
-    int new_routing_id,
-    mojo::ScopedMessagePipeHandle interface_provider_receiver_handle,
-    mojo::ScopedMessagePipeHandle browser_interface_broker_handle) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderFrameHostImpl* render_frame_host =
-      RenderFrameHostImpl::FromID(process_id, parent_routing_id);
-  // Handles the RenderFrameHost being deleted on the UI thread while
-  // processing a subframe creation message.
-  if (render_frame_host) {
-    render_frame_host->OnCreateChildFrame(
-        new_routing_id,
-        mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>(
-            std::move(interface_provider_receiver_handle)),
-        mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>(
-            std::move(browser_interface_broker_handle)),
-        scope, frame_name, frame_unique_name, is_created_by_script, frame_token,
-        devtools_frame_token, frame_policy, frame_owner_properties, owner_type);
-  }
-}
-
 // Common functionality for converting a sync renderer message to a callback
 // function in the browser. Derive from this, create it on the heap when
 // issuing your callback. When done, write your reply parameters into
@@ -134,39 +101,6 @@ class RenderMessageCompletionCallback {
 }  // namespace
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-
-class RenderFrameMessageFilter::OpenChannelToPpapiBrokerCallback
-    : public PpapiPluginProcessHost::BrokerClient {
- public:
-  OpenChannelToPpapiBrokerCallback(RenderFrameMessageFilter* filter,
-                                   int routing_id)
-      : filter_(filter), routing_id_(routing_id) {}
-
-  ~OpenChannelToPpapiBrokerCallback() override {}
-
-  void GetPpapiChannelInfo(base::ProcessHandle* renderer_handle,
-                           int* renderer_id) override {
-    // base::kNullProcessHandle indicates that the channel will be used by the
-    // browser itself. Make sure we never output that value here.
-    CHECK_NE(base::kNullProcessHandle, filter_->PeerHandle());
-    *renderer_handle = filter_->PeerHandle();
-    *renderer_id = filter_->render_process_id_;
-  }
-
-  void OnPpapiChannelOpened(const IPC::ChannelHandle& channel_handle,
-                            base::ProcessId plugin_pid,
-                            int /* plugin_child_id */) override {
-    filter_->Send(new ViewMsg_PpapiBrokerChannelCreated(routing_id_, plugin_pid,
-                                                        channel_handle));
-    delete this;
-  }
-
-  bool Incognito() override { return filter_->incognito_; }
-
- private:
-  scoped_refptr<RenderFrameMessageFilter> filter_;
-  int routing_id_;
-};
 
 class RenderFrameMessageFilter::OpenChannelToPpapiPluginCallback
     : public RenderMessageCompletionCallback,
@@ -227,7 +161,6 @@ void RenderFrameMessageFilter::ClearResourceContext() {
 bool RenderFrameMessageFilter::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameMessageFilter, message)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_CreateChildFrame, OnCreateChildFrame)
 #if BUILDFLAG(ENABLE_PLUGINS)
     IPC_MESSAGE_HANDLER(FrameHostMsg_GetPluginInfo, OnGetPluginInfo)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(FrameHostMsg_OpenChannelToPepperPlugin,
@@ -236,10 +169,6 @@ bool RenderFrameMessageFilter::OnMessageReceived(const IPC::Message& message) {
                         OnDidCreateOutOfProcessPepperInstance)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidDeleteOutOfProcessPepperInstance,
                         OnDidDeleteOutOfProcessPepperInstance)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_OpenChannelToPpapiBroker,
-                        OnOpenChannelToPpapiBroker)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_PluginInstanceThrottleStateChange,
-                        OnPluginInstanceThrottleStateChange)
 #endif  // ENABLE_PLUGINS
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -258,41 +187,6 @@ void RenderFrameMessageFilter::OverrideThreadForMessage(
   if (message.type() == FrameHostMsg_GetPluginInfo::ID)
     *thread = BrowserThread::UI;
 #endif  // ENABLE_PLUGINS
-}
-
-void RenderFrameMessageFilter::OnCreateChildFrame(
-    const FrameHostMsg_CreateChildFrame_Params& params,
-    FrameHostMsg_CreateChildFrame_Params_Reply* params_reply) {
-  params_reply->child_routing_id = render_widget_helper_->GetNextRoutingID();
-
-  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
-      interface_provider;
-  auto interface_provider_receiver(
-      interface_provider.InitWithNewPipeAndPassReceiver());
-  params_reply->new_interface_provider =
-      interface_provider.PassPipe().release();
-
-  mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
-      browser_interface_broker;
-  auto browser_interface_broker_receiver =
-      browser_interface_broker.InitWithNewPipeAndPassReceiver();
-  params_reply->browser_interface_broker_handle =
-      browser_interface_broker.PassPipe().release();
-
-  params_reply->frame_token = base::UnguessableToken::Create();
-  params_reply->devtools_frame_token = base::UnguessableToken::Create();
-
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &CreateChildFrameOnUI, render_process_id_, params.parent_routing_id,
-          params.scope, params.frame_name, params.frame_unique_name,
-          params.is_created_by_script, params_reply->frame_token,
-          params_reply->devtools_frame_token, params.frame_policy,
-          params.frame_owner_properties, params.frame_owner_element_type,
-          params_reply->child_routing_id,
-          interface_provider_receiver.PassPipe(),
-          browser_interface_broker_receiver.PassPipe()));
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -372,23 +266,6 @@ void RenderFrameMessageFilter::OnDidDeleteOutOfProcessPepperInstance(
     PpapiPluginProcessHost::DidDeleteOutOfProcessInstance(plugin_child_id,
                                                           pp_instance);
   }
-}
-
-void RenderFrameMessageFilter::OnOpenChannelToPpapiBroker(
-    int routing_id,
-    const base::FilePath& path) {
-  plugin_service_->OpenChannelToPpapiBroker(
-      render_process_id_, routing_id, path,
-      new OpenChannelToPpapiBrokerCallback(this, routing_id));
-}
-
-void RenderFrameMessageFilter::OnPluginInstanceThrottleStateChange(
-    int plugin_child_id,
-    int32_t pp_instance,
-    bool is_throttled) {
-  // Feature is only implemented for non-external Plugins.
-  PpapiPluginProcessHost::OnPluginInstanceThrottleStateChange(
-      plugin_child_id, pp_instance, is_throttled);
 }
 
 #endif  // ENABLE_PLUGINS

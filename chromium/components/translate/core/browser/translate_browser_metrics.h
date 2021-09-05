@@ -43,6 +43,7 @@ enum InitiationStatusType {
   INITIATION_STATUS_NO_NETWORK,
   INITIATION_STATUS_DOESNT_NEED_TRANSLATION,
   INITIATION_STATUS_IDENTICAL_LANGUAGE_USE_SOURCE_LANGUAGE_UNKNOWN,
+  INITIATION_STATUS_DISABLED_BY_AUTOFILL_ASSISTANT,
   // Insert new items here.
   INITIATION_STATUS_MAX,
 };
@@ -84,12 +85,31 @@ enum class TargetLanguageOrigin {
   kMaxValue = kDefaultEnglish
 };
 
+enum class MenuTranslationUnavailableReason {
+  kTranslateDisabled,
+  kNetworkOffline,
+  kApiKeysMissing,
+  kMHTMLPage,
+  kURLNotTranslatable,
+  kTargetLangUnknown,
+  kNotAllowedByPolicy,
+  kSourceLangUnknown,
+  // Insert new items here. Keep in sync with MenuTranslationUnavailableReason
+  // in enums.xml when adding values.
+  kMaxValue = kSourceLangUnknown
+};
+
 // Called when Chrome Translate is initiated to report a reason of the next
 // browser action.
 void ReportInitiationStatus(InitiationStatusType type);
 
 // Called when Chrome opens the URL so that the user sends an error feedback.
 void ReportLanguageDetectionError();
+
+// Called when the context (Desktop) menu or app (Mobile) menu is shown and
+// manual translation is unavailable to report a reason it is unavailable.
+void ReportMenuTranslationUnavailableReason(
+    MenuTranslationUnavailableReason reason);
 
 // Called when language detection details are complete.
 void ReportLanguageDetectionContentLength(size_t length);

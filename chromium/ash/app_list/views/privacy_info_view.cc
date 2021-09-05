@@ -161,10 +161,8 @@ void PrivacyInfoView::OnKeyEvent(ui::KeyEvent* event) {
 void PrivacyInfoView::SelectInitialResultAction(bool reverse_tab_order) {
   if (!reverse_tab_order) {
     selected_action_ = Action::kTextLink;
-    text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   } else {
     selected_action_ = Action::kCloseButton;
-    close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
 
   // Update visual indicators for focus.
@@ -179,12 +177,10 @@ bool PrivacyInfoView::SelectNextResultAction(bool reverse_tab_order) {
   if (!reverse_tab_order && selected_action_ == Action::kTextLink) {
     // Move selection forward from the text view to the close button.
     selected_action_ = Action::kCloseButton;
-    close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
     action_changed = true;
   } else if (reverse_tab_order && selected_action_ == Action::kCloseButton) {
     // Move selection backward from the close button to the text view.
     selected_action_ = Action::kTextLink;
-    text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
     action_changed = true;
   } else {
     selected_action_ = Action::kNone;
@@ -196,24 +192,19 @@ bool PrivacyInfoView::SelectNextResultAction(bool reverse_tab_order) {
   return action_changed;
 }
 
-void PrivacyInfoView::NotifyA11yResultSelected() {
+views::View* PrivacyInfoView::GetSelectedView() {
   switch (selected_action_) {
     case Action::kTextLink:
-      text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
-      break;
+      return text_view_;
     case Action::kCloseButton:
-      close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                                              true);
-      break;
+      return close_button_;
     case Action::kNone:
-      break;
+      return this;
   }
 }
 
-void PrivacyInfoView::ButtonPressed(views::Button* sender,
-                                    const ui::Event& event) {
-  if (sender == close_button_)
-    CloseButtonPressed();
+void PrivacyInfoView::OnButtonPressed() {
+  CloseButtonPressed();
 }
 
 void PrivacyInfoView::InitLayout() {
@@ -274,8 +265,8 @@ void PrivacyInfoView::InitText() {
   views::StyledLabel::RangeStyleInfo link_style;
   link_style.disable_line_wrapping = true;
   auto custom_view = std::make_unique<views::Link>(link);
-  custom_view->set_callback(base::BindRepeating(&PrivacyInfoView::LinkClicked,
-                                                base::Unretained(this)));
+  custom_view->SetCallback(base::BindRepeating(&PrivacyInfoView::LinkClicked,
+                                               base::Unretained(this)));
   custom_view->SetEnabledColor(gfx::kGoogleBlue700);
   link_style.custom_view = custom_view.get();
   link_view_ = custom_view.get();
@@ -285,7 +276,9 @@ void PrivacyInfoView::InitText() {
 }
 
 void PrivacyInfoView::InitCloseButton() {
-  auto close_button = std::make_unique<views::ImageButton>(this);
+  auto close_button = std::make_unique<views::ImageButton>();
+  close_button->SetCallback(base::BindRepeating(
+      &PrivacyInfoView::OnButtonPressed, base::Unretained(this)));
   close_button->SetImage(views::ImageButton::STATE_NORMAL,
                          gfx::CreateVectorIcon(views::kCloseIcon, kIconSizeDip,
                                                gfx::kGoogleGrey700));

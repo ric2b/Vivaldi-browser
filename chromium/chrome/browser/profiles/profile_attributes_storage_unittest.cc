@@ -12,6 +12,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
@@ -30,6 +32,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/native_theme/native_theme.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/signin/profile_colors_util.h"
+#endif
 
 using ::testing::Mock;
 using ::testing::_;
@@ -94,6 +100,8 @@ class ProfileAttributesTestObserver
   MOCK_METHOD1(OnProfileSupervisedUserIdChanged,
                void(const base::FilePath& profile_path));
   MOCK_METHOD1(OnProfileIsOmittedChanged,
+               void(const base::FilePath& profile_path));
+  MOCK_METHOD1(OnProfileThemeColorsChanged,
                void(const base::FilePath& profile_path));
 };
 }  // namespace
@@ -922,34 +930,43 @@ TEST_F(ProfileAttributesStorageTest, ProfilesState_SingleProfile) {
 // Themes aren't used on Android
 #if !defined(OS_ANDROID)
 TEST_F(ProfileAttributesStorageTest, ProfileThemeColors) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kNewProfilePicker);
   AddTestingProfile();
   base::FilePath profile_path = GetProfilePath("testing_profile_path0");
 
-  DisableObserver();  // No need to test observers in this test.
-
   ProfileAttributesEntry* entry;
   ASSERT_TRUE(storage()->GetProfileAttributesWithPath(profile_path, &entry));
+  EXPECT_CALL(observer(), OnProfileAvatarChanged(profile_path)).Times(1);
+  entry->SetAvatarIconIndex(profiles::GetPlaceholderAvatarIndex());
+  VerifyAndResetCallExpectations();
+
   EXPECT_EQ(entry->GetProfileThemeColors(),
-            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+            GetDefaultProfileThemeColors(false));
 
   ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(true);
-  EXPECT_EQ(entry->GetProfileThemeColors(),
-            ProfileAttributesEntry::GetDefaultProfileThemeColors(true));
+  EXPECT_EQ(entry->GetProfileThemeColors(), GetDefaultProfileThemeColors(true));
   EXPECT_NE(entry->GetProfileThemeColors(),
-            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+            GetDefaultProfileThemeColors(false));
 
   ProfileThemeColors colors = {SK_ColorTRANSPARENT, SK_ColorBLACK,
                                SK_ColorWHITE};
+  EXPECT_CALL(observer(), OnProfileAvatarChanged(profile_path)).Times(1);
+  EXPECT_CALL(observer(), OnProfileThemeColorsChanged(profile_path)).Times(1);
   entry->SetProfileThemeColors(colors);
   EXPECT_EQ(entry->GetProfileThemeColors(), colors);
+  VerifyAndResetCallExpectations();
 
   // Colors shouldn't change after switching back to the light mode.
   ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(false);
   EXPECT_EQ(entry->GetProfileThemeColors(), colors);
 
   // base::nullopt resets the colors to default.
+  EXPECT_CALL(observer(), OnProfileAvatarChanged(profile_path)).Times(1);
+  EXPECT_CALL(observer(), OnProfileThemeColorsChanged(profile_path)).Times(1);
   entry->SetProfileThemeColors(base::nullopt);
   EXPECT_EQ(entry->GetProfileThemeColors(),
-            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+            GetDefaultProfileThemeColors(false));
+  VerifyAndResetCallExpectations();
 }
 #endif

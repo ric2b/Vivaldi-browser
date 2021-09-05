@@ -23,12 +23,12 @@
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantFormInput_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantFormModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantGenericUiModel_jni.h"
-#include "chrome/android/features/autofill_assistant/jni_headers/AssistantHeaderModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantInfoBoxModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantInfoBox_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantOverlayModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantUiController_jni.h"
+#include "chrome/browser/android/autofill_assistant/client_android.h"
 #include "chrome/browser/android/autofill_assistant/generic_ui_root_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/ui_controller_android_utils.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
@@ -49,6 +49,7 @@
 #include "components/autofill_assistant/browser/rectf.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
+#include "components/autofill_assistant/browser/user_model.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
@@ -66,9 +67,6 @@ using base::android::JavaRef;
 namespace autofill_assistant {
 
 namespace {
-
-static const char* const kCancelChipIdentifier = "CANCEL_CHIP_ID";
-
 std::vector<float> ToFloatVector(const std::vector<RectF>& areas) {
   std::vector<float> flattened;
   for (const auto& rect : areas) {
@@ -291,14 +289,15 @@ UiControllerAndroid::UiControllerAndroid(
       /* allowTabSwitching= */
       base::FeatureList::IsEnabled(features::kAutofillAssistantChromeEntry),
       reinterpret_cast<intptr_t>(this), joverlay_coordinator);
+  header_model_ = std::make_unique<AssistantHeaderModel>(
+      Java_AssistantModel_getHeaderModel(env, GetModel()));
 
   // Register overlay_delegate_ as delegate for the overlay.
   Java_AssistantOverlayModel_setDelegate(env, GetOverlayModel(),
                                          overlay_delegate_.GetJavaObject());
 
   // Register header_delegate_ as delegate for clicks on header buttons.
-  Java_AssistantHeaderModel_setDelegate(env, GetHeaderModel(),
-                                        header_delegate_.GetJavaObject());
+  header_model_->SetDelegate(header_delegate_);
 
   // Register collect_user_data_delegate_ as delegate for the collect user data
   // UI.
@@ -310,7 +309,7 @@ UiControllerAndroid::UiControllerAndroid(
 }
 
 void UiControllerAndroid::Attach(content::WebContents* web_contents,
-                                 Client* client,
+                                 ClientAndroid* client,
                                  UiDelegate* ui_delegate) {
   DCHECK(web_contents);
   DCHECK(client);
@@ -324,8 +323,6 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
   // Attach to the new ui_delegate.
   ui_delegate_ = ui_delegate;
   ui_delegate_->AddObserver(this);
-
-  destroy_timer_.reset();
 
   JNIEnv* env = AttachCurrentThread();
   auto java_web_contents = web_contents->GetJavaWebContents();
@@ -371,13 +368,6 @@ UiControllerAndroid::~UiControllerAndroid() {
 base::android::ScopedJavaLocalRef<jobject> UiControllerAndroid::GetModel() {
   return Java_AutofillAssistantUiController_getModel(AttachCurrentThread(),
                                                      java_object_);
-}
-
-// Header related methods.
-
-base::android::ScopedJavaLocalRef<jobject>
-UiControllerAndroid::GetHeaderModel() {
-  return Java_AssistantModel_getHeaderModel(AttachCurrentThread(), GetModel());
 }
 
 void UiControllerAndroid::OnStateChanged(AutofillAssistantState new_state) {
@@ -460,59 +450,36 @@ void UiControllerAndroid::SetupForState() {
 }
 
 void UiControllerAndroid::OnStatusMessageChanged(const std::string& message) {
-  JNIEnv* env = AttachCurrentThread();
-  Java_AssistantHeaderModel_setStatusMessage(
-      env, GetHeaderModel(),
-      base::android::ConvertUTF8ToJavaString(env, message));
+  header_model_->SetStatusMessage(message);
 }
 
 void UiControllerAndroid::OnBubbleMessageChanged(const std::string& message) {
   if (!message.empty()) {
-    JNIEnv* env = AttachCurrentThread();
-    Java_AssistantHeaderModel_setBubbleMessage(
-        env, GetHeaderModel(),
-        base::android::ConvertUTF8ToJavaString(env, message));
+    header_model_->SetBubbleMessage(message);
   }
 }
 
 void UiControllerAndroid::OnProgressChanged(int progress) {
-  Java_AssistantHeaderModel_setProgress(AttachCurrentThread(), GetHeaderModel(),
-                                        progress);
+  header_model_->SetProgress(progress);
 }
 
 void UiControllerAndroid::OnProgressActiveStepChanged(int active_step) {
-  Java_AssistantHeaderModel_setProgressActiveStep(
-      AttachCurrentThread(), GetHeaderModel(), active_step);
+  header_model_->SetProgressActiveStep(active_step);
 }
 
 void UiControllerAndroid::OnProgressVisibilityChanged(bool visible) {
-  Java_AssistantHeaderModel_setProgressVisible(AttachCurrentThread(),
-                                               GetHeaderModel(), visible);
+  header_model_->SetProgressVisible(visible);
 }
 
 void UiControllerAndroid::OnProgressBarErrorStateChanged(bool error) {
-  Java_AssistantHeaderModel_setProgressBarErrorState(AttachCurrentThread(),
-                                                     GetHeaderModel(), error);
+  header_model_->SetProgressBarErrorState(error);
 }
 
 void UiControllerAndroid::OnStepProgressBarConfigurationChanged(
     const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
-  JNIEnv* env = AttachCurrentThread();
-  auto jmodel = GetHeaderModel();
-  Java_AssistantHeaderModel_setUseStepProgressBar(
-      env, jmodel, configuration.use_step_progress_bar());
-  if (!configuration.annotated_step_icons().empty()) {
-    auto jcontext =
-        Java_AutofillAssistantUiController_getContext(env, java_object_);
-    auto jlist = Java_AssistantHeaderModel_createIconList(env);
-    for (const auto& icon : configuration.annotated_step_icons()) {
-      Java_AssistantHeaderModel_addStepProgressBarIcon(
-          env, jlist,
-          ui_controller_android_utils::CreateJavaDrawable(env, jcontext,
-                                                          icon.icon()));
-    }
-    Java_AssistantHeaderModel_setStepProgressBarIcons(env, jmodel, jlist);
-  }
+  header_model_->SetStepProgressBarConfiguration(
+      configuration, Java_AutofillAssistantUiController_getContext(
+                         AttachCurrentThread(), java_object_));
 }
 
 void UiControllerAndroid::OnViewportModeChanged(ViewportMode mode) {
@@ -559,8 +526,7 @@ void UiControllerAndroid::ShowContentAndExpandBottomSheet() {
 }
 
 void UiControllerAndroid::SetSpinPoodle(bool enabled) {
-  Java_AssistantHeaderModel_setSpinPoodle(AttachCurrentThread(),
-                                          GetHeaderModel(), enabled);
+  header_model_->SetSpinPoodle(enabled);
 }
 
 void UiControllerAndroid::OnFeedbackButtonClicked() {
@@ -623,10 +589,22 @@ void UiControllerAndroid::SnackbarResult(
 }
 
 void UiControllerAndroid::DestroySelf() {
+  // Note: shutdown happens asynchronously (if at all), so calling code after
+  // |ShutdownIfNecessary| returns should be ok.
   if (ui_delegate_)
     ui_delegate_->ShutdownIfNecessary();
 
-  client_->DestroyUI();
+  // Destroy self in separate task to avoid UaFs. Obviously, having this method
+  // in the first place is a terrible idea. We should refactor. The controller
+  // should always be in control. ui_controller should always hold a reference
+  // to ui_delegate, even when detached. ui_controller should not have a
+  // reference for client_android at all. It introduces a circular dependency,
+  // among other things.
+  //
+  // TODO(mcarlen): refactor lifecycle and deps of ui_controller.
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ClientAndroid::DestroyUI, client_->GetWeakPtr()));
 }
 
 void UiControllerAndroid::SetVisible(
@@ -709,8 +687,6 @@ void UiControllerAndroid::OnTabSwitched(
   // TODO(b/167947210) Allow lite scripts to transition from CCT to regular
   // scripts.
   if (activity_changed && ui_delegate_->IsRunningLiteScript()) {
-    // Destroying UI here because Shutdown does not do so in all cases.
-    DestroySelf();
     Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED);
     return;
   }
@@ -748,29 +724,25 @@ void UiControllerAndroid::UpdateActions(
     const auto& action = user_actions[i];
     const Chip& chip = action.chip();
     base::android::ScopedJavaLocalRef<jobject> jchip;
+    // TODO(arbesser): Refactor this to use
+    // ui_controller_android_utils::CreateJavaAssistantChip.
     switch (chip.type) {
       default:  // Ignore actions with other chip types or with no chips.
         break;
 
       case HIGHLIGHTED_ACTION:
-        // Here and below, we set the identifier to the empty string so that we
-        // can hide all the chips except for the cancel chip when the keyboard
-        // is showing.
-        // TODO(b/149543425): Find a better way to do this.
         jchip =
             Java_AutofillAssistantUiController_createHighlightedActionButton(
                 env, java_object_, chip.icon,
                 base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-                !action.enabled(), chip.sticky,
-                base::android::ConvertUTF8ToJavaString(env, ""));
+                !action.enabled(), chip.sticky, chip.visible);
         break;
 
       case NORMAL_ACTION:
         jchip = Java_AutofillAssistantUiController_createActionButton(
             env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-            !action.enabled(), chip.sticky,
-            base::android::ConvertUTF8ToJavaString(env, ""));
+            !action.enabled(), chip.sticky, chip.visible);
         break;
 
       case CANCEL_ACTION:
@@ -779,8 +751,7 @@ void UiControllerAndroid::UpdateActions(
         jchip = Java_AutofillAssistantUiController_createCancelButton(
             env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-            !action.enabled(), chip.sticky,
-            base::android::ConvertUTF8ToJavaString(env, kCancelChipIdentifier));
+            !action.enabled(), chip.sticky, chip.visible);
         has_close_or_cancel = true;
         break;
 
@@ -788,8 +759,7 @@ void UiControllerAndroid::UpdateActions(
         jchip = Java_AutofillAssistantUiController_createActionButton(
             env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-            !action.enabled(), chip.sticky,
-            base::android::ConvertUTF8ToJavaString(env, ""));
+            !action.enabled(), chip.sticky, chip.visible);
         has_close_or_cancel = true;
         break;
 
@@ -798,8 +768,7 @@ void UiControllerAndroid::UpdateActions(
             Java_AutofillAssistantUiController_createHighlightedActionButton(
                 env, java_object_, chip.icon,
                 base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-                !action.enabled(), chip.sticky,
-                base::android::ConvertUTF8ToJavaString(env, ""));
+                !action.enabled(), chip.sticky, chip.visible);
         has_close_or_cancel = true;
         break;
     }
@@ -818,14 +787,12 @@ void UiControllerAndroid::UpdateActions(
       jcancel_chip = Java_AutofillAssistantUiController_createCloseButton(
           env, java_object_, ICON_CLEAR,
           base::android::ConvertUTF8ToJavaString(env, ""),
-          /* disabled= */ false, /* sticky= */ true,
-          base::android::ConvertUTF8ToJavaString(env, ""));
+          /* disabled= */ false, /* sticky= */ true, /* visible=*/true);
     } else if (ui_delegate_->GetState() != AutofillAssistantState::INACTIVE) {
       jcancel_chip = Java_AutofillAssistantUiController_createCancelButton(
           env, java_object_, ICON_CLEAR,
           base::android::ConvertUTF8ToJavaString(env, ""), -1,
-          /* disabled= */ false, /* sticky= */ true,
-          base::android::ConvertUTF8ToJavaString(env, kCancelChipIdentifier));
+          /* disabled= */ false, /* sticky= */ true, /* visible=*/true);
     }
     if (jcancel_chip) {
       Java_AutofillAssistantUiController_appendChipToList(env, jchips,
@@ -836,8 +803,7 @@ void UiControllerAndroid::UpdateActions(
   }
 
   Java_AutofillAssistantUiController_setActions(env, java_object_, jchips);
-  Java_AssistantHeaderModel_setChips(AttachCurrentThread(), GetHeaderModel(),
-                                     jsticky_chips);
+  header_model_->SetChips(jsticky_chips);
 }
 
 void UiControllerAndroid::OnUserActionsChanged(
@@ -879,13 +845,8 @@ void UiControllerAndroid::OnKeyboardVisibilityChanged(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
     jboolean visible) {
-  // Hide all chips except cancel while the keyboard is shown, to prevent users
-  // from accidentally tapping chips while using the keyboard.
-  // TODO(b/149543425): Find a better way to do this.
-  Java_AutofillAssistantUiController_setAllChipsVisibleExcept(
-      env, java_object_,
-      base::android::ConvertUTF8ToJavaString(env, kCancelChipIdentifier),
-      !visible);
+  if (ui_delegate_)
+    ui_delegate_->OnKeyboardVisibilityChanged(visible);
 }
 
 bool UiControllerAndroid::OnBackButtonClicked() {
@@ -915,8 +876,6 @@ bool UiControllerAndroid::OnBackButtonClicked() {
     // Lite scripts should not shut down here. The navigation will be handled
     // by the lite script coordinator.
     if (!ui_delegate_ || !ui_delegate_->IsRunningLiteScript()) {
-      // Destroying UI here because Shutdown does not do so in all cases.
-      DestroySelf();
       Shutdown(Metrics::DropOutReason::BACK_BUTTON_CLICKED);
     }
 
@@ -938,8 +897,6 @@ bool UiControllerAndroid::OnBackButtonClicked() {
 
 void UiControllerAndroid::OnBottomSheetClosedWithSwipe() {
   if (ui_delegate_->IsTabSelected() && ui_delegate_->IsRunningLiteScript()) {
-    // Destroying UI here because Shutdown does not do so in all cases.
-    DestroySelf();
     Shutdown(Metrics::DropOutReason::SHEET_CLOSED);
   }
 }
@@ -1717,8 +1674,10 @@ void UiControllerAndroid::OnClientSettingsChanged(
         env, jcontext, image.text_size(), 0);
 
     Java_AssistantOverlayModel_setOverlayImage(
-        env, GetOverlayModel(),
-        base::android::ConvertUTF8ToJavaString(env, image.image_url()),
+        env, GetOverlayModel(), jcontext,
+        ui_controller_android_utils::CreateJavaDrawable(
+            env, jcontext, image.image_drawable(),
+            ui_delegate_->GetUserModel()),
         image_size, top_margin, bottom_margin,
         base::android::ConvertUTF8ToJavaString(env, image.text()),
         ui_controller_android_utils::GetJavaColor(env, image.text_color()),
@@ -1727,8 +1686,7 @@ void UiControllerAndroid::OnClientSettingsChanged(
     Java_AssistantOverlayModel_clearOverlayImage(env, GetOverlayModel());
   }
   if (settings.integration_test_settings.has_value()) {
-    Java_AssistantHeaderModel_setDisableAnimations(
-        env, GetHeaderModel(),
+    header_model_->SetDisableAnimations(
         settings.integration_test_settings->disable_header_animations());
     Java_AutofillAssistantUiController_setDisableChipChangeAnimations(
         env, java_object_,

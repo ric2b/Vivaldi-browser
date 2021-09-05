@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/version_updater/version_updater.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "components/user_manager/remove_user_delegate.h"
 
 namespace base {
 class Clock;
@@ -25,15 +26,15 @@ class Clock;
 namespace chromeos {
 
 class ErrorScreensHistogramHelper;
-class ScreenManager;
 class UpdateRequiredView;
 
 // Controller for the update required screen.
 class UpdateRequiredScreen : public BaseScreen,
                              public VersionUpdater::Delegate,
-                             public NetworkStateHandlerObserver {
+                             public NetworkStateHandlerObserver,
+                             public user_manager::RemoveUserDelegate {
  public:
-  static UpdateRequiredScreen* Get(ScreenManager* manager);
+  using TView = UpdateRequiredView;
 
   UpdateRequiredScreen(UpdateRequiredView* view,
                        ErrorScreen* error_screen,
@@ -84,6 +85,10 @@ class UpdateRequiredScreen : public BaseScreen,
   // NetworkStateHandlerObserver:
   void DefaultNetworkChanged(const NetworkState* network) override;
 
+  // user_manager::RemoveUserDelegate:
+  void OnBeforeUserRemoved(const AccountId& account_id) override;
+  void OnUserRemoved(const AccountId& account_id) override;
+
   void RefreshNetworkState();
   void RefreshView(const VersionUpdater::UpdateInfo& update_info);
 
@@ -101,6 +106,9 @@ class UpdateRequiredScreen : public BaseScreen,
   void OnGetEolInfo(const chromeos::UpdateEngineClient::EolInfo& info);
 
   void OnErrorScreenHidden();
+
+  // Deletes all users data on the device.
+  void DeleteUsersData();
 
   // True if there was no notification about captive portal state for
   // the default network.

@@ -60,8 +60,8 @@ namespace blink {
 // such that any given frame is equally likely to be the final sample.
 //
 // Sample usage (see also SCOPED_UMA_AND_UKM_TIMER):
-//   std::unique_ptr<UkmHierarchicalTimeAggregator> aggregator(
-//      new UkmHierarchicalTimeAggregator(
+//   std::unique_ptr<LocalFrameUkmAggregator> aggregator(
+//      new LocalFrameUkmAggregator(
 //              GetSourceId(),
 //              GetUkmRecorder());
 //   ...
@@ -79,31 +79,23 @@ namespace blink {
 //   // It may generate an event. trackers is a bit encoding of the active frame
 //.  // sequence trackers, informing us of why the BeginMainFrame was requested.
 //
-// In the example above, the event name is "my_event". It will measure 7
+// In the example above, the event name is "my_event". It will measure 4
 // metrics:
 //   "primary_metric",
 //   "sub_metric1",
 //   "sub_metric2",
 //   "sub_metric3"
-//   "sub_metric1Percentage",
-//   "sub_metric2Percentage",
-//   "sub_metric3Percentage"
 //
-// It will report 13 UMA values:
+// It will report 4 UMA values:
 //   "primary_uma_counter",
-//   "sub_uma_metric1", "sub_uma_metric2", "sub_uma_metric3",
-//   "sub_uma_ratio1.LessThan1ms", "sub_uma_ratio1.1msTo5ms",
-//   "sub_uma_ratio1.MoreThan5ms", "sub_uma_ratio2.LessThan1ms",
-//   "sub_uma_ratio2.1msTo5ms", "sub_uma_ratio2.MoreThan5ms",
-//   "sub_uma_ratio3.LessThan1ms", "sub_uma_ratio3.1msTo5ms",
-//   "sub_uma_ratio3.MoreThan5ms"
+//   "sub_uma_metric1", "sub_uma_metric2", "sub_uma_metric3"
 //
 // Note that these have to be specified in the appropriate ukm.xml file
 // and histograms.xml file. Runtime errors indicate missing or mis-named
 // metrics.
 //
-// If the source_id/recorder changes then a new
-// UkmHierarchicalTimeAggregator has to be created.
+// If the source_id/recorder changes then a new  LocalFrameUkmAggregator has to
+// be created.
 
 // Defines a UKM that is part of a hierarchical ukm, recorded in
 // microseconds equal to the duration of the current lexical scope after
@@ -125,8 +117,8 @@ class CORE_EXPORT LocalFrameUkmAggregator
     : public RefCounted<LocalFrameUkmAggregator> {
  public:
   // Changing these values requires changing the names of metrics specified
-  // below. For every metric name added here, add an entry in the
-  // metric_strings_ array below.
+  // below. For every metric name added here, add an entry in the array in
+  // metrics_data() below.
   enum MetricId {
     kCompositingAssignments,
     kCompositingCommit,
@@ -139,11 +131,14 @@ class CORE_EXPORT LocalFrameUkmAggregator
     kLayout,
     kForcedStyleAndLayout,
     kHitTestDocumentUpdate,
-    kScrollingCoordinator,
     kHandleInputEvents,
     kAnimate,
     kUpdateLayers,
     kWaitForCommit,
+    kDisplayLockIntersectionObserver,
+    kJavascriptIntersectionObserver,
+    kLazyLoadIntersectionObserver,
+    kMediaIntersectionObserver,
     kCount,
     kMainFrame
   };
@@ -173,22 +168,16 @@ class CORE_EXPORT LocalFrameUkmAggregator
         {"Layout", true},
         {"ForcedStyleAndLayout", true},
         {"HitTestDocumentUpdate", true},
-        {"ScrollingCoordinator", true},
         {"HandleInputEvents", true},
         {"Animate", true},
         {"UpdateLayers", false},
-        {"WaitForCommit", true}};
+        {"WaitForCommit", true},
+        {"DisplayLockIntersectionObserver", true},
+        {"JavascriptIntersectionObserver", true},
+        {"LazyLoadIntersectionObserver", true},
+        {"MediaIntersectionObserver", true}};
     static_assert(base::size(data) == kCount, "Metrics data mismatch");
     return data;
-  }
-
-  // Modify this array if the UMA ratio metrics should be bucketed in a
-  // different way.
-  static base::span<const base::TimeDelta> bucket_thresholds() {
-    static const base::TimeDelta thresholds[] = {
-        base::TimeDelta::FromMilliseconds(1),
-        base::TimeDelta::FromMilliseconds(5)};
-    return thresholds;
   }
 
  public:
@@ -269,7 +258,6 @@ class CORE_EXPORT LocalFrameUkmAggregator
 
  private:
   struct AbsoluteMetricRecord {
-    std::unique_ptr<CustomCountHistogram> uma_counter;
     std::unique_ptr<CustomCountHistogram> pre_fcp_uma_counter;
     std::unique_ptr<CustomCountHistogram> post_fcp_uma_counter;
     std::unique_ptr<CustomCountHistogram> uma_aggregate_counter;
@@ -277,25 +265,21 @@ class CORE_EXPORT LocalFrameUkmAggregator
     // Accumulated at each sample, then reset with a call to
     // RecordEndOfFrameMetrics.
     base::TimeDelta interval_duration;
+
+    // Accumulated at each sample when within a BeginMainFrame,
+    // reset with a call to RecordEndOfFrameMetrics.
+    base::TimeDelta main_frame_duration;
+
+    // Accumulated at each sample up to the time of First Contentful Paint.
     base::TimeDelta pre_fcp_aggregate;
 
-    void reset() { interval_duration = base::TimeDelta(); }
-  };
-
-  struct MainFramePercentageRecord {
-    Vector<std::unique_ptr<CustomCountHistogram>> uma_counters_per_bucket;
-
-    // Accumulated at each sample, then reset with a call to
-    // RecordEndOfFrameMetrics.
-    base::TimeDelta interval_duration;
-
-    void reset() { interval_duration = base::TimeDelta(); }
+    void reset();
   };
 
   struct SampleToRecord {
     base::TimeDelta primary_metric_duration;
     Vector<base::TimeDelta> sub_metrics_durations;
-    Vector<unsigned> sub_metric_percentages;
+    Vector<base::TimeDelta> sub_main_frame_durations;
     cc::ActiveFrameSequenceTrackers trackers;
   };
 
@@ -337,7 +321,6 @@ class CORE_EXPORT LocalFrameUkmAggregator
   const char* const event_name_;
   AbsoluteMetricRecord primary_metric_;
   Vector<AbsoluteMetricRecord> absolute_metric_records_;
-  Vector<MainFramePercentageRecord> main_frame_percentage_records_;
 
   // The current sample to report. When RecordEvent() is called we
   // check for uniform_random[0,1) < 1 / n where n is the number of frames

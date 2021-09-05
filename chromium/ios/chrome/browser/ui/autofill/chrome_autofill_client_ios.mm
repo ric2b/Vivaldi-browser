@@ -122,7 +122,7 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
       // renderer.
       log_manager_(LogManager::Create(
           AutofillLogRouterFactory::GetForBrowserState(browser_state),
-          base::Closure())) {}
+          base::RepeatingClosure())) {}
 
 ChromeAutofillClientIOS::~ChromeAutofillClientIOS() {
   HideAutofillPopup(PopupHidingReason::kTabGone);
@@ -224,9 +224,9 @@ void ChromeAutofillClientIOS::ShowUnmaskPrompt(
     UnmaskCardReason reason,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
   unmask_controller_.ShowPrompt(
-      base::Bind(&CreateCardUnmaskPromptViewBridge,
-                 base::Unretained(&unmask_controller_),
-                 base::Unretained(base_view_controller_)),
+      base::BindOnce(&CreateCardUnmaskPromptViewBridge,
+                     base::Unretained(&unmask_controller_),
+                     base::Unretained(base_view_controller_)),
       card, reason, delegate);
 }
 

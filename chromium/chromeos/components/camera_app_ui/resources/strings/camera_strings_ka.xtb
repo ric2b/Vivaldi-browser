@@ -3,6 +3,7 @@
 <translationbundle lang="ka">
 <translation id="1276998909102132017">გალერეის სურათები</translation>
 <translation id="1430915738399379752">ბეჭდვა</translation>
+<translation id="1473110567575736769">3-წამიანი ტაიმერი</translation>
 <translation id="1620510694547887537">კამერა</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">ჩაწერილი არაფერია</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">კამერის გარჩევადობა</translation>
 <translation id="3517926952904427380">პორტრეტის რეჟიმში ფოტოს გადაღება ვერ მოხერხდა</translation>
 <translation id="3569311554794739032">ნამდვილად გსურთ, ამოშალოთ <ph name="FILE" />?</translation>
+<translation id="3750315947605636967">თქვენს კამერას სხვა აპი იყენებს</translation>
 <translation id="3810838688059735925">ვიდეო</translation>
+<translation id="4000398125663085899">ახალი ფოტოები და ვიდეოები ამიერიდან შეინახება ფაილების აპის საქაღალდეში: ჩემი ფაილები &gt; კამერა</translation>
 <translation id="4118525110028899586">ჩაწერის დაპაუზება</translation>
 <translation id="4279490309300973883">არეკვლა</translation>
 <translation id="4329152592498422850">კვადრატული ფოტოს გადაღებაზე გადართვა</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">თქვენი კამერა ამჟამად მიუწვდომელია.
         შეამოწმეთ, რომ კამერა სწორად არის დაკავშირებული.</translation>
 <translation id="5152121255775685072">გალერეაზე გადასვლა</translation>
+<translation id="5422455049771430511">თქვენმა ფოტოებმა და ვიდეოებმა ახალ სივრცეში გადაინაცვლა</translation>
 <translation id="5671277269877808209">კვადრატი</translation>
 <translation id="5775960006311140197">ექსპერტთა რეჟიმი</translation>
 <translation id="5869546221129391014">ბადე</translation>
+<translation id="6040143037577758943">დახურვა</translation>
 <translation id="6073451960410192870">ჩაწერის შეწყვეტა</translation>
 <translation id="6197807149213783179">მეტამონაცემების შენახვა</translation>
 <translation id="6233780560267770709">სამი სამზე</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">კარგი</translation>
 <translation id="698156982839284926">3 წამი</translation>
 <translation id="712848772518857951">ნამდვილად გსურთ, ამოშალოთ <ph name="COUNT" /> ერთეული?</translation>
+<translation id="7134221860976209830">10-წამიანი ტაიმერი</translation>
 <translation id="7243947652761655814">ვიდეოს გარჩევადობა</translation>
 <translation id="7337660886763914220">ფაილების სისტემის შეცდომები.</translation>
 <translation id="7557677699350329807">მომდევნო კამერაზე გადართვა</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">დახმარება</translation>
 <translation id="7658239707568436148">გაუქმება</translation>
 <translation id="7670511624014457267">60 კადრი/წმ</translation>
-<translation id="8049189770492311300">ტაიმერი</translation>
 <translation id="8067883171444229417">ვიდეოს დაკვრა</translation>
 <translation id="8131740175452115882">დაადასტურება</translation>
 <translation id="8145038249676204903">ფოტოს გადაღებაზე გადართვა</translation>

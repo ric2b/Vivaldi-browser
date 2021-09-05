@@ -23,21 +23,21 @@ namespace ui {
 
 ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
                            PlatformWindowDelegate* delegate,
-                           fuchsia::ui::views::ViewToken view_token,
-                           scenic::ViewRefPair view_ref_pair)
+                           PlatformWindowInitProperties properties)
     : manager_(window_manager),
       delegate_(delegate),
       window_id_(manager_->AddWindow(this)),
       event_dispatcher_(this),
       scenic_session_(manager_->GetScenic()),
       view_(&scenic_session_,
-            std::move(view_token),
-            std::move(view_ref_pair.control_ref),
-            std::move(view_ref_pair.view_ref),
+            std::move(std::move(properties.view_token)),
+            std::move(properties.view_ref_pair.control_ref),
+            std::move(properties.view_ref_pair.view_ref),
             "chromium window"),
       node_(&scenic_session_),
       input_node_(&scenic_session_),
-      render_node_(&scenic_session_) {
+      render_node_(&scenic_session_),
+      bounds_(properties.bounds) {
   scenic_session_.set_error_handler(
       fit::bind_member(this, &ScenicWindow::OnScenicError));
   scenic_session_.set_event_handler(
@@ -83,13 +83,13 @@ void ScenicWindow::AttachSurfaceView(
       [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
 }
 
-gfx::Rect ScenicWindow::GetBounds() {
-  return gfx::Rect(size_pixels_);
+gfx::Rect ScenicWindow::GetBounds() const {
+  return bounds_;
 }
 
 void ScenicWindow::SetBounds(const gfx::Rect& bounds) {
-  // View dimensions are controlled by the containing view, it's not possible to
-  // set them here.
+  // This path should only be reached in tests.
+  bounds_ = bounds;
 }
 
 void ScenicWindow::SetTitle(const base::string16& title) {
@@ -97,6 +97,11 @@ void ScenicWindow::SetTitle(const base::string16& title) {
 }
 
 void ScenicWindow::Show(bool inactive) {
+  if (visible_)
+    return;
+
+  visible_ = true;
+
   view_.AddChild(node_);
 
   // Call Present2() to ensure that the scenic session commands are processed,
@@ -108,6 +113,10 @@ void ScenicWindow::Show(bool inactive) {
 }
 
 void ScenicWindow::Hide() {
+  if (!visible_)
+    return;
+
+  visible_ = false;
   node_.Detach();
 }
 
@@ -155,6 +164,7 @@ void ScenicWindow::Restore() {
 }
 
 PlatformWindowState ScenicWindow::GetPlatformWindowState() const {
+  NOTIMPLEMENTED();
   return PlatformWindowState::kNormal;
 }
 
@@ -205,13 +215,12 @@ void ScenicWindow::SizeConstraintsChanged() {
 
 void ScenicWindow::UpdateSize() {
   gfx::SizeF scaled = ScaleSize(size_dips_, device_pixel_ratio_);
-  size_pixels_ = gfx::Size(ceilf(scaled.width()), ceilf(scaled.height()));
-  gfx::Rect size_rect(size_pixels_);
+  bounds_ = gfx::Rect(gfx::Size(ceilf(scaled.width()), ceilf(scaled.height())));
 
   // Update this window's Screen's dimensions to match the new size.
   ScenicScreen* screen = manager_->screen();
   if (screen)
-    screen->OnWindowBoundsChanged(window_id_, size_rect);
+    screen->OnWindowBoundsChanged(window_id_, bounds_);
 
   // Translate the node by half of the view dimensions to put it in the center
   // of the view.
@@ -233,7 +242,7 @@ void ScenicWindow::UpdateSize() {
       /*requested_prediction_span=*/0,
       [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
 
-  delegate_->OnBoundsChanged(size_rect);
+  delegate_->OnBoundsChanged(bounds_);
 }
 
 void ScenicWindow::OnScenicError(zx_status_t status) {

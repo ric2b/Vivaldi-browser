@@ -5,7 +5,7 @@
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_check_screen.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/notreached.h"
@@ -25,12 +25,7 @@ namespace chromeos {
 namespace {
 
 NetworkPortalDetector::CaptivePortalStatus GetCaptivePortalStatus() {
-  const NetworkState* default_network =
-      NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
-  return default_network ? network_portal_detector::GetInstance()
-                               ->GetCaptivePortalState(default_network->guid())
-                               .status
-                         : NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN;
+  return network_portal_detector::GetInstance()->GetCaptivePortalStatus();
 }
 
 }  // namespace
@@ -118,12 +113,13 @@ void AutoEnrollmentCheckScreen::ShowImpl() {
           policy::AUTO_ENROLLMENT_STATE_CONNECTION_ERROR ||
       auto_enrollment_controller_->state() ==
           policy::AUTO_ENROLLMENT_STATE_SERVER_ERROR) {
+    VLOG(1) << "AutoEnrollmentCheckScreen::ShowImpl() retrying enrollment"
+            << " check due to failure.";
     auto_enrollment_controller_->Retry();
   } else {
     auto_enrollment_controller_->Start();
   }
-  network_portal_detector::GetInstance()->StartPortalDetection(
-      false /* force */);
+  network_portal_detector::GetInstance()->StartPortalDetection();
 }
 
 void AutoEnrollmentCheckScreen::HideImpl() {}
@@ -136,7 +132,7 @@ void AutoEnrollmentCheckScreen::OnViewDestroyed(
 
 void AutoEnrollmentCheckScreen::OnPortalDetectionCompleted(
     const NetworkState* /* network */,
-    const NetworkPortalDetector::CaptivePortalState& /* state */) {
+    const NetworkPortalDetector::CaptivePortalStatus /* status */) {
   UpdateState();
 }
 
@@ -178,6 +174,8 @@ void AutoEnrollmentCheckScreen::UpdateState() {
   // state.
   if (retry)
     auto_enrollment_controller_->Retry();
+
+  VLOG(1) << "AutoEnrollmentCheckScreen::UpdateState() retry = " << retry;
 }
 
 bool AutoEnrollmentCheckScreen::UpdateCaptivePortalStatus(
@@ -261,11 +259,15 @@ void AutoEnrollmentCheckScreen::OnErrorScreenHidden() {
 }
 
 void AutoEnrollmentCheckScreen::SignalCompletion() {
+  VLOG(1) << "AutoEnrollmentCheckScreen::SignalCompletion()";
+
   network_portal_detector::GetInstance()->RemoveObserver(this);
+  error_screen_->SetHideCallback(base::OnceClosure());
+  error_screen_->SetParentScreen(OobeScreen::SCREEN_UNKNOWN);
   auto_enrollment_progress_subscription_.reset();
   connect_request_subscription_.reset();
 
-  // Running exit callback can cause |this| destruction, so let other methods
+  // Running exit callback can cause `this` destruction, so let other methods
   // finish their work before.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&AutoEnrollmentCheckScreen::RunExitCallback,

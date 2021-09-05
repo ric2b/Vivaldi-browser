@@ -32,7 +32,6 @@ _JAVAC_EXTRACTOR = os.path.join(build_utils.DIR_SOURCE_ROOT, 'third_party',
 # Full list of checks: https://errorprone.info/bugpatterns
 ERRORPRONE_WARNINGS_TO_DISABLE = [
     # These should really be turned on.
-    'ParameterNotNullable',
     'CollectionUndefinedEquality',
     'ModifyCollectionInEnhancedForLoop',
     # The following are super useful, but existing issues need to be fixed first
@@ -63,8 +62,6 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     'JUnitAmbiguousTestClass',
     # TODO(crbug.com/1027683): Follow steps in bug.
     'UnnecessaryParentheses',
-    # TODO(wnwen): Fix issue in JavaUploadDataSinkBase.java
-    'PrimitiveAtomicReference',
     # Android platform default is always UTF-8.
     # https://developer.android.com/reference/java/nio/charset/Charset.html#defaultCharset()
     'DefaultCharset',
@@ -183,6 +180,7 @@ ERRORPRONE_WARNINGS_TO_ENABLE = [
     'InvalidThrows',
     'LongLiteralLowerCaseSuffix',
     'MultiVariableDeclaration',
+    'ParameterNotNullable',
     'RedundantOverride',
     'StaticQualifiedUsingExpression',
     'StringEquality',

@@ -51,9 +51,23 @@
         "description": "Different Switch Access bubbles that can be shown or hidden."
       },
       {
+        "id": "PointScanPoint",
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "description": "X coordinate of the selected point in DIPs."
+          },
+          "y": {
+            "type": "number",
+            "description": "Y coordinate of the selected point in DIPs."
+          }
+        }
+      },
+      {
         "id": "SwitchAccessMenuAction",
         "type": "string",
-        "enum": [ "copy", "cut", "decrement", "dictation", "endTextSelection", "increment", "jumpToBeginningOfText", "jumpToEndOfText", "keyboard", "moveBackwardOneCharOfText", "moveBackwardOneWordOfText", "moveCursor", "moveDownOneLineOfText", "moveForwardOneCharOfText", "moveForwardOneWordOfText", "moveUpOneLineOfText", "paste", "scrollDown", "scrollLeft", "scrollRight", "scrollUp", "select", "settings", "startTextSelection" ],
+        "enum": [ "copy", "cut", "decrement", "dictation", "endTextSelection", "increment", "jumpToBeginningOfText", "jumpToEndOfText", "keyboard", "moveBackwardOneCharOfText", "moveBackwardOneWordOfText", "moveCursor", "moveDownOneLineOfText", "moveForwardOneCharOfText", "moveForwardOneWordOfText", "moveUpOneLineOfText", "paste", "pointScan", "scrollDown", "scrollLeft", "scrollRight", "scrollUp", "select", "settings", "startTextSelection" ],
         "description": "Available actions to be shown in the Switch Access menu. Must be kept in sync with the strings in ash/system/accessibility/switch_access_menu_view.cc"
       },
       {
@@ -108,6 +122,12 @@
         "enum": ["press", "release", "drag", "move", "enter", "exit"]
       },
       {
+        "id": "SyntheticMouseEventButton",
+        "type": "string",
+        "description": "The button to send event on",
+        "enum": ["left", "middle", "right", "back", "foward"]
+      },
+      {
         "id": "SyntheticMouseEvent",
         "type": "object",
         "properties": {
@@ -117,6 +137,11 @@
           "touchAccessibility": {
             "type": "boolean",
             "description": "True if the touch accessibility flag should be set.",
+            "optional": true
+          },
+          "mouseButton": {
+            "$ref": "SyntheticMouseEventButton",
+            "description": "The default mouse button is set to left if mouseButton is not specified.",
             "optional": true
           }
         }
@@ -172,6 +197,12 @@
         "type": "string",
         "enum": [ "focusPreviousPane", "focusNextPane" ],
         "description": "A subset of accelerator actions used by accessibility."
+      },
+      {
+        "id": "AccessibilityFeature",
+        "type": "string",
+        "enum": [ "selectToSpeakNavigationControl" ],
+        "description": "Subset of accessibility features."
       }
     ],
     "functions": [
@@ -332,6 +363,13 @@
         "platforms": ["chromeos"]
       },
       {
+        "name": "activatePointScan",
+        "type": "function",
+        "description": "Activates point scanning in Switch Access.",
+        "parameters": [],
+        "platforms": ["chromeos"]
+      },
+      {
         "name": "setNativeChromeVoxArcSupportForCurrentApp",
         "type": "function",
         "description": "Sets current ARC app to use native ARC support.",
@@ -462,6 +500,54 @@
           }
         ],
         "platforms": ["chromeos"]
+      },
+      {
+        "name": "isFeatureEnabled",
+        "type": "function",
+        "description": "Checks to see if an accessibility feature is enabled.",
+        "parameters": [
+          {
+            "name": "feature",
+            "$ref": "AccessibilityFeature"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Returns whether feature is enabled.",
+            "parameters": [
+              {
+                "name": "featureEnabled",
+                "type": "boolean"
+              }
+            ]
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "updateSelectToSpeakPanel",
+        "type": "function",
+        "description": "Updates properties of the Select-to-speak panel.",
+        "parameters": [
+          {
+            "name": "show",
+            "type": "boolean",
+            "description": "True to show panel, false to hide it"
+          },
+          {
+            "name": "anchor",
+            "$ref": "ScreenRect",
+            "description": "A rectangle indicating the bounds of the object the panel should be displayed next to.",
+            "optional": true
+          },
+          {
+            "name": "isPaused",
+            "type": "boolean",
+            "description": "True if Select-to-speak playback is paused.",
+            "optional": true
+          }
+        ],
+        "platforms": ["chromeos"]
       }
     ],
     "events": [
@@ -521,6 +607,18 @@
         "platforms": ["chromeos"]
       },
       {
+        "name": "onPointScanSet",
+        "type": "function",
+        "description": "Fired when Chrome OS has received the final point of point scanning.",
+        "parameters": [
+          {
+            "name": "point",
+            "$ref": "PointScanPoint"
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
         "name": "onAnnounceForAccessibility",
         "type": "function",
         "description": "Fired when an internal component within accessibility wants to force speech output for an accessibility extension. Do not use without approval from accessibility owners.",
@@ -548,6 +646,19 @@
             "name": "y",
             "type": "number",
             "description": "Y screen coordinate of the point."
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "onMagnifierBoundsChanged",
+        "type": "function",
+        "description": "Fired when Chrome OS magnifier bounds are updated.",
+        "parameters": [
+          {
+            "name": "magnifierBounds",
+            "$ref": "ScreenRect",
+            "description": "Updated bounds of magnifier viewport."
           }
         ],
         "platforms": ["chromeos"]

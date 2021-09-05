@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/strings/string_piece.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/titled_url_node.h"
@@ -129,6 +130,9 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // TitledUrlNode interface methods.
   const base::string16& GetTitledUrlNodeTitle() const override;
   const GURL& GetTitledUrlNodeUrl() const override;
+  std::vector<base::StringPiece16> GetTitledUrlNodeAncestorTitles()
+      const override;
+
   // Vivaldi: TitledUrlNode interface methods.
   const base::string16 GetTitledUrlNodeNickName() const override;
   const base::string16 GetTitledUrlNodeDescription() const override;
@@ -204,7 +208,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 
   // If not base::CancelableTaskTracker::kBadTaskId, it indicates
   // we're loading the
-  // favicon and the task is tracked by CancelabelTaskTracker.
+  // favicon and the task is tracked by CancelableTaskTracker.
   base::CancelableTaskTracker::TaskId favicon_load_task_id_ =
       base::CancelableTaskTracker::kBadTaskId;
 

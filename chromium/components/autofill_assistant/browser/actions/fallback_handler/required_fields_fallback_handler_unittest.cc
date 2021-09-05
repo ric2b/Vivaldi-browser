@@ -27,6 +27,7 @@ namespace {
 using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::Expectation;
+using ::testing::InSequence;
 using ::testing::Invoke;
 
 RequiredField CreateRequiredField(const std::string& value_expression,
@@ -45,14 +46,17 @@ class RequiredFieldsFallbackHandlerTest : public testing::Test {
         .WillByDefault(Invoke([this](BatchElementChecker* checker) {
           checker->Run(&mock_web_controller_);
         }));
+    test_util::MockFindAnyElement(mock_web_controller_);
     ON_CALL(mock_action_delegate_, GetElementTag(_, _))
         .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
-    ON_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _))
+    ON_CALL(mock_action_delegate_, SetValueAttribute(_, _, _))
         .WillByDefault(RunOnceCallback<2>(OkClientStatus()));
-    ON_CALL(mock_action_delegate_, WaitForDocumentToBecomeInteractive(_, _))
-        .WillByDefault(RunOnceCallback<1>(OkClientStatus()));
+    ON_CALL(mock_action_delegate_, WaitUntilDocumentIsInReadyState(_, _, _, _))
+        .WillByDefault(RunOnceCallback<3>(OkClientStatus()));
     ON_CALL(mock_action_delegate_, ScrollIntoView(_, _))
         .WillByDefault(RunOnceCallback<1>(OkClientStatus()));
+    ON_CALL(mock_action_delegate_, WaitUntilElementIsStable(_, _, _, _))
+        .WillByDefault(RunOnceCallback<3>(OkClientStatus()));
   }
 
  protected:
@@ -156,7 +160,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
 TEST_F(RequiredFieldsFallbackHandlerTest, AddsFirstFieldFillingError) {
   ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), ""));
-  ON_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _))
+  ON_CALL(mock_action_delegate_, SetValueAttribute(_, _, _))
       .WillByDefault(RunOnceCallback<2>(ClientStatus(OTHER_ACTION_STATUS)));
 
   std::vector<RequiredField> required_fields = {
@@ -260,7 +264,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
 TEST_F(RequiredFieldsFallbackHandlerTest, DoesNotFallbackIfFieldsAreFilled) {
   ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${51}", {"#card_name"})};
@@ -282,10 +286,10 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FillsEmptyRequiredField) {
   Expectation set_value =
       EXPECT_CALL(
           mock_action_delegate_,
-          OnSetFieldValue("John Doe",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, expected_selector)),
-                          _))
+          SetValueAttribute("John Doe",
+                            EqualsElement(test_util::MockFindElement(
+                                mock_action_delegate_, expected_selector)),
+                            _))
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .After(set_value)
@@ -314,10 +318,10 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FallsBackForForcedFilledField) {
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
   Selector expected_selector({"#card_name"});
   EXPECT_CALL(mock_action_delegate_,
-              OnSetFieldValue("John Doe",
-                              EqualsElement(test_util::MockFindElement(
-                                  mock_action_delegate_, expected_selector)),
-                              _))
+              SetValueAttribute("John Doe",
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, expected_selector)),
+                                _))
       .WillOnce(RunOnceCallback<2>(OkClientStatus()));
 
   std::vector<RequiredField> required_fields = {
@@ -342,7 +346,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FallsBackForForcedFilledField) {
 TEST_F(RequiredFieldsFallbackHandlerTest, FailsIfForcedFieldDidNotGetFilled) {
   ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${51}", {"#card_name"})};
@@ -389,10 +393,10 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FillsFieldWithPattern) {
   Expectation set_value =
       EXPECT_CALL(
           mock_action_delegate_,
-          OnSetFieldValue("08/2050",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, expected_selector)),
-                          _))
+          SetValueAttribute("08/2050",
+                            EqualsElement(test_util::MockFindElement(
+                                mock_action_delegate_, expected_selector)),
+                            _))
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .After(set_value)
@@ -424,7 +428,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
   EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
       .Times(2)
       .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${53}", {"#card_expiry"}),
@@ -481,22 +485,33 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, UsesSelectOptionForDropdowns) {
+  InSequence sequence;
+
   Selector expected_selector({"#year"});
+
+  // First validation fails.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, expected_selector)),
+                              _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  // Fill field.
   const ElementFinder::Result& expected_element =
       test_util::MockFindElement(mock_action_delegate_, expected_selector);
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(expected_selector, _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
   EXPECT_CALL(mock_action_delegate_,
               GetElementTag(EqualsElement(expected_element), _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "SELECT"));
-  Expectation select_option =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          SelectOption("2050", DropdownSelectStrategy::LABEL_STARTS_WITH,
-                       EqualsElement(expected_element), _))
-          .WillOnce(RunOnceCallback<3>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(expected_selector, _))
-      .After(select_option)
+  EXPECT_CALL(mock_action_delegate_,
+              SelectOption("2050", DropdownSelectStrategy::LABEL_STARTS_WITH,
+                           EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<3>(OkClientStatus()));
+
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, expected_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "2050"));
 
   std::vector<RequiredField> required_fields = {
@@ -519,7 +534,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest, UsesSelectOptionForDropdowns) {
 
 TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
   EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetValueAttribute(_, _, _)).Times(0);
   Selector expected_main_selector({"#card_expiry"});
   EXPECT_CALL(
       mock_action_delegate_,
@@ -530,10 +545,10 @@ TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
       .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   Selector expected_option_selector({".option"});
   expected_option_selector.MatchingInnerText("08");
-  expected_option_selector.MustBeVisible();
   EXPECT_CALL(mock_action_delegate_,
               OnShortWaitForElement(expected_option_selector, _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus()));
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(),
+                                   base::TimeDelta::FromSeconds(0)));
   EXPECT_CALL(
       mock_action_delegate_,
       ClickOrTapElement(ClickType::TAP,
@@ -563,7 +578,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
 
 TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
   EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetValueAttribute(_, _, _)).Times(0);
   Selector expected_main_selector({"#card_expiry"});
   Expectation main_click =
       EXPECT_CALL(
@@ -575,10 +590,10 @@ TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   Selector expected_option_selector({".option"});
   expected_option_selector.MatchingInnerText("08");
-  expected_option_selector.MustBeVisible();
   EXPECT_CALL(mock_action_delegate_,
               OnShortWaitForElement(expected_option_selector, _))
-      .WillOnce(RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED)));
+      .WillOnce(RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED),
+                                   base::TimeDelta::FromSeconds(0)));
   EXPECT_CALL(mock_action_delegate_, FindElement(_, _))
       .Times(0)
       .After(main_click);
@@ -605,41 +620,74 @@ TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
       }));
 }
 
-TEST_F(RequiredFieldsFallbackHandlerTest, ClearsFilledFields) {
-  Selector full_field_selector({"#full_field"});
-  Selector empty_field_selector({"#empty_field"});
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(full_field_selector, _))
+TEST_F(RequiredFieldsFallbackHandlerTest, ClearsFilledField) {
+  InSequence sequence;
+
+  Selector expected_selector({"#field"});
+
+  // First validation fails
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, expected_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(empty_field_selector, _))
-      .Times(0);
 
-  Expectation clear_full_value =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, full_field_selector)),
-                          _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(full_field_selector, _))
-      .After(clear_full_value)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  Expectation clear_empty_value =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, empty_field_selector)),
-                          _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(empty_field_selector, _))
-      .After(clear_empty_value)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
+  // Clears field.
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute(std::string(),
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, expected_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
 
-  auto non_forced_field = CreateRequiredField("", {"#full_field"});
-  auto forced_field = CreateRequiredField("", {"#empty_field"});
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, expected_selector)),
+                              _))
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField(std::string(), {"#field"})};
+  std::map<std::string, std::string> fallback_values;
+
+  RequiredFieldsFallbackHandler fallback_handler(
+      required_fields, fallback_values, &mock_action_delegate_);
+  fallback_handler.CheckAndFallbackRequiredFields(
+      OkClientStatus(),
+      base::BindOnce([](const ClientStatus& status,
+                        const base::Optional<ClientStatus>& detail_status) {
+        EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
+      }));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest, SkipsForcedFieldCheckOnFirstRun) {
+  InSequence sequence;
+
+  Selector forced_field_selector({"#forced_field"});
+
+  // First validation skips forced fields.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
+
+  // Fills field.
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("value",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, forced_field_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  // Second validation checks the field.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, forced_field_selector)),
+                              _))
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "value"));
+
+  auto forced_field = CreateRequiredField("value", {"#forced_field"});
   forced_field.forced = true;
-  std::vector<RequiredField> required_fields = {non_forced_field, forced_field};
+  std::vector<RequiredField> required_fields = {forced_field};
 
   std::map<std::string, std::string> fallback_values;
 

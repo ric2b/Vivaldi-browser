@@ -49,7 +49,6 @@
 #include "pdf/url_loader_wrapper_impl.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/pdf.h"
-#include "ppapi/cpp/var_dictionary.h"
 #include "printing/units.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_annot.h"
@@ -351,21 +350,6 @@ wchar_t SimplifyForSearch(wchar_t c) {
   }
 }
 
-PDFiumEngine::SetSelectedTextFunction g_set_selected_text_func_for_testing =
-    nullptr;
-
-void SetSelectedText(pp::Instance* instance, const std::string& selected_text) {
-  pp::PDF::SetSelectedText(instance, selected_text.c_str());
-}
-
-PDFiumEngine::SetLinkUnderCursorFunction
-    g_set_link_under_cursor_func_for_testing = nullptr;
-
-void SetLinkUnderCursor(pp::Instance* instance,
-                        const std::string& link_under_cursor) {
-  pp::PDF::SetLinkUnderCursor(instance, link_under_cursor.c_str());
-}
-
 PP_PrivateFocusObjectType GetAnnotationFocusType(
     FPDF_ANNOTATION_SUBTYPE annot_type) {
   switch (annot_type) {
@@ -495,18 +479,6 @@ void PDFiumEngine::SetDocumentLoaderForTesting(
   DCHECK(!doc_loader_);
   doc_loader_ = std::move(loader);
   doc_loader_set_for_testing_ = true;
-}
-
-// static
-void PDFiumEngine::OverrideSetSelectedTextFunctionForTesting(
-    SetSelectedTextFunction function) {
-  g_set_selected_text_func_for_testing = function;
-}
-
-// static
-void PDFiumEngine::OverrideSetLinkUnderCursorFunctionForTesting(
-    SetLinkUnderCursorFunction function) {
-  g_set_link_under_cursor_func_for_testing = function;
 }
 
 bool PDFiumEngine::New(const char* url, const char* headers) {
@@ -839,6 +811,10 @@ FPDF_FORMHANDLE PDFiumEngine::form() const {
   return document_ ? document_->form() : nullptr;
 }
 
+bool PDFiumEngine::IsValidLink(const std::string& url) {
+  return client_->IsValidLink(url);
+}
+
 void PDFiumEngine::ContinueFind(int32_t result) {
   StartFind(current_find_text_, result != 0);
 }
@@ -1096,7 +1072,7 @@ void PDFiumEngine::SetFormSelectedText(FPDF_FORMHANDLE form_handle,
   selected_form_text_ = base::UTF16ToUTF8(selected_form_text16);
   if (selected_form_text != selected_form_text_) {
     DCHECK(in_form_text_area_);
-    pp::PDF::SetSelectedText(GetPluginInstance(), selected_form_text_.c_str());
+    client_->SetSelectedText(selected_form_text_);
   }
 }
 
@@ -2279,36 +2255,39 @@ int PDFiumEngine::GetNumberOfPages() const {
   return pages_.size();
 }
 
-pp::VarArray PDFiumEngine::GetBookmarks() {
-  pp::VarDictionary dict = TraverseBookmarks(nullptr, 0);
+base::Value PDFiumEngine::GetBookmarks() {
+  base::Value dict = TraverseBookmarks(nullptr, 0);
+  DCHECK(dict.is_dict());
   // The root bookmark contains no useful information.
-  return pp::VarArray(dict.Get(pp::Var("children")));
+  base::Value* children = dict.FindListKey("children");
+  DCHECK(children);
+  return std::move(*children);
 }
 
-pp::VarDictionary PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
-                                                  unsigned int depth) {
-  pp::VarDictionary dict;
+base::Value PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
+                                            unsigned int depth) {
+  base::Value dict(base::Value::Type::DICTIONARY);
   base::string16 title = CallPDFiumWideStringBufferApi(
       base::BindRepeating(&FPDFBookmark_GetTitle, bookmark),
       /*check_expected_size=*/true);
-  dict.Set(pp::Var("title"), pp::Var(base::UTF16ToUTF8(title)));
+  dict.SetStringKey("title", title);
 
   FPDF_DEST dest = FPDFBookmark_GetDest(doc(), bookmark);
   // Some bookmarks don't have a page to select.
   if (dest) {
     int page_index = FPDFDest_GetDestPageIndex(doc(), dest);
     if (PageIndexInBounds(page_index)) {
-      dict.Set(pp::Var("page"), pp::Var(page_index));
+      dict.SetIntKey("page", page_index);
 
       base::Optional<gfx::PointF> xy;
       base::Optional<float> zoom;
       pages_[page_index]->GetPageDestinationTarget(dest, &xy, &zoom);
       if (xy) {
-        dict.Set(pp::Var("x"), pp::Var(static_cast<int>(xy.value().x())));
-        dict.Set(pp::Var("y"), pp::Var(static_cast<int>(xy.value().y())));
+        dict.SetIntKey("x", static_cast<int>(xy.value().x()));
+        dict.SetIntKey("y", static_cast<int>(xy.value().y()));
       }
       if (zoom) {
-        dict.Set(pp::Var("zoom"), pp::Var(zoom.value()));
+        dict.SetDoubleKey("zoom", zoom.value());
       }
     }
   } else {
@@ -2318,15 +2297,14 @@ pp::VarDictionary PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
         base::BindRepeating(&FPDFAction_GetURIPath, doc(), action),
         /*check_expected_size=*/true);
     if (!uri.empty())
-      dict.Set(pp::Var("uri"), pp::Var(uri));
+      dict.SetStringKey("uri", uri);
   }
 
-  pp::VarArray children;
+  base::Value children(base::Value::Type::LIST);
 
   // Don't trust PDFium to handle circular bookmarks.
   constexpr unsigned int kMaxDepth = 128;
   if (depth < kMaxDepth) {
-    int child_index = 0;
     std::set<FPDF_BOOKMARK> seen_bookmarks;
     for (FPDF_BOOKMARK child_bookmark =
              FPDFBookmark_GetFirstChild(doc(), bookmark);
@@ -2336,11 +2314,10 @@ pp::VarDictionary PDFiumEngine::TraverseBookmarks(FPDF_BOOKMARK bookmark,
         break;
 
       seen_bookmarks.insert(child_bookmark);
-      children.Set(child_index, TraverseBookmarks(child_bookmark, depth + 1));
-      child_index++;
+      children.Append(TraverseBookmarks(child_bookmark, depth + 1));
     }
   }
-  dict.Set(pp::Var("children"), children);
+  dict.SetKey("children", std::move(children));
   return dict;
 }
 
@@ -3598,7 +3575,7 @@ void PDFiumEngine::GetRegion(const gfx::Point& location,
 
 void PDFiumEngine::OnSelectionTextChanged() {
   DCHECK(!in_form_text_area_);
-  pp::PDF::SetSelectedText(GetPluginInstance(), GetSelectedText().c_str());
+  client_->SetSelectedText(GetSelectedText());
 }
 
 void PDFiumEngine::OnSelectionPositionChanged() {
@@ -3687,11 +3664,7 @@ void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
   // observer is notified of the change in selection. When |in_form_text_area_|
   // is true, this is the Renderer. After it flips, the MimeHandler is notified.
   if (in_form_text_area_) {
-    SetSelectedTextFunction set_selected_text_func =
-        g_set_selected_text_func_for_testing
-            ? g_set_selected_text_func_for_testing
-            : &SetSelectedText;
-    set_selected_text_func(GetPluginInstance(), "");
+    client_->SetSelectedText("");
   }
 
   client_->FormTextFieldFocusChange(in_form_text_area);
@@ -4119,12 +4092,7 @@ void PDFiumEngine::UpdateLinkUnderCursor(const std::string& target_url) {
     return;
 
   link_under_cursor_ = target_url;
-
-  SetLinkUnderCursorFunction set_link_under_cursor_func =
-      g_set_link_under_cursor_func_for_testing
-          ? g_set_link_under_cursor_func_for_testing
-          : &SetLinkUnderCursor;
-  set_link_under_cursor_func(GetPluginInstance(), link_under_cursor_);
+  client_->SetLinkUnderCursor(link_under_cursor_);
 }
 
 void PDFiumEngine::SetLinkUnderCursorForAnnotation(FPDF_ANNOTATION annot,

@@ -88,6 +88,8 @@ struct SESSIONS_EXPORT SessionTab {
   // Ext data.
   std::string ext_data;
 
+  std::map<std::string, bool> page_action_overrides;
+
   // Timestamp for when this tab was last modified.
   base::Time timestamp;
 

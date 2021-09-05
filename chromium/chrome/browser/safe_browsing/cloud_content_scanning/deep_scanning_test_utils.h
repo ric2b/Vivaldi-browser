@@ -42,7 +42,8 @@ class EventReportValidator {
       const std::string& expected_trigger,
       const std::set<std::string>* expected_mimetypes,
       int expected_content_size,
-      const std::string& expected_result);
+      const std::string& expected_result,
+      const std::string& expected_username);
 
   void ExpectSensitiveDataEvent(
       const std::string& expected_url,
@@ -53,7 +54,8 @@ class EventReportValidator {
           expected_dlp_verdict,
       const std::set<std::string>* expected_mimetypes,
       int expected_content_size,
-      const std::string& expected_result);
+      const std::string& expected_result,
+      const std::string& expected_username);
 
   void ExpectDangerousDeepScanningResultAndSensitiveDataEvent(
       const std::string& expected_url,
@@ -65,7 +67,8 @@ class EventReportValidator {
           expected_dlp_verdict,
       const std::set<std::string>* expected_mimetypes,
       int expected_content_size,
-      const std::string& expected_result);
+      const std::string& expected_result,
+      const std::string& expected_username);
 
   void ExpectSensitiveDataEventAndDangerousDeepScanningResult(
       const std::string& expected_url,
@@ -77,7 +80,8 @@ class EventReportValidator {
           expected_dlp_verdict,
       const std::set<std::string>* expected_mimetypes,
       int expected_content_size,
-      const std::string& expected_result);
+      const std::string& expected_result,
+      const std::string& expected_username);
 
   void ExpectUnscannedFileEvent(const std::string& expected_url,
                                 const std::string& expected_filename,
@@ -86,7 +90,8 @@ class EventReportValidator {
                                 const std::string& expected_reason,
                                 const std::set<std::string>* expected_mimetypes,
                                 int expected_content_size,
-                                const std::string& expected_result);
+                                const std::string& expected_result,
+                                const std::string& expected_username);
 
   void ExpectDangerousDownloadEvent(
       const std::string& expected_url,
@@ -96,7 +101,10 @@ class EventReportValidator {
       const std::string& expected_trigger,
       const std::set<std::string>* expected_mimetypes,
       int expected_content_size,
-      const std::string& expected_result);
+      const std::string& expected_result,
+      const std::string& expected_username);
+
+  void ExpectNoReport();
 
   // Closure to run once all expected events are validated.
   void SetDoneClosure(base::RepeatingClosure closure);
@@ -132,36 +140,16 @@ class EventReportValidator {
   base::Optional<int> content_size_ = base::nullopt;
   const std::set<std::string>* mimetypes_ = nullptr;
   base::Optional<std::string> result_ = base::nullopt;
+  std::string username_;
 
   base::RepeatingClosure done_closure_;
 };
 
-// Helper functions that set matching connector policies values from legacy
-// policy values.
-void SetDlpPolicyForConnectors(CheckContentComplianceValues state);
-void SetMalwarePolicyForConnectors(SendFilesForMalwareCheckValues state);
-void SetDelayDeliveryUntilVerdictPolicyForConnectors(
-    DelayDeliveryUntilVerdictValues state);
-void SetAllowPasswordProtectedFilesPolicyForConnectors(
-    AllowPasswordProtectedFilesValues state);
-void SetBlockUnsupportedFileTypesPolicyForConnectors(
-    BlockUnsupportedFiletypesValues state);
-void SetBlockLargeFileTransferPolicyForConnectors(
-    BlockLargeFileTransferValues state);
-void AddUrlsToCheckComplianceOfDownloadsForConnectors(
-    const std::vector<std::string>& urls);
-void AddUrlsToNotCheckComplianceOfUploadsForConnectors(
-    const std::vector<std::string>& urls);
-void AddUrlsToCheckForMalwareOfUploadsForConnectors(
-    const std::vector<std::string>& urls);
-void AddUrlsToNotCheckForMalwareOfDownloadsForConnectors(
-    const std::vector<std::string>& urls);
-void AddUrlToListForConnectors(const char* pref_name, const std::string& url);
-void ClearUrlsToCheckComplianceOfUploadsForConnectors();
-void ClearUrlsToCheckForMalwareOfUploadsForConnectors();
-void ClearUrlsToCheckComplianceOfDownloadsForConnectors();
-void ClearUrlsToCheckForMalwareOfDownloadsForConnectors();
+// Helper functions that set Connector policies for testing.
+void SetAnalysisConnector(enterprise_connectors::AnalysisConnector connector,
+                          const std::string& pref_value);
 void SetOnSecurityEventReporting(bool enabled);
+void ClearAnalysisConnector(enterprise_connectors::AnalysisConnector connector);
 
 }  // namespace safe_browsing
 

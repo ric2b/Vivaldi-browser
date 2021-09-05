@@ -2,8 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
-import("//ui/ozone/ozone.gni")
+import("//tools/generate_library_loader/generate_library_loader.gni")
 
 assert(use_x11 || ozone_platform_x11)
 
@@ -18,6 +19,22 @@ config("x11_private_config") {
     "-Wno-unused-variable",
   ]
   defines = [ "IS_X11_IMPL" ]
+}
+
+generate_library_loader("xlib_loader") {
+  name = "XlibLoader"
+  output_h = "xlib_loader.h"
+  output_cc = "xlib_loader.cc"
+  header = "\"ui/gfx/x/xlib.h\""
+
+  functions = [
+    "XInitThreads",
+    "XOpenDisplay",
+    "XCloseDisplay",
+    "XFlush",
+    "XSynchronize",
+    "XSetErrorHandler",
+  ]
 }
 
 action("gen_xprotos") {
@@ -59,6 +76,7 @@ action("gen_xprotos") {
   sources = []
   outputs = [
     "$target_gen_dir/read_event.cc",
+    "$target_gen_dir/read_error.cc",
     "$target_gen_dir/extension_manager.h",
     "$target_gen_dir/extension_manager.cc",
   ]
@@ -80,30 +98,35 @@ action("gen_xprotos") {
 component("xprotos") {
   deps = [
     ":gen_xprotos",
+    ":xlib_loader",
     "//base",
     "//base:i18n",
     "//ui/events/platform",
   ]
   public_deps = [ "//ui/gfx/x/keysyms" ]
   sources = get_target_outputs(":gen_xprotos") + [
+              "connection.h",
+              "connection.cc",
+              "event.h",
+              "event.cc",
+              "error.h",
+              "error.cc",
+              "keyboard_state.h",
+              "keyboard_state.cc",
+              "scoped_ignore_errors.h",
+              "scoped_ignore_errors.cc",
+              "x11_switches.cc",
+              "x11_switches.h",
+              "xlib_support.h",
+              "xlib_support.cc",
               "xproto_internal.h",
               "xproto_internal.cc",
               "xproto_types.h",
               "xproto_types.cc",
               "xproto_util.h",
-              "xproto_util.cc",
-              "connection.h",
-              "connection.cc",
-              "event.h",
-              "event.cc",
-              "x11_switches.cc",
-              "x11_switches.h",
-              "x11.h",
             ]
-  configs += [
-    ":x11_private_config",
-    "//build/config/linux:x11",
-  ]
+  configs += [ ":x11_private_config" ]
+  libs = [ "xcb" ]
 }
 
 component("x") {
@@ -113,17 +136,11 @@ component("x") {
     "../gfx_export.h",
     "x11_atom_cache.cc",
     "x11_atom_cache.h",
-    "x11_error_tracker.cc",
-    "x11_error_tracker.h",
     "x11_path.cc",
     "x11_path.h",
-    "x11_types.cc",
-    "x11_types.h",
   ]
 
   defines = [ "GFX_IMPLEMENTATION" ]
-
-  public_configs = [ "//build/config/linux:x11" ]
 
   deps = [
     "//base",

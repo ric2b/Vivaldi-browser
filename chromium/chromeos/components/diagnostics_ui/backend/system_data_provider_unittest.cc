@@ -11,10 +11,11 @@
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/system/sys_info.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
+#include "chromeos/components/diagnostics_ui/backend/cpu_usage_data.h"
 #include "chromeos/components/diagnostics_ui/backend/power_manager_client_conversions.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cros_healthd/fake_cros_healthd_client.h"
@@ -56,6 +57,7 @@ void SetProbeTelemetryInfoResponse(
 }
 
 void SetCrosHealthdSystemInfoResponse(const std::string& board_name,
+                                      const std::string& marketing_name,
                                       const std::string& cpu_model,
                                       uint32_t total_memory_kib,
                                       uint16_t cpu_threads_count,
@@ -67,6 +69,7 @@ void SetCrosHealthdSystemInfoResponse(const std::string& board_name,
   auto os_version_info = cros_healthd::mojom::OsVersion::New();
   os_version_info->release_milestone = milestone_version;
   system_info->os_version = std::move(os_version_info);
+  system_info->marketing_name = marketing_name;
 
   // Battery info
   auto battery_info =
@@ -104,8 +107,8 @@ cros_healthd::mojom::BatteryInfoPtr CreateCrosHealthdBatteryInfoResponse(
     const std::string& status,
     const base::Optional<std::string>& manufacture_date,
     uint64_t temperature) {
-  cros_healthd::mojom::UInt64ValuePtr temp_value_ptr(
-      cros_healthd::mojom::UInt64Value::New());
+  cros_healthd::mojom::NullableUint64Ptr temp_value_ptr(
+      cros_healthd::mojom::NullableUint64::New());
   if (temperature != 0) {
     temp_value_ptr->value = temperature;
   }
@@ -183,7 +186,7 @@ void SetCrosHealthdBatteryInfoResponse(const std::string& vendor,
       CreateCrosHealthdBatteryInfoResponse(vendor, charge_full_design);
   SetProbeTelemetryInfoResponse(std::move(battery_info), /*cpu_info=*/nullptr,
                                 /*memory_info=*/nullptr,
-                                /*memory_info=*/nullptr);
+                                /*system_info=*/nullptr);
 }
 
 void SetCrosHealthdBatteryChargeStatusResponse(double charge_now,
@@ -192,7 +195,7 @@ void SetCrosHealthdBatteryChargeStatusResponse(double charge_now,
       CreateCrosHealthdBatteryChargeStatusResponse(charge_now, current_now);
   SetProbeTelemetryInfoResponse(std::move(battery_info), /*cpu_info=*/nullptr,
                                 /*memory_info=*/nullptr,
-                                /*memory_info=*/nullptr);
+                                /*system_info=*/nullptr);
 }
 
 void SetCrosHealthdBatteryHealthResponse(double charge_full_now,
@@ -203,7 +206,64 @@ void SetCrosHealthdBatteryHealthResponse(double charge_full_now,
                                              charge_full_design, cycle_count);
   SetProbeTelemetryInfoResponse(std::move(battery_info), /*cpu_info=*/nullptr,
                                 /*memory_info=*/nullptr,
-                                /*memory_info=*/nullptr);
+                                /*system_info=*/nullptr);
+}
+
+void SetCrosHealthdMemoryUsageResponse(uint32_t total_memory_kib,
+                                       uint32_t free_memory_kib,
+                                       uint32_t available_memory_kib) {
+  cros_healthd::mojom::MemoryInfoPtr memory_info =
+      cros_healthd::mojom::MemoryInfo::New(total_memory_kib, free_memory_kib,
+                                           available_memory_kib,
+                                           /*page_faults_since_last_boot=*/0);
+  SetProbeTelemetryInfoResponse(/*battery_info=*/nullptr, /*cpu_info=*/nullptr,
+                                /*memory_info=*/std::move(memory_info),
+                                /*system_info=*/nullptr);
+}
+
+void SetCrosHealthdCpuResponse(const std::vector<CpuUsageData>& usage_data,
+                               const std::vector<int32_t>& cpu_temps) {
+  auto cpu_info_ptr = cros_healthd::mojom::CpuInfo::New();
+  auto physical_cpu_info_ptr = cros_healthd::mojom::PhysicalCpuInfo::New();
+
+  for (const auto& data : usage_data) {
+    auto logical_cpu_info_ptr = cros_healthd::mojom::LogicalCpuInfo::New();
+
+    logical_cpu_info_ptr->user_time_user_hz = data.GetUserTime();
+    logical_cpu_info_ptr->system_time_user_hz = data.GetSystemTime();
+    logical_cpu_info_ptr->idle_time_user_hz = data.GetIdleTime();
+
+    physical_cpu_info_ptr->logical_cpus.emplace_back(
+        std::move(logical_cpu_info_ptr));
+  }
+
+  cpu_info_ptr->physical_cpus.push_back(std::move(physical_cpu_info_ptr));
+  for (const auto& cpu_temp : cpu_temps) {
+    auto cpu_temp_channel_ptr =
+        cros_healthd::mojom::CpuTemperatureChannel::New();
+    cpu_temp_channel_ptr->temperature_celsius = cpu_temp;
+    cpu_info_ptr->temperature_channels.emplace_back(
+        std::move(cpu_temp_channel_ptr));
+  }
+
+  SetProbeTelemetryInfoResponse(/*battery_info=*/nullptr,
+                                std::move(cpu_info_ptr),
+                                /*memory_info=*/nullptr,
+                                /*system_info=*/nullptr);
+}
+
+// Sets the CpuUsage response on cros_healthd. |usage_data| should contain one
+// entry for each logical cpu.
+void SetCrosHealthdCpuUsageResponse(
+    const std::vector<CpuUsageData>& usage_data) {
+  // Use fake temp data since none was supplied.
+  SetCrosHealthdCpuResponse(usage_data, {50});
+}
+
+void SetCrosHealthdCpuTemperatureResponse(
+    const std::vector<int32_t>& cpu_temps) {
+  // Use fake usage_data data since none was supplied.
+  SetCrosHealthdCpuResponse({CpuUsageData(1000, 1000, 1000)}, cpu_temps);
 }
 
 bool AreValidPowerTimes(int64_t time_to_full, int64_t time_to_empty) {
@@ -315,6 +375,29 @@ void VerifyHealthResult(const mojom::BatteryHealthPtr& update,
   EXPECT_EQ(expected_battery_wear_percentage, update->battery_wear_percentage);
 }
 
+void VerifyMemoryUsageResult(const mojom::MemoryUsagePtr& update,
+                             uint32_t expected_total_memory_kib,
+                             uint32_t expected_free_memory_kib,
+                             uint32_t expected_available_memory_kib) {
+  EXPECT_EQ(expected_total_memory_kib, update->total_memory_kib);
+  EXPECT_EQ(expected_free_memory_kib, update->free_memory_kib);
+  EXPECT_EQ(expected_available_memory_kib, update->available_memory_kib);
+}
+
+void VerifyCpuUsageResult(const mojom::CpuUsagePtr& update,
+                          uint8_t expected_percent_user,
+                          uint8_t expected_percent_system,
+                          uint8_t expected_percent_free) {
+  EXPECT_EQ(expected_percent_user, update->percent_usage_user);
+  EXPECT_EQ(expected_percent_system, update->percent_usage_system);
+  EXPECT_EQ(expected_percent_free, update->percent_usage_free);
+}
+
+void VerifyCpuTempResult(const mojom::CpuUsagePtr& update,
+                         uint32_t expected_average_temp) {
+  EXPECT_EQ(expected_average_temp, update->average_cpu_temp_celsius);
+}
+
 }  // namespace
 
 struct FakeBatteryChargeStatusObserver
@@ -322,7 +405,7 @@ struct FakeBatteryChargeStatusObserver
   // mojom::BatteryChargeStatusObserver
   void OnBatteryChargeStatusUpdated(
       mojom::BatteryChargeStatusPtr status_ptr) override {
-    updates.emplace_back(std::move(status_ptr));
+    updates.push_back(std::move(status_ptr));
   }
 
   // Tracks calls to OnBatteryChargeStatusUpdated. Each call adds an element to
@@ -335,7 +418,7 @@ struct FakeBatteryChargeStatusObserver
 struct FakeBatteryHealthObserver : public mojom::BatteryHealthObserver {
   // mojom::BatteryHealthObserver
   void OnBatteryHealthUpdated(mojom::BatteryHealthPtr status_ptr) override {
-    updates.emplace_back(std::move(status_ptr));
+    updates.push_back(std::move(status_ptr));
   }
 
   // Tracks calls to OnBatteryHealthUpdated. Each call adds an element to
@@ -343,6 +426,32 @@ struct FakeBatteryHealthObserver : public mojom::BatteryHealthObserver {
   std::vector<mojom::BatteryHealthPtr> updates;
 
   mojo::Receiver<mojom::BatteryHealthObserver> receiver{this};
+};
+
+struct FakeMemoryUsageObserver : public mojom::MemoryUsageObserver {
+  // mojom::MemoryUsageObserver
+  void OnMemoryUsageUpdated(mojom::MemoryUsagePtr status_ptr) override {
+    updates.push_back(std::move(status_ptr));
+  }
+
+  // Tracks calls to OnMemoryUsageUpdated. Each call adds an element to
+  // the vector.
+  std::vector<mojom::MemoryUsagePtr> updates;
+
+  mojo::Receiver<mojom::MemoryUsageObserver> receiver{this};
+};
+
+struct FakeCpuUsageObserver : public mojom::CpuUsageObserver {
+  // mojom::CpuUsageObserver
+  void OnCpuUsageUpdated(mojom::CpuUsagePtr status_ptr) override {
+    updates.push_back(std::move(status_ptr));
+  }
+
+  // Tracks calls to OnCpuUsageUpdated. Each call adds an element to
+  // the vector.
+  std::vector<mojom::CpuUsagePtr> updates;
+
+  mojo::Receiver<mojom::CpuUsageObserver> receiver{this};
 };
 
 class SystemDataProviderTest : public testing::Test {
@@ -369,6 +478,7 @@ class SystemDataProviderTest : public testing::Test {
 
 TEST_F(SystemDataProviderTest, GetSystemInfo) {
   const std::string expected_board_name = "board_name";
+  const std::string expected_marketing_name = "marketing_name";
   const std::string expected_cpu_model = "cpu_model";
   const uint32_t expected_total_memory_kib = 1234;
   const uint16_t expected_cpu_threads_count = 5678;
@@ -376,15 +486,16 @@ TEST_F(SystemDataProviderTest, GetSystemInfo) {
   const std::string expected_milestone_version = "M99";
 
   SetCrosHealthdSystemInfoResponse(
-      expected_board_name, expected_cpu_model, expected_total_memory_kib,
-      expected_cpu_threads_count, expected_has_battery,
-      expected_milestone_version);
+      expected_board_name, expected_marketing_name, expected_cpu_model,
+      expected_total_memory_kib, expected_cpu_threads_count,
+      expected_has_battery, expected_milestone_version);
 
   base::RunLoop run_loop;
   system_data_provider_->GetSystemInfo(
       base::BindLambdaForTesting([&](mojom::SystemInfoPtr ptr) {
         ASSERT_TRUE(ptr);
         EXPECT_EQ(expected_board_name, ptr->board_name);
+        EXPECT_EQ(expected_marketing_name, ptr->marketing_name);
         EXPECT_EQ(expected_cpu_model, ptr->cpu_model_name);
         EXPECT_EQ(expected_total_memory_kib, ptr->total_memory_kib);
         EXPECT_EQ(expected_cpu_threads_count, ptr->cpu_threads_count);
@@ -399,6 +510,7 @@ TEST_F(SystemDataProviderTest, GetSystemInfo) {
 
 TEST_F(SystemDataProviderTest, NoBattery) {
   const std::string expected_board_name = "board_name";
+  const std::string expected_marketing_name = "marketing_name";
   const std::string expected_cpu_model = "cpu_model";
   const uint32_t expected_total_memory_kib = 1234;
   const uint16_t expected_cpu_threads_count = 5678;
@@ -406,15 +518,16 @@ TEST_F(SystemDataProviderTest, NoBattery) {
   const std::string expected_milestone_version = "M99";
 
   SetCrosHealthdSystemInfoResponse(
-      expected_board_name, expected_cpu_model, expected_total_memory_kib,
-      expected_cpu_threads_count, expected_has_battery,
-      expected_milestone_version);
+      expected_board_name, expected_marketing_name, expected_cpu_model,
+      expected_total_memory_kib, expected_cpu_threads_count,
+      expected_has_battery, expected_milestone_version);
 
   base::RunLoop run_loop;
   system_data_provider_->GetSystemInfo(
       base::BindLambdaForTesting([&](mojom::SystemInfoPtr ptr) {
         ASSERT_TRUE(ptr);
         EXPECT_EQ(expected_board_name, ptr->board_name);
+        EXPECT_EQ(expected_marketing_name, ptr->marketing_name);
         EXPECT_EQ(expected_cpu_model, ptr->cpu_model_name);
         EXPECT_EQ(expected_total_memory_kib, ptr->total_memory_kib);
         EXPECT_EQ(expected_cpu_threads_count, ptr->cpu_threads_count);
@@ -557,6 +670,191 @@ TEST_F(SystemDataProviderTest, BatteryHealthObserver) {
   EXPECT_EQ(3u, health_observer.updates.size());
   VerifyHealthResult(health_observer.updates[2], charge_full_now,
                      charge_full_design, new_cycle_count);
+}
+
+TEST_F(SystemDataProviderTest, MemoryUsageObserver) {
+  // Setup Timer
+  auto timer = std::make_unique<base::MockRepeatingTimer>();
+  auto* timer_ptr = timer.get();
+  system_data_provider_->SetMemoryUsageTimerForTesting(std::move(timer));
+
+  // Setup initial data
+  const uint32_t total_memory_kib = 10000;
+  const uint32_t free_memory_kib = 2000;
+  const uint32_t available_memory_kib = 4000;
+
+  SetCrosHealthdMemoryUsageResponse(total_memory_kib, free_memory_kib,
+                                    available_memory_kib);
+
+  // Registering as an observer should trigger one update.
+  FakeMemoryUsageObserver memory_usage_observer;
+  system_data_provider_->ObserveMemoryUsage(
+      memory_usage_observer.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(1u, memory_usage_observer.updates.size());
+  VerifyMemoryUsageResult(memory_usage_observer.updates[0], total_memory_kib,
+                          free_memory_kib, available_memory_kib);
+
+  // Firing the timer should trigger another.
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(2u, memory_usage_observer.updates.size());
+  VerifyMemoryUsageResult(memory_usage_observer.updates[1], total_memory_kib,
+                          free_memory_kib, available_memory_kib);
+
+  // Updating the information in Croshealthd does not trigger an update until
+  // the timer fires
+  const uint32_t new_available_memory_kib = available_memory_kib + 1000;
+  SetCrosHealthdMemoryUsageResponse(total_memory_kib, free_memory_kib,
+                                    new_available_memory_kib);
+
+  EXPECT_EQ(2u, memory_usage_observer.updates.size());
+
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(3u, memory_usage_observer.updates.size());
+  VerifyMemoryUsageResult(memory_usage_observer.updates[2], total_memory_kib,
+                          free_memory_kib, new_available_memory_kib);
+}
+
+TEST_F(SystemDataProviderTest, CpuUsageObserverOneProcessor) {
+  // Setup Timer
+  auto timer = std::make_unique<base::MockRepeatingTimer>();
+  auto* timer_ptr = timer.get();
+  system_data_provider_->SetCpuUsageTimerForTesting(std::move(timer));
+
+  // Setup initial data
+  CpuUsageData core_1(1000, 1000, 1000);
+
+  SetCrosHealthdCpuUsageResponse({core_1});
+
+  // Registering as an observer should trigger one update.
+  FakeCpuUsageObserver cpu_usage_observer;
+  system_data_provider_->ObserveCpuUsage(
+      cpu_usage_observer.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop().RunUntilIdle();
+
+  // There should be one update with no percentages since we could not calculate
+  // a delta yet.
+  EXPECT_EQ(1u, cpu_usage_observer.updates.size());
+  VerifyCpuUsageResult(cpu_usage_observer.updates[0],
+                       /*expected_percent_user=*/0,
+                       /*expected_percent_system=*/0,
+                       /*expected_percent_free=*/0);
+
+  CpuUsageData delta(3000, 2500, 4500);
+
+  SetCrosHealthdCpuUsageResponse({core_1 + delta});
+
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(2u, cpu_usage_observer.updates.size());
+  VerifyCpuUsageResult(cpu_usage_observer.updates[1],
+                       delta.GetUserTime() * 100 / delta.GetTotalTime(),
+                       delta.GetSystemTime() * 100 / delta.GetTotalTime(),
+                       delta.GetIdleTime() * 100 / delta.GetTotalTime());
+}
+
+TEST_F(SystemDataProviderTest, CpuUsageObserverTwoProcessor) {
+  // Setup Timer
+  auto timer = std::make_unique<base::MockRepeatingTimer>();
+  auto* timer_ptr = timer.get();
+  system_data_provider_->SetCpuUsageTimerForTesting(std::move(timer));
+
+  // Setup initial data
+  CpuUsageData core_1(1000, 1000, 1000);
+
+  CpuUsageData core_2(2000, 2000, 2000);
+
+  SetCrosHealthdCpuUsageResponse({core_1, core_2});
+
+  // Registering as an observer should trigger one update.
+  FakeCpuUsageObserver cpu_usage_observer;
+  system_data_provider_->ObserveCpuUsage(
+      cpu_usage_observer.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop().RunUntilIdle();
+
+  // There should be one update with no percentages since we could not calculate
+  // a delta yet.
+  EXPECT_EQ(1u, cpu_usage_observer.updates.size());
+  VerifyCpuUsageResult(cpu_usage_observer.updates[0],
+                       /*expected_percent_user=*/0,
+                       /*expected_percent_system=*/0,
+                       /*expected_percent_free=*/0);
+
+  CpuUsageData core_1_delta(3000, 2500, 4500);
+
+  CpuUsageData core_2_delta(1000, 5500, 3500);
+
+  SetCrosHealthdCpuUsageResponse(
+      {core_1 + core_1_delta, core_2 + core_2_delta});
+
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  // The result should be the averages of the times from the two cores.
+  const int64_t expected_percent_user = 20;
+  const int64_t expected_percent_system = 40;
+  const int64_t expected_percent_free = 40;
+
+  EXPECT_EQ(2u, cpu_usage_observer.updates.size());
+  VerifyCpuUsageResult(cpu_usage_observer.updates[1], expected_percent_user,
+                       expected_percent_system, expected_percent_free);
+}
+
+TEST_F(SystemDataProviderTest, CpuUsageObserverTemp) {
+  // Setup Timer
+  auto timer = std::make_unique<base::MockRepeatingTimer>();
+  auto* timer_ptr = timer.get();
+  system_data_provider_->SetCpuUsageTimerForTesting(std::move(timer));
+
+  // Setup initial data
+  uint32_t temp_1 = 40;
+  uint32_t temp_2 = 50;
+  uint32_t temp_3 = 15;
+
+  SetCrosHealthdCpuTemperatureResponse({temp_1, temp_2, temp_3});
+
+  // Registering as an observer should trigger one update.
+  FakeCpuUsageObserver cpu_usage_observer;
+  system_data_provider_->ObserveCpuUsage(
+      cpu_usage_observer.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(1u, cpu_usage_observer.updates.size());
+  VerifyCpuTempResult(cpu_usage_observer.updates[0],
+                      /*expected_average_temp=*/35);
+
+  temp_1 = 20;
+  temp_2 = 25;
+  temp_3 = 45;
+
+  SetCrosHealthdCpuTemperatureResponse({temp_1, temp_2, temp_3});
+
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(2u, cpu_usage_observer.updates.size());
+  VerifyCpuTempResult(cpu_usage_observer.updates[1],
+                      /*expected_average_temp=*/30);
+
+  temp_1 = 20;
+  temp_2 = 26;
+  temp_3 = 46;
+
+  SetCrosHealthdCpuTemperatureResponse({temp_1, temp_2, temp_3});
+
+  timer_ptr->Fire();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(3u, cpu_usage_observer.updates.size());
+  // Integer division so `expected_average_temp` should still be 30.
+  VerifyCpuTempResult(cpu_usage_observer.updates[2],
+                      /*expected_average_temp=*/30);
 }
 
 }  // namespace diagnostics

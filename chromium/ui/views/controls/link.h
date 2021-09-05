@@ -14,6 +14,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/style/typography.h"
 
 namespace views {
@@ -42,14 +43,14 @@ class VIEWS_EXPORT Link : public Label {
   // Allow providing callbacks that expect either zero or one args, since many
   // callers don't care about the argument and can avoid adapter functions this
   // way.
-  void set_callback(base::RepeatingClosure callback) {
+  void SetCallback(base::RepeatingClosure callback) {
     // Adapt this closure to a ClickedCallback by discarding the extra arg.
     callback_ =
         base::BindRepeating([](base::RepeatingClosure closure,
                                const ui::Event& event) { closure.Run(); },
                             std::move(callback));
   }
-  void set_callback(ClickedCallback callback) {
+  void SetCallback(ClickedCallback callback) {
     callback_ = std::move(callback);
   }
 
@@ -60,6 +61,8 @@ class VIEWS_EXPORT Link : public Label {
   // Label:
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
   bool GetCanProcessEventsWithinSubtree() const override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -102,6 +105,11 @@ class VIEWS_EXPORT Link : public Label {
   DISALLOW_COPY_AND_ASSIGN(Link);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Link, Label)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Link)
 
 #endif  // UI_VIEWS_CONTROLS_LINK_H_

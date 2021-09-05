@@ -13,40 +13,20 @@ Still reading?
   local as possible, i.e. by warning message or by file.
 - When adding new issues, please keep the issue ids in sorted order.
 -->
+  <!-- Ignore all lint errors in clank code. -->
+  <issue id="all">
+    <ignore regexp="^\.\./\.\./clank/"/>
+    <ignore regexp="^gen/clank/"/>
+    <!-- obj can be a subdirectory under gen. -->
+    <ignore regexp="/obj/clank/"/>
+  </issue>
   <issue id="AcceptsUserCertificates">
     <!-- See https://crbug.com/827265 and comment in the file for context. -->
     <ignore regexp="chrome/android/java/res_base/xml/network_security_config.xml"/>
-    <ignore regexp="android_webview/tools/system_webview_shell/apk/res/xml/network_security_config.xml"/>
   </issue>
-  <issue id="CustomViewStyleable">
-    <!-- TODO(crbug.com/1077861): Old code, good to fix. -->
-    <ignore regexp="components/browser_ui/widget/android/java/src/org/chromium/components/browser_ui/widget/BoundedLinearLayout.java"/>
-  </issue>
-  <issue id="DefaultLocale">
-    <ignore regexp="clank"/>
-    <ignore regexp="com/android/tv"/>
-    <!-- TODO(crbug.com/1081240): Fix -->
-    <ignore regexp="chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/FeedSurfaceMediator.java"/>
-    <!-- TODO(crbug.com/1082222): Fix -->
-    <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/omnibox/suggestions/header/HeaderProcessor.java"/>
-  </issue>
-  <issue id="DrawAllocation">
-    <ignore regexp="content/public/android/java/src/org/chromium/content/browser/ContentViewRenderView.java"/>
-    <ignore regexp="content/public/android/java/src/org/chromium/content/browser/PopupZoomer.java"/>
-  </issue>
-  <!-- TODO(crbug.com/804432): Remove this and fix the offending xml files. -->
-  <issue id="EllipsizeMaxLines" severity="ignore"/>
   <issue id="ExifInterface">
-    <!-- TODO(crbug.com/804438): Cannot update until android.media.ExifInterface supports file descriptors -->
-    <ignore regexp="components/browser_ui/photo_picker/android/java/src/org/chromium/components/browser_ui/photo_picker/BitmapUtils.java"/>
-  </issue>
-  <issue id="ExportedContentProvider" severity="ignore"/>
-  <issue id="ExportedService" severity="ignore"/>
-  <issue id="HandlerLeak">
-    <ignore regexp="android_webview/glue/java/src/com/android/webview/chromium/WebViewContentsClientAdapter.java"/>
-  </issue>
-  <issue id="IconColors">
-    <ignore regexp="tools/android/audio_focus_grabber/java/res/drawable-.*/notification_icon.png"/>
+      <!-- TODO(crbug.com/804438): Update to androidx ExifInterface. -->
+      <ignore regexp="components/browser_ui/photo_picker/android/java/src/org/chromium/components/browser_ui/photo_picker/BitmapUtils.java"/>
   </issue>
   <issue id="IconDensities">
     <!-- This is intentional to reduce APK size. See: http://crrev/c/1352161 -->
@@ -64,14 +44,6 @@ Still reading?
   <issue id="IconDipSize">
     <!-- These only need to be 1px for all densities. See: crbug.com/804449 -->
     <ignore regexp="chrome/android/java/res/.*tab_strip_fade"/>
-  </issue>
-  <issue id="IconDuplicates">
-    <!-- Filed https://crbug.com/1073963 -->
-    <ignore regexp="clank/java/res_default/mipmap-.*/app_shortcut_icon.png"/>
-  </issue>
-  <issue id="IconLauncherFormat" severity="ignore"/>
-  <issue id="IconLauncherShape">
-    <ignore regexp="chrome/android/webapk/shell_apk/res/mipmap-mdpi/ic_launcher_background.png"/>
   </issue>
   <issue id="IconLocation">
     <!-- It is OK for content_shell_apk to have missing assets. -->
@@ -94,27 +66,20 @@ Still reading?
   <issue id="ImpliedQuantity">
     <ignore regexp="chrome/browser/ui/android/strings/ui_strings_grd"/>
     <ignore regexp="components/browser_ui/strings/android/browser_ui_strings_grd"/>
-    <ignore regexp="clank/third_party/chime/chime_systemtray_strings_grd.resources.zip"/>
   </issue>
   <issue id="InsecureBaseConfiguration">
     <!-- See https://crbug.com/827265 and comment in the file for context. -->
     <ignore regexp="chrome/android/java/res_base/xml/network_security_config.xml"/>
-    <ignore regexp="android_webview/tools/system_webview_shell/apk/res/xml/network_security_config.xml"/>
   </issue>
-  <issue id="Instantiatable" severity="ignore"/>
   <issue id="InconsistentArrays">
     <ignore regexp="android_webview/locale_paks.resources.zip/values/locale-paks.xml"/>
     <ignore regexp="chrome/android/chrome_locale_paks.resources.zip/values/locale-paks.xml"/>
     <ignore regexp="preloaded_fonts.xml"/>
   </issue>
-  <issue id="InconsistentLayout" severity="ignore"/>
   <issue id="InefficientWeight">
     <ignore regexp="android_webview/tools/system_webview_shell/apk/res/layout/activity_webview_browser.xml"/>
   </issue>
-  <issue id="InflateParams" severity="ignore"/>
-  <issue id="InlinedApi" severity="ignore"/>
   <issue id="InvalidVectorPath" severity="ignore"/>
-  <issue id="JobSchedulerService" severity="ignore"/>
   <issue id="LabelFor">
     <ignore regexp="android_webview/tools/system_webview_shell/apk/res/layout/activity_webview_browser.xml"/>
   </issue>
@@ -172,12 +137,20 @@ Still reading?
   <issue id="PrivateApi" severity="ignore"/>
   <!-- Chrome is a system app. -->
   <issue id="ProtectedPermissions" severity="ignore"/>
+  <!-- Android 11+ package visibility: g.co/dev/packagevisibility -->
+  <issue id="QueryAllPackagesPermission" severity="ignore"/>
+  <issue id="RestrictedApi">
+    <!-- Chrome uses these GMS core APIs. -->
+    <ignore regexp="is marked as internal and should not be accessed from apps"/>
+  </issue>
   <issue id="Recycle" severity="ignore"/>
   <issue id="Registered" severity="ignore"/>
   <issue id="ResourceAsColor" severity="ignore"/>
   <issue id="RtlCompat" severity="ignore"/>
   <issue id="RtlEnabled" severity="ignore"/>
   <issue id="RtlSymmetry" severity="ignore"/>
+  <!-- Android 10+ WRITE_EXTERNAL_STORAGE changed meaning. -->
+  <issue id="ScopedStorage" severity="ignore"/>
   <issue id="SetJavaScriptEnabled" severity="ignore"/>
   <issue id="SignatureOrSystemPermissions" severity="ignore"/>
   <issue id="StaticFieldLeak">
@@ -219,9 +192,6 @@ Still reading?
     <ignore regexp="The resource `R.mipmap.maskable_splash_icon_xxxhdpi` appears to be unused"/>
     <!-- 1: Module titles may only be used by the Play Store. -->
     <ignore regexp="The resource `R.string.*_module_title` appears to be unused"/>
-    <!-- 2: resource sets used by clank widgets for each channel -->
-    <ignore regexp="The resource `R.string.bookmark_widget_title.*` appears to be unused"/>
-    <ignore regexp="The resource `R.string.search_widget_title.*` appears to be unused"/>
     <!-- crbug.com/1004570 remove this line and the following six lines after the bug resolved -->
     <ignore regexp="The resource `R.string.accessibility_tab_suggestion_review_button` appears to be unused"/>
     <ignore regexp="The resource `R.string.accessibility_tab_suggestion_close_stale_message` appears to be unused"/>
@@ -265,7 +235,8 @@ Still reading?
     <ignore regexp="The resource `R.string.accessibility_close_tab_group_button_with_group_name` appears to be unused"/>
     <ignore regexp="The resource `R.string.accessibility_expand_tab_group_with_group_name` appears to be unused"/>
 
-    <!-- crbug.com/1128074 remove this line and following 9 lines after the bug is resolved -->
+    <!-- crbug.com/1128074 remove this line and following 15 lines after the bug is resolved -->
+    <ignore regexp="The resource `R.drawable.ic_reading_list_folder` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_title` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_read` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_unread` appears to be unused"/>
@@ -273,10 +244,14 @@ Still reading?
     <ignore regexp="The resource `R.string.reading_list_mark_as_read` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_share` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_reminder_notification_title` appears to be unused"/>
-    <ignore regexp="The resource `R.string.reading_list_reminder_notification_subtitle` appears to be unused"/>
-    <ignore regexp="The resource `R.string.reading_list_unread_page_count` appears to be unused"/>
+    <ignore regexp="The resource `R.plurals.reading_list_reminder_notification_subtitle` appears to be unused"/>
+    <ignore regexp="The resource `R.plurals.reading_list_unread_page_count` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_intro_text` appears to be unused"/>
+    <ignore regexp="The resource `R.string.reading_list_save_pages_for_later` appears to be unused"/>
     <ignore regexp="The resource `R.string.reading_list_find_in_bookmarks` appears to be unused"/>
+    <ignore regexp="The resource `R.string.reading_list_empty_list_title` appears to be unused"/>
+    <ignore regexp="The resource `R.string.reading_list_empty_list_description` appears to be unused"/>
+    <ignore regexp="The resource `R.string.reading_list_empty_list_description_offline` appears to be unused"/>
 
     <!-- crbug.com/1127531 remove this line and following 9 lines after the bug is resolved -->
     <ignore regexp="The resource `R.string.app_language_title` appears to be unused"/>
@@ -332,7 +307,6 @@ Still reading?
     <ignore regexp="The resource `R.string.combined_notification_text` appears to be unused"/>
     <ignore regexp="The resource `R.plurals.public_notification_text` appears to be unused"/>
     <ignore regexp="The resource `R.mipmap.app_shortcut_icon` appears to be unused"/>
-    <ignore regexp="The resource `R.mipmap.app_single_page_icon` appears to be unused"/>
     <ignore regexp="The resource `R.string.app_banner_install` appears to be unused"/>
     <ignore regexp="The resource `R.string.iph_download_indicator_text` appears to be unused"/>
     <!--TODO(crbug.com/1106109): Remove this suppression once Most Visited Tiles header is implemented.-->
@@ -341,15 +315,20 @@ Still reading?
     <ignore regexp="The resource `R.string.accessibility_omnibox_most_visited_tile` appears to be unused"/>
     <!-- 1: Some strings in components_strings_grd are not used in other targets. -->
     <ignore regexp="webview_.*__lint.*components_strings_grd"/>
-    <!-- 6: Temporarily suppress until implementation is ready, see https://crbug.com/1116201-->
-    <ignore regexp="The resource `R.string.iph_ntp_without_feed_text` appears to be unused"/>
-    <ignore regexp="The resource `R.string.iph_ntp_without_feed_accessibility_text` appears to be unused"/>
-    <ignore regexp="The resource `R.string.iph_ntp_with_feed_text` appears to be unused"/>
-    <ignore regexp="The resource `R.string.iph_ntp_with_feed_accessibility_text` appears to be unused"/>
-    <ignore regexp="The resource `R.string.iph_tab_switcher_text` appears to be unused"/>
-    <ignore regexp="The resource `R.string.iph_tab_switcher_accessibility_text` appears to be unused"/>
+    <!-- 5: Temporarily suppressed until impelmentation is ready, see https://crbug.com/1144250 -->
+    <ignore regexp="The resource `R.string.iph_bubble_add_to_home_screen_accessibility` appears to be unused"/>
+    <ignore regexp="The resource `R.string.iph_bubble_add_to_home_screen` appears to be unused"/>
+    <ignore regexp="The resource `R.string.iph_infobar_add_to_home_screen_title` appears to be unused"/>
+    <ignore regexp="The resource `R.string.iph_infobar_add_to_home_screen_description` appears to be unused"/>
+    <ignore regexp="The resource `R.string.iph_infobar_add_to_home_screen_description_tablet` appears to be unused"/>
+    <!-- 1: resource is used in C++ components/ntp_snippets. -->
+    <ignore regexp="The resource `R.string.ntp_article_suggestions_section_empty` appears to be unused"/>
     <!-- 1: TODO(crbug.com/1137985) resource is used in downstream image editor. -->
     <ignore regexp="The resource `R.string.clear` appears to be unused"/>
+    <!-- 3: Temporarily suppressed until impelmentation is ready, see https://crbug.com/1148020 -->
+    <ignore regexp="The resource `R.string.price_drop_spotted_title` appears to be unused"/>
+    <ignore regexp="The resource `R.string.price_drop_spotted_content` appears to be unused"/>
+    <ignore regexp="The resource `R.string.price_drop_spotted_show_me` appears to be unused"/>
     <!-- Endnote: Please specify number of suppressions when adding more -->
   </issue>
   <issue id="UsableSpace">

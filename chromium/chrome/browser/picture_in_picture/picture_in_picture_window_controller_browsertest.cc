@@ -5,6 +5,7 @@
 #include "content/public/browser/picture_in_picture_window_controller.h"
 
 #include "base/bind.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -23,8 +24,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -64,7 +64,6 @@
 #endif
 
 using ::testing::_;
-using web_app::ProviderType;
 
 namespace {
 
@@ -159,7 +158,7 @@ class PictureInPictureWindowControllerBrowserTest
     EXPECT_FALSE(in_picture_in_picture);
   }
 
-  class WidgetBoundsChangeWaiter : public views::WidgetObserver {
+  class WidgetBoundsChangeWaiter final : public views::WidgetObserver {
    public:
     explicit WidgetBoundsChangeWaiter(views::Widget* widget)
         : widget_(widget), initial_bounds_(widget->GetWindowBoundsInScreen()) {
@@ -331,7 +330,6 @@ class PictureInPicturePixelComparisonBrowserTest
   std::unique_ptr<SkBitmap> result_bitmap_;
 };
 
-// TODO(cliffordcheng): enable on Windows when compile errors are resolved.
 // Plays a video and then trigger Picture-in-Picture. Grabs a screenshot of
 // Picture-in-Picture window and verifies it's as expected.
 IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest, VideoPlay) {
@@ -623,9 +621,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
 // Tests that when closing a Picture-in-Picture window from the Web API, the
 // video element is not paused.
-// Flaky on Linux and Windows: http://crbug.com/1001538
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_CloseWindowFromWebAPIWhilePlaying) {
+                       CloseWindowFromWebAPIWhilePlaying) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(kPictureInPictureWindowSizePage));
@@ -1254,53 +1251,6 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       EnterPictureInPictureThenFullscreen) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  EXPECT_TRUE(active_web_contents->IsFullscreen());
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
-}
-
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       EnterFullscreenThenPictureInPicture) {
-  GURL test_page_url = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(kPictureInPictureWindowSizePage));
-  ui_test_utils::NavigateToURL(browser(), test_page_url);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(active_web_contents != nullptr);
-
-  SetUpWindowController(active_web_contents);
-
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  bool result = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      active_web_contents, "enterPictureInPicture();", &result));
-  EXPECT_TRUE(result);
-
-  EXPECT_FALSE(active_web_contents->IsFullscreen());
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-}
-
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
                        EnterPictureInPictureThenNavigateAwayCloseWindow) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
@@ -1337,9 +1287,14 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
 // Tests that when a new surface id is sent to the Picture-in-Picture window, it
 // doesn't move back to its default position.
-// crbug.com/1002489: disabled due to flakiness.
+// TODO(crbug.com/1146047): Test is flaky on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_SurfaceIdChangeDoesNotMoveWindow DISABLED_SurfaceIdChangeDoesNotMoveWindow
+#else
+#define MAYBE_SurfaceIdChangeDoesNotMoveWindow SurfaceIdChangeDoesNotMoveWindow
+#endif
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_SurfaceIdChangeDoesNotMoveWindow) {
+                       MAYBE_SurfaceIdChangeDoesNotMoveWindow) {
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
 
@@ -1623,9 +1578,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 // Tests that video in Picture-in-Picture is paused when user presses
 // VKEY_MEDIA_PLAY_PAUSE key even if there's another media playing in a
 // foreground tab.
-// TODO(https://crbug.com/1070810) flaky test
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_HandleMediaKeyPlayPause) {
+                       HandleMediaKeyPlayPause) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(kPictureInPictureWindowSizePage));
@@ -2425,60 +2379,6 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
   EXPECT_FALSE(in_picture_in_picture);
 }
 
-// Show/hide fullscreen page and check that Auto Picture-in-Picture is
-// triggered.
-
-// Crashes on Mac only.  http://crbug.com/1058087
-#if defined(OS_MAC)
-#define MAYBE_AutoPictureInPictureTriggeredWhenFullscreen \
-  DISABLED_AutoPictureInPictureTriggeredWhenFullscreen
-#else
-#define MAYBE_AutoPictureInPictureTriggeredWhenFullscreen \
-  AutoPictureInPictureTriggeredWhenFullscreen
-#endif
-IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
-                       MAYBE_AutoPictureInPictureTriggeredWhenFullscreen) {
-  GURL test_page_url = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(kPictureInPictureWindowSizePage));
-  ui_test_utils::NavigateToURL(browser(), test_page_url);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_NE(nullptr, active_web_contents);
-
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents,
-                                     "addPictureInPictureEventListeners();"));
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents,
-                                     "video.autoPictureInPicture = true;"));
-
-  SetUpWindowController(active_web_contents);
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  // Hide page and check that video entered Picture-in-Picture automatically.
-  active_web_contents->WasHidden();
-  expected_title = base::ASCIIToUTF16("enterpictureinpicture");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  // Show page and check that video left Picture-in-Picture automatically.
-  active_web_contents->WasShown();
-  expected_title = base::ASCIIToUTF16("leavepictureinpicture");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
-}
-
 namespace {
 
 class ChromeContentBrowserClientOverrideWebAppScope
@@ -2544,7 +2444,7 @@ class WebAppPictureInPictureWindowControllerBrowserTest
 };
 
 // Show/hide pwa page and check that Auto Picture-in-Picture is triggered.
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
                        AutoPictureInPicture) {
   InstallAndLaunchPWA(main_url());
   bool result = false;
@@ -2572,7 +2472,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Show pwa page and check that Auto Picture-in-Picture is not triggered if
 // document is not inside the scope specified in the Web App Manifest.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredIfDocumentNotInWebAppScope) {
   // We open a web app with a different scope
@@ -2605,7 +2505,7 @@ IN_PROC_BROWSER_TEST_P(
 
 // Show pwa page and check that Auto Picture-in-Picture is not triggered if
 // video is not playing.
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
                        AutoPictureInPictureNotTriggeredIfVideoNotPlaying) {
   InstallAndLaunchPWA(main_url());
   ASSERT_TRUE(content::ExecuteScript(web_contents(),
@@ -2631,7 +2531,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Check that Auto Picture-in-Picture is not triggered if there's already a
 // video in Picture-in-Picture.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureWhenPictureInPictureWindowAlreadyVisible) {
   InstallAndLaunchPWA(main_url());
@@ -2668,7 +2568,7 @@ IN_PROC_BROWSER_TEST_P(
 
 // Check that video does not leave Picture-in-Picture automatically when it
 // doesn't have the Auto Picture-in-Picture attribute set.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredOnPageShownIfNoAttribute) {
   InstallAndLaunchPWA(main_url());
@@ -2706,11 +2606,10 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_TRUE(in_picture_in_picture);
 }
 
-// TODO(http://crbug/1001249): flaky.
 // Check that Auto Picture-in-Picture applies only to the video element whose
 // autoPictureInPicture attribute was set most recently
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
-                       DISABLED_AutoPictureInPictureAttributeApplies) {
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
+                       AutoPictureInPictureAttributeApplies) {
   InstallAndLaunchPWA(main_url());
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(web_contents(),
@@ -2788,7 +2687,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Check that video does not leave Picture-in-Picture automatically when it
 // not the most recent element with the Auto Picture-in-Picture attribute set.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredOnPageShownIfNotEnteredAutoPictureInPicture) {
   InstallAndLaunchPWA(main_url());
@@ -2831,7 +2730,7 @@ IN_PROC_BROWSER_TEST_P(
 
 // Check that video with no audio that is paused when hidden is still eligible
 // to enter Auto Picture-in-Picture and resumes playback.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureTriggeredOnPageHiddenIfVideoPausedWhenHidden) {
   InstallAndLaunchPWA(main_url());
@@ -2952,14 +2851,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   ExpectLeavePictureInPicture(active_web_contents);
 }
 
-// TODO(crbug.com/1002489): Test is flaky on Linux.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
-#define MAYBE_UpdateMaxSize DISABLED_UpdateMaxSize
-#else
-#define MAYBE_UpdateMaxSize UpdateMaxSize
-#endif
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       MAYBE_UpdateMaxSize) {
+                       UpdateMaxSize) {
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
 
@@ -3016,9 +2909,3 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         WebAppPictureInPictureWindowControllerBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         web_app::ProviderTypeParamToString);

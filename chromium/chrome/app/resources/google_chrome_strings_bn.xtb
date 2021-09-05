@@ -23,7 +23,6 @@
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> বিপজ্জনক, তাই Chrome এটিকে অবরুদ্ধ করেছে।</translation>
 <translation id="1597911401261118146">আপনার পাসওয়ার্ড ডেটার নিরাপত্তা লঙ্ঘন এবং অন্যান্য নিরাপত্তা সংক্রান্ত সমস্যা থেকে সুরক্ষিত কিনা তা চেক করতে <ph name="BEGIN_LINK" />Chrome-এ সাইন-ইন করুন<ph name="END_LINK" />।</translation>
 <translation id="1619887657840448962">Chrome-কে আরও নিরাপদ করতে, আমরা নিচের এক্সটেনশনটি বন্ধ করেছি যা <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />-এ তালিকাবদ্ধ করা হয়নি এবং হয়ত আপনাকে না জানিয়ে যোগ করা হয়েছিল৷</translation>
-<translation id="162448658176061655">Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: একটু আগে।</translation>
 <translation id="162629503687514352">Chrome OS আপনার পাসওয়ার্ড সিঙ্ক করতে পারেনি।</translation>
 <translation id="1628000112320670027">Chrome বিষয়ে সাহায্য পান</translation>
 <translation id="1662639173275167396"><ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta)<ph name="END_LINK_LINUX_OSS" />-এর মত অতিরিক্ত <ph name="BEGIN_LINK_CROS_OSS" />ওপেন সোর্স সফ্টওয়্যার<ph name="END_LINK_CROS_OSS" /> ব্যবহার করে Chrome OS তৈরি করা সম্ভব হয়েছে।</translation>
@@ -78,6 +77,7 @@
 <translation id="2926676257163822632">দুর্বল পাসওয়ার্ড সহজেই অনুমান করা যায়। Chrome-কে <ph name="BEGIN_LINK" />আপনার জন্য শক্তিশালী পাসওয়ার্ড তৈরি করার ও সেটি মনে রাখার<ph name="END_LINK" /> অনুমতি দিন।</translation>
 <translation id="2929907241665500097">Chrome আপডেট করা যায়নি, কোনও সমস্যা হয়েছে। <ph name="BEGIN_LINK" />Chrome-এ আপডেট করতে না পারার সমস্যা ও আপডেট করা যায়নি এমন সমস্যার সমাধান করুন।<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> - নেটওয়ার্ক সাইন-ইন - Chrome</translation>
+<translation id="298099161970687941">Chrome খুললে জিজ্ঞাসা করো</translation>
 <translation id="3037838751736561277">Google Chrome পটভূমি মোডে রয়েছে।</translation>
 <translation id="3059710691562604940">'Safe Browsing'-এর সুবিধা বন্ধ করা আছে। তবে Chrome আপনাকে এটি চালু রাখার জন্য সাজেস্ট করছে।</translation>
 <translation id="3065168410429928842">Chrome ট্যাব</translation>
@@ -146,7 +146,6 @@
 <translation id="4771048833395599659">এই ফাইলটি বিপজ্জনক হতে পারে, তাই Chrome এটিকে অবরুদ্ধ করেছে।</translation>
 <translation id="479167709087336770">এটি Google সার্চ-এ যে বানান পরীক্ষা করার টুল ব্যবহার করা হয় সেটিই ব্যবহার করে। আপনি ব্রাউজারে যে টেক্সট লেখেন, সেটি Google-এ পাঠানো হয়। সেটিংস থেকে আপনি এটি পরিবর্তন করতে পারেন।</translation>
 <translation id="4891791193823137474">Google Chrome-কে ব্যাকগ্রাউন্ডে চলতে দিন</translation>
-<translation id="489337168347244450">{NUM_DAYS,plural, =1{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: ১ দিন আগে।}one{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_DAYS} দিন আগে।}other{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_DAYS} দিন আগে।}}</translation>
 <translation id="4895437082222824641">নতুন Chrome ট্যাবে লিঙ্ক খুলুন</translation>
 <translation id="4953650215774548573">আপনার ডিফল্ট ব্রাউজার হিসাবে Google Chrome-কে সেট করুন</translation>
 <translation id="495931528404527476">Chrome-এ</translation>
@@ -164,7 +163,6 @@
 <translation id="5430073640787465221">আপনার পছন্দের ফাইল ক্ষতিকর অথবা ভুল৷\n\nGoogle Chrome আপনার সেটিংস পুনরুদ্ধার করতে পারছে না৷</translation>
 <translation id="556024056938947818">Google Chrome পাসওয়ার্ডগুলি দেখানোর চেষ্টা করছে৷</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5633355459292055250">আমি Chrome খুললে জিজ্ঞাসা করো</translation>
 <translation id="5657226924540934362">এই পৃষ্ঠাতে কোনও একটি সেটিং দেখা না গেলে, আপনার <ph name="LINK_BEGIN" />
       Chrome OS সেটিংস<ph name="LINK_END" /> বিকল্পটি দেখুন</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> বিপজ্জনক হতে পারে, তাই Chrome এটিকে অবরুদ্ধ করেছে।</translation>
@@ -190,7 +188,6 @@
 <translation id="6291549208091401781">Google Chrome ইতোমধ্যে আপনার কম্পিউটারের সকল ব্যবহারকারীর জন্য ইনস্টল করা হয়েছে।</translation>
 <translation id="6338556085225130112">Google Chrome আপডেট করা হচ্ছে</translation>
 <translation id="6368958679917195344">Chrome OS সম্ভবত অতিরিক্ত <ph name="BEGIN_LINK_CROS_OSS" />ওপেন সোর্স সফ্টওয়্যার<ph name="END_LINK_CROS_OSS" /> দিয়ে তৈরি৷</translation>
-<translation id="6454142105866844106">Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
 <translation id="6566149418543181476">Google Chrome আপডেট হচ্ছে (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6650333065969705433">সুরক্ষিত মিডিয়া প্লে করার জন্য Rosetta ব্যবহার করতে, আপনাকে অবশ্যই Chrome রিস্টার্ট করতে হবে।</translation>
@@ -210,13 +207,11 @@
 <translation id="7106741999175697885">কার্য পরিচালক - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Chrome-এর একটি নতুন আপডেট উপলভ্য আছে এবং আপনি আবার চালু করলেই সেটি প্রয়োগ করা হবে।}=1{Chrome-এর একটি নতুন আপডেট উপলভ্য আছে এবং আপনি আবার চালু করলেই সেটি প্রয়োগ করা হবে। আপনার ছদ্মবেশী উইন্ডো আবার খুলবে না।}one{Chrome-এর একটি নতুন আপডেট উপলভ্য আছে এবং আপনি আবার চালু করলেই সেটি প্রয়োগ করা হবে। আপনার #টি ছদ্মবেশী উইন্ডো আবার খুলবে না।}other{Chrome-এর একটি নতুন আপডেট উপলভ্য আছে এবং আপনি আবার চালু করলেই সেটি প্রয়োগ করা হবে। আপনার #টি ছদ্মবেশী উইন্ডো আবার খুলবে না।}}</translation>
 <translation id="7155997830309522122">যদি তাই হয়, তাহলে Chrome-এ আপনার সেভ করা পাসওয়ার্ড এডিট করুন যাতে এটি আপনার নতুন পাসওয়ার্ডের সাথে ম্যাচ করে।</translation>
-<translation id="7236955538461508933">{NUM_HOURS,plural, =1{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: ১ ঘণ্টা আগে।}one{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_HOURS} ঘণ্টা আগে।}other{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_HOURS} ঘণ্টা আগে।}}</translation>
 <translation id="7242029209006116544">আপনি একটি পরিচালিত অ্যাকাউন্টের মাধ্যমে সাইন-ইন করছেন এবং এর অ্যাডমিনিস্ট্রেটরকে আপনার Google Chrome প্রোফাইলের উপরে নিয়ন্ত্রণ দিচ্ছেন৷ আপনার Chrome ডেটা, যেমন অ্যাপ, বুকমার্ক, ইতিহাস, পাসওয়ার্ড এবং অন্যান্য সেটিংস <ph name="USER_NAME" /> এতে স্থায়ীভাবে সম্পৃক্ত হবে৷ আপনি Google অ্যাকাউন্টের ড্যাশবোর্ডের মাধ্যমে এই ডেটাগুলি মুছতে পারবেন, কিন্তু অন্য অ্যাকাউন্টের সাথে এই ডেটা সংশ্লিষ্ট করতে পারবেন না৷ বিকল্প হিসেবে আপনি আপনার বিদ্যমান Chrome ডেটা আলাদা রাখার জন্য একটি নতুন প্রোফাইল তৈরি করতে পারেন৷ <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Google Chrome UI-এ দেখানোর জন্য এই ভাষা ব্যবহার করা হয়</translation>
 <translation id="7296210096911315575">ব্যবহার ও নিরাপত্তা সম্পর্কে গুরুত্বপূর্ণ তথ্য</translation>
 <translation id="7308322188646931570">ফাইল ডাউনলোড করতে Chrome-এর স্টোরেজের অ্যাক্সেস প্রয়োজন</translation>
 <translation id="7339898014177206373">নতুন উইন্ডো</translation>
-<translation id="7386132805935307836">Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: গতকাল।</translation>
 <translation id="7398801000654795464">আপনি <ph name="USER_EMAIL_ADDRESS" /> হিসাবে Chrome-এ প্রবেশ করেছেন৷ আবার সাইন-ইন করতে একই অ্যাকাউন্ট ব্যবহার করুন৷</translation>
 <translation id="7408085963519505752">Chrome OS শর্তাবলী</translation>
 <translation id="7419046106786626209">আপনার ডোমেনে সিঙ্ক উপলভ্য না থাকার কারণে Chrome OS আপনার ডেটা সিঙ্ক করতে পারেনি৷</translation>
@@ -251,7 +246,6 @@
 <translation id="828798499196665338">তোমার অভিভাবক Chrome-এ "সাইট, অ্যাপ ও এক্সটেনশনের অনুমতি" বন্ধ করে দিয়েছেন। এই <ph name="EXTENSION_TYPE_PARAMETER" /> চালু করার অনুমতি নেই।</translation>
 <translation id="8290100596633877290">হোয়া! Google Chrome ক্র্যাশ হয়েছে৷ এখনই পুনঃলঞ্চ করবেন?</translation>
 <translation id="8342675569599923794">এই ফাইলটি বিপজ্জনক, তাই Chrome এটিকে অবরুদ্ধ করেছে।</translation>
-<translation id="8344083974188970894">{NUM_MINS,plural, =1{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: ১ মিনিট আগে।}one{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_MINS} মিনিট আগে।}other{Chrome সপ্তাহে একবার ডিভাইসে কোনও অযাচিত সফ্টওয়্যার আছে কিনা তা চেক করে দেখে। শেষবার চেক করা হয়েছে: {NUM_MINS} মিনিট আগে।}}</translation>
 <translation id="8370517070665726704">কপিরাইট <ph name="YEAR" /> Google LLC সব স্বত্ব সংরক্ষিত আছে।</translation>
 <translation id="840084489713044809">Google Chrome আপনার পাসওয়ার্ড এক্সপোর্ট করতে চাইছে।</translation>
 <translation id="8433638294851456451">এখান থেকে আপনার Android ফোনে একটি নম্বর পাঠাতে, উভয় ডিভাইসের Chrome-এ সাইন-ইন করুন।</translation>
@@ -266,7 +260,6 @@
 <translation id="8641606876632989680">কোনও চুরি যাওয়া পাসওয়ার্ড দিয়ে সাইন-ইন করলে Chrome আপনাকে তা জানাবে</translation>
 <translation id="8669527147644353129">Google Chrome সহায়তাকারী</translation>
 <translation id="8679801911857917785">আপনি Chrome শুরু করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
-<translation id="8681614230122836773">Chrome আপনার কম্পিউটারে ক্ষতিকর সফ্টওয়্যার খুঁজে পেয়েছে</translation>
 <translation id="870251953148363156">&amp;Google Chrome আপডেট</translation>
 <translation id="873133009373065397">Google Chrome ডিফল্ট ব্রাউজার নির্ধারণ বা সেট করতে পারছে না</translation>
 <translation id="8748242232968346981">Chrome-এ আপনার প্রোফাইল তৈরি করতে চান?</translation>

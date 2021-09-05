@@ -96,7 +96,7 @@ class MetricsService : public base::HistogramFlattener {
 
   // Returns the client ID for this client, or the empty string if metrics
   // recording is not currently running.
-  std::string GetClientId();
+  std::string GetClientId() const;
 
   // Returns the install date of the application, in seconds since the epoch.
   int64_t GetInstallDate();
@@ -181,6 +181,14 @@ class MetricsService : public base::HistogramFlattener {
 
   // Test hook to safely stage the current log in the log store.
   bool StageCurrentLogForTest();
+
+  DelegatingProvider* GetDelegatingProviderForTesting() {
+    return &delegating_provider_;
+  }
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  bool IsInForegroundForTesting() const { return is_in_foreground_; }
+#endif
 
  protected:
   // Sets the persistent system profile. Virtual for tests.
@@ -393,6 +401,12 @@ class MetricsService : public base::HistogramFlattener {
 
   // Indicates if loading of independent metrics is currently active.
   bool independent_loader_active_ = false;
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  // Indicates whether OnAppEnterForeground() (true) or OnAppEnterBackground
+  // (false) was called.
+  bool is_in_foreground_ = false;
+#endif
 
   // Redundant marker to check that we completed our shutdown, and set the
   // exited-cleanly bit in the prefs.

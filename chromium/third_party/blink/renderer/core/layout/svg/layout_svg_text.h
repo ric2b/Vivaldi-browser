@@ -108,6 +108,7 @@ class LayoutSVGText final : public LayoutSVGBlock {
   RootInlineBox* CreateRootInlineBox() override;
 
   void SubtreeStructureChanged(LayoutInvalidationReasonForTracing);
+  void UpdateTransformAffectsVectorEffect();
 
   bool needs_reordering_ : 1;
   bool needs_positioning_values_update_ : 1;
@@ -115,7 +116,12 @@ class LayoutSVGText final : public LayoutSVGBlock {
   Vector<LayoutSVGInlineText*> descendant_text_nodes_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGText, IsSVGText());
+template <>
+struct DowncastTraits<LayoutSVGText> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsSVGText();
+  }
+};
 
 }  // namespace blink
 

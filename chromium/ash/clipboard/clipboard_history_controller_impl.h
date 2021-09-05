@@ -9,10 +9,12 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/clipboard/clipboard_history.h"
 #include "ash/clipboard/clipboard_history_item.h"
-#include "ash/clipboard/clipboard_nudge_controller.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/optional.h"
 
 namespace views {
 enum class MenuAnchorPosition;
@@ -24,21 +26,34 @@ class Rect;
 
 namespace ash {
 
-class ClipboardHistory;
 class ClipboardHistoryMenuModelAdapter;
 class ClipboardHistoryResourceManager;
+class ClipboardNudgeController;
+class ScopedClipboardHistoryPause;
 
 // Shows a menu with the last few things saved in the clipboard when the
 // keyboard shortcut is pressed.
 class ASH_EXPORT ClipboardHistoryControllerImpl
-    : public ClipboardHistoryController {
+    : public ClipboardHistoryController,
+      public ClipboardHistory::Observer {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when the clipboard history menu is shown.
+    virtual void OnClipboardHistoryMenuShown() = 0;
+    // Called when the user pastes from the clipboard history menu.
+    virtual void OnClipboardHistoryPasted() = 0;
+  };
+
   ClipboardHistoryControllerImpl();
   ClipboardHistoryControllerImpl(const ClipboardHistoryControllerImpl&) =
       delete;
   ClipboardHistoryControllerImpl& operator=(
       const ClipboardHistoryControllerImpl&) = delete;
   ~ClipboardHistoryControllerImpl() override;
+
+  void AddObserver(Observer* observer) const;
+  void RemoveObserver(Observer* observer) const;
 
   void Init();
 
@@ -61,7 +76,7 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
     return nudge_controller_.get();
   }
 
-  const ClipboardHistoryMenuModelAdapter* context_menu_for_test() const {
+  ClipboardHistoryMenuModelAdapter* context_menu_for_test() {
     return context_menu_.get();
   }
 
@@ -70,25 +85,47 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   class MenuDelegate;
 
   // ClipboardHistoryController:
+  bool CanShowMenu() const override;
   void ShowMenu(const gfx::Rect& anchor_rect,
                 views::MenuAnchorPosition menu_anchor_position,
                 ui::MenuSourceType source_type) override;
-  bool CanShowMenu() const override;
+  std::unique_ptr<ScopedClipboardHistoryPause> CreateScopedPause() override;
+
+  // ClipboardHistory::Observer:
+  void OnClipboardHistoryCleared() override;
 
   // Shows the clipboard history menu through the keyboard accelerator.
   void ShowMenuByAccelerator();
 
   void ExecuteSelectedMenuItem(int event_flags);
-  void MenuOptionSelected(int command_id, int event_flags);
+
+  // Executes the command specified by `command_id` with the given event flags.
+  void ExecuteCommand(int command_id, int event_flags);
+
+  // Paste the clipboard data of the menu item specified by `command_id`.
+  // `paste_plain_text` indicates whether the plain text instead of the
+  // clipboard data should be pasted.
+  void PasteMenuItemData(int command_id, bool paste_plain_text);
 
   // Delete the menu item being selected and its corresponding data. If no item
   // is selected, do nothing.
   void DeleteSelectedMenuItemIfAny();
 
+  // Delete the menu item specified by `command_id` and its corresponding data.
+  void DeleteItemWithCommandId(int command_id);
+
+  // Advances the pseudo focus (backward if `reverse` is true).
+  void AdvancePseudoFocus(bool reverse);
+
+  // Calculates the anchor rect for the ClipboardHistory menu.
   gfx::Rect CalculateAnchorRect() const;
 
   // Called when the contextual menu is closed.
   void OnMenuClosed();
+
+  // Mutable to allow adding/removing from |observers_| through a const
+  // ClipboardHistoryControllerImpl.
+  mutable base::ObserverList<Observer> observers_;
 
   // The menu being shown.
   std::unique_ptr<ClipboardHistoryMenuModelAdapter> context_menu_;

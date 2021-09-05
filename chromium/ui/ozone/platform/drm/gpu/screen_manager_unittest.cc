@@ -9,7 +9,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/platform_file.h"
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -225,6 +225,9 @@ class ScreenManagerTest : public testing::Test {
 
 TEST_F(ScreenManagerTest, CheckWithNoControllers) {
   EXPECT_FALSE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
+  EXPECT_EQ(drm_->get_test_modeset_count(), 0);
+  EXPECT_EQ(drm_->get_commit_modeset_count(), 0);
+  EXPECT_EQ(drm_->get_commit_count(), 0);
 }
 
 TEST_F(ScreenManagerTest, CheckWithValidController) {
@@ -232,12 +235,14 @@ TEST_F(ScreenManagerTest, CheckWithValidController) {
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
       std::make_unique<drmModeModeInfo>(kDefaultMode));
   screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
+  EXPECT_EQ(drm_->get_test_modeset_count(), 1);
+  EXPECT_EQ(drm_->get_commit_modeset_count(), 1);
 
   ui::HardwareDisplayController* controller =
       screen_manager_->GetDisplayController(GetPrimaryBounds());
@@ -251,7 +256,7 @@ TEST_F(ScreenManagerTest, CheckWithInvalidBounds) {
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -269,7 +274,7 @@ TEST_F(ScreenManagerTest, CheckForSecondValidController) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -281,6 +286,9 @@ TEST_F(ScreenManagerTest, CheckForSecondValidController) {
       std::make_unique<drmModeModeInfo>(secondary_mode));
   screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
 
+  EXPECT_EQ(drm_->get_test_modeset_count(), 1);
+  EXPECT_EQ(drm_->get_commit_modeset_count(), 2);
+
   EXPECT_TRUE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
   EXPECT_TRUE(screen_manager_->GetDisplayController(GetSecondaryBounds()));
 }
@@ -290,7 +298,7 @@ TEST_F(ScreenManagerTest, CheckControllerAfterItIsRemoved) {
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -300,9 +308,38 @@ TEST_F(ScreenManagerTest, CheckControllerAfterItIsRemoved) {
   EXPECT_TRUE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
 
   ScreenManager::CrtcsWithDrmList controllers_to_remove;
-
   controllers_to_remove.emplace_back(kPrimaryCrtc, drm_);
   screen_manager_->RemoveDisplayControllers(controllers_to_remove);
+  EXPECT_FALSE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
+}
+
+TEST_F(ScreenManagerTest, CheckControllerAfterDisabled) {
+  InitializeDrmStateWithDefault(drm_.get());
+  screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
+
+  // Enable
+  {
+    ScreenManager::ControllerConfigsList controllers_to_enable;
+    controllers_to_enable.emplace_back(
+        kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
+        GetPrimaryBounds().origin(),
+        std::make_unique<drmModeModeInfo>(kDefaultMode));
+    screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
+  }
+
+  int test_modeset_count_before_disable = drm_->get_test_modeset_count();
+  int commit_modeset_count_before_disable = drm_->get_commit_modeset_count();
+  // Disable
+  ScreenManager::ControllerConfigsList controllers_to_enable;
+  controllers_to_enable.emplace_back(kPrimaryDisplayId, drm_, kPrimaryCrtc,
+                                     kPrimaryConnector, gfx::Point(), nullptr);
+  screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
+
+  EXPECT_EQ(drm_->get_test_modeset_count(),
+            test_modeset_count_before_disable + 1);
+  EXPECT_EQ(drm_->get_commit_modeset_count(),
+            commit_modeset_count_before_disable + 1);
+
   EXPECT_FALSE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
 }
 
@@ -313,7 +350,7 @@ TEST_F(ScreenManagerTest, CheckMultipleControllersAfterBeingRemoved) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -324,10 +361,53 @@ TEST_F(ScreenManagerTest, CheckMultipleControllersAfterBeingRemoved) {
       std::make_unique<drmModeModeInfo>(kDefaultMode));
   screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
 
+  int modeset_count_after_enable = drm_->get_commit_modeset_count();
   ScreenManager::CrtcsWithDrmList controllers_to_remove;
   controllers_to_remove.emplace_back(kPrimaryCrtc, drm_);
   controllers_to_remove.emplace_back(kSecondaryCrtc, drm_);
   screen_manager_->RemoveDisplayControllers(controllers_to_remove);
+
+  // Removed displays are disabled in only 1 modeset commit.
+  EXPECT_EQ(drm_->get_commit_modeset_count(), modeset_count_after_enable + 1);
+
+  EXPECT_FALSE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
+  EXPECT_FALSE(screen_manager_->GetDisplayController(GetSecondaryBounds()));
+}
+
+TEST_F(ScreenManagerTest, CheckMultipleControllersAfterBeingDisabled) {
+  InitializeDrmStateWithDefault(drm_.get());
+  screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
+  screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
+                                        kSecondaryConnector);
+  // Enable
+  {
+    ScreenManager::ControllerConfigsList controllers_to_enable;
+    controllers_to_enable.emplace_back(
+        kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
+        GetPrimaryBounds().origin(),
+        std::make_unique<drmModeModeInfo>(kDefaultMode));
+    controllers_to_enable.emplace_back(
+        kSecondaryDisplayId, drm_, kSecondaryCrtc, kSecondaryConnector,
+        GetSecondaryBounds().origin(),
+        std::make_unique<drmModeModeInfo>(kDefaultMode));
+    screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
+  }
+
+  int test_modeset_count_before_disable = drm_->get_test_modeset_count();
+  int commit_modeset_count_before_disable = drm_->get_commit_modeset_count();
+  // Disable
+  ScreenManager::ControllerConfigsList controllers_to_enable;
+  controllers_to_enable.emplace_back(kPrimaryDisplayId, drm_, kPrimaryCrtc,
+                                     kPrimaryConnector, gfx::Point(), nullptr);
+  controllers_to_enable.emplace_back(kSecondaryDisplayId, drm_, kSecondaryCrtc,
+                                     kSecondaryConnector, gfx::Point(),
+                                     nullptr);
+  screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
+
+  EXPECT_EQ(drm_->get_test_modeset_count(),
+            test_modeset_count_before_disable + 1);
+  EXPECT_EQ(drm_->get_commit_modeset_count(),
+            commit_modeset_count_before_disable + 2);
 
   EXPECT_FALSE(screen_manager_->GetDisplayController(GetPrimaryBounds()));
   EXPECT_FALSE(screen_manager_->GetDisplayController(GetSecondaryBounds()));
@@ -338,7 +418,7 @@ TEST_F(ScreenManagerTest, CheckDuplicateConfiguration) {
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -368,7 +448,7 @@ TEST_F(ScreenManagerTest, CheckChangingMode) {
 
   // Modeset with default mode.
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(
         kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
         GetPrimaryBounds().origin(),
@@ -379,7 +459,7 @@ TEST_F(ScreenManagerTest, CheckChangingMode) {
   new_mode.vdisplay = new_mode.vdisplay++;
   // Modeset with a changed Mode.
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(
         kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
         GetPrimaryBounds().origin(),
@@ -404,7 +484,7 @@ TEST_F(ScreenManagerTest, CheckForControllersInMirroredMode) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -443,7 +523,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeTransitions) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -500,7 +580,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeModesettingWithDisplaysMode) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -535,7 +615,7 @@ TEST_F(ScreenManagerTest, MonitorGoneInMirrorMode) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -567,7 +647,7 @@ TEST_F(ScreenManagerTest, MonitorDisabledInMirrorMode) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -600,7 +680,7 @@ TEST_F(ScreenManagerTest, DoNotEnterMirrorModeUnlessSameBounds) {
 
   // Configure displays in extended mode.
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(
         kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
         GetPrimaryBounds().origin(),
@@ -617,7 +697,7 @@ TEST_F(ScreenManagerTest, DoNotEnterMirrorModeUnlessSameBounds) {
     auto new_mode = std::make_unique<drmModeModeInfo>(kDefaultMode);
     new_mode->vdisplay = 10;
     // Shouldn't enter mirror mode unless the display bounds are the same.
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(
         kSecondaryDisplayId, drm_, kSecondaryCrtc, kSecondaryConnector,
         GetPrimaryBounds().origin(), std::move(new_mode));
@@ -632,7 +712,7 @@ TEST_F(ScreenManagerTest, ReuseFramebufferIfDisabledThenReEnabled) {
   InitializeDrmStateWithDefault(drm_.get(), /*is_atomic=*/false);
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -667,7 +747,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeAfterBeginReEnabled) {
   screen_manager_->AddDisplayController(drm_, kSecondaryCrtc,
                                         kSecondaryConnector);
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(
         kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
         GetPrimaryBounds().origin(),
@@ -680,7 +760,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeAfterBeginReEnabled) {
     screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
   }
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     controllers_to_enable.emplace_back(0, drm_, kPrimaryCrtc, 0, gfx::Point(),
                                        nullptr);
     screen_manager_->ConfigureDisplayControllers(controllers_to_enable);
@@ -692,7 +772,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeAfterBeginReEnabled) {
   EXPECT_FALSE(controller->IsMirrored());
 
   {
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     drmModeModeInfo reenable_mode = kDefaultMode;
     controllers_to_enable.emplace_back(
         kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
@@ -732,7 +812,7 @@ TEST_F(ScreenManagerTest, ConfigureOnDifferentDrmDevices) {
   screen_manager_->AddDisplayController(drm2, kSecondaryCrtc + 1,
                                         kSecondaryConnector + 1);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -765,7 +845,7 @@ TEST_F(ScreenManagerTest,
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
   screen_manager_->AddDisplayController(drm2, kPrimaryCrtc, kPrimaryConnector);
 
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -797,7 +877,7 @@ TEST_F(ScreenManagerTest, CheckControllerToWindowMappingWithSameBounds) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -822,7 +902,7 @@ TEST_F(ScreenManagerTest, CheckControllerToWindowMappingWithDifferentBounds) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -849,7 +929,7 @@ TEST_F(ScreenManagerTest,
   }
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -878,7 +958,7 @@ TEST_F(ScreenManagerTest, ShouldDissociateWindowOnControllerRemoval) {
   screen_manager_->AddWindow(window_id, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -907,7 +987,7 @@ TEST_F(ScreenManagerTest, EnableControllerWhenWindowHasNoBuffer) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -950,7 +1030,7 @@ TEST_F(ScreenManagerTest, EnableControllerWhenWindowHasBuffer) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -978,7 +1058,7 @@ TEST_F(ScreenManagerTest, DISABLED_RejectBufferWithIncompatibleModifiers) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -1006,7 +1086,7 @@ TEST_F(ScreenManagerTest, ConfigureDisplayControllerShouldModesetOnce) {
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
-  std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+  ScreenManager::ControllerConfigsList controllers_to_enable;
   controllers_to_enable.emplace_back(
       kPrimaryDisplayId, drm_, kPrimaryCrtc, kPrimaryConnector,
       GetPrimaryBounds().origin(),
@@ -1064,7 +1144,7 @@ TEST_F(ScreenManagerTest, ShouldNotHardwareMirrorDifferentDrmDevices) {
     screen_manager.AddDisplayController(drm_device1, kCrtc1, kConnector1);
     screen_manager.AddDisplayController(drm_device2, kCrtc2, kConnector2);
 
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     std::unique_ptr<drmModeModeInfo> primary_mode =
         std::make_unique<drmModeModeInfo>(k1920x1080Screen);
     std::unique_ptr<drmModeModeInfo> secondary_mode =
@@ -1101,7 +1181,7 @@ TEST_F(ScreenManagerTest, ShouldNotHardwareMirrorDifferentDrmDevices) {
     controllers_to_remove.emplace_back(kCrtc1, drm_device1);
     screen_manager.RemoveDisplayControllers(controllers_to_remove);
 
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     std::unique_ptr<drmModeModeInfo> secondary_mode =
         std::make_unique<drmModeModeInfo>(k1920x1080Screen);
     controllers_to_enable.emplace_back(kSecondaryDisplayId, drm_device2, kCrtc2,
@@ -1117,7 +1197,7 @@ TEST_F(ScreenManagerTest, ShouldNotHardwareMirrorDifferentDrmDevices) {
   // Reconnect first display. Original configuration restored.
   {
     screen_manager.AddDisplayController(drm_device1, kCrtc1, kConnector1);
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     std::unique_ptr<drmModeModeInfo> primary_mode =
         std::make_unique<drmModeModeInfo>(k1920x1080Screen);
     controllers_to_enable.emplace_back(kPrimaryDisplayId, drm_device1, kCrtc1,
@@ -1209,7 +1289,7 @@ TEST_F(ScreenManagerTest, ShouldNotUnbindFramebufferOnJoiningMirror) {
     screen_manager.AddDisplayController(drm_device, kCrtc1, kConnector1);
     screen_manager.AddDisplayController(drm_device, kCrtc2, kConnector2);
 
-    std::vector<ScreenManager::ControllerConfigParams> controllers_to_enable;
+    ScreenManager::ControllerConfigsList controllers_to_enable;
     std::unique_ptr<drmModeModeInfo> primary_mode =
         std::make_unique<drmModeModeInfo>(k1080p60Screen);
     std::unique_ptr<drmModeModeInfo> secondary_mode =

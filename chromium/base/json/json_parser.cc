@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -421,8 +422,7 @@ Optional<Value> JSONParser::ConsumeDictionary() {
       return nullopt;
     }
 
-    dict_storage.emplace_back(key.DestructiveAsString(),
-                              std::make_unique<Value>(std::move(*value)));
+    dict_storage.emplace_back(key.DestructiveAsString(), std::move(*value));
 
     token = GetNextToken();
     if (token == T_LIST_SEPARATOR) {
@@ -441,7 +441,7 @@ Optional<Value> JSONParser::ConsumeDictionary() {
   ConsumeChar();  // Closing '}'.
   // Reverse |dict_storage| to keep the last of elements with the same key in
   // the input.
-  std::reverse(dict_storage.begin(), dict_storage.end());
+  ranges::reverse(dict_storage);
   return Value(Value::DictStorage(std::move(dict_storage)));
 }
 

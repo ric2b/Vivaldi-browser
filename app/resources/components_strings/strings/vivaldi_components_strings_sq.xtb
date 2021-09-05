@@ -24,7 +24,7 @@
 <translation id="1974060860693918893">Parametrat e avancuar</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Të kontrolloni proxy-n dhe sistemin mbrojtës të rrjetit<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Tingulli</translation>
-<translation id="2119505898009119320">E lëshuar për: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
+<translation id="2119505898009119320">Është lëshuar për: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Sinkronizimi në sfond</translation>
 <translation id="2166378884831602661">Faqja nuk ofron lidhje të sigurt</translation>
 <translation id="2187317261103489799">Diktoj (standard)</translation>
@@ -56,7 +56,7 @@
 <translation id="2948083400971632585">Në faqen e parametrave mund të çaktivizoni proxy-t për çdo lidhje.</translation>
 <translation id="2991571918955627853">Për momentin nuk mund ta vizitoni <ph name="SITE" />, sepse faqja përdor HSTS. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="3005723025932146533">Tregoj kopjen e regjistruar</translation>
-<translation id="301521992641321250">E bllokuar automatikisht</translation>
+<translation id="301521992641321250">Është bllokuar automatikisht</translation>
 <translation id="3041612393474885105">Informacion për certifikatën</translation>
 <translation id="3109728660330352905">Mungon autorizimi për hapjen e faqes.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Provoni të diagnostikoni lidhjen me rrjetin<ph name="END_LINK" />.</translation>
@@ -72,7 +72,7 @@
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> është e paarritshme për momentin.</translation>
 <translation id="3427092606871434483">Autorizoj (standarde)</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka çaktivizuar lojën me dinozaur.</translation>
-<translation id="3447884698081792621">Tregoj certifikatën (e lëshuar nga <ph name="ISSUER" />)</translation>
+<translation id="3447884698081792621">Tregoj certifikatën (është lëshuar nga <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Fsheh detajet e avancuara</translation>
 <translation id="3484560055331845446">Mund të humbitni aksesin te Kontoja në Google. Chrome rekomandon ta ndryshoni fjalëkalimin që tani. Do ju kërkohet identifikimi.</translation>
 <translation id="3566021033012934673">Nuk jeni lidhur privatisht</translation>
@@ -150,7 +150,7 @@
 <translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni prapë ruterin, modemin apo çdo aparat tjetër
     që përdorni në rrjetin kompjuterik.</translation>
 <translation id="614940544461990577">Provoni:</translation>
-<translation id="6165508094623778733">Mësoj më shumë</translation>
+<translation id="6165508094623778733">Mësoni më shumë</translation>
 <translation id="6177128806592000436">Nuk është e sigurt lidhja me faqen</translation>
 <translation id="6203231073485539293">Kontrolloni linjën e internetit</translation>
 <translation id="6225522625585012689">Vizitoni &lt;strong&gt;vivaldi://policy&lt;/strong&gt; për të parë listën e adresave URL të bllokuara dhe rregullat e tjera që aplikon administratori i sistemit.</translation>
@@ -185,13 +185,13 @@
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>
 <translation id="7518003948725431193">Nuk u gjet faqja me adresën: <ph name="URL" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
-<translation id="7549584377607005141">Për t'u paraqitur saktë, faqja e internetit kërkon që të plotësoni të dhënat e mëparshme. Të dhënat mund t'i dërgoni prapë, por në këtë mënyrë do ju duhet të përsëritni çdo veprim të mëparshëm.</translation>
+<translation id="7549584377607005141">Faqja e internetit kërkon që të plotësoni të dhënat e mëparshme që ajo të paraqitet drejt. Të dhënat mund t'i dërgoni prapë, por në këtë mënyrë do ju duhet të përsëritni çdo veprim të mëparshëm.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> nuk mund ta shqyrtojë kërkesën për momentin.</translation>
 <translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
 <translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7669271284792375604">Te kjo faqja, piratët e internetit mund t'ju mashtrojnë duke instaluar programe të cilat dëmtojnë procesin e shfletimit në internet (për shembull, duke ndryshuar faqen e parë ose duke shfaqur reklama shtesë në faqet që vizitoni).</translation>
 <translation id="7714464543167945231">Certifikata</translation>
-<translation id="7716147886133743102">E bllokuar nga administratori</translation>
+<translation id="7716147886133743102">Është bllokuar nga administratori</translation>
 <translation id="7716424297397655342">Nuk hapet faqja nga cache</translation>
 <translation id="7758069387465995638">Lidhja mund të jetë bllokuar nga programi mbrojtës i rrjetit ose antivirusi.</translation>
 <translation id="7800304661137206267">Lidhja mbrohet me shifrimin <ph name="CIPHER" />, duke përdorur <ph name="MAC" /> për vërtetimin e mesazhit dhe <ph name="KX" /> për shkëmbimin e algoritmeve kriptografike.</translation>
@@ -226,7 +226,7 @@
 <translation id="9025348182339809926">(E pavlefshme)</translation>
 <translation id="9039213469156557790">Për më tepër, faqja nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët kalimthi dhe mund të modifikohen nga piratët e internetit për ndryshimin e funksioneve të faqes.</translation>
 <translation id="9062620674789239642">Mund të jetë zhvendosur, modifikuar ose fshirë.</translation>
-<translation id="9069693763241529744">E bllokuar nga shtesa</translation>
+<translation id="9069693763241529744">Është bllokuar nga shtesa</translation>
 <translation id="9169664750068251925">Gjithmonë bllokoj te kjo faqja</translation>
 <translation id="9180553614777056266">Bllokuesi i reklamave</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> përdor protokoll jofunksional.</translation>

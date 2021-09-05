@@ -24,6 +24,7 @@ extern const char kClipboardRestriction[];
 extern const char kScreenshotRestriction[];
 extern const char kPrintingRestriction[];
 extern const char kPrivacyScreenRestriction[];
+extern const char kScreenShareRestriction[];
 
 extern const char kArc[];
 extern const char kCrostini[];
@@ -42,13 +43,17 @@ class DlpRulesManager {
   // A restriction that can be set by DataLeakPreventionRulesList policy.
   enum class Restriction {
     kUnknownRestriction = 0,
-    kClipboard = 1,      // Restricts sharing the clipboard data.
+    kClipboard = 1,      // Restricts sharing the data via clipboard and
+                         // drag-n-drop.
     kScreenshot = 2,     // Restricts taking screenshots of confidential screen
                          // content.
+                         // TODO(crbug/1145100): Update to include video capture
     kPrinting = 3,       // Restricts printing confidential screen content.
     kPrivacyScreen = 4,  // Enforces the Eprivacy screen when there's
                          // confidential content on the screen.
-    kMaxValue = kPrivacyScreen
+    kScreenShare = 5,    // Restricts screen sharing of confidential content
+                         // through 3P extensions/websites.
+    kMaxValue = kScreenShare
   };
 
   // A representation of destinations to which sharing confidential data is
@@ -89,7 +94,7 @@ class DlpRulesManager {
   // Returns the enforcement level for `restriction` given that data comes
   // from `source`. ALLOW is returned if no restrictions should be applied.
   // Requires `restriction` to be one of the following: screenshot, printing,
-  // privacy screen.
+  // privacy screen, screenshare.
   Level IsRestricted(const GURL& source, Restriction restriction) const;
 
   // Returns the enforcement level for `restriction` given that data comes

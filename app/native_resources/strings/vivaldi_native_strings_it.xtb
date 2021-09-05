@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Invia Link tramite mail</translation>
 <translation id="1454726940098520109">Non Chiedere Conferma Di Nuovo</translation>
 <translation id="1462666970065907900">Vuoi davvero chiudere questa finestra?</translation>
+<translation id="1526344461589023948">Si è verificato un errore durante il salvataggio di un aggiornamento. Verifica che il computer abbia spazio su disco sufficiente e riprova.</translation>
 <translation id="1657174850639146440">Mostro 9</translation>
 <translation id="1676595396635191120">Nuova finestra privata</translation>
+<translation id="1702758681952953055">Se l'errore persiste, segnalalo e includi i seguenti dettagli:</translation>
 <translation id="1728549374069268714">Incolla e vai</translation>
 <translation id="1756026472674246267">Apri link in nuova scheda</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Paesaggio 15</translation>
 <translation id="19598411548897379">Generico</translation>
 <translation id="2079036669923635404">Clicca qui per aggiornare Vivaldi alla versione <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Si è verificato un errore durante il download dei file di aggiornamento. Controlla la tua connessione e riprova.</translation>
 <translation id="2441056087170876076">Mostro 2</translation>
 <translation id="2444387452209867610">Inserisci nota</translation>
 <translation id="2486841023299517366">Animale 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Apri link in nuova finestra</translation>
 <translation id="3588820906588687999">Apri immagine in nuova scheda</translation>
 <translation id="3601066750251199488">Mostro 3</translation>
+<translation id="3708982624815781692">Il download è stato annullato.</translation>
 <translation id="3732157130969736834">Aggiungi link nei segnalibri</translation>
 <translation id="3732388226447288666">Animale 2</translation>
 <translation id="3732439195215136813">Animale 5</translation>
@@ -76,16 +80,18 @@
 <translation id="527605719918376753">Silenzia scheda</translation>
 <translation id="5305569355661722298">Conferma la chiusura della finestra</translation>
 <translation id="5388358297987318779">Apri immagine</translation>
-<translation id="5416008465899576639">Una nuova versione di Vivaldi è disponibile.</translation>
+<translation id="5416008465899576639">È disponibile una nuova versione di Vivaldi.</translation>
 <translation id="5497042274492038489">Conferma la chiusura della finestra</translation>
 <translation id="5594602170491763400">Mostro 5</translation>
 <translation id="5615637589913244581">Opera versione 15+ (Beta)</translation>
 <translation id="5648110075441906505">Apri immagine in una nuova finestra</translation>
+<translation id="5656371807944747581">Errore di aggiornamento!</translation>
 <translation id="5716238312826274098">Disattivazione delle notifiche</translation>
 <translation id="5770433027661640693">Paesaggio 10</translation>
 <translation id="5857090052475505287">Nuova cartella</translation>
 <translation id="588258955323874662">Schermo intero</translation>
 <translation id="5916080360077521750">Purtroppo, le impostazioni di Chrome non sono disponibili mentre il browser è in esecuzione. Per importare queste impostazioni in Vivaldi, salvare il lavoro e chiudere tutte le finestre di Chrome. Dopo clicca su continua.</translation>
+<translation id="6040143037577758943">Chiudi</translation>
 <translation id="6229528619562190452">Clicca qui per aggiornare Vivaldi.</translation>
 <translation id="6234173136417926046">Usa immagine come sfondo per la pagina iniziale</translation>
 <translation id="630690498669249215">File Segnalibri Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Paesaggio 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi è reso possibile dal progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e da altri <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Impossibile avviare l'installazione dell'aggiornamento. Verifica che il computer abbia memoria o spazio su disco sufficienti e riprova.</translation>
 <translation id="7715497554424665066">&amp;Ignora aggiornamento</translation>
 <translation id="7724603315864178912">Taglia</translation>
 <translation id="7793738202466490491">Aggiungi come evento del calendario</translation>
+<translation id="7848222781052558334">Impossibile verificare la firma digitale dei file scaricati.</translation>
 <translation id="7865983598101744945">Conferma l'uscita</translation>
 <translation id="7957213167373139414">Il mio Calendario</translation>
 <translation id="8027581147000338959">Apri un una nuova finestra</translation>

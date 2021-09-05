@@ -34,7 +34,8 @@
 #include "skia/grit/skia_resources_map.h"
 #include "ui/base/layout.h"
 #include "ui/base/webui/web_ui_util.h"
-#include "ui/resources/grit/webui_resources.h"
+#include "ui/resources/grit/webui_generated_resources.h"
+#include "ui/resources/grit/webui_generated_resources_map.h"
 #include "ui/resources/grit/webui_resources_map.h"
 
 #if defined(OS_CHROMEOS)
@@ -56,14 +57,8 @@ const std::map<std::string, std::string> CreatePathPrefixAliasesMap() {
   // TODO(rkc): Once we have a separate source for apps, remove '*/apps/'
   // aliases.
   std::map<std::string, std::string> aliases = {
-    {"../../../third_party/polymer/v1_0/components-chromium/", "polymer/v1_0/"},
-    {"../../../third_party/polymer/v3_0/components-chromium/", "polymer/v3_0/"},
-    {"../../../third_party/web-animations-js/sources/",
-     "polymer/v1_0/web-animations-js/"},
     {"../../views/resources/default_100_percent/common/", "images/apps/"},
     {"../../views/resources/default_200_percent/common/", "images/2x/apps/"},
-    {"../../webui/resources/cr_components/", "cr_components/"},
-    {"../../webui/resources/cr_elements/", "cr_elements/"},
     {"@out_folder@/gen/ui/webui/resources/", ""},
 #if defined(OS_ANDROID)
     // This is a temporary fix for `target_cpu = "arm64"`. See the bug for
@@ -77,8 +72,6 @@ const std::map<std::string, std::string> CreatePathPrefixAliasesMap() {
 
 #if !defined(OS_ANDROID)
   aliases["../../../third_party/lottie/"] = "lottie/";
-  aliases["../../../third_party/polymer/v1_0/components-chromium/polymer2/"] =
-      "polymer/v1_0/polymer/";
 #endif  // !defined(OS_ANDROID)
   return aliases;
 }
@@ -93,41 +86,9 @@ const std::map<int, std::string> CreateContentResourceIdToAliasMap() {
        "mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js"},
       {IDR_URL_MOJO_HTML, "mojo/url/mojom/url.mojom.html"},
       {IDR_URL_MOJO_JS, "mojo/url/mojom/url.mojom-lite.js"},
+      {IDR_URL_MOJOM_WEBUI_JS, "mojo/url/mojom/url.mojom-webui.js"},
       {IDR_VULKAN_INFO_MOJO_JS, "gpu/ipc/common/vulkan_info.mojom-lite.js"},
       {IDR_VULKAN_TYPES_MOJO_JS, "gpu/ipc/common/vulkan_types.mojom-lite.js"},
-  };
-}
-
-const std::map<int, std::string> CreateMojoResourceIdToAliasMap() {
-  return std::map<int, std::string> {
-    {IDR_MOJO_MOJO_BINDINGS_LITE_HTML,
-     "mojo/mojo/public/js/mojo_bindings_lite.html"},
-        {IDR_MOJO_MOJO_BINDINGS_LITE_JS,
-         "mojo/mojo/public/js/mojo_bindings_lite.js"},
-        {IDR_MOJO_BIG_BUFFER_MOJOM_HTML,
-         "mojo/mojo/public/mojom/base/big_buffer.mojom.html"},
-        {IDR_MOJO_BIG_BUFFER_MOJOM_LITE_JS,
-         "mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js"},
-        {IDR_MOJO_FILE_MOJOM_HTML,
-         "mojo/mojo/public/mojom/base/file.mojom.html"},
-        {IDR_MOJO_FILE_MOJOM_LITE_JS,
-         "mojo/mojo/public/mojom/base/file.mojom-lite.js"},
-        {IDR_MOJO_STRING16_MOJOM_HTML,
-         "mojo/mojo/public/mojom/base/string16.mojom.html"},
-        {IDR_MOJO_STRING16_MOJOM_LITE_JS,
-         "mojo/mojo/public/mojom/base/string16.mojom-lite.js"},
-        {IDR_MOJO_TEXT_DIRECTION_MOJOM_HTML,
-         "mojo/mojo/public/mojom/base/text_direction.mojom.html"},
-        {IDR_MOJO_TEXT_DIRECTION_MOJOM_LITE_JS,
-         "mojo/mojo/public/mojom/base/text_direction.mojom-lite.js"},
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS) || defined(OS_ANDROID)
-        {IDR_MOJO_TIME_MOJOM_HTML,
-         "mojo/mojo/public/mojom/base/time.mojom.html"},
-        {IDR_MOJO_TIME_MOJOM_LITE_JS,
-         "mojo/mojo/public/mojom/base/time.mojom-lite.js"},
-#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
-        // defined(OS_CHROMEOS) || defined(OS_ANDROID)
   };
 }
 
@@ -248,6 +209,14 @@ void AddAliasedResourcesToMap(
   }
 }
 
+// Adds |resources| to |resources_map| using the path given by resource_path in
+// each GRD entry.
+void AddGritResourcesToMap(base::span<const GritResourceMap> resources,
+                           ResourcesMap* resources_map) {
+  for (const GritResourceMap& entry : resources)
+    AddResource(entry.name, entry.value, resources_map);
+}
+
 const ResourcesMap* CreateResourcesMap() {
   ResourcesMap* result = new ResourcesMap();
   AddResourcesToMap(result);
@@ -256,9 +225,12 @@ const ResourcesMap* CreateResourcesMap() {
   AddAliasedResourcesToMap(CreateContentResourceIdToAliasMap(),
                            kMediaInternalsResources,
                            kMediaInternalsResourcesSize, result);
-  AddAliasedResourcesToMap(CreateMojoResourceIdToAliasMap(),
-                           kMojoBindingsResources, kMojoBindingsResourcesSize,
-                           result);
+  AddGritResourcesToMap(
+      base::make_span(kWebuiGeneratedResources, kWebuiGeneratedResourcesSize),
+      result);
+  AddGritResourcesToMap(
+      base::make_span(kMojoBindingsResources, kMojoBindingsResourcesSize),
+      result);
   AddAliasedResourcesToMap(CreateSkiaResourceIdToAliasMap(), kSkiaResources,
                            kSkiaResourcesSize, result);
 #if defined(OS_CHROMEOS)
@@ -326,10 +298,10 @@ void SharedResourcesDataSource::StartDataRequest(
   DCHECK_NE(-1, idr) << " path: " << path;
   scoped_refptr<base::RefCountedMemory> bytes;
 
-  if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS) {
+  if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS_CSS) {
     std::string css = webui::GetWebUiCssTextDefaults();
     bytes = base::RefCountedString::TakeString(&css);
-  } else if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS_MD) {
+  } else if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS_MD_CSS) {
     std::string css = webui::GetWebUiCssTextDefaultsMd();
     bytes = base::RefCountedString::TakeString(&css);
   } else {

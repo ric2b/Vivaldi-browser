@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "fuchsia/base/legacymetrics_user_event_recorder.h"
 
@@ -28,6 +29,13 @@ class LegacyMetricsClient {
   // Maximum number of Events to send to Record() at a time, so as to not exceed
   // the 64KB FIDL maximum message size.
   static constexpr size_t kMaxBatchSize = 50;
+
+  // Constants for FIDL reconnection with exponential backoff.
+  static constexpr base::TimeDelta kInitialReconnectDelay =
+      base::TimeDelta::FromSeconds(1);
+  static constexpr base::TimeDelta kMaxReconnectDelay =
+      base::TimeDelta::FromHours(1);
+  static constexpr size_t kReconnectBackoffFactor = 2;
 
   using ReportAdditionalMetricsCallback = base::RepeatingCallback<void(
       base::OnceCallback<void(std::vector<fuchsia::legacymetrics::Event>)>)>;
@@ -57,7 +65,13 @@ class LegacyMetricsClient {
   // |callback| should be invoked to signal flush completion.
   void SetNotifyFlushCallback(NotifyFlushCallback callback);
 
+  // Use when caller needs an explicit flush and then disconnect, such as before
+  // termination. Caller will be notified when all events in the buffer are
+  // sent.
+  void FlushAndDisconnect(base::OnceClosure on_flush_complete);
+
  private:
+  void ConnectAndStartReporting();
   void ScheduleNextReport();
   void StartReport();
   void Report(std::vector<fuchsia::legacymetrics::Event> additional_metrics);
@@ -67,6 +81,7 @@ class LegacyMetricsClient {
   // Incrementally sends the contents of |to_send_| to |metrics_recorder_|.
   void DrainBuffer();
 
+  base::TimeDelta reconnect_delay_ = kInitialReconnectDelay;
   base::TimeDelta report_interval_;
   ReportAdditionalMetricsCallback report_additional_callback_;
   NotifyFlushCallback notify_flush_callback_;
@@ -76,8 +91,11 @@ class LegacyMetricsClient {
   std::unique_ptr<LegacyMetricsUserActionRecorder> user_events_recorder_;
 
   fuchsia::legacymetrics::MetricsRecorderPtr metrics_recorder_;
-  base::RetainingOneShotTimer timer_;
+  base::RetainingOneShotTimer reconnect_timer_;
+  base::RetainingOneShotTimer report_timer_;
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::OnceClosure on_flush_complete_;
 
   // Prevents use-after-free if |report_additional_callback_| is invoked after
   // |this| is destroyed.

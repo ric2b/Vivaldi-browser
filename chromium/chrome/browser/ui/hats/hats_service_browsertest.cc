@@ -8,6 +8,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -111,7 +112,9 @@ class HatsServiceBrowserTestBase : public InProcessBrowserTest {
       std::vector<base::test::ScopedFeatureList::FeatureAndParams>
           enabled_features)
       : enabled_features_(enabled_features) {
-    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features_, {});
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        enabled_features_,
+        {features::kHappinessTrackingSurveysForDesktopMigration});
   }
 
   HatsServiceBrowserTestBase() = default;
@@ -309,6 +312,20 @@ IN_PROC_BROWSER_TEST_F(HatsServiceProbabilityOne,
   GetHatsService()->SetSurveyMetadataForTesting(metadata);
   GetHatsService()->LaunchSurvey(kHatsSurveyTriggerSatisfaction);
   EXPECT_FALSE(HatsBubbleShown());
+}
+
+IN_PROC_BROWSER_TEST_F(HatsServiceProbabilityOne,
+                       SurveyStartedBeforeElapsedTimeBetweenAnySurveys) {
+  SetMetricsConsent(true);
+  base::HistogramTester histogram_tester;
+  HatsService::SurveyMetadata metadata;
+  metadata.any_last_survey_started_time = base::Time::Now();
+  GetHatsService()->SetSurveyMetadataForTesting(metadata);
+  GetHatsService()->LaunchSurvey(kHatsSurveyTriggerSatisfaction);
+  EXPECT_FALSE(HatsBubbleShown());
+  histogram_tester.ExpectUniqueSample(
+      kHatsShouldShowSurveyReasonHistogram,
+      HatsService::ShouldShowSurveyReasons::kNoAnyLastSurveyTooRecent, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(HatsServiceProbabilityOne, ProfileTooYoungToShow) {

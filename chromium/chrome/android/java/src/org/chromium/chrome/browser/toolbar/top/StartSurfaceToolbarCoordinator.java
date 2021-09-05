@@ -17,8 +17,8 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ButtonData;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
+import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -56,14 +57,14 @@ public class StartSurfaceToolbarCoordinator {
 
     StartSurfaceToolbarCoordinator(ViewStub startSurfaceToolbarStub,
             UserEducationHelper userEducationHelper,
-            OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             ObservableSupplier<Boolean> identityDiscStateSupplier, ThemeColorProvider provider,
             MenuButtonCoordinator menuButtonCoordinator,
             Supplier<ButtonData> identityDiscButtonSupplier) {
         mStub = startSurfaceToolbarStub;
 
-        overviewModeBehaviorSupplier.onAvailable(
-                mCallbackController.makeCancelable(this::setOverviewModeBehavior));
+        layoutStateProviderSupplier.onAvailable(
+                mCallbackController.makeCancelable(this::setLayoutStateProvider));
 
         mPropertyModel =
                 new PropertyModel.Builder(StartSurfaceToolbarProperties.ALL_KEYS)
@@ -159,14 +160,6 @@ public class StartSurfaceToolbarCoordinator {
     }
 
     /**
-     * Called to set the visibility in Start Surface mode.
-     * @param shouldShowStartSurfaceToolbar whether the toolbar should be visible.
-     */
-    void setStartSurfaceToolbarVisibility(boolean shouldShowStartSurfaceToolbar) {
-        mToolbarMediator.setStartSurfaceToolbarVisibility(shouldShowStartSurfaceToolbar);
-    }
-
-    /**
      * Called when accessibility status changes.
      * @param enabled whether accessibility status is enabled.
      */
@@ -175,12 +168,11 @@ public class StartSurfaceToolbarCoordinator {
     }
 
     /**
-     * @param overviewModeBehavior The {@link OverviewModeBehavior} to observe overview state
-     *         changes.
+     * @param layoutStateProvider The {@link LayoutStateProvider} to observe layout state changes.
      */
-    private void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
-        assert overviewModeBehavior != null;
-        mToolbarMediator.setOverviewModeBehavior(overviewModeBehavior);
+    private void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
+        assert layoutStateProvider != null;
+        mToolbarMediator.setLayoutStateProvider(layoutStateProvider);
     }
 
     /**
@@ -216,6 +208,32 @@ public class StartSurfaceToolbarCoordinator {
         }
     }
 
+    /**
+     * Called when start surface state is changed.
+     * @param newState The new {@link StartSurfaceState}.
+     * @param shouldShowStartSurfaceToolbar Whether or not should show start surface toolbar.
+     */
+    void onStartSurfaceStateChanged(
+            @StartSurfaceState int newState, boolean shouldShowStartSurfaceToolbar) {
+        mToolbarMediator.onStartSurfaceStateChanged(newState, shouldShowStartSurfaceToolbar);
+    }
+
+    /**
+     * Triggered when the offset of start surface header view is changed.
+     * @param verticalOffset The start surface header view's offset.
+     */
+    void onStartSurfaceHeaderOffsetChanged(int verticalOffset) {
+        mToolbarMediator.onStartSurfaceHeaderOffsetChanged(verticalOffset);
+    }
+
+    /**
+     * @param toolbarHeight The height of start surface toolbar.
+     * @return Whether or not toolbar container view should be hidden.
+     */
+    boolean shouldHideToolbarContainer(int toolbarHeight) {
+        return mToolbarMediator.shouldHideToolbarContainer(toolbarHeight);
+    }
+
     void onNativeLibraryReady() {
         // It is possible that the {@link mIncognitoSwitchCoordinator} isn't created because
         // inflate() is called when the native library isn't ready. So create it now.
@@ -224,6 +242,13 @@ public class StartSurfaceToolbarCoordinator {
             maybeCreateIncognitoSwitchCoordinator();
         }
         mToolbarMediator.onNativeLibraryReady();
+    }
+
+    /**
+     * @param highlight If the new tab button should be highlighted.
+     */
+    void setNewTabButtonHighlight(boolean highlight) {
+        mToolbarMediator.setNewTabButtonHighlight(highlight);
     }
 
     private void inflate() {

@@ -5,7 +5,9 @@
 #include "chrome/browser/profiles/profiles_state.h"
 
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -16,8 +18,10 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
@@ -65,6 +69,7 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   // Preferences about global profile information.
   registry->RegisterStringPref(prefs::kProfileLastUsed, std::string());
   registry->RegisterIntegerPref(prefs::kProfilesNumCreated, 1);
+  registry->RegisterIntegerPref(prefs::kGuestProfilesNumCreated, 1);
   registry->RegisterListPref(prefs::kProfilesLastActive);
   registry->RegisterListPref(prefs::kProfilesDeleted);
 
@@ -75,6 +80,9 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kForceBrowserSignin, false);
   registry->RegisterBooleanPref(prefs::kBrowserShowProfilePickerOnStartup,
                                 true);
+  registry->RegisterIntegerPref(
+      prefs::kBrowserProfilePickerAvailabilityOnStartup,
+      static_cast<int>(ProfilePicker::AvailabilityOnStartup::kEnabled));
 }
 
 void SetLastUsedProfile(const std::string& profile_dir) {
@@ -164,7 +172,30 @@ void UpdateProfileName(Profile* profile,
 
 bool IsRegularOrGuestSession(Browser* browser) {
   Profile* profile = browser->profile();
-  return profile->IsRegularProfile() || profile->IsGuestSession();
+  return profile->IsRegularProfile() || profile->IsGuestSession() ||
+         profile->IsEphemeralGuestProfile();
+}
+
+bool IsGuestModeRequested(const base::CommandLine& command_line,
+                          PrefService* local_state,
+                          bool show_warning) {
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
+    defined(OS_MAC)
+  DCHECK(local_state);
+
+  // Check if guest mode enforcement commandline switch or policy are provided.
+  if (command_line.HasSwitch(switches::kGuest) ||
+      local_state->GetBoolean(prefs::kBrowserGuestModeEnforced)) {
+    // Check if guest mode is allowed by policy.
+    if (local_state->GetBoolean(prefs::kBrowserGuestModeEnabled))
+      return true;
+    if (show_warning) {
+      LOG(WARNING) << "Guest mode disabled by policy, launching a normal "
+                   << "browser session.";
+    }
+  }
+#endif
+  return false;
 }
 
 bool IsProfileLocked(const base::FilePath& profile_path) {
@@ -284,6 +315,20 @@ bool ArePublicSessionRestrictionsEnabled() {
 #endif
   return false;
 }
+
+#if !defined(OS_CHROMEOS)
+base::string16 GetDefaultNameForNewSignedInProfile(
+    const AccountInfo& account_info) {
+  DCHECK(account_info.IsValid());
+  bool is_consumer = account_info.hosted_domain.empty() ||
+                     account_info.hosted_domain == kNoHostedDomainFound;
+  if (is_consumer)
+    return base::UTF8ToUTF16(account_info.given_name);
+  return l10n_util::GetStringUTF16(
+      IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_PROFILE_NAME);
+}
+#endif  // !defined(OS_CHROMEOS)
+
 #endif  // !defined(OS_ANDROID)
 
 }  // namespace profiles

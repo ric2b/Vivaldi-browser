@@ -532,6 +532,11 @@ class ShellUtil {
                                     const base::string16& unique_suffix,
                                     bool elevate_if_not_admin);
 
+  // Same as RegisterChromeBrowser above, except that we don't stop early if
+  // there is an error adding registry entries and we disable rollback.
+  // |elevate_if_not_admin| is false and unique_suffix is empty.
+  static void RegisterChromeBrowserBestEffort(const base::FilePath& chrome_exe);
+
   // This method declares to Windows that Chrome is capable of handling the
   // given protocol. This function will call the RegisterChromeBrowser function
   // to register with Windows as capable of handling the protocol, if it isn't
@@ -581,8 +586,8 @@ class ShellUtil {
 
   typedef base::RefCountedData<base::AtomicFlag> SharedCancellationFlag;
 
-  // Appends Chrome shortcuts with non-whitelisted arguments to |shortcuts| if
-  // not nullptr. If |do_removal|, also removes non-whitelisted arguments from
+  // Appends Chrome shortcuts with disallowed arguments to |shortcuts| if
+  // not nullptr. If |do_removal|, also removes disallowed arguments from
   // those shortcuts. This method will abort and return false if |cancel| is
   // non-nullptr and gets set at any point during this call.
   static bool ShortcutListMaybeRemoveUnknownArgs(
@@ -660,6 +665,31 @@ class ShellUtil {
   // with this name will be deleted.
   static bool DeleteFileAssociations(const base::string16& prog_id);
 
+  // Adds an application entry and metadata sub-entries to
+  // HKCU\SOFTWARE\classes\<prog_id> capable of handling file type /
+  // protocol associations.
+  //
+  // |prog_id| is the ProgId used by Windows to uniquely identity this
+  // application. Must not be empty or start with a '.'.
+  // |shell_open_command_line| is the command to execute when opening the app
+  // via association.
+  // |application_name| is the friendly name displayed for this application in
+  // the Open With menu.
+  // |application_description| is the description for this application to be
+  // displayed by certain Windows settings dialogs.
+  // |icon_path| is the path of the icon displayed for this application in the
+  // Open With menu, and used for default files / protocols associated with this
+  // application.
+  static bool AddApplicationClass(
+      const base::string16& prog_id,
+      const base::CommandLine& shell_open_command_line,
+      const base::string16& application_name,
+      const base::string16& application_description,
+      const base::FilePath& icon_path);
+
+  // Removes all entries of an application at HKCU\SOFTWARE\classes\<prog_id>.
+  static bool DeleteApplicationClass(const base::string16& prog_id);
+
   // Returns the app name and file associations registered for a particular
   // application in the Windows registry. If there is no entry in the registry
   // for |prog_id|, nothing will be returned.
@@ -676,9 +706,12 @@ class ShellUtil {
 
   // This method converts all the RegistryEntries from the given list to
   // Set/CreateRegWorkItems and runs them using WorkItemList.
+  // |best_effort_no_rollback| is used to set WorkItemList::set_rollback_enabled
+  // and WorkItemList::set_best_effort.
   static bool AddRegistryEntries(
       HKEY root,
-      const std::vector<std::unique_ptr<RegistryEntry>>& entries);
+      const std::vector<std::unique_ptr<RegistryEntry>>& entries,
+      bool best_effort_no_rollback = false);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShellUtil);

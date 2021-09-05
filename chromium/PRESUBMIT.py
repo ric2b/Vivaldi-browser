@@ -68,6 +68,8 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'ios[\\/].*_app_interface\.mm$',
     # Views Examples code
     r'ui[\\/]views[\\/]examples[\\/].*',
+    # Chromium Codelab
+    r'codelabs[\\/]*'
 )
 
 _THIRD_PARTY_EXCEPT_BLINK = 'third_party/(?!blink/)'
@@ -328,13 +330,9 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^chrome/browser/download/',
   '^chrome/browser/extensions/',
   '^chrome/browser/history/',
-  '^chrome/browser/installable/installable_manager_browsertest.cc',
   '^chrome/browser/lifetime/',
   '^chrome/browser/media_galleries/',
   '^chrome/browser/media/',
-  '^chrome/browser/metrics/',
-  '^chrome/browser/nacl_host/test/gdb_debug_stub_browsertest.cc',
-  '^chrome/browser/nearby_sharing/client/nearby_share_api_call_flow_impl_unittest.cc', # pylint: disable=line-too-long
   '^chrome/browser/net/',
   '^chrome/browser/notifications/',
   '^chrome/browser/ntp_tiles/ntp_tiles_browsertest.cc',
@@ -358,52 +356,28 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^chrome/browser/resource_coordinator/',
   '^chrome/browser/resources/chromeos/accessibility/',
   '^chrome/browser/rlz/chrome_rlz_tracker_delegate.cc',
-  '^chrome/browser/safe_browsing/',
   '^chrome/browser/search_engines/',
   '^chrome/browser/service_process/',
   '^chrome/browser/signin/',
   '^chrome/browser/site_isolation/site_per_process_text_input_browsertest.cc',
   '^chrome/browser/ssl/',
-  '^chrome/browser/subresource_filter/',
   '^chrome/browser/supervised_user/',
   '^chrome/browser/sync_file_system/',
   '^chrome/browser/sync/',
-  '^chrome/browser/themes/theme_service.cc',
   '^chrome/browser/thumbnail/cc/',
   '^chrome/browser/translate/',
   '^chrome/browser/ui/',
   '^chrome/browser/web_applications/',
   '^chrome/browser/win/',
-  '^chrome/services/',
-  '^chrome/test/',
-  '^chrome/tools/',
-  '^chromecast/media/',
+  '^chrome/test/chromedriver/server/http_handler.cc',
   '^chromeos/attestation/',
   '^chromeos/components/',
-  '^components/arc/',
-  '^components/cast_channel/',
-  '^components/component_updater/',
-  '^components/content_settings/',
   '^components/drive/',
-  '^components/nacl/',
-  '^components/navigation_interception/',
-  '^components/ownership/',
-  '^components/policy/',
   '^components/search_engines/',
-  '^components/security_interstitials/',
-  '^components/signin/',
-  '^components/sync/',
-  '^components/ukm/',
   '^components/webcrypto/',
   '^extensions/browser/',
   '^extensions/renderer/',
   '^google_apis/drive/',
-  '^ios/chrome/',
-  '^ios/components/',
-  '^ios/net/',
-  '^ios/web/',
-  '^ios/web_view/',
-  '^ipc/',
   '^media/blink/',
   '^media/cast/',
   '^media/cdm/',
@@ -414,7 +388,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^net/url_request/',
   '^ppapi/proxy/',
   '^services/',
-  '^third_party/blink/',
   '^tools/clang/base_bind_rewriters/',  # Intentional.
   '^tools/gdb/gdb_chrome.py',  # Intentional.
 ))
@@ -1108,6 +1081,16 @@ _BANNED_CPP_FUNCTIONS = (
         r'^base/tracing/.*',
       ),
     ),
+    (
+      r'/\bScopedObserver',
+      (
+          'ScopedObserver is deprecated.',
+          'Please use base::ScopedObservation for observing a single source,',
+          'or base::ScopedMultiSourceObservation for observing multple sources',
+      ),
+      False,
+      (),
+    ),
 )
 
 # Format: Sequence of tuples containing:
@@ -1323,6 +1306,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/apkbuilder.pydeps',
     'build/android/gyp/assert_static_initializers.pydeps',
     'build/android/gyp/bytecode_processor.pydeps',
+    'build/android/gyp/bytecode_rewriter.pydeps',
     'build/android/gyp/compile_java.pydeps',
     'build/android/gyp/compile_resources.pydeps',
     'build/android/gyp/copy_ex.pydeps',
@@ -1345,6 +1329,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/ijar.pydeps',
     'build/android/gyp/jacoco_instr.pydeps',
     'build/android/gyp/java_cpp_enum.pydeps',
+    'build/android/gyp/java_cpp_features.pydeps',
     'build/android/gyp/java_cpp_strings.pydeps',
     'build/android/gyp/jetify_jar.pydeps',
     'build/android/gyp/jinja_template.pydeps',
@@ -1352,6 +1337,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/main_dex_list.pydeps',
     'build/android/gyp/merge_manifest.pydeps',
     'build/android/gyp/prepare_resources.pydeps',
+    'build/android/gyp/process_native_prebuilt.pydeps',
     'build/android/gyp/proguard.pydeps',
     'build/android/gyp/turbine.pydeps',
     'build/android/gyp/validate_static_library_dex_references.pydeps',
@@ -1365,6 +1351,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/test_wrapper/logdog_wrapper.pydeps',
     'build/lacros/lacros_resource_sizes.pydeps',
     'build/protoc_java.pydeps',
+    'chrome/android/monochrome/scripts/monochrome_python_tests.pydeps',
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
     'chrome/test/chromedriver/test/run_py_tests.pydeps',
     'components/cronet/tools/generate_javadoc.pydeps',
@@ -1373,12 +1360,11 @@ _GENERIC_PYDEPS_FILES = [
     'content/public/android/generate_child_service.pydeps',
     'net/tools/testserver/testserver.pydeps',
     'testing/scripts/run_android_wpt.pydeps',
+    'testing/scripts/run_isolated_script_test.pydeps',
     'third_party/android_platform/development/scripts/stack.pydeps',
     'third_party/blink/renderer/bindings/scripts/build_web_idl_database.pydeps',
     'third_party/blink/renderer/bindings/scripts/collect_idl_files.pydeps',
     'third_party/blink/renderer/bindings/scripts/generate_bindings.pydeps',
-    ('third_party/blink/renderer/bindings/scripts/'
-     'generate_high_entropy_list.pydeps'),
     'tools/binary_size/sizes.pydeps',
     'tools/binary_size/supersize.pydeps',
 ]
@@ -1393,7 +1379,7 @@ _KNOWN_ROBOTS = set(
   ) | set('%s@developer.gserviceaccount.com' % s for s in ('3su6n15k.default',)
   ) | set('%s@chops-service-accounts.iam.gserviceaccount.com' % s
           for s in ('bling-autoroll-builder', 'v8-ci-autoroll-builder',
-                    'wpt-autoroller',)
+                    'wpt-autoroller', 'chrome-weblayer-builder')
   ) | set('%s@skia-public.iam.gserviceaccount.com' % s
           for s in ('chromium-autoroll', 'chromium-release-autoroll')
   ) | set('%s@skia-corp.google.com.iam.gserviceaccount.com' % s
@@ -1426,6 +1412,42 @@ def _IsJavaFile(input_api, file_path):
 
 def _IsProtoFile(input_api, file_path):
   return input_api.os_path.splitext(file_path)[1] == ".proto"
+
+
+def CheckNoUpstreamDepsOnClank(input_api, output_api):
+  """Prevent additions of dependencies from the upstream repo on //clank."""
+  # clank can depend on clank
+  if input_api.change.RepositoryRoot().endswith('clank'):
+    return []
+  build_file_patterns = [
+    r'(.+/)?BUILD\.gn',
+    r'.+\.gni',
+  ]
+  excluded_files = [
+    r'build[/\\]config[/\\]android[/\\]config\.gni'
+  ]
+  bad_pattern = input_api.re.compile(r'^[^#]*//clank')
+
+  error_message = 'Disallowed import on //clank in an upstream build file:'
+
+  def FilterFile(affected_file):
+    return input_api.FilterSourceFile(
+      affected_file,
+      files_to_check=build_file_patterns,
+      files_to_skip=excluded_files)
+
+  problems = []
+  for f in input_api.AffectedSourceFiles(FilterFile):
+    local_path = f.LocalPath()
+    for line_number, line in f.ChangedContents():
+      if (bad_pattern.search(line)):
+        problems.append(
+          '%s:%d\n    %s' % (local_path, line_number, line.strip()))
+  if problems:
+    return [output_api.PresubmitPromptOrNotify(error_message, problems)]
+  else:
+    return []
+
 
 def CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
   """Attempts to prevent use of functions intended only for testing in
@@ -1492,7 +1514,7 @@ def CheckNoProductionCodeUsingTestOnlyFunctionsJava(input_api, output_api):
   # Describes an occurrence of "ForTest*" inside a // comment.
   comment_re = input_api.re.compile(r'//.*%s' % name_pattern)
   # Describes @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-  annotation_re = input_api.re.compile(r'@VisibleForTesting\(otherwise')
+  annotation_re = input_api.re.compile(r'@VisibleForTesting\(')
   # Catch calls.
   inclusion_re = input_api.re.compile(r'(%s)\s*\(' % name_pattern)
   # Ignore definitions. (Comments are ignored separately.)
@@ -1658,111 +1680,9 @@ def CheckDCHECK_IS_ONHasBraces(input_api, output_api):
   return errors
 
 
-def _FindHistogramNameInChunk(histogram_name, chunk):
-  """Tries to find a histogram name or prefix in a line.
-
-  Returns the existence of the histogram name, or None if it needs more chunk
-  to determine."""
-  # A histogram_suffixes tag type has an affected-histogram name as a prefix of
-  # the histogram_name.
-  if '<affected-histogram' in chunk:
-    # If the tag is not completed, needs more chunk to get the name.
-    if not '>' in chunk:
-      return None
-    if not 'name="' in chunk:
-      return False
-    # Retrieve the first portion of the chunk wrapped by double-quotations. We
-    # expect the only attribute is the name.
-    histogram_prefix = chunk.split('"')[1]
-    return histogram_prefix in histogram_name
-  # Typically the whole histogram name should in the line.
-  return histogram_name in chunk
-
-
-def CheckUmaHistogramChangesOnUpload(input_api, output_api):
-  """Check that UMA histogram names in touched lines can still be found in other
-  lines of the patch or in histograms.xml. Note that this check would not catch
-  the reverse: changes in histograms.xml not matched in the code itself."""
-  touched_histograms = []
-  histograms_xml_modifications = []
-  call_pattern_c = r'\bUMA_HISTOGRAM.*\('
-  call_pattern_java = r'\bRecordHistogram\.record[a-zA-Z]+Histogram\('
-  name_pattern = r'"(.*?)"'
-  single_line_c_re = input_api.re.compile(call_pattern_c + name_pattern)
-  single_line_java_re = input_api.re.compile(call_pattern_java + name_pattern)
-  split_line_c_prefix_re = input_api.re.compile(call_pattern_c)
-  split_line_java_prefix_re = input_api.re.compile(call_pattern_java)
-  split_line_suffix_re = input_api.re.compile(r'^\s*' + name_pattern)
-  last_line_matched_prefix = False
-  for f in input_api.AffectedFiles():
-    # If histograms.xml itself is modified, keep the modified lines for later.
-    if f.LocalPath().endswith(('histograms.xml')):
-      histograms_xml_modifications = f.ChangedContents()
-      continue
-    if f.LocalPath().endswith(('cc', 'mm', 'cpp')):
-      single_line_re = single_line_c_re
-      split_line_prefix_re = split_line_c_prefix_re
-    elif f.LocalPath().endswith(('java')):
-      single_line_re = single_line_java_re
-      split_line_prefix_re = split_line_java_prefix_re
-    else:
-      continue
-    for line_num, line in f.ChangedContents():
-      if last_line_matched_prefix:
-        suffix_found = split_line_suffix_re.search(line)
-        if suffix_found :
-          touched_histograms.append([suffix_found.group(1), f, line_num])
-          last_line_matched_prefix = False
-          continue
-      found = single_line_re.search(line)
-      if found:
-        touched_histograms.append([found.group(1), f, line_num])
-        continue
-      last_line_matched_prefix = split_line_prefix_re.search(line)
-
-  # Search for the touched histogram names in the local modifications to
-  # histograms.xml, and, if not found, on the base histograms.xml file.
-  unmatched_histograms = []
-  for histogram_info in touched_histograms:
-    histogram_name_found = False
-    chunk = ''
-    for line_num, line in histograms_xml_modifications:
-      chunk += line
-      histogram_name_found = _FindHistogramNameInChunk(histogram_info[0], chunk)
-      if histogram_name_found is None:
-        continue
-      chunk = ''
-      if histogram_name_found:
-        break
-    if not histogram_name_found:
-      unmatched_histograms.append(histogram_info)
-
-  histograms_xml_path = 'tools/metrics/histograms/histograms.xml'
-  problems = []
-  if unmatched_histograms:
-    with open(histograms_xml_path) as histograms_xml:
-      for histogram_name, f, line_num in unmatched_histograms:
-        histograms_xml.seek(0)
-        histogram_name_found = False
-        chunk = ''
-        for line in histograms_xml:
-          chunk += line
-          histogram_name_found = _FindHistogramNameInChunk(histogram_name,
-                                                           chunk)
-          if histogram_name_found is None:
-            continue
-          chunk = ''
-          if histogram_name_found:
-            break
-        if not histogram_name_found:
-          problems.append(' [%s:%d] %s' %
-                          (f.LocalPath(), line_num, histogram_name))
-
-  if not problems:
-    return []
-  return [output_api.PresubmitPromptWarning('Some UMA_HISTOGRAM lines have '
-    'been modified and the associated histogram name has no match in either '
-    '%s or the modifications of it:' % (histograms_xml_path),  problems)]
+# TODO(crbug/1138055): Reimplement CheckUmaHistogramChangesOnUpload check in a
+# more reliable way. See
+# https://chromium-review.googlesource.com/c/chromium/src/+/2500269
 
 
 def CheckFlakyTestUsage(input_api, output_api):
@@ -3639,11 +3559,17 @@ class PydepsChecker(object):
 
   def _ComputeNormalizedPydepsEntries(self, pydeps_path):
     """Returns an interable of paths within the .pydep, relativized to //."""
-    os_path = self._input_api.os_path
-    pydeps_dir = os_path.dirname(pydeps_path)
-    entries = (l.rstrip() for l in self._LoadFile(pydeps_path).splitlines()
-               if not l.startswith('*'))
-    return (os_path.normpath(os_path.join(pydeps_dir, e)) for e in entries)
+    pydeps_data = self._LoadFile(pydeps_path)
+    uses_gn_paths = '--gn-paths' in pydeps_data
+    entries = (l for l in pydeps_data.splitlines() if not l.startswith('#'))
+    if uses_gn_paths:
+      # Paths look like: //foo/bar/baz
+      return (e[2:] for e in entries)
+    else:
+      # Paths look like: path/relative/to/file.pydeps
+      os_path = self._input_api.os_path
+      pydeps_dir = os_path.dirname(pydeps_path)
+      return (os_path.normpath(os_path.join(pydeps_dir, e)) for e in entries)
 
   def _CreateFilesToPydepsMap(self):
     """Returns a map of local_path -> list_of_pydeps."""
@@ -3683,6 +3609,8 @@ class PydepsChecker(object):
     old_pydeps_data = self._LoadFile(pydeps_path).splitlines()
     if old_pydeps_data:
       cmd = old_pydeps_data[1][1:].strip()
+      if '--output' not in cmd:
+        cmd += ' --output ' + pydeps_path
       old_contents = old_pydeps_data[2:]
     else:
       # A default cmd that should work in most cases (as long as pydeps filename
@@ -5194,6 +5122,12 @@ def CheckTranslationExpectations(input_api, output_api,
         'translation_expectations.pyl')
   if not grd_files:
     grd_files = git_helper.list_grds_in_repository(repo_root)
+
+  # Ignore bogus grd files used only for testing
+  # ui/webui/resoucres/tools/generate_grd.py.
+  ignore_path = input_api.os_path.join(
+      'ui', 'webui', 'resources', 'tools', 'tests')
+  grd_files = filter(lambda p: ignore_path not in p, grd_files)
 
   try:
     translation_helper.get_translatable_grds(repo_root, grd_files,

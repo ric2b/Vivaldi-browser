@@ -24,6 +24,7 @@ BindingsManagerCast::BindingsManagerCast(
 
   port_connector_ =
       std::make_unique<NamedMessagePortConnectorCast>(cast_web_contents_, this);
+
   port_connector_->RegisterPortHandler(base::BindRepeating(
       &BindingsManagerCast::OnPortConnected, base::Unretained(this)));
 }

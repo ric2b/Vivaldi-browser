@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/inspector/inspector_dom_snapshot_agent.h"
 
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
@@ -66,9 +65,9 @@ std::unique_ptr<protocol::Array<double>> BuildRectForLayout(const int x,
 
 Document* GetEmbeddedDocument(PaintLayer* layer) {
   // Documents are embedded on their own PaintLayer via a LayoutEmbeddedContent.
-  if (layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
-    FrameView* frame_view =
-        ToLayoutEmbeddedContent(layer->GetLayoutObject()).ChildFrameView();
+  if (auto* embedded =
+          DynamicTo<LayoutEmbeddedContent>(layer->GetLayoutObject())) {
+    FrameView* frame_view = embedded->ChildFrameView();
     if (auto* local_frame_view = DynamicTo<LocalFrameView>(frame_view))
       return local_frame_view->GetFrame().GetDocument();
   }
@@ -634,8 +633,9 @@ int InspectorDOMSnapshotAgent::BuildLayoutTreeNode(LayoutObject* layout_object,
     layout_tree_snapshot->getPaintOrders(nullptr)->emplace_back(paint_order);
   }
 
-  String text = layout_object->IsText() ? ToLayoutText(layout_object)->GetText()
-                                        : String();
+  String text = layout_object->IsText()
+                    ? To<LayoutText>(layout_object)->GetText()
+                    : String();
   layout_tree_snapshot->getText()->emplace_back(AddString(text));
 
   if (node->GetPseudoId()) {
@@ -652,7 +652,7 @@ int InspectorDOMSnapshotAgent::BuildLayoutTreeNode(LayoutObject* layout_object,
   if (!layout_object->IsText())
     return layout_index;
 
-  LayoutText* layout_text = ToLayoutText(layout_object);
+  auto* layout_text = To<LayoutText>(layout_object);
   Vector<LayoutText::TextBoxInfo> text_boxes = layout_text->GetTextBoxInfo();
   if (text_boxes.IsEmpty())
     return layout_index;

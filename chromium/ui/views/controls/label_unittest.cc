@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -29,6 +30,7 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/base_control_test_widget.h"
 #include "ui/views/controls/link.h"
@@ -1059,6 +1061,61 @@ TEST_F(LabelTest, TextChangedCallback) {
   label()->SetText(ASCIIToUTF16("abc"));
   EXPECT_TRUE(text_changed);
 }
+
+// Verify that GetSubstringBounds returns the correct bounds, accounting for
+// label insets.
+TEST_F(LabelTest, GetSubstringBounds) {
+  label()->SetText(ASCIIToUTF16("abc"));
+  auto substring_bounds = label()->GetSubstringBounds(gfx::Range(0, 3));
+  EXPECT_EQ(1u, substring_bounds.size());
+
+  gfx::Insets insets{2, 3, 4, 5};
+  label()->SetBorder(CreateEmptyBorder(insets));
+  auto substring_bounds_with_inset =
+      label()->GetSubstringBounds(gfx::Range(0, 3));
+  EXPECT_EQ(1u, substring_bounds_with_inset.size());
+  EXPECT_EQ(substring_bounds[0].x() + 3, substring_bounds_with_inset[0].x());
+  EXPECT_EQ(substring_bounds[0].y() + 2, substring_bounds_with_inset[0].y());
+  EXPECT_EQ(substring_bounds[0].width(),
+            substring_bounds_with_inset[0].width());
+  EXPECT_EQ(substring_bounds[0].height(),
+            substring_bounds_with_inset[0].height());
+}
+
+// TODO(crbug.com/1139395): Enable on ChromeOS along with the DCHECK in Label.
+#if !defined(OS_CHROMEOS)
+// Ensures DCHECK for subpixel rendering on transparent layer is working.
+TEST_F(LabelTest, ChecksSubpixelRenderingOntoOpaqueSurface) {
+  View view;
+  Label* label = view.AddChildView(std::make_unique<TestLabel>());
+  EXPECT_TRUE(label->GetSubpixelRenderingEnabled());
+
+  gfx::Canvas canvas;
+
+  // Painting on a view not painted to a layer should be fine.
+  label->OnPaint(&canvas);
+
+  // Painting to an opaque layer should also be fine.
+  view.SetPaintToLayer();
+  label->OnPaint(&canvas);
+
+  // Set up a transparent layer for the parent view.
+  view.layer()->SetFillsBoundsOpaquely(false);
+
+  // Painting on a transparent layer should DCHECK.
+  EXPECT_DCHECK_DEATH(label->OnPaint(&canvas));
+
+  // We should not DCHECK if the check is skipped.
+  label->SetSkipSubpixelRenderingOpacityCheck(true);
+  label->OnPaint(&canvas);
+  label->SetSkipSubpixelRenderingOpacityCheck(false);
+
+  // Painting onto a transparent layer should not DCHECK if there's an opaque
+  // background in a parent of the Label.
+  view.SetBackground(CreateSolidBackground(SK_ColorWHITE));
+  label->OnPaint(&canvas);
+}
+#endif  // !defined(OS_CHROMEOS)
 
 TEST_F(LabelSelectionTest, Selectable) {
   // By default, labels don't support text selection.

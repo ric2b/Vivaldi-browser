@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
@@ -66,8 +66,7 @@ class SiteSettingsHelperTest : public testing::Test {
                   ContentSetting setting) {
     map->SetContentSettingCustomScope(
         ContentSettingsPattern::FromString(pattern),
-        ContentSettingsPattern::Wildcard(), kContentType, std::string(),
-        setting);
+        ContentSettingsPattern::Wildcard(), kContentType, setting);
   }
 
  private:
@@ -88,7 +87,7 @@ TEST_F(SiteSettingsHelperTest, ExceptionListWithEmbargoedAndBlockedOrigins) {
   constexpr char kOriginToBlock[] = "https://www.blocked.com:443";
   auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
   map->SetContentSettingDefaultScope(GURL(kOriginToBlock), GURL(kOriginToBlock),
-                                     kContentTypeNotifications, std::string(),
+                                     kContentTypeNotifications,
                                      CONTENT_SETTING_BLOCK);
 
   base::ListValue exceptions;
@@ -168,7 +167,7 @@ TEST_F(SiteSettingsHelperTest, ExceptionListShowsIncognitoEmbargoed) {
         HostContentSettingsMapFactory::GetForProfile(incognito_profile);
     incognito_map->SetContentSettingDefaultScope(
         GURL(kOriginToBlock), GURL(kOriginToBlock), kContentTypeNotifications,
-        std::string(), CONTENT_SETTING_BLOCK);
+        CONTENT_SETTING_BLOCK);
   }
 
   // Check there is only 1 blocked origin for an incognito profile.
@@ -228,7 +227,7 @@ TEST_F(SiteSettingsHelperTest, ExceptionListShowsEmbargoed) {
 
   auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
   map->SetContentSettingDefaultScope(GURL(kOriginToBlock), GURL(kOriginToBlock),
-                                     kContentTypeNotifications, std::string(),
+                                     kContentTypeNotifications,
                                      CONTENT_SETTING_BLOCK);
   {
     // Check there is 1 blocked origin.
@@ -320,7 +319,7 @@ TEST_F(SiteSettingsHelperTest, CheckExceptionOrder) {
   auto policy_provider = std::make_unique<content_settings::MockProvider>();
   policy_provider->SetWebsiteSetting(
       ContentSettingsPattern::FromString(star_google_com),
-      ContentSettingsPattern::Wildcard(), kContentType, "",
+      ContentSettingsPattern::Wildcard(), kContentType,
       std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
   policy_provider->set_read_only(true);
   content_settings::TestUtils::OverrideProvider(
@@ -338,7 +337,7 @@ TEST_F(SiteSettingsHelperTest, CheckExceptionOrder) {
   auto extension_provider = std::make_unique<content_settings::MockProvider>();
   extension_provider->SetWebsiteSetting(
       ContentSettingsPattern::FromString(drive_google_com),
-      ContentSettingsPattern::Wildcard(), kContentType, "",
+      ContentSettingsPattern::Wildcard(), kContentType,
       std::make_unique<base::Value>(CONTENT_SETTING_ASK));
   extension_provider->set_read_only(true);
   content_settings::TestUtils::OverrideProvider(
@@ -409,7 +408,7 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
 
   // User-set origin setting.
   map->SetContentSettingDefaultScope(origin, origin, kContentType,
-                                     std::string(), CONTENT_SETTING_ALLOW);
+                                     CONTENT_SETTING_ALLOW);
   content_setting =
       GetContentSettingForOrigin(&profile, map, origin, kContentType, &source,
                                  extension_registry, &display_name);
@@ -432,7 +431,7 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
   auto extension_provider = std::make_unique<content_settings::MockProvider>();
   extension_provider->SetWebsiteSetting(
       ContentSettingsPattern::FromURL(origin),
-      ContentSettingsPattern::FromURL(origin), kContentType, "",
+      ContentSettingsPattern::FromURL(origin), kContentType,
       std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
   extension_provider->set_read_only(true);
   content_settings::TestUtils::OverrideProvider(
@@ -448,7 +447,7 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
   auto policy_provider = std::make_unique<content_settings::MockProvider>();
   policy_provider->SetWebsiteSetting(
       ContentSettingsPattern::FromURL(origin),
-      ContentSettingsPattern::FromURL(origin), kContentType, "",
+      ContentSettingsPattern::FromURL(origin), kContentType,
       std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
   policy_provider->set_read_only(true);
   content_settings::TestUtils::OverrideProvider(

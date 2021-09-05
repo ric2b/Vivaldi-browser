@@ -5,25 +5,36 @@
 import {browserProxy} from '../browser_proxy/browser_proxy.js';
 import {Intent} from '../intent.js';  // eslint-disable-line no-unused-vars
 import * as Comlink from '../lib/comlink.js';
+// eslint-disable-next-line no-unused-vars
+import {VideoProcessorHelperInterface} from '../untrusted_helper_interfaces.js';
+import * as util from '../util.js';
+
 import {AsyncWriter} from './async_writer.js';
 import {createPrivateTempVideoFile} from './file_system.js';
 // eslint-disable-next-line no-unused-vars
 import {AbstractFileEntry} from './file_system_entry.js';
+// eslint-disable-next-line no-unused-vars
+import {VideoProcessor} from './video_processor_interface.js';
 
-const VideoProcessor = (() => {
-  const url = browserProxy.isMp4RecordingEnabled() ?
-      '/js/models/mp4_video_processor.js' :
-      '/js/models/nop_video_processor.js';
-  return Comlink.wrap(new Worker(url, {type: 'module'}));
+const Mp4VideoProcessor = (async () => {
+  const workerChannel = new MessageChannel();
+  const videoProcessorHelper = /** @type {!VideoProcessorHelperInterface} */ (
+      await util.createUntrustedJSModule(
+          '/js/untrusted_video_processor_helper.js',
+          browserProxy.getUntrustedOrigin()));
+  await videoProcessorHelper.connectToWorker(
+      Comlink.transfer(workerChannel.port2, [workerChannel.port2]));
+  return Comlink.wrap(workerChannel.port1);
 })();
 
 /**
  * @param {!AsyncWriter} output
- * @return {!Promise<!AsyncWriter>}
+ * @return {!Promise<!VideoProcessor>}
  */
-async function createVideoProcesoor(output) {
+async function createVideoProcessor(output) {
   // Comlink proxies all calls asynchronously, including constructors.
-  return await new VideoProcessor(Comlink.proxy(output));
+  return new (await Mp4VideoProcessor)(
+      Comlink.proxy(output), {seekable: output.seekable()});
 }
 
 /**
@@ -31,10 +42,11 @@ async function createVideoProcesoor(output) {
  * @return {!AsyncWriter}
  */
 function createWriterForIntent(intent) {
-  const doWrite = async (blob) => {
+  const write = async (blob) => {
     await intent.appendData(new Uint8Array(await blob.arrayBuffer()));
   };
-  return new AsyncWriter(doWrite);
+  // TODO(crbug.com/1140852): Supports seek.
+  return new AsyncWriter({write, seek: null, close: null});
 }
 
 /**
@@ -43,7 +55,7 @@ function createWriterForIntent(intent) {
 export class VideoSaver {
   /**
    * @param {!AbstractFileEntry} file
-   * @param {!AsyncWriter} processor
+   * @param {!VideoProcessor} processor
    */
   constructor(file, processor) {
     /**
@@ -52,7 +64,7 @@ export class VideoSaver {
     this.file_ = file;
 
     /**
-     * @const {!AsyncWriter}
+     * @const {!VideoProcessor}
      */
     this.processor_ = processor;
   }
@@ -81,7 +93,7 @@ export class VideoSaver {
    */
   static async createForFile(file) {
     const writer = await file.getWriter();
-    const processor = await createVideoProcesoor(writer);
+    const processor = await createVideoProcessor(writer);
     return new VideoSaver(file, processor);
   }
 
@@ -95,7 +107,7 @@ export class VideoSaver {
     const fileWriter = await file.getWriter();
     const intentWriter = createWriterForIntent(intent);
     const writer = AsyncWriter.combine(fileWriter, intentWriter);
-    const processor = await createVideoProcesoor(writer);
+    const processor = await createVideoProcessor(writer);
     return new VideoSaver(file, processor);
   }
 }

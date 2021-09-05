@@ -10,10 +10,11 @@
 
 #include "base/callback.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
+#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_install_delegate.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
@@ -70,6 +71,9 @@ class TestWebAppRegistryController : public SyncInstallDelegate {
   WebAppRegistrarMutable& mutable_registrar() { return *mutable_registrar_; }
   syncer::MockModelTypeChangeProcessor& processor() { return mock_processor_; }
   WebAppSyncBridge& sync_bridge() { return *sync_bridge_; }
+  TestOsIntegrationManager& os_integration_manager() {
+    return *os_integration_manager_;
+  }
 
  private:
   InstallWebAppsAfterSyncDelegate install_web_apps_after_sync_delegate_;
@@ -79,6 +83,7 @@ class TestWebAppRegistryController : public SyncInstallDelegate {
   std::unique_ptr<WebAppRegistrarMutable> mutable_registrar_;
   testing::NiceMock<syncer::MockModelTypeChangeProcessor> mock_processor_;
   std::unique_ptr<WebAppSyncBridge> sync_bridge_;
+  std::unique_ptr<TestOsIntegrationManager> os_integration_manager_;
 };
 
 }  // namespace web_app

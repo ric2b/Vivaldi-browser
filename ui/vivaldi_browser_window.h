@@ -283,8 +283,6 @@ class VivaldiBrowserWindow final
   std::unique_ptr<FindBar> CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
-  void ExecuteExtensionCommand(const extensions::Extension* extension,
-                               const extensions::Command& command) override;
   void ShowOneClickSigninConfirmation(
       const base::string16& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
@@ -313,10 +311,16 @@ class VivaldiBrowserWindow final
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
-  void ShowHatsBubble(const std::string& site_id) override {}
+  void ShowHatsBubble(const std::string& site_id,
+                      base::OnceClosure success_callback,
+                      base::OnceClosure failure_callback) override {}
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
     content::RenderFrameHost* frame,
     content::EyeDropperListener* listener) override;
+  void ShowCaretBrowsingDialog() override {}
+  void CreateTabSearchBubble() override {}
+  void CloseTabSearchBubble() override {}
+  FeaturePromoController* GetFeaturePromoController() override;
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -405,12 +409,6 @@ class VivaldiBrowserWindow final
       DidFinishFirstNavigationCallback callback);
 
   void OnDidFinishFirstNavigation();
-
-  void ShowCaretBrowsingDialog() override {}
-
-  void CreateTabSearchBubble() override {}
-
-  FeaturePromoController* GetFeaturePromoController() override;
 
  private:
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {

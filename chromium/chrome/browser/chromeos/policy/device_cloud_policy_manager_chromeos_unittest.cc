@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -245,8 +245,7 @@ class DeviceCloudPolicyManagerChromeOSTest
     initializer_ = std::make_unique<DeviceCloudPolicyInitializer>(
         &local_state_, &device_management_service_,
         base::ThreadTaskRunnerHandle::Get(), install_attributes_.get(),
-        &state_keys_broker_, store_, manager_.get(),
-        cryptohome::AsyncMethodCaller::GetInstance(), std::move(unique_flow),
+        &state_keys_broker_, store_, manager_.get(), std::move(unique_flow),
         &fake_statistics_provider_);
     initializer_->SetSigningServiceForTesting(
         std::make_unique<FakeSigningService>());

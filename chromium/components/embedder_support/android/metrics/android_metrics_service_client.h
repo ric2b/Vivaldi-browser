@@ -87,6 +87,9 @@ extern const char kCrashpadHistogramAllocatorName[];
 // the client ID (generating a new ID if there was none). If this client is in
 // the sample, it then calls MetricsService::Start(). If consent was not
 // granted, MaybeStartMetrics() instead clears the client ID, if any.
+//
+// To match chrome on other platforms (including android), the MetricsService is
+// always created.
 class AndroidMetricsServiceClient : public MetricsServiceClient,
                                     public EnabledStateProvider,
                                     public content::NotificationObserver {
@@ -125,6 +128,10 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   bool IsConsentGiven() const override;
   bool IsReportingEnabled() const override;
 
+  // Returns the MetricService only if it has been started (which means consent
+  // was given).
+  MetricsService* GetMetricsServiceIfStarted();
+
   // MetricsServiceClient
   MetricsService* GetMetricsService() override;
   ukm::UkmService* GetUkmService() override;
@@ -154,8 +161,13 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Runs |closure| when CollectFinalMetricsForLog() is called.
+  // Runs |closure| when CollectFinalMetricsForLog() is called, when we begin
+  // collecting final metrics.
   void SetCollectFinalMetricsForLogClosureForTesting(base::OnceClosure closure);
+
+  // Runs |listener| after all final metrics have been collected.
+  void SetOnFinalMetricsCollectedListenerForTesting(
+      base::RepeatingClosure listener);
 
   metrics::MetricsStateManager* metrics_state_manager() const {
     return metrics_state_manager_.get();
@@ -172,20 +184,20 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   // per mille value, so this integer must always be in the inclusive range [0,
   // 1000]. A value of 0 will always be out-of-sample, and a value of 1000 is
   // always in-sample.
-  virtual int GetSampleRatePerMille() = 0;
+  virtual int GetSampleRatePerMille() const = 0;
 
   // Returns a value in the inclusive range [0, 999], to be compared against a
   // per mille sample rate. This value will be based on a persisted value, so it
   // should be consistent across restarts. This value should also be mostly
   // consistent across upgrades, to avoid significantly impacting IsInSample()
   // and IsInPackageNameSample(). Virtual for testing.
-  virtual int GetSampleBucketValue();
+  virtual int GetSampleBucketValue() const;
 
   // Determines if the client is within the random sample of clients for which
   // we log metrics. If this returns false, MetricsServiceClient should
   // indicate reporting is disabled. Sampling is due to storage/bandwidth
   // considerations.
-  bool IsInSample();
+  bool IsInSample() const;
 
   // Determines if the embedder app is the type of app for which we may log the
   // package name. If this returns false, GetAppPackageName() must return empty
@@ -208,12 +220,6 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   // MetricsProviders. Does nothing by default.
   virtual void RegisterAdditionalMetricsProviders(MetricsService* service);
 
-  // Called by CreateMetricsService if metrics should be persisted. If the
-  // client returns true then its
-  // variations::PlatformFieldTrials::SetupFieldTrials needs to also call
-  // InstantiatePersistentHistograms.
-  virtual bool IsPersistentHistogramsEnabled();
-
   // Returns the embedding application's package name (unconditionally). Virtual
   // for testing.
   virtual std::string GetAppPackageNameInternal();
@@ -234,9 +240,7 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   void MaybeStartMetrics();
   void RegisterForNotifications();
 
-  void CreateMetricsService(MetricsStateManager* state_manager,
-                            AndroidMetricsServiceClient* client,
-                            PrefService* prefs);
+  void RegisterMetricsProvidersAndInitState();
   void CreateUkmService();
 
   std::unique_ptr<MetricsStateManager> metrics_state_manager_;
@@ -248,14 +252,16 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   bool set_consent_finished_ = false;
   bool user_consent_ = false;
   bool app_consent_ = false;
-  bool is_in_sample_ = false;
+  bool is_client_id_forced_ = false;
   bool fast_startup_for_testing_ = false;
+  bool did_start_metrics_ = false;
 
   // When non-zero, this overrides the default value in
   // GetStandardUploadInterval().
   base::TimeDelta overridden_upload_interval_;
 
   base::OnceClosure collect_final_metrics_for_log_closure_;
+  base::RepeatingClosure on_final_metrics_collected_listener_;
 
   // MetricsServiceClient may be created before the UI thread is promoted to
   // BrowserThread::UI. Use |sequence_checker_| to enforce that the

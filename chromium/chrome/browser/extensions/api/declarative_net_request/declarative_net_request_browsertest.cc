@@ -27,8 +27,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -127,6 +128,7 @@ namespace {
 namespace dnr_api = api::declarative_net_request;
 
 using ::testing::UnorderedElementsAre;
+using ::testing::UnorderedElementsAreArray;
 
 constexpr char kDefaultRulesetID[] = "id";
 
@@ -140,36 +142,6 @@ bool WasFrameWithScriptLoaded(content::RenderFrameHost* rfh) {
       &script_resource_was_loaded));
   return script_resource_was_loaded;
 }
-
-// Helper to wait for warnings thrown for a given extension. This must be
-// constructed before warnings are added.
-class WarningServiceObserver : public WarningService::Observer {
- public:
-  WarningServiceObserver(WarningService* warning_service,
-                         const ExtensionId& extension_id)
-      : observer_(this), extension_id_(extension_id) {
-    observer_.Add(warning_service);
-  }
-  WarningServiceObserver(const WarningServiceObserver&) = delete;
-  WarningServiceObserver& operator=(const WarningServiceObserver&) = delete;
-
-  // Should only be called once per WarningServiceObserver lifetime.
-  void WaitForWarning() { run_loop_.Run(); }
-
- private:
-  // WarningService::Observer override:
-  void ExtensionWarningsChanged(
-      const ExtensionIdSet& affected_extensions) override {
-    if (!base::Contains(affected_extensions, extension_id_))
-      return;
-
-    run_loop_.Quit();
-  }
-
-  ScopedObserver<WarningService, WarningService::Observer> observer_;
-  const ExtensionId extension_id_;
-  base::RunLoop run_loop_;
-};
 
 // Helper to wait for ruleset load in response to extension load.
 class RulesetLoadObserver : public RulesMonitorService::TestObserver {
@@ -267,7 +239,7 @@ class DeclarativeNetRequestBrowserTest
 
   content::RenderFrameHost* GetFrameByName(const std::string& name) const {
     return content::FrameMatchingPredicate(
-        web_contents(), base::Bind(&content::FrameMatchesName, name));
+        web_contents(), base::BindRepeating(&content::FrameMatchesName, name));
   }
 
   content::PageType GetPageType(Browser* browser) const {
@@ -421,43 +393,45 @@ class DeclarativeNetRequestBrowserTest
       const ExtensionId& extension_id,
       const std::vector<std::string>& ruleset_ids_to_remove,
       const std::vector<std::string>& ruleset_ids_to_add) {
-    static constexpr char kScript[] = R"(
-      let params = {
-        disableRulesetIds: $1,
-        enableRulesetIds: $2
-      };
-      chrome.declarativeNetRequest.updateEnabledRulesets(params, () => {
-        window.domAutomationController.send(chrome.runtime.lastError ?
-            chrome.runtime.lastError.message : 'success');
-      });
-    )";
+    std::string result = UpdateEnabledRulesetsInternal(
+        extension_id, ruleset_ids_to_remove, ruleset_ids_to_add);
+    ASSERT_EQ("success", result);
+  }
 
-    std::unique_ptr<base::Value> ids_to_remove =
-        ListBuilder()
-            .Append(ruleset_ids_to_remove.begin(), ruleset_ids_to_remove.end())
-            .Build();
-    std::unique_ptr<base::Value> ids_to_add =
-        ListBuilder()
-            .Append(ruleset_ids_to_add.begin(), ruleset_ids_to_add.end())
-            .Build();
+  void UpdateEnabledRulesetsAndFail(
+      const ExtensionId& extension_id,
+      const std::vector<std::string>& ruleset_ids_to_remove,
+      const std::vector<std::string>& ruleset_ids_to_add,
+      std::string expected_error) {
+    std::string result = UpdateEnabledRulesetsInternal(
+        extension_id, ruleset_ids_to_remove, ruleset_ids_to_add);
+    ASSERT_NE("success", result);
+    EXPECT_EQ(expected_error, result);
+  }
 
-    // A cast is necessary from ListValue to Value, else this fails to compile.
-    const std::string script = content::JsReplace(
-        kScript, static_cast<const base::Value&>(*ids_to_remove),
-        static_cast<const base::Value&>(*ids_to_add));
-    ASSERT_EQ("success", ExecuteScriptInBackgroundPage(extension_id, script));
+  void VerifyPublicRulesetIds(
+      const Extension* extension,
+      const std::vector<std::string>& expected_ruleset_ids) {
+    ASSERT_TRUE(extension);
+
+    CompositeMatcher* composite_matcher =
+        ruleset_manager()->GetMatcherForExtension(extension->id());
+    ASSERT_TRUE(composite_matcher);
+    EXPECT_THAT(GetPublicRulesetIDs(*extension, *composite_matcher),
+                UnorderedElementsAreArray(expected_ruleset_ids));
   }
 
   void SetActionsAsBadgeText(const ExtensionId& extension_id, bool pref) {
     const char* pref_string = pref ? "true" : "false";
-    static constexpr char kSetActionCountAsBadgeTextScript[] = R"(
-      chrome.declarativeNetRequest.setActionCountAsBadgeText(%s);
+    static constexpr char kSetExtensionActionOptionsScript[] = R"(
+      chrome.declarativeNetRequest.setExtensionActionOptions(
+        {displayActionCountAsBadgeText: %s});
       window.domAutomationController.send("done");
     )";
 
     ExecuteScriptInBackgroundPage(
         extension_id,
-        base::StringPrintf(kSetActionCountAsBadgeTextScript, pref_string));
+        base::StringPrintf(kSetExtensionActionOptionsScript, pref_string));
   }
 
   // Navigates frame with name |frame_name| to |url|.
@@ -549,6 +523,23 @@ class DeclarativeNetRequestBrowserTest
         script_user_activation);
   }
 
+  std::string GetAvailableStaticRuleCount(const ExtensionId& extension_id) {
+    const char kGetAvailableStaticRuleCountScript[] = R"(
+      chrome.declarativeNetRequest.getAvailableStaticRuleCount((rule_count) => {
+        if (chrome.runtime.lastError) {
+          window.domAutomationController.send(chrome.runtime.lastError.message);
+          return;
+        }
+
+        window.domAutomationController.send(rule_count.toString());
+      });
+    )";
+
+    return ExecuteScriptInBackgroundPage(
+        extension_id, kGetAvailableStaticRuleCountScript,
+        browsertest_util::ScriptUserActivation::kDontActivate);
+  }
+
   std::set<GURL> GetAndResetRequestsToServer() {
     base::AutoLock lock(requests_to_server_lock_);
     std::set<GURL> results = requests_to_server_;
@@ -610,7 +601,8 @@ class DeclarativeNetRequestBrowserTest
     ASSERT_FALSE(base::PathExists(extension_dir));
     EXPECT_TRUE(base::CreateDirectory(extension_dir));
 
-    WriteManifestAndRulesets(extension_dir, rulesets, hosts, flags_);
+    WriteManifestAndRulesets(extension_dir, rulesets, hosts, flags_,
+                             directory /* extension_name */);
 
     ExtensionTestMessageListener background_page_ready_listener(
         "ready", false /*will_reply*/);
@@ -700,6 +692,36 @@ class DeclarativeNetRequestBrowserTest
 
     // Ensure no load errors were reported.
     EXPECT_TRUE(LoadErrorReporter::GetInstance()->GetErrors()->empty());
+  }
+
+  std::string UpdateEnabledRulesetsInternal(
+      const ExtensionId& extension_id,
+      const std::vector<std::string>& ruleset_ids_to_remove,
+      const std::vector<std::string>& ruleset_ids_to_add) {
+    static constexpr char kScript[] = R"(
+      chrome.declarativeNetRequest.updateEnabledRulesets({
+        disableRulesetIds: $1,
+        enableRulesetIds: $2
+      }, () => {
+        window.domAutomationController.send(chrome.runtime.lastError ?
+            chrome.runtime.lastError.message : 'success');
+      });
+    )";
+
+    std::unique_ptr<base::Value> ids_to_remove =
+        ListBuilder()
+            .Append(ruleset_ids_to_remove.begin(), ruleset_ids_to_remove.end())
+            .Build();
+    std::unique_ptr<base::Value> ids_to_add =
+        ListBuilder()
+            .Append(ruleset_ids_to_add.begin(), ruleset_ids_to_add.end())
+            .Build();
+
+    // A cast is necessary from ListValue to Value, else this fails to compile.
+    const std::string script = content::JsReplace(
+        kScript, static_cast<const base::Value&>(*ids_to_remove),
+        static_cast<const base::Value&>(*ids_to_add));
+    return ExecuteScriptInBackgroundPage(extension_id, script);
   }
 
   base::ScopedTempDir temp_dir_;
@@ -3091,8 +3113,9 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   EXPECT_FALSE(action->HasDNRActionCount(first_tab_id));
 }
 
-// Test that enabling the setActionCountAsBadgeText preference will update
-// all browsers sharing the same browser context.
+// Test that enabling the "displayActionCountAsBadgeText" preference using
+// setExtensionActionOptions will update all browsers sharing the same browser
+// context.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
                        ActionCountPreferenceMultipleWindows) {
   // Load the extension with a background script so scripts can be run from its
@@ -4879,6 +4902,326 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
   EXPECT_FALSE(TryLoadScript("redirect_to_server.js"));
 }
 
+class DeclarativeNetRequestGlobalRulesBrowserTest
+    : public DeclarativeNetRequestBrowserTest {
+ public:
+  DeclarativeNetRequestGlobalRulesBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        kDeclarativeNetRequestGlobalRules);
+  }
+
+ protected:
+  void VerifyExtensionAllocationInPrefs(
+      const ExtensionId& extension_id,
+      const base::Optional<size_t>& expected_rules_count) {
+    size_t actual_rules_count = 0;
+
+    const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+    bool has_allocated_rules_count = prefs->GetDNRAllocatedGlobalRuleCount(
+        extension_id, &actual_rules_count);
+
+    EXPECT_EQ(expected_rules_count.has_value(), has_allocated_rules_count);
+    if (expected_rules_count.has_value())
+      EXPECT_EQ(*expected_rules_count, actual_rules_count);
+  }
+
+  void VerifyKeepExcessAllocation(const ExtensionId& extension_id,
+                                  bool expected_keep_allocation) {
+    const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+    EXPECT_EQ(expected_keep_allocation,
+              prefs->GetDNRKeepExcessAllocation(extension_id));
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  // Override the API guaranteed minimum to prevent a timeout on loading the
+  // extension.
+  base::AutoReset<int> guaranteed_minimum_override_ =
+      CreateScopedStaticGuaranteedMinimumOverrideForTesting(1);
+
+  // Similarly, override the global limit to prevent a timeout.
+  base::AutoReset<int> global_limit_override_ =
+      CreateScopedGlobalStaticRuleLimitOverrideForTesting(2);
+};
+
+using DeclarativeNetRequestGlobalRulesBrowserTest_Packed =
+    DeclarativeNetRequestGlobalRulesBrowserTest;
+
+// Test that extensions with allocated global rules keep their allocations after
+// the browser restarts.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                       PRE_GlobalRulesBrowserRestart) {
+  // This is not tested for unpacked extensions since the unpacked extension
+  // directory won't be persisted across browser restarts.
+  ASSERT_EQ(ExtensionLoadType::PACKED, GetParam());
+
+  // Sanity check that the extension can index and enable up to
+  // |rule_limit_override_| + |global_limit_override_| rules.
+  ASSERT_EQ(3, GetMaximumRulesPerRuleset());
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRules({CreateGenericRule(1), CreateGenericRule(2)},
+                             "extension_1", {} /* hosts */));
+  const ExtensionId first_extension_id = last_loaded_extension_id();
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRules({CreateGenericRule(1), CreateGenericRule(2)},
+                             "extension_2", {} /* hosts */));
+  const ExtensionId second_extension_id = last_loaded_extension_id();
+
+  std::vector<TestRulesetInfo> rulesets;
+  rulesets.emplace_back("ruleset_1", *ToListValue({CreateGenericRule(1)}));
+  rulesets.emplace_back("ruleset_2", *ToListValue({CreateGenericRule(2)}));
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRulesets(rulesets, "extension_3", {} /* hosts */));
+
+  const Extension* third_extension = last_loaded_extension();
+  CompositeMatcher* composite_matcher =
+      ruleset_manager()->GetMatcherForExtension(third_extension->id());
+
+  ASSERT_TRUE(composite_matcher);
+
+  // Check that the third extension only has |ruleset_1| enabled.
+  EXPECT_THAT(GetPublicRulesetIDs(*third_extension, *composite_matcher),
+              UnorderedElementsAre("ruleset_1"));
+
+  // First and second extension should have 1 rule in the global pool, third
+  // extension should have none because one of its rulesets is not enabled since
+  // the global limit is reached.
+  VerifyExtensionAllocationInPrefs(first_extension_id, 1);
+  VerifyExtensionAllocationInPrefs(second_extension_id, 1);
+  VerifyExtensionAllocationInPrefs(third_extension->id(), base::nullopt);
+}
+
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                       GlobalRulesBrowserRestart) {
+  // This is not tested for unpacked extensions since the unpacked extension
+  // directory won't be persisted across browser restarts.
+  ASSERT_EQ(ExtensionLoadType::PACKED, GetParam());
+
+  // Sanity check that the extension can index and enable up to
+  // |rule_limit_override| + |global_limit_override| rules.
+  ASSERT_EQ(3, GetMaximumRulesPerRuleset());
+
+  const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  std::map<std::string, size_t> allocated_rule_counts;
+  std::map<std::string, const Extension*> extensions_by_name;
+  for (const auto& extension : extension_registry()->enabled_extensions()) {
+    extensions_by_name[extension->name()] = extension.get();
+
+    size_t allocated_rule_count = 0;
+    if (prefs->GetDNRAllocatedGlobalRuleCount(extension->id(),
+                                              &allocated_rule_count)) {
+      allocated_rule_counts[extension->name()] = allocated_rule_count;
+    }
+  }
+
+  // Check that all three extensions have the same rulesets enabled as before
+  // the browser restart.
+  VerifyPublicRulesetIds(extensions_by_name["extension_1"],
+                         {kDefaultRulesetID});
+  VerifyPublicRulesetIds(extensions_by_name["extension_2"],
+                         {kDefaultRulesetID});
+  VerifyPublicRulesetIds(extensions_by_name["extension_3"], {"ruleset_1"});
+
+  EXPECT_THAT(allocated_rule_counts,
+              UnorderedElementsAre(std::make_pair("extension_1", 1),
+                                   std::make_pair("extension_2", 1)));
+}
+
+// Test that an extension will not have its allocation reclaimed on load if it
+// is the first load after a packed update.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                       PackedUpdateAndReload) {
+  // This is not tested for unpacked extensions since the unpacked extension
+  // directory won't be persisted across browser restarts.
+  ASSERT_EQ(ExtensionLoadType::PACKED, GetParam());
+
+  // Load the extension with a background page so updateEnabledRulesets can be
+  // called.
+  set_config_flags(ConfigFlag::kConfig_HasBackgroundScript);
+
+  std::vector<TestRulesetInfo> rulesets;
+  rulesets.emplace_back(
+      "ruleset_1", *ToListValue({CreateGenericRule(1), CreateGenericRule(2)}));
+  rulesets.emplace_back("ruleset_2", *ToListValue({CreateGenericRule(3)}),
+                        false /* enabled */);
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRulesets(rulesets, "test_extension", {} /* hosts */));
+
+  // Check that the extension only has |ruleset_1| enabled.
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1"});
+
+  // There should be one rule allocated.
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+
+  // Enable |ruleset_2| and verify the allocation.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {}, {"ruleset_2"}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1", "ruleset_2"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+
+  // Update the extension. This should keep the allocated rule count in prefs
+  // but not the set of enabled rulesets.
+  UpdateLastLoadedExtension(rulesets, "test_extension2", {} /* hosts */,
+                            0 /* expected_extension_ruleset_count_change */,
+                            false /* has_dynamic_ruleset */);
+
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+
+  // Disable then enable the extension to trigger another extension load.
+  DisableExtension(last_loaded_extension_id());
+  WaitForExtensionsWithRulesetsCount(0);
+  EnableExtension(last_loaded_extension_id());
+  WaitForExtensionsWithRulesetsCount(1);
+
+  // Since this is the second load after an update, the unused allocation should
+  // be reclaimed.
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+}
+
+// Tests that excess allocation is no longer kept after an update once the
+// current allocation exceeds the allocation from before the update.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                       UpdateEnabledRulesetsAfterPackedUpdate) {
+  // This is not tested for unpacked extensions since the unpacked extension
+  // directory won't be persisted across browser restarts.
+  ASSERT_EQ(ExtensionLoadType::PACKED, GetParam());
+
+  // Load the extension with a background page so updateEnabledRulesets can be
+  // called.
+  set_config_flags(ConfigFlag::kConfig_HasBackgroundScript);
+
+  std::vector<TestRulesetInfo> rulesets;
+  rulesets.emplace_back("ruleset_1", *ToListValue({CreateGenericRule(1)}));
+  rulesets.emplace_back("ruleset_2", *ToListValue({CreateGenericRule(2)}),
+                        false /* enabled */);
+  rulesets.emplace_back(
+      "big_ruleset",
+      *ToListValue(
+          {CreateGenericRule(3), CreateGenericRule(4), CreateGenericRule(5)}),
+      false /* enabled */);
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRulesets(rulesets, "test_extension", {} /* hosts */));
+
+  // Enable |ruleset_2|.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {}, {"ruleset_2"}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1", "ruleset_2"});
+
+  // There should be one rule allocated.
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+
+  // Update the extension. This should keep the allocated rule count in prefs
+  // but not the set of enabled rulesets.
+  UpdateLastLoadedExtension(rulesets, "test_extension2", {} /* hosts */,
+                            0 /* expected_extension_ruleset_count_change */,
+                            false /* has_dynamic_ruleset */);
+
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+  VerifyKeepExcessAllocation(last_loaded_extension_id(), true);
+
+  // Adding |big_ruleset| should fail right now, and should not change the
+  // allocation.
+  ASSERT_NO_FATAL_FAILURE(UpdateEnabledRulesetsAndFail(
+      last_loaded_extension_id(), {}, {"big_ruleset"},
+      kEnabledRulesetsRuleCountExceeded));
+
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+  VerifyKeepExcessAllocation(last_loaded_extension_id(), true);
+
+  // Removing |ruleset_1| should not change the allocation.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {"ruleset_1"}, {}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 1);
+  VerifyKeepExcessAllocation(last_loaded_extension_id(), true);
+
+  // Adding |big_ruleset| should succeed now, and should increase the allocation
+  // past the value from just before the update.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {}, {"big_ruleset"}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {"big_ruleset"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+  VerifyKeepExcessAllocation(last_loaded_extension_id(), false);
+
+  // Removing |big_ruleset| should now drop the allocation down to 0 since the
+  // excess allocation has been exceeded and no longer needs to be kept.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {"big_ruleset"}, {}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), base::nullopt);
+  VerifyKeepExcessAllocation(last_loaded_extension_id(), false);
+}
+
+// Test that GetAvailableStaticRuleCount includes the excess unused allocation
+// after an extension update.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                       GetAvailableStaticRuleCountAfterPackedUpdate) {
+  // This is not tested for unpacked extensions since the unpacked extension
+  // directory won't be persisted across browser restarts.
+  ASSERT_EQ(ExtensionLoadType::PACKED, GetParam());
+
+  // Load the extension with a background page so updateEnabledRulesets can be
+  // called.
+  set_config_flags(ConfigFlag::kConfig_HasBackgroundScript);
+
+  std::vector<TestRulesetInfo> rulesets;
+  rulesets.emplace_back("ruleset_1", *ToListValue({CreateGenericRule(1)}));
+  rulesets.emplace_back("ruleset_2", *ToListValue({CreateGenericRule(2)}));
+  rulesets.emplace_back("ruleset_3", *ToListValue({CreateGenericRule(3)}),
+                        false /* enabled */);
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRulesets(rulesets, "test_extension", {} /* hosts */));
+
+  // Enable |ruleset_3|.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {}, {"ruleset_3"}));
+  VerifyPublicRulesetIds(last_loaded_extension(),
+                         {"ruleset_1", "ruleset_2", "ruleset_3"});
+
+  // There should be two rules allocated.
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+
+  // There should not be any more rules available.
+  EXPECT_EQ("0", GetAvailableStaticRuleCount(last_loaded_extension_id()));
+
+  // Update the extension. This should keep the allocated rule count in prefs
+  // but not the set of enabled rulesets.
+  UpdateLastLoadedExtension(rulesets, "test_extension2", {} /* hosts */,
+                            0 /* expected_extension_ruleset_count_change */,
+                            false /* has_dynamic_ruleset */);
+
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1", "ruleset_2"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+
+  // Since there are two rules enabled, and one rule that's allocated but
+  // unused, there should be one rule available.
+  EXPECT_EQ("1", GetAvailableStaticRuleCount(last_loaded_extension_id()));
+
+  // Disabling |ruleset_1| and |ruleset_2| should not decrease the allocation,
+  // but should increase the number of rules available.
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {"ruleset_2"}, {}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {"ruleset_1"});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+  EXPECT_EQ("2", GetAvailableStaticRuleCount(last_loaded_extension_id()));
+
+  ASSERT_NO_FATAL_FAILURE(
+      UpdateEnabledRulesets(last_loaded_extension_id(), {"ruleset_1"}, {}));
+  VerifyPublicRulesetIds(last_loaded_extension(), {});
+  VerifyExtensionAllocationInPrefs(last_loaded_extension_id(), 2);
+  EXPECT_EQ("3", GetAvailableStaticRuleCount(last_loaded_extension_id()));
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestBrowserTest,
                          ::testing::Values(ExtensionLoadType::PACKED,
@@ -4909,6 +5252,10 @@ INSTANTIATE_TEST_SUITE_P(All,
 INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestBrowserTest_Unpacked,
                          ::testing::Values(ExtensionLoadType::UNPACKED));
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         DeclarativeNetRequestGlobalRulesBrowserTest_Packed,
+                         ::testing::Values(ExtensionLoadType::PACKED));
 
 }  // namespace
 }  // namespace declarative_net_request

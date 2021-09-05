@@ -1360,7 +1360,7 @@ TEST_F('ChromeVoxEditingTest', 'TextAreaBrailleEmptyLine', function() {
   this.runWithLoadedTree('<textarea></textarea>', function(root) {
     const textarea = root.find({role: RoleType.TEXT_FIELD});
     this.listenOnce(textarea, 'focus', function() {
-      this.listenOnce(textarea, 'valueChanged', function() {
+      this.listenOnce(textarea, 'valueInTextFieldChanged', function() {
         mockFeedback.call(this.press(KeyCode.UP)).expectBraille('\n');
         mockFeedback.call(this.press(KeyCode.UP)).expectBraille('two\n');
         mockFeedback.call(this.press(KeyCode.UP)).expectBraille('one\n');
@@ -1487,35 +1487,32 @@ TEST_F('ChromeVoxEditingTest', 'InputEvents', function() {
       this.listenOnce(input, 'focus', resolve);
     });
 
-    let event = await this.waitForEditableEvent();
+    // EventType.TEXT_SELECTION_CHANGED fires on focus as well.
+    //
+    // TODO(nektar): Deprecate and remove TEXT_SELECTION_CHANGED.
+    event = await this.waitForEditableEvent();
     assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
     assertEquals(input, event.target);
     assertEquals('', input.value);
 
     this.press(KeyCode.A)();
 
-    // Important to note that there's no document selection changes below.
     event = await this.waitForEditableEvent();
-    assertEquals(EventType.VALUE_CHANGED, event.type);
+    assertEquals(EventType.VALUE_IN_TEXT_FIELD_CHANGED, event.type);
     assertEquals(input, event.target);
     assertEquals('a', input.value);
 
+    // We deliberately used EventType.TEXT_SELECTION_CHANGED instead of
+    // EventType.DOCUMENT_SELECTION_CHANGED for text fields.
     event = await this.waitForEditableEvent();
     assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
-    assertEquals(input, event.target);
-    assertEquals('a', input.value);
-
-    // TODO(accessibility): this extra value change shouldn't happen.
-    // http://crbug.com/1135249.
-    event = await this.waitForEditableEvent();
-    assertEquals(EventType.VALUE_CHANGED, event.type);
     assertEquals(input, event.target);
     assertEquals('a', input.value);
 
     this.press(KeyCode.B)();
 
     event = await this.waitForEditableEvent();
-    assertEquals(EventType.VALUE_CHANGED, event.type);
+    assertEquals(EventType.VALUE_IN_TEXT_FIELD_CHANGED, event.type);
     assertEquals(input, event.target);
     assertEquals('ab', input.value);
 
@@ -1583,5 +1580,46 @@ TEST_F('ChromeVoxEditingTest', 'ContentEditableEvents', function() {
     assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
     assertEquals(contentEditable, event.target);
     assertEquals('ab', contentEditable.value);
+  });
+});
+
+TEST_F('ChromeVoxEditingTest', 'MarkedContent', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <div contenteditable role="textbox">
+      <p>Start</p>
+      <span>This is </span><span role="mark">my</span><span> text.</span>
+      <br>
+      <span>This is </span><span role="mark"
+          aria-roledescription="Comment">your</span><span> text.</span>
+      <br>
+      <span>This is </span><span role="suggestion"><span
+          role="insertion">their</span></span><span> text.</span>
+      <br>
+      <span>This is </span><span role="suggestion"><span
+          role="deletion">everyone's</span></span><span> text.</span>
+    </div>
+  `;
+  this.runWithLoadedTree(site, function(root) {
+    const input = root.find({role: RoleType.TEXT_FIELD});
+    this.listenOnce(input, 'focus', function() {
+      mockFeedback.call(this.press(KeyCode.DOWN))
+          .expectSpeech(
+              'This is ', 'my', 'Marked content', ' text.',
+              'Exited Marked content.')
+          .call(this.press(KeyCode.DOWN))
+          .expectSpeech(
+              'This is ', 'your', 'Comment', ' text.', 'Exited Comment.')
+          .call(this.press(KeyCode.DOWN))
+          .expectSpeech(
+              'This is ', 'their', 'Insertion', 'Suggestion', ' text.',
+              'Exited Suggestion.', 'Exited Insertion.')
+          .call(this.press(KeyCode.DOWN))
+          .expectSpeech(
+              'This is ', `everyone's`, 'Deletion', 'Suggestion', ' text.',
+              'Exited Suggestion.', 'Exited Deletion.')
+          .replay();
+    });
+    input.focus();
   });
 });

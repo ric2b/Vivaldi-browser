@@ -108,7 +108,7 @@ FloatRect LayoutSVGModelObject::LocalBoundingBoxRectForAccessibility() const {
 
 void LayoutSVGModelObject::WillBeDestroyed() {
   NOT_DESTROYED();
-  SVGResourcesCache::ClientDestroyed(*this);
+  SVGResourcesCache::RemoveResources(*this);
   SVGResources::ClearClipPathFilterMask(*GetElement(), Style());
   LayoutObject::WillBeDestroyed();
 }
@@ -139,14 +139,7 @@ bool LayoutSVGModelObject::CheckForImplicitTransformChange(
 void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
                                           const ComputedStyle* old_style) {
   NOT_DESTROYED();
-  // Since layout depends on the bounds of the filter, we need to force layout
-  // when the filter changes. We also need to make sure paint will be
-  // performed, since if the filter changed we will not have cached result from
-  // before and thus will not flag paint in ClientLayoutChanged.
-  if (diff.FilterChanged()) {
-    SetNeedsLayoutAndFullPaintInvalidation(
-        layout_invalidation_reason::kStyleChange);
-  }
+  LayoutObject::StyleDidChange(diff, old_style);
 
   if (diff.NeedsFullLayout()) {
     SetNeedsBoundariesUpdate();
@@ -154,30 +147,31 @@ void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
       SetNeedsTransformUpdate();
   }
 
-  if (IsBlendingAllowed()) {
-    bool has_blend_mode_changed =
-        (old_style && old_style->HasBlendMode()) == !StyleRef().HasBlendMode();
-    if (Parent() && has_blend_mode_changed) {
-      Parent()->DescendantIsolationRequirementsChanged(
-          StyleRef().HasBlendMode() ? kDescendantIsolationRequired
-                                    : kDescendantIsolationNeedsUpdate);
-    }
+  SVGResources::UpdateClipPathFilterMask(*GetElement(), old_style, StyleRef());
 
-    if (has_blend_mode_changed)
-      SetNeedsPaintPropertyUpdate();
+  if (!Parent())
+    return;
+  if (diff.BlendModeChanged() && !IsSVGHiddenContainer()) {
+    DCHECK(IsBlendingAllowed());
+    Parent()->DescendantIsolationRequirementsChanged(
+        StyleRef().HasBlendMode() ? kDescendantIsolationRequired
+                                  : kDescendantIsolationNeedsUpdate);
   }
-
   if (diff.CompositingReasonsChanged())
     SVGLayoutSupport::NotifySVGRootOfChangedCompositingReasons(this);
-
-  LayoutObject::StyleDidChange(diff, old_style);
-  SVGResources::UpdateClipPathFilterMask(*GetElement(), old_style, StyleRef());
-  SVGResourcesCache::ClientStyleChanged(*this, diff, StyleRef());
+  if (diff.HasDifference()) {
+    SVGResourcesCache::UpdateResources(*this);
+    LayoutSVGResourceContainer::StyleDidChange(*this, diff);
+  }
 }
 
 void LayoutSVGModelObject::InsertedIntoTree() {
   NOT_DESTROYED();
   LayoutObject::InsertedIntoTree();
+  LayoutSVGResourceContainer::MarkForLayoutAndParentResourceInvalidation(*this,
+                                                                         false);
+  if (SVGResourcesCache::AddResources(*this))
+    SetNeedsPaintPropertyUpdate();
   if (CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(*this) !=
       CompositingReason::kNone) {
     SVGLayoutSupport::NotifySVGRootOfChangedCompositingReasons(this);
@@ -186,6 +180,10 @@ void LayoutSVGModelObject::InsertedIntoTree() {
 
 void LayoutSVGModelObject::WillBeRemovedFromTree() {
   NOT_DESTROYED();
+  LayoutSVGResourceContainer::MarkForLayoutAndParentResourceInvalidation(*this,
+                                                                         false);
+  if (SVGResourcesCache::RemoveResources(*this))
+    SetNeedsPaintPropertyUpdate();
   LayoutObject::WillBeRemovedFromTree();
   if (CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(*this) !=
       CompositingReason::kNone) {

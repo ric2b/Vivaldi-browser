@@ -31,6 +31,7 @@ BluetoothInternalsTest.prototype = {
   extraLibraries: [
     '//third_party/mocha/mocha.js',
     '//chrome/test/data/webui/mocha_adapter.js',
+    '//ui/webui/resources/js/assert.js',
     '//ui/webui/resources/js/promise_resolver.js',
     '//ui/webui/resources/js/cr.js',
     '//ui/webui/resources/js/util.js',
@@ -149,7 +150,7 @@ BluetoothInternalsTest.prototype = {
         return {result: null};
       }
 
-      async createRfcommService(service_name, service_uuid) {
+      async createRfcommServiceInsecurely(service_name, service_uuid) {
         return {result: null};
       }
 

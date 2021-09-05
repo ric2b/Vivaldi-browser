@@ -16,7 +16,6 @@
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
@@ -68,7 +67,7 @@ using autofill::FormData;
 using autofill::FormFieldData;
 using autofill::FormRendererId;
 using autofill::FieldRendererId;
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 using autofill::PasswordFormFillData;
 using base::SysUTF8ToNSString;
 using FillingAssistance =
@@ -176,7 +175,7 @@ PasswordForm CreatePasswordForm(const char* origin_url,
   form.signon_realm = origin_url;
   form.username_value = ASCIIToUTF16(username_value);
   form.password_value = ASCIIToUTF16(password_value);
-  form.in_store = autofill::PasswordForm::Store::kProfileStore;
+  form.in_store = password_manager::PasswordForm::Store::kProfileStore;
   return form;
 }
 
@@ -412,8 +411,8 @@ class PasswordControllerTest : public ChromeWebTest {
   void InjectGeneratedPassword(FormRendererId form_id,
                                FieldRendererId field_id,
                                NSString* password) {
-    autofill::PasswordFormGenerationData generation_data(form_id, field_id,
-                                                         FieldRendererId());
+    autofill::PasswordFormGenerationData generation_data = {form_id, field_id,
+                                                            FieldRendererId()};
     [passwordController_.sharedPasswordController
         formEligibleForGenerationFound:generation_data];
     __block BOOL block_was_called = NO;
@@ -1306,7 +1305,7 @@ TEST_F(PasswordControllerTest, SendingToStoreDynamicallyAddedFormsOnFocus) {
   bool* p_get_logins_called = &get_logins_called;
 
   password_manager::PasswordStore::FormDigest expected_form_digest(
-      autofill::PasswordForm::Scheme::kHtml, "https://chromium.test/",
+      password_manager::PasswordForm::Scheme::kHtml, "https://chromium.test/",
       GURL("https://chromium.test/"));
   // TODO(crbug.com/949519): replace WillRepeatedly with WillOnce when the old
   // parser is gone.

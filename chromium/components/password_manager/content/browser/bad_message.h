@@ -6,17 +6,17 @@
 #define COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_BAD_MESSAGE_H_
 
 #include <vector>
-#include "components/autofill/core/common/form_data.h"
 
-namespace autofill {
-struct PasswordForm;
-}
+#include "components/autofill/core/common/form_data.h"
 
 namespace content {
 class RenderFrameHost;
 }
 
 namespace password_manager {
+
+struct PasswordForm;
+
 // The browser process often chooses to terminate a renderer if it receives
 // a bad IPC message. The reasons are tracked for metrics.
 //
@@ -61,17 +61,15 @@ bool CheckChildProcessSecurityPolicyForURL(content::RenderFrameHost* frame,
 // on |password_form|. If the origin mismatches, the process for |frame| is
 // terminated and the function returns false.
 // TODO: Delete this signature after transferring all driver calls to FormData
-bool CheckChildProcessSecurityPolicy(
-    content::RenderFrameHost* frame,
-    const autofill::PasswordForm& password_form,
-    BadMessageReason reason);
+bool CheckChildProcessSecurityPolicy(content::RenderFrameHost* frame,
+                                     const PasswordForm& password_form,
+                                     BadMessageReason reason);
 
 // Same as above but checks every form in |forms|.
 // TODO: Delete this signature after transferring all driver calls to FormData
-bool CheckChildProcessSecurityPolicy(
-    content::RenderFrameHost* frame,
-    const std::vector<autofill::PasswordForm>& forms,
-    BadMessageReason reason);
+bool CheckChildProcessSecurityPolicy(content::RenderFrameHost* frame,
+                                     const std::vector<PasswordForm>& forms,
+                                     BadMessageReason reason);
 
 bool CheckChildProcessSecurityPolicy(
     content::RenderFrameHost* frame,

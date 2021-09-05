@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/tab_search/tab_search_ui.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
@@ -12,32 +13,23 @@
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/tab_search_resources.h"
+#include "chrome/grit/tab_search_resources_map.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/webui/web_ui_util.h"
-
-#if BUILDFLAG(ENABLE_TAB_SEARCH)
-#include "chrome/grit/tab_search_resources.h"
-#include "chrome/grit/tab_search_resources_map.h"
-#endif  // BUILDFLAG(ENABLE_TAB_SEARCH)
-
-#if BUILDFLAG(ENABLE_TAB_SEARCH)
-namespace {
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/tab_search/";
-}
-#endif  // BUILDFLAG(ENABLE_TAB_SEARCH)
+#include "ui/views/style/platform_style.h"
 
 TabSearchUI::TabSearchUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui,
-                              true /* Needed for webui browser tests */),
+    : ui::MojoBubbleWebUIController(web_ui,
+                                    true /* Needed for webui browser tests */),
       webui_load_timer_(web_ui->GetWebContents(),
                         "Tabs.TabSearch.WebUI.LoadDocumentTime",
                         "Tabs.TabSearch.WebUI.LoadCompletedTime") {
-#if BUILDFLAG(ENABLE_TAB_SEARCH)
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUITabSearchHost);
   static constexpr webui::LocalizedString kStrings[] = {
@@ -57,6 +49,7 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
   source->AddBoolean(
       "submitFeedbackEnabled",
       base::FeatureList::IsEnabled(features::kTabSearchFeedback));
+  source->AddBoolean("useRipples", views::PlatformStyle::kUseRipples);
 
   // Add the configuration parameters for fuzzy search.
   source->AddBoolean("searchIgnoreLocation",
@@ -71,13 +64,17 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
   source->AddDouble("searchTitleToHostnameWeightRatio",
                     features::kTabSearchTitleToHostnameWeightRatio.Get());
 
+  source->AddBoolean("moveActiveTabToBottom",
+                     features::kTabSearchMoveActiveTabToBottom.Get());
   source->AddLocalizedString("close", IDS_CLOSE);
-  source->AddResourcePath("tab_search.mojom-lite.js",
-                          IDR_TAB_SEARCH_MOJO_LITE_JS);
-  source->AddResourcePath("fuse.js", IDR_FUSE_JS);
+
+  ui::Accelerator accelerator(ui::VKEY_A,
+                              ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR);
+  source->AddString("shortcutText", accelerator.GetShortcutText());
+
   webui::SetupWebUIDataSource(
       source, base::make_span(kTabSearchResources, kTabSearchResourcesSize),
-      kGeneratedPath, IDR_TAB_SEARCH_PAGE_HTML);
+      /*generated_path=*/std::string(), IDR_TAB_SEARCH_TAB_SEARCH_PAGE_HTML);
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 source);
 
@@ -85,7 +82,10 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile, std::make_unique<FaviconSource>(
                    profile, chrome::FaviconUrlFormat::kFavicon2));
-#endif  // BUILDFLAG(ENABLE_TAB_SEARCH)
+
+  page_handler_timer_ = base::ElapsedTimer();
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "browser", "TabSearchPageHandlerConstructionDelay", this);
 }
 
 TabSearchUI::~TabSearchUI() = default;
@@ -98,26 +98,25 @@ void TabSearchUI::BindInterface(
   page_factory_receiver_.Bind(std::move(receiver));
 }
 
-void TabSearchUI::SetEmbedder(TabSearchUIEmbedder* embedder) {
-  // Setting the embedder must be done before the page handler is created.
-  DCHECK(!embedder || !page_handler_);
-  embedder_ = embedder;
-}
-
-void TabSearchUI::ShowUI() {
-  if (embedder_)
-    embedder_->ShowBubble();
-}
-
-void TabSearchUI::CloseUI() {
-  if (embedder_)
-    embedder_->CloseBubble();
-}
-
 void TabSearchUI::CreatePageHandler(
     mojo::PendingRemote<tab_search::mojom::Page> page,
     mojo::PendingReceiver<tab_search::mojom::PageHandler> receiver) {
   DCHECK(page);
+
+  // CreatePageHandler() can be called multiple times if reusing the same
+  // WebUIController. For eg refreshing the page will create new PageHandler but
+  // reuse TabSearchUI. Check to make sure |page_handler_timer_| is valid before
+  // logging metrics.
+  if (page_handler_timer_.has_value()) {
+    TRACE_EVENT_NESTABLE_ASYNC_END0(
+        "browser", "TabSearchPageHandlerConstructionDelay", this);
+    UmaHistogramMediumTimes("Tabs.TabSearch.PageHandlerConstructionDelay",
+                            page_handler_timer_->Elapsed());
+    page_handler_timer_.reset();
+  }
+
+  // TODO(tluk): Investigate whether we can avoid recreating this multiple times
+  // per instance of the TabSearchUI.
   page_handler_ = std::make_unique<TabSearchPageHandler>(
       std::move(receiver), std::move(page), web_ui(), this);
 }

@@ -19,7 +19,6 @@
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/signatures.h"
@@ -232,6 +231,7 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
     if (!render_frame())
       return;
     password_element.SetAutofillState(WebAutofillState::kAutofilled);
+    password_agent_->TrackAutofilledElement(password_element);
     // Advance focus to the next input field. We assume password fields in
     // an account creation form are always adjacent.
     render_frame()->GetRenderView()->GetWebView()->AdvanceFocus(false);
@@ -290,10 +290,10 @@ void PasswordGenerationAgent::FoundFormEligibleForGeneration(
   }
 }
 
-void PasswordGenerationAgent::UserTriggeredGeneratePassword(
-    UserTriggeredGeneratePasswordCallback callback) {
-  if (SetUpUserTriggeredGeneration()) {
-    LogMessage(Logger::STRING_GENERATION_RENDERER_SHOW_MANUAL_GENERATION_POPUP);
+void PasswordGenerationAgent::TriggeredGeneratePassword(
+    TriggeredGeneratePasswordCallback callback) {
+  if (SetUpTriggeredGeneration()) {
+    LogMessage(Logger::STRING_GENERATION_RENDERER_SHOW_GENERATION_POPUP);
     // If the field is not |type=password|, the list of suggestions
     // should not be populated with passwords to avoid filling them in a
     // clear-text field.
@@ -320,7 +320,7 @@ void PasswordGenerationAgent::UserTriggeredGeneratePassword(
   }
 }
 
-bool PasswordGenerationAgent::SetUpUserTriggeredGeneration() {
+bool PasswordGenerationAgent::SetUpTriggeredGeneration() {
   if (last_focused_password_element_.IsNull() || !render_frame())
     return false;
 
@@ -493,6 +493,11 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
             *presaved_form_data, generated_password);
       }
     }
+
+    // Notify `password_agent_` of text changes to the other confirmation
+    // password fields.
+    for (const auto& element : current_generation_item_->password_elements_)
+      password_agent_->UpdateStateForTextChange(element);
   }
   return true;
 }

@@ -719,10 +719,6 @@ struct CheckedPtr2OrMTEImplPartitionAllocSupportForTest {
   static ALWAYS_INLINE void* TagPointer(void* ptr) {
     return static_cast<char*>(ptr) - kTagOffsetForTest;
   }
-
-#if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
-  static constexpr size_t TagOffset() { return kTagOffsetForTest; }
-#endif
 };
 
 using CheckedPtr2OrMTEImplForTest =
@@ -748,10 +744,6 @@ TEST(CheckedPtr2OrMTEImpl, WrapAndSafelyUnwrap) {
   ASSERT_EQ(0x78, *static_cast<char*>(ptr));
   uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
-  uintptr_t set_top_bit = 0x0000000000000000;
-#if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
-  set_top_bit = 0x8000000000000000;
-#endif
   uintptr_t mask = 0xFFFFFFFFFFFFFFFF;
   if (sizeof(PartitionTag) < 2)
     mask = 0x00FFFFFFFFFFFFFF;
@@ -761,10 +753,9 @@ TEST(CheckedPtr2OrMTEImpl, WrapAndSafelyUnwrap) {
   // order due to little-endianness).
 #if CHECKED_PTR2_USE_NO_OP_WRAPPER
   ASSERT_EQ(wrapped, addr);
-  std::ignore = set_top_bit;
   std::ignore = mask;
 #else
-  ASSERT_EQ(wrapped, (addr | 0x42BA000000000000) & mask | set_top_bit);
+  ASSERT_EQ(wrapped, (addr | 0x42BA000000000000) & mask);
 #endif
   ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped),
             ptr);
@@ -775,7 +766,7 @@ TEST(CheckedPtr2OrMTEImpl, WrapAndSafelyUnwrap) {
 #if CHECKED_PTR2_USE_NO_OP_WRAPPER
   ASSERT_EQ(wrapped, addr);
 #else
-  ASSERT_EQ(wrapped, (addr | 0x42FA000000000000) & mask | set_top_bit);
+  ASSERT_EQ(wrapped, (addr | 0x42FA000000000000) & mask);
 #endif
   ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped),
             ptr);
@@ -784,16 +775,12 @@ TEST(CheckedPtr2OrMTEImpl, WrapAndSafelyUnwrap) {
   // Clear the generation associated with the fake allocation.
   bytes[0] = 0;
   bytes[1] = 0;
-#if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
-  mask &= 0x7FFFFFFFFFFFFFFF;
-#endif
 
   // Mask out the top bit, because in some cases (not all), it may differ.
   ASSERT_EQ(
       reinterpret_cast<uintptr_t>(
-          CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped)) &
-          mask,
-      wrapped & mask);
+          CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped)),
+      wrapped);
 #endif  // CHECKED_PTR2_AVOID_BRANCH_WHEN_DEREFERENCING
 }
 
@@ -843,7 +830,7 @@ TEST(CheckedPtr2OrMTEImpl, CrashOnUseAfterFree) {
   // new/delete once PartitionAlloc Everywhere is fully enabled.
   PartitionAllocGlobalInit(HandleOOM);
   PartitionAllocator<ThreadSafe> allocator;
-  allocator.init();
+  allocator.init({});
   void* raw_ptr = allocator.root()->Alloc(sizeof(int), "int");
   // Use the actual CheckedPtr implementation, not a test substitute, to
   // exercise real PartitionAlloc paths.
@@ -864,7 +851,7 @@ TEST(CheckedPtr2OrMTEImpl, CrashOnUseAfterFree_WithOffset) {
   // new/delete once PartitionAlloc Everywhere is fully enabled.
   PartitionAllocGlobalInit(HandleOOM);
   PartitionAllocator<ThreadSafe> allocator;
-  allocator.init();
+  allocator.init({});
   const uint8_t kSize = 100;
   void* raw_ptr = allocator.root()->Alloc(kSize * sizeof(uint8_t), "uint8_t");
   // Use the actual CheckedPtr implementation, not a test substitute, to
@@ -890,14 +877,14 @@ TEST(CheckedPtr2OrMTEImpl, CrashOnUseAfterFree_WithOffset) {
     !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 TEST(BackupRefPtrImpl, Basic) {
   // This test works only if GigaCage is enabled. Bail out otherwise.
-  if (!IsPartitionAllocGigaCageEnabled())
+  if (!features::IsPartitionAllocGigaCageEnabled())
     return;
 
   // TODO(bartekn): Avoid using PartitionAlloc API directly. Switch to
   // new/delete once PartitionAlloc Everywhere is fully enabled.
   PartitionAllocGlobalInit(HandleOOM);
   PartitionAllocator<ThreadSafe> allocator;
-  allocator.init();
+  allocator.init({});
   uint64_t* raw_ptr1 = reinterpret_cast<uint64_t*>(
       allocator.root()->Alloc(sizeof(uint64_t), ""));
   // Use the actual CheckedPtr implementation, not a test substitute, to

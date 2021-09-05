@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include "chromeos/components/phonehub/message_receiver_impl.h"
-#include "chromeos/components/phonehub/proto/phonehub_api.pb.h"
 
+#include <netinet/in.h>
 #include <stdint.h>
 #include <string>
 
 #include "base/logging.h"
+#include "chromeos/components/phonehub/proto/phonehub_api.pb.h"
+#include "chromeos/components/phonehub/util/histogram_util.h"
 
 namespace chromeos {
 namespace phonehub {
@@ -55,10 +57,13 @@ void MessageReceiverImpl::OnMessageReceived(const std::string& payload) {
   // proto::MessageType.
   uint16_t* ptr =
       reinterpret_cast<uint16_t*>(const_cast<char*>(payload.data()));
-  proto::MessageType message_type = static_cast<proto::MessageType>(*ptr);
+  proto::MessageType message_type =
+      static_cast<proto::MessageType>(ntohs(*ptr));
 
   PA_LOG(INFO) << "MessageReceiver received a "
                << GetMessageTypeName(message_type) << " message.";
+  util::LogMessageResult(message_type,
+                         util::PhoneHubMessageResult::kResponseReceived);
 
   // Decode the proto message if the message is something we want to notify to
   // clients.

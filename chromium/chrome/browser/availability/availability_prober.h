@@ -78,11 +78,11 @@ class AvailabilityProber
     kLitepages_DEPRECATED = 0,
     kLitepagesOriginCheck_DEPRECATED = 1,
 
-    // chrome/browser/prerender/isolated/
-    // isolated_prerender_url_loader_interceptor.h
+    // chrome/browser/prefetch/prefetch_proxy/
+    // prefetch_proxy_url_loader_interceptor.h
     kIsolatedPrerenderOriginCheck = 2,
 
-    // chrome/browser/prerender/isolated/isolated_prerender_origin_prober.h
+    // chrome/browser/prefetch/prefetch_proxy/prefetch_proxy_origin_prober.h
     kIsolatedPrerenderCanaryCheck_DEPRECATED = 3,
     kIsolatedPrerenderTLSCanaryCheck = 4,
     kIsolatedPrerenderDNSCanaryCheck = 5,

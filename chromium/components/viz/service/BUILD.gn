@@ -9,13 +9,6 @@ import("//media/gpu/args.gni")
 import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 config("viz_service_implementation") {
 }
 
@@ -71,6 +64,8 @@ viz_component("service") {
     "display/output_surface_frame.h",
     "display/overlay_candidate.cc",
     "display/overlay_candidate.h",
+    "display/overlay_candidate_temporal_tracker.cc",
+    "display/overlay_candidate_temporal_tracker.h",
     "display/overlay_processor_interface.cc",
     "display/overlay_processor_interface.h",
     "display/overlay_processor_on_gpu.cc",
@@ -113,8 +108,6 @@ viz_component("service") {
     "display_embedder/gl_output_surface.h",
     "display_embedder/gl_output_surface_buffer_queue.cc",
     "display_embedder/gl_output_surface_buffer_queue.h",
-    "display_embedder/gl_output_surface_chromeos.cc",
-    "display_embedder/gl_output_surface_chromeos.h",
     "display_embedder/gl_output_surface_offscreen.cc",
     "display_embedder/gl_output_surface_offscreen.h",
     "display_embedder/in_process_gpu_memory_buffer_manager.cc",
@@ -211,6 +204,7 @@ viz_component("service") {
     "//media/mojo/services",
     "//services/tracing/public/cpp:cpp",
     "//services/viz/privileged/mojom",
+    "//skia",
     "//skia:skcms",
     "//third_party/libyuv",
     "//ui/display/types",
@@ -225,6 +219,7 @@ viz_component("service") {
     "//gpu/command_buffer/client:gles2_interface",
     "//services/viz/privileged/mojom/compositing",
     "//services/viz/public/mojom",
+    "//ui/base/prediction",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/latency",
@@ -239,6 +234,10 @@ viz_component("service") {
   }
 
   if (is_chromeos) {
+    sources += [
+      "display_embedder/gl_output_surface_chromeos.cc",
+      "display_embedder/gl_output_surface_chromeos.h",
+    ]
     deps += [ "//components/arc/video_accelerator" ]
   }
 
@@ -342,6 +341,8 @@ viz_component("service") {
 # then this build target will no longer be needed.
 viz_source_set("gpu_service_dependencies") {
   sources = [
+    "display/display_compositor_memory_and_task_controller.cc",
+    "display/display_compositor_memory_and_task_controller.h",
     "display_embedder/image_context_impl.cc",
     "display_embedder/image_context_impl.h",
     "display_embedder/output_presenter.cc",
@@ -386,6 +387,7 @@ viz_source_set("gpu_service_dependencies") {
   deps = [
     "//base",
     "//gpu/config",
+    "//third_party/libyuv",
   ]
 
   if (is_win) {
@@ -427,6 +429,8 @@ viz_source_set("gpu_service_dependencies") {
     sources += [
       "display_embedder/skia_output_device_vulkan.cc",
       "display_embedder/skia_output_device_vulkan.h",
+      "display_embedder/skia_output_device_vulkan_secondary_cb.cc",
+      "display_embedder/skia_output_device_vulkan_secondary_cb.h",
     ]
 
     public_deps += [ "//gpu/vulkan" ]
@@ -474,6 +478,8 @@ viz_source_set("unit_tests") {
   sources = [
     "display/bsp_tree_unittest.cc",
     "display/copy_output_scaling_pixeltest.cc",
+    "display/delegated_ink_point_pixel_test_helper.cc",
+    "display/delegated_ink_point_pixel_test_helper.h",
     "display/display_damage_tracker_unittest.cc",
     "display/display_resource_provider_unittest.cc",
     "display/display_scheduler_unittest.cc",

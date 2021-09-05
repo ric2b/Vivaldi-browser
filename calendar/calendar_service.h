@@ -76,17 +76,12 @@ class CalendarService : public KeyedService {
   // Provides the result of a event create. See EventResultCB in
   // event_type.h.
   typedef base::Callback<void(std::shared_ptr<EventResultCB>)>
-      CreateEventCallback;
+      EventResultCallback;
 
   // Provides the results of multiple event create. See CreateEventsResult in
   // event_type.h.
   typedef base::Callback<void(std::shared_ptr<CreateEventsResult>)>
       CreateEventsCallback;
-
-  // Provides the result of a event update. See UpdateEventResult in
-  // event_type.h.
-  typedef base::Callback<void(std::shared_ptr<UpdateEventResult>)>
-      UpdateEventCallback;
 
   // Provides the result of a delete calendar event. See DeleteEventResult in
   // event_type.h.
@@ -115,9 +110,6 @@ class CalendarService : public KeyedService {
 
   typedef base::Callback<void(std::shared_ptr<DeleteEventTypeResult>)>
       DeleteEventTypeCallback;
-
-  typedef base::Callback<void(std::shared_ptr<EventResultCB>)>
-      CreateRecurrenceExceptionCallback;
 
   typedef base::Callback<void(std::shared_ptr<GetAllNotificationResult>)>
       GetAllNotificationsCallback;
@@ -156,7 +148,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CreateCalendarEvent(
       EventRow ev,
-      const CreateEventCallback& callback,
+      const EventResultCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateCalendarEvents(
@@ -167,7 +159,7 @@ class CalendarService : public KeyedService {
   base::CancelableTaskTracker::TaskId UpdateCalendarEvent(
       EventID event_id,
       EventRow event,
-      const UpdateEventCallback& callback,
+      const EventResultCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteCalendarEvent(
@@ -217,7 +209,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CreateRecurrenceException(
       RecurrenceExceptionRow ev,
-      const CreateRecurrenceExceptionCallback& callback,
+      const EventResultCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllNotifications(

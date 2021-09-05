@@ -7,8 +7,6 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "remoting/host/linux/unicode_to_keysym.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/gfx/x/xkb.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xtest.h"
@@ -16,11 +14,10 @@
 namespace {
 
 bool FindKeycodeForKeySym(x11::Connection* connection,
-                          x11::KeySym key_sym,
+                          uint32_t key_sym,
                           uint32_t* keycode,
                           uint32_t* modifiers) {
-  auto found_keycode =
-      static_cast<uint32_t>(connection->KeysymToKeycode(key_sym));
+  auto found_keycode = connection->KeysymToKeycode(key_sym);
 
   const x11::KeyButMask kModifiersToTry[] = {
       {},
@@ -38,7 +35,7 @@ bool FindKeycodeForKeySym(x11::Connection* connection,
     auto mods = static_cast<uint32_t>(i);
     if (connection->KeycodeToKeysym(found_keycode, mods) == key_sym) {
       *modifiers = mods;
-      *keycode = found_keycode;
+      *keycode = static_cast<uint8_t>(found_keycode);
       return true;
     }
   }
@@ -60,7 +57,7 @@ uint32_t UnicodeToKeysym(uint32_t u) {
 namespace remoting {
 
 X11KeyboardImpl::X11KeyboardImpl(x11::Connection* connection)
-    : connection_(connection), display_(connection->display()) {}
+    : connection_(connection) {}
 
 X11KeyboardImpl::~X11KeyboardImpl() = default;
 
@@ -107,10 +104,8 @@ bool X11KeyboardImpl::FindKeycode(uint32_t code_point,
                                   uint32_t* keycode,
                                   uint32_t* modifiers) {
   for (uint32_t keysym : GetKeySymsForUnicode(code_point)) {
-    if (FindKeycodeForKeySym(connection_, static_cast<x11::KeySym>(keysym),
-                             keycode, modifiers)) {
+    if (FindKeycodeForKeySym(connection_, keysym, keycode, modifiers))
       return true;
-    }
   }
   return false;
 }
@@ -132,7 +127,7 @@ bool X11KeyboardImpl::ChangeKeyMapping(uint32_t keycode, uint32_t code_point) {
 }
 
 void X11KeyboardImpl::Flush() {
-  XFlush(display_);
+  connection_->Flush();
 }
 
 void X11KeyboardImpl::Sync() {

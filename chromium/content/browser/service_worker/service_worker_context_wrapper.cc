@@ -12,7 +12,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
@@ -45,9 +45,11 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/url_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
@@ -225,6 +227,12 @@ ServiceWorkerContextWrapper::ServiceWorkerContextWrapper(
   // Add this object as an observer of the wrapped |context_core_|. This lets us
   // forward observer methods to observers outside of content.
   core_observer_list_->AddObserver(this);
+
+  if (blink::IdentifiabilityStudySettings::Get()->IsActive()) {
+    identifiability_metrics_ =
+        std::make_unique<ServiceWorkerIdentifiabilityMetrics>();
+    core_observer_list_->AddObserver(identifiability_metrics_.get());
+  }
 }
 
 void ServiceWorkerContextWrapper::Init(
@@ -270,25 +278,7 @@ void ServiceWorkerContextWrapper::Shutdown() {
   storage_partition_ = nullptr;
   process_manager_->Shutdown();
 
-  // Use explicit feature check here instead of RunOrPostTaskOnThread(), since
-  // the feature may be disabled but in unit tests we are considered both on the
-  // UI and IO thread here, and not posting a task causes a race with callers
-  // setting the |resource_context_|.
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    ShutdownOnCoreThread();
-  } else {
-    GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&ServiceWorkerContextWrapper::ShutdownOnCoreThread,
-                       this));
-  }
-}
-
-void ServiceWorkerContextWrapper::InitializeResourceContext(
-    ResourceContext* resource_context) {
-  DCHECK(!ServiceWorkerContext::IsServiceWorkerOnUIEnabled());
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  resource_context_ = resource_context;
+  ShutdownOnCoreThread();
 }
 
 void ServiceWorkerContextWrapper::DeleteAndStartOver() {
@@ -320,15 +310,9 @@ BrowserContext* ServiceWorkerContextWrapper::browser_context() {
   return process_manager()->browser_context();
 }
 
-ResourceContext* ServiceWorkerContextWrapper::resource_context() {
-  DCHECK(!ServiceWorkerContext::IsServiceWorkerOnUIEnabled());
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return resource_context_;
-}
-
 // static
 bool ServiceWorkerContext::IsServiceWorkerOnUIEnabled() {
-  return base::FeatureList::IsEnabled(features::kServiceWorkerOnUI);
+  return true;
 }
 
 // static
@@ -612,11 +596,10 @@ void ServiceWorkerContextWrapper::GetInstalledRegistrationOriginsOnCoreThread(
     return;
   }
 
-  context()->registry()->GetRemoteStorageControl()->GetRegisteredOrigins(
-      base::BindOnce(
-          &ServiceWorkerContextWrapper::
-              DidGetRegisteredOriginsForGetInstalledRegistrationOrigins,
-          host_filter, std::move(callback), task_runner_for_callback));
+  context()->registry()->GetRegisteredOrigins(base::BindOnce(
+      &ServiceWorkerContextWrapper::
+          DidGetRegisteredOriginsForGetInstalledRegistrationOrigins,
+      host_filter, std::move(callback), task_runner_for_callback));
 }
 
 void ServiceWorkerContextWrapper::GetAllOriginsInfo(
@@ -735,7 +718,8 @@ void ServiceWorkerContextWrapper::CheckOfflineCapability(
   if (!context_core_) {
     GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(callback), OfflineCapability::kUnsupported));
+        base::BindOnce(std::move(callback), OfflineCapability::kUnsupported,
+                       blink::mojom::kInvalidServiceWorkerRegistrationId));
     return;
   }
   context()->CheckOfflineCapability(
@@ -1553,7 +1537,8 @@ ServiceWorkerContextWrapper::~ServiceWorkerContextWrapper() {
   // tests where this object is not guaranteed to outlive the
   // ServiceWorkerContextCore it wraps.
   core_observer_list_->RemoveObserver(this);
-  DCHECK(!resource_context_);
+  if (identifiability_metrics_)
+    core_observer_list_->RemoveObserver(identifiability_metrics_.get());
 }
 
 void ServiceWorkerContextWrapper::InitOnCoreThread(
@@ -1582,9 +1567,8 @@ void ServiceWorkerContextWrapper::InitOnCoreThread(
       core_observer_list_.get(), this);
 
   if (storage_partition_) {
-    context()->registry()->GetRemoteStorageControl()->GetRegisteredOrigins(
-        base::BindOnce(&ServiceWorkerContextWrapper::DidGetRegisteredOrigins,
-                       this));
+    context()->registry()->GetRegisteredOrigins(base::BindOnce(
+        &ServiceWorkerContextWrapper::DidGetRegisteredOrigins, this));
   }
 }
 
@@ -1607,8 +1591,6 @@ void ServiceWorkerContextWrapper::FindRegistrationForScopeImpl(
 
 void ServiceWorkerContextWrapper::ShutdownOnCoreThread() {
   DCHECK_CURRENTLY_ON(GetCoreThreadId());
-  if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled())
-    resource_context_ = nullptr;
   context_core_.reset();
 }
 
@@ -1727,10 +1709,12 @@ void ServiceWorkerContextWrapper::DidCheckHasServiceWorker(
 
 void ServiceWorkerContextWrapper::DidCheckOfflineCapability(
     CheckOfflineCapabilityCallback callback,
-    OfflineCapability capability) {
+    OfflineCapability capability,
+    int64_t registration_id) {
   DCHECK_CURRENTLY_ON(GetCoreThreadId());
   GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), capability));
+      FROM_HERE,
+      base::BindOnce(std::move(callback), capability, registration_id));
 }
 
 void ServiceWorkerContextWrapper::DidFindRegistrationForUpdate(
@@ -1948,7 +1932,7 @@ void ServiceWorkerContextWrapper::SetUpLoaderFactoryForUpdateCheckOnUI(
       ChildProcessHost::kInvalidUniqueID,
       ContentBrowserClient::URLLoaderFactoryType::kServiceWorkerScript,
       url::Origin::Create(scope), /*navigation_id=*/base::nullopt,
-      base::kInvalidUkmSourceId, &pending_receiver, &header_client,
+      ukm::kInvalidSourceIdObj, &pending_receiver, &header_client,
       &bypass_redirect_checks,
       /*disable_secure_dns=*/nullptr,
       /*factory_override=*/nullptr);

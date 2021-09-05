@@ -37,12 +37,6 @@ enum class LargeBlobDataKeys : uint8_t {
   kOrigSize = 0x03,
 };
 
-enum class LargeBlobOperation {
-  kNone,
-  kRead,
-  kWrite,
-};
-
 using LargeBlobKey = std::array<uint8_t, kLargeBlobKeyLength>;
 
 constexpr size_t kLargeBlobDefaultMaxFragmentLength = 960;
@@ -87,7 +81,7 @@ class LargeBlobsRequest {
   int64_t offset_ = 0;
   base::Optional<int64_t> length_;
   base::Optional<std::vector<uint8_t>> pin_uv_auth_param_;
-  base::Optional<int64_t> pin_uv_auth_protocol_;
+  base::Optional<PINUVAuthProtocol> pin_uv_auth_protocol_;
 };
 
 class LargeBlobsResponse {
@@ -119,7 +113,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) LargeBlobData {
  public:
   static base::Optional<LargeBlobData> Parse(const cbor::Value& cbor_response);
 
-  LargeBlobData(LargeBlobKey key, std::vector<uint8_t> blob);
+  LargeBlobData(LargeBlobKey key, base::span<const uint8_t> blob);
   LargeBlobData(const LargeBlobData&) = delete;
   LargeBlobData operator=(const LargeBlobData&) = delete;
   LargeBlobData(LargeBlobData&&);

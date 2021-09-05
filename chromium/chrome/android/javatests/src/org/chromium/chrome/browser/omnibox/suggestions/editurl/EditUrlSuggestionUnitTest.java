@@ -27,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.UserDataHost;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
@@ -40,11 +41,13 @@ import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewPr
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.share.ShareDelegateImpl.ShareOrigin;
+import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -87,6 +90,9 @@ public final class EditUrlSuggestionUnitTest {
     private Tab mTab;
 
     @Mock
+    private SadTab mSadTab;
+
+    @Mock
     private OmniboxSuggestion mWhatYouTypedSuggestion;
 
     @Mock
@@ -118,6 +124,7 @@ public final class EditUrlSuggestionUnitTest {
 
     // The original (real) ClipboardManager to be restored after a test run.
     private ClipboardManager mOldClipboardManager;
+    private UserDataHost mUserDataHost;
 
     @Before
     public void setUp() {
@@ -126,21 +133,10 @@ public final class EditUrlSuggestionUnitTest {
 
         TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
 
-        doReturn(mTestUrl).when(mTab).getUrl();
-        doReturn(TEST_TITLE).when(mTab).getTitle();
-        doReturn(false).when(mTab).isNativePage();
-        doReturn(false).when(mTab).isInitialized();
-
-        doReturn(OmniboxSuggestionType.URL_WHAT_YOU_TYPED).when(mWhatYouTypedSuggestion).getType();
-        doReturn(mTestUrl).when(mWhatYouTypedSuggestion).getUrl();
-
-        doReturn(OmniboxSuggestionType.SEARCH_WHAT_YOU_TYPED).when(mSearchSuggestion).getType();
-        doReturn(mFoobarSearchUrl).when(mSearchSuggestion).getUrl();
-        doReturn(FOOBAR_SEARCH_TERMS).when(mSearchSuggestion).getFillIntoEdit();
-
-        doReturn(OmniboxSuggestionType.SEARCH_HISTORY).when(mOtherSuggestion).getType();
-
         TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mUserDataHost = new UserDataHost();
+            mUserDataHost.setUserData(SadTab.class, mSadTab);
+
             mOldClipboardManager =
                     Clipboard.getInstance().overrideClipboardManagerForTesting(mClipboardManager);
 
@@ -150,6 +146,23 @@ public final class EditUrlSuggestionUnitTest {
                     mSuggestionHost, mUrlBarDelegate,
                     () -> mIconBridge, () -> mTab, () -> mShareDelegate);
         });
+
+        doReturn(mTestUrl).when(mTab).getUrl();
+        doReturn(TEST_TITLE).when(mTab).getTitle();
+        doReturn(false).when(mTab).isNativePage();
+        doReturn(true).when(mTab).isInitialized();
+
+        // Simulate that all our test tabs are never 'sad'.
+        doReturn(mUserDataHost).when(mTab).getUserDataHost();
+        doReturn(false).when(mSadTab).isShowing();
+        doReturn(OmniboxSuggestionType.URL_WHAT_YOU_TYPED).when(mWhatYouTypedSuggestion).getType();
+        doReturn(mTestUrl).when(mWhatYouTypedSuggestion).getUrl();
+
+        doReturn(OmniboxSuggestionType.SEARCH_WHAT_YOU_TYPED).when(mSearchSuggestion).getType();
+        doReturn(mFoobarSearchUrl).when(mSearchSuggestion).getUrl();
+        doReturn(FOOBAR_SEARCH_TERMS).when(mSearchSuggestion).getFillIntoEdit();
+
+        doReturn(OmniboxSuggestionType.SEARCH_HISTORY).when(mOtherSuggestion).getType();
     }
 
     @After
@@ -325,7 +338,8 @@ public final class EditUrlSuggestionUnitTest {
         List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTIONS);
         Assert.assertEquals("EditUrl suggestion should have 3 action buttons.", 3, actions.size());
         actions.get(ACTION_SHARE).callback.run();
-        verify(mShareDelegate, times(1)).share(mTab, false /* shareDirectly */);
+        verify(mShareDelegate, times(1))
+                .share(mTab, false /* shareDirectly */, ShareOrigin.EDIT_URL);
     }
 
     private void verifyCopyButtonPress(boolean isIncognito) {

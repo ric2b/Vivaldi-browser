@@ -8,13 +8,6 @@ import("//build/util/version.gni")
 import("//chrome/android/modules/chrome_feature_module_tmpl.gni")
 import("//components/module_installer/android/module_desc_java.gni")
 
-declare_args() {
-  # Whether //chrome code and resources are in a DFM for Monochrome and
-  # Trichrome bundles. This module will also include code and resources from all
-  # other DFMs.
-  enable_chrome_module = false
-}
-
 # Instantiates a Chrome-specific app bundle.
 #
 # Supports most variables of chrome_feature_module and android_app_bundle, plus:
@@ -41,6 +34,7 @@ template("chrome_bundle") {
   # - All //chrome-specific manifest definitions (e.g. activities, services)
   #   will be moved to the chrome DFM AndroidManifest.xml.
   if (_enable_chrome_module) {
+    _base_target_name = get_label_info(invoker.base_module_target, "name")
     _base_target_gen_dir =
         get_label_info(invoker.base_module_target, "target_gen_dir")
     _base_name = get_label_info(invoker.base_module_target, "name")
@@ -50,21 +44,47 @@ template("chrome_bundle") {
     _paks = []
     _pak_deps = []
     foreach(_module_desc, invoker.module_descs) {
-      _module_desc_target_name =
-          "${target_name}__${_module_desc.name}__module_desc_java"
-      module_desc_java(_module_desc_target_name) {
-        module_name = _module_desc.name
+      _supports_isolated_split =
+          defined(_module_desc.supports_isolated_split) &&
+          _module_desc.supports_isolated_split
+      _uses_chrome_split =
+          defined(_module_desc.uses_split) &&
+          _module_desc.uses_split == "chrome" && enable_chrome_child_modules
+      if (_supports_isolated_split || _uses_chrome_split) {
+        _module_descs += [ _module_desc ]
+      } else {
+        _shared_libraries = []
+        if (defined(_module_desc.native_deps) &&
+            _module_desc.native_deps != []) {
+          _arch = ""
+          _toolchain = ""
+          if (android_64bit_target_cpu) {
+            if (invoker.is_64_bit_browser) {
+              _arch = "_64"
+            } else {
+              _toolchain = "($android_secondary_abi_toolchain)"
+            }
+          }
+          _shared_libraries += [ "//chrome/android:libmonochrome${_arch}_${_module_desc.name}${_toolchain}" ]
+        }
+        _module_desc_target_name =
+            "${target_name}__${_module_desc.name}__module_desc_java"
+        module_desc_java(_module_desc_target_name) {
+          module_name = _module_desc.name
+          shared_libraries = _shared_libraries
+          if (defined(_module_desc.pak_deps)) {
+            paks = _module_desc.paks
+          }
+          if (defined(_module_desc.load_native_on_get_impl)) {
+            load_native_on_get_impl = _module_desc.load_native_on_get_impl
+          }
+        }
+        _java_deps +=
+            _module_desc.java_deps + [ ":${_module_desc_target_name}" ]
         if (defined(_module_desc.pak_deps)) {
-          paks = _module_desc.paks
+          _paks += _module_desc.paks
+          _pak_deps += _module_desc.pak_deps
         }
-        if (defined(_module_desc.load_native_on_get_impl)) {
-          load_native_on_get_impl = _module_desc.load_native_on_get_impl
-        }
-      }
-      _java_deps += _module_desc.java_deps + [ ":${_module_desc_target_name}" ]
-      if (defined(_module_desc.pak_deps)) {
-        _paks += _module_desc.paks
-        _pak_deps += _module_desc.pak_deps
       }
     }
     chrome_module_desc = {
@@ -75,7 +95,7 @@ template("chrome_bundle") {
       java_deps = [ "//chrome/android:chrome_all_java" ] + _java_deps
       if (enable_arcore) {
         java_deps += [
-          "//chrome/browser/android/vr:ar_java",
+          "//components/webxr/android:ar_java",
           "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
         ]
       }
@@ -91,11 +111,40 @@ template("chrome_bundle") {
       load_native_on_get_impl = false
     }
     _module_descs += [ chrome_module_desc ]
+
+    # TODO(crbug.com/1126301): Isolated splits cause various bugs with resource
+    # access. For now, move all resources to the base module.
+    android_resources("${_base_target_name}__all_chrome_resources") {
+      recursive_resource_deps = true
+      deps = []
+
+      # Java library deps are added to this target because the
+      # recursive_resource_deps arg allows pulling all the android_resources
+      # deps from them. The actual java library targets are not used.
+      foreach(_module_desc, _module_descs) {
+        if (defined(_module_desc.java_deps)) {
+          deps += _module_desc.java_deps
+        }
+      }
+    }
   } else {
     _module_descs = invoker.module_descs
   }
-  foreach(_module_desc, _module_descs) {
+  foreach(_tmp_module_desc, _module_descs) {
     assert(_package_id > 2, "Too many modules, ran out of package IDs!")
+
+    # Need to reset _module_desc on each loop iteration, otherwise the
+    # "Replacing nonempty scope" error is thrown.
+    _module_desc = {
+    }
+    if (_enable_chrome_module && enable_chrome_child_modules) {
+      _module_desc = _tmp_module_desc
+    } else {
+      # Remove uses_split if child modules are not enabled.
+      _module_desc = {
+        forward_variables_from(_tmp_module_desc, "*", [ "uses_split" ])
+      }
+    }
 
     # Assert that |load_native_on_get_impl| is defined iff native libraries or
     # resources are defined.
@@ -177,24 +226,10 @@ template("chrome_bundle") {
     is_multi_abi = _is_multi_abi
     validate_services = _enable_chrome_module
 
-    # Use a consistent baseline so that it is easy to regenerate by deleting the
-    # file and re-building the "android_lint" target.
-    if (defined(enable_lint) && enable_lint) {
-      if (!defined(lint_baseline_file)) {
-        lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
-      }
-      if (!defined(lint_suppressions_file)) {
-        lint_suppressions_file =
-            "//chrome/android/expectations/lint-suppressions.xml"
-      }
-    }
-
     # List of DFMs that are installed by default by wrapper scripts, to make
     # testing easier. This removes the need to manually specify, e.g.,
     # "-m dev_ui" on every install or run.
-    if (!_enable_chrome_module) {
-      default_modules_for_testing = [ "dev_ui" ]
-    }
+    default_modules_for_testing = [ "dev_ui" ]
 
     # NOTE: Only sign bundle for official builds since this is very slow.
     if (enable_chrome_android_internal && use_signing_keys &&

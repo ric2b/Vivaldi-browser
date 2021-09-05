@@ -109,11 +109,6 @@ TEST(Operators, SourcesAppend) {
   TestBinaryOpNode node(Token::PLUS_EQUALS, "+=");
   node.SetLeftToIdentifier(sources);
 
-  // Set up the filter on the scope to remove everything ending with "rm"
-  std::unique_ptr<PatternList> pattern_list = std::make_unique<PatternList>();
-  pattern_list->Append(Pattern("*rm"));
-  setup.scope()->set_sources_assignment_filter(std::move(pattern_list));
-
   // Append an integer.
   node.SetRightToListOfValue(Value(nullptr, static_cast<int64_t>(5)));
   node.Execute(setup.scope(), &err);
@@ -125,14 +120,8 @@ TEST(Operators, SourcesAppend) {
   node.Execute(setup.scope(), &err);
   EXPECT_FALSE(err.has_error());
 
-  // Append a string that does match the pattern, it should be a no-op.
-  const char string2[] = "foo-rm";
-  node.SetRightToListOfValue(Value(nullptr, string2));
-  node.Execute(setup.scope(), &err);
-  EXPECT_FALSE(err.has_error());
-
   // Append a list with the two strings from above.
-  node.SetRightToListOfValue(Value(nullptr, string1), Value(nullptr, string2));
+  node.SetRightToListOfValue(Value(nullptr, string1));
   node.Execute(setup.scope(), &err);
   EXPECT_FALSE(err.has_error());
 

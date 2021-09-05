@@ -45,13 +45,12 @@ base::Optional<IntRect> CSSMaskPainter::MaskBoundingBox(
   // We don't implement mask-clip:margin-box or no-clip currently,
   // so the maximum we can get is border-box.
   if (object.IsBox()) {
-    maximum_mask_region = ToLayoutBox(object).PhysicalBorderBoxRect();
+    maximum_mask_region = To<LayoutBox>(object).PhysicalBorderBoxRect();
   } else {
     // For inline elements, depends on the value of box-decoration-break
     // there could be one box in multiple fragments or multiple boxes.
     // Either way here we are only interested in the bounding box of them.
-    DCHECK(object.IsLayoutInline());
-    maximum_mask_region = ToLayoutInline(object).PhysicalLinesBoundingBox();
+    maximum_mask_region = To<LayoutInline>(object).PhysicalLinesBoundingBox();
   }
   if (style.HasMaskBoxImageOutsets())
     maximum_mask_region.Expand(style.MaskBoxImageOutsets());

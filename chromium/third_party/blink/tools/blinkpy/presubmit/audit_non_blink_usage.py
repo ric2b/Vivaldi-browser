@@ -68,11 +68,7 @@ _CONFIG = [
             'base::TimeDelta',
             'base::TimeTicks',
             'base::ThreadTicks',
-            'base::trace_event::MemoryAllocatorDump',
-            'base::trace_event::MemoryDumpArgs',
-            'base::trace_event::MemoryDumpManager',
-            'base::trace_event::MemoryDumpProvider',
-            'base::trace_event::ProcessMemoryDump',
+            'base::trace_event::.*',
             'base::UnguessableToken',
             'base::UnguessableTokenHash',
             'base::UnsafeSharedMemoryRegion',
@@ -94,7 +90,7 @@ _CONFIG = [
             'base::ObserverList',
             'base::CheckedObserver',
 
-            # //base/bind_helpers.h.
+            # //base/callback_helpers.h.
             'base::DoNothing',
 
             # //base/callback.h is allowed, but you need to use WTF::Bind or
@@ -410,6 +406,7 @@ _CONFIG = [
             # Third-party libraries that don't depend on non-Blink Chrome code
             # are OK.
             'icu::.+',
+            'perfetto::.+',  # tracing
             'testing::.+',  # googlemock / googletest
             'v8::.+',
             'v8_inspector::.+',
@@ -428,6 +425,12 @@ _CONFIG = [
 
             # HTTP structured headers
             'net::structured_headers::.+',
+
+            # CanonicalCookie and related headers
+            'net::CanonicalCookie',
+            'net::CookiePriority',
+            'net::CookieSameSite',
+            'net::CookieSourceScheme',
 
             # HTTP status codes
             'net::HTTP_.+',
@@ -502,6 +505,10 @@ _CONFIG = [
             'base::mac::(CFToNSCast|NSToCFCast)',
             'base::mac::Is(AtMost|AtLeast)?OS.+',
             'base::(scoped_nsobject|ScopedCFTypeRef)',
+
+            # absl::variant and getters:
+            'absl::variant',
+            'absl::get_if',
         ],
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
@@ -599,8 +606,10 @@ _CONFIG = [
             'cc::ActiveFrameSequenceTrackers',
             'cc::ApplyViewportChangesArgs',
             'cc::LayerTreeSettings',
+            'cc::PaintBenchmarkResult',
             'cc::TaskGraphRunner',
             'gfx::DisplayColorSpaces',
+            'gfx::FontRenderParams',
             'ui::ImeTextSpan',
             'viz::FrameSinkId',
             'viz::LocalSurfaceId',
@@ -708,6 +717,7 @@ _CONFIG = [
         'paths': ['third_party/blink/renderer/core/page/scrolling'],
         'allowed': [
             'cc::ScrollbarLayerBase',
+            'shared_highlighting::.+',
         ],
     },
     {
@@ -871,8 +881,9 @@ _CONFIG = [
             'third_party/blink/renderer/modules/imagecapture/',
         ],
         'allowed': [
-            'media::.+',
+            'cc::SkiaPaintCanvas',
             'libyuv::.+',
+            'media::.+',
         ]
     },
     {
@@ -1163,6 +1174,17 @@ _CONFIG = [
         ],
     },
     {
+        'paths': [
+            'third_party/blink/renderer/modules/direct_sockets/',
+        ],
+        'allowed': [
+            'net::DefineNetworkTrafficAnnotation',
+            'net::Error',
+            'net::MutableNetworkTrafficAnnotationTag',
+            'net::NetworkTrafficAnnotationTag',
+        ]
+    },
+    {
         'paths': ['third_party/blink/renderer/modules/manifest/'],
         'allowed': ['net::ParseMimeTypeWithoutParameter'],
     },
@@ -1173,8 +1195,10 @@ _CONFIG = [
     },
     {
         'paths': ['third_party/blink/renderer/core/frame/local_frame_view.cc'],
-        'allowed':
-        ['cc::frame_viewer_instrumentation::IsTracingLayerTreeSnapshots'],
+        'allowed': [
+            'base::LapTimer',
+            'cc::frame_viewer_instrumentation::IsTracingLayerTreeSnapshots',
+        ],
     },
     {
         'paths': [

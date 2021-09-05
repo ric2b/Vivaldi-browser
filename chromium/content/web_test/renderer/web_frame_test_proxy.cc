@@ -579,9 +579,6 @@ void WebFrameTestProxy::PostAccessibilityEvent(const ui::AXEvent& event) {
     case ax::mojom::Event::kHover:
       event_name = "Hover";
       break;
-    case ax::mojom::Event::kInvalidStatusChanged:
-      event_name = "InvalidStatusChanged";
-      break;
     case ax::mojom::Event::kLayoutComplete:
       event_name = "LayoutComplete";
       break;
@@ -593,9 +590,6 @@ void WebFrameTestProxy::PostAccessibilityEvent(const ui::AXEvent& event) {
       break;
     case ax::mojom::Event::kLocationChanged:
       event_name = "LocationChanged";
-      break;
-    case ax::mojom::Event::kMenuListItemSelected:
-      event_name = "MenuListItemSelected";
       break;
     case ax::mojom::Event::kMenuListValueChanged:
       event_name = "MenuListValueChanged";
@@ -719,6 +713,14 @@ void WebFrameTestProxy::DidClearWindowObject() {
     blink::WebTestingSupport::InjectInternalsObject(GetWebFrame());
   }
   RenderFrameImpl::DidClearWindowObject();
+}
+
+void WebFrameTestProxy::OnDeactivated() {
+  test_runner()->OnFrameDeactivated(this);
+}
+
+void WebFrameTestProxy::OnReactivated() {
+  test_runner()->OnFrameReactivated(this);
 }
 
 WebWidgetTestProxy* WebFrameTestProxy::GetLocalRootWebWidgetTestProxy() {

@@ -19,6 +19,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -33,7 +34,6 @@ import org.chromium.components.browser_ui.media.MediaNotificationManager;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.media.MediaSwitches;
@@ -123,7 +123,7 @@ public class MediaSessionTest {
 
     private void simulateHeadsetUnplug() {
         Intent i = new Intent(InstrumentationRegistry.getTargetContext(),
-                ChromeMediaNotificationControllerDelegate.PlaybackListenerService.class);
+                ChromeMediaNotificationControllerServices.PlaybackListenerService.class);
         i.setAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
 
         InstrumentationRegistry.getContext().startService(i);

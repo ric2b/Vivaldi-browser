@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_environment_variable_override.h"
@@ -1138,8 +1138,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceRestartBrowserTest, Plugin) {
   ASSERT_TRUE(NavigateToURL(web_contents,
                             embedded_test_server()->GetURL("/title1.html")));
 
-  // Load the test plugin (see ppapi::RegisterFlashTestPlugin and
-  // ppapi/tests/power_saver_test_plugin.cc).
+  // Load the test plugin (see ppapi::RegisterCorbTestPlugin).
   const char kLoadingScript[] = R"(
       var obj = document.createElement('object');
       obj.id = 'plugin';

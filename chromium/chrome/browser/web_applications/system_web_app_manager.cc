@@ -27,13 +27,14 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
@@ -46,16 +47,22 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/chromeos/web_applications/camera_system_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/connectivity_diagnostics_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/chromeos/web_applications/diagnostics_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/help_app_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/media_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/os_settings_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/print_management_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/scanning_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/terminal_source.h"
 #include "chrome/browser/chromeos/web_applications/terminal_system_web_app_info.h"
+#include "chromeos/components/camera_app_ui/url_constants.h"
+#include "chromeos/components/connectivity_diagnostics/url_constants.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "extensions/common/constants.h"
@@ -95,10 +102,10 @@ url::Origin GetOrigin(const char* url) {
 
   return origin;
 }
-
 #endif  // OS_CHROMEOS
 
-base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
+base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps(
+    Profile* profile) {
   base::flat_map<SystemAppType, SystemAppInfo> infos;
 // TODO(calamity): Split this into per-platform functions.
 #if defined(OS_CHROMEOS)
@@ -106,19 +113,17 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
   // to logs and should not be renamed.
   // If new names are added, update tool/metrics/histograms/histograms.xml:
   // "SystemWebAppName"
-  if (SystemWebAppManager::IsAppEnabled(SystemAppType::DISCOVER)) {
-    infos.emplace(
-        SystemAppType::DISCOVER,
-        SystemAppInfo("Discover", GURL(chrome::kChromeUIDiscoverURL)));
-  }
-
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::CAMERA)) {
-    infos.emplace(SystemAppType::CAMERA,
-                  SystemAppInfo("Camera", GURL("chrome://camera-app"),
-                                base::BindRepeating(
-                                    &CreateWebAppInfoForCameraSystemWebApp)));
-    infos.at(SystemAppType::CAMERA).uninstall_and_replace = {
-        extension_misc::kCameraAppId};
+    infos.emplace(
+        SystemAppType::CAMERA,
+        SystemAppInfo(
+            "Camera", GURL("chrome://camera-app/views/main.html"),
+            base::BindRepeating(&CreateWebAppInfoForCameraSystemWebApp)));
+    if (!profile->GetPrefs()->GetBoolean(
+            chromeos::prefs::kHasCameraAppMigratedToSWA)) {
+      infos.at(SystemAppType::CAMERA).uninstall_and_replace = {
+          extension_misc::kCameraAppId};
+    }
     // We need "FileHandling" to use File Handling API to set launch directory.
     // And we need "NativeFileSystem2" to use Native File System API.
     infos.at(SystemAppType::CAMERA).enabled_origin_trials =
@@ -135,9 +140,10 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
             base::BindRepeating(&CreateWebAppInfoForDiagnosticsSystemWebApp)));
   }
 
-  infos.emplace(
-      SystemAppType::SETTINGS,
-      SystemAppInfo("OSSettings", GURL("chrome://os-settings/pwa.html")));
+  infos.emplace(SystemAppType::SETTINGS,
+                SystemAppInfo("OSSettings", GURL(chrome::kChromeUISettingsURL),
+                              base::BindRepeating(
+                                  &CreateWebAppInfoForOSSettingsSystemWebApp)));
   infos.at(SystemAppType::SETTINGS).uninstall_and_replace = {
       chromeos::default_web_apps::kSettingsAppId, ash::kInternalAppIdSettings};
   // Large enough to see the heading text "Settings" in the top-left.
@@ -178,10 +184,10 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::PRINT_MANAGEMENT)) {
     infos.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(SystemAppType::PRINT_MANAGEMENT),
-        std::forward_as_tuple("PrintManagement",
-                              GURL("chrome://print-management/pwa.html")));
+        SystemAppType::PRINT_MANAGEMENT,
+        SystemAppInfo(
+            "PrintManagement", GURL("chrome://print-management/pwa.html"),
+            base::BindRepeating(&CreateWebAppInfoForPrintManagementApp)));
     infos.at(SystemAppType::PRINT_MANAGEMENT).show_in_launcher = false;
     infos.at(SystemAppType::PRINT_MANAGEMENT).minimum_window_size = {600, 320};
   }
@@ -191,6 +197,17 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
                   SystemAppInfo("Scanning", GURL("chrome://scanning"),
                                 base::BindRepeating(
                                     &CreateWebAppInfoForScanningSystemWebApp)));
+  }
+
+  if (SystemWebAppManager::IsAppEnabled(
+          SystemAppType::CONNECTIVITY_DIAGNOSTICS)) {
+    infos.emplace(
+        SystemAppType::CONNECTIVITY_DIAGNOSTICS,
+        SystemAppInfo(
+            "ConnectivityDiagnostics",
+            GURL(chromeos::kChromeUIConnectivityDiagnosticsUrl),
+            base::BindRepeating(
+                &CreateWebAppInfoForConnectivityDiagnosticsSystemWebApp)));
   }
 
 #if !defined(OFFICIAL_BUILD)
@@ -325,11 +342,10 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
   switch (type) {
     case SystemAppType::SETTINGS:
       return true;
-    case SystemAppType::DISCOVER:
-      return base::FeatureList::IsEnabled(chromeos::features::kDiscoverApp);
     case SystemAppType::CAMERA:
       return base::FeatureList::IsEnabled(
-          chromeos::features::kCameraSystemWebApp);
+                 chromeos::features::kCameraSystemWebApp) &&
+             !user_manager::UserManager::Get()->IsLoggedInAsGuest();
     case SystemAppType::TERMINAL:
       return true;
     case SystemAppType::MEDIA:
@@ -343,6 +359,9 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
       return base::FeatureList::IsEnabled(chromeos::features::kScanningUI);
     case SystemAppType::DIAGNOSTICS:
       return base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp);
+    case SystemAppType::CONNECTIVITY_DIAGNOSTICS:
+      return base::FeatureList::IsEnabled(
+          chromeos::features::kConnectivityDiagnosticsWebUi);
 #if !defined(OFFICIAL_BUILD)
     case SystemAppType::TELEMETRY:
       return base::FeatureList::IsEnabled(
@@ -370,7 +389,10 @@ SystemWebAppManager::SystemWebAppManager(Profile* profile)
     // Always update in tests.
     update_policy_ = UpdatePolicy::kAlwaysUpdate;
 
-    // Return early to avoid populating with real system apps.
+    // Populate with real system apps if the test asks for it.
+    if (base::FeatureList::IsEnabled(features::kEnableAllSystemWebApps))
+      system_app_infos_ = CreateSystemWebApps(profile_);
+
     return;
   }
 
@@ -382,7 +404,7 @@ SystemWebAppManager::SystemWebAppManager(Profile* profile)
   update_policy_ = UpdatePolicy::kAlwaysUpdate;
 #endif
 
-  system_app_infos_ = CreateSystemWebApps();
+  system_app_infos_ = CreateSystemWebApps(profile_);
 }
 
 SystemWebAppManager::~SystemWebAppManager() = default;
@@ -475,7 +497,7 @@ void SystemWebAppManager::Start() {
 
 void SystemWebAppManager::InstallSystemAppsForTesting() {
   on_apps_synchronized_.reset(new base::OneShotEvent());
-  system_app_infos_ = CreateSystemWebApps();
+  system_app_infos_ = CreateSystemWebApps(profile_);
   Start();
 
   // Wait for the System Web Apps to install.
@@ -622,6 +644,12 @@ base::Optional<SystemAppType> SystemWebAppManager::GetCapturingSystemAppForURL(
 
   if (!it->second.capture_navigations)
     return base::nullopt;
+
+#if defined(OS_CHROMEOS)
+  if (type == SystemAppType::CAMERA &&
+      url.spec() != chromeos::kChromeUICameraAppMainURL)
+    return base::nullopt;
+#endif  // defined(OS_CHROMEOS)
 
   return type;
 }
@@ -782,6 +810,13 @@ void SystemWebAppManager::OnAppsSynchronized(
     on_apps_synchronized_->Signal();
     OnAppsPolicyChanged();
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  bool is_camera_app_installed =
+      system_app_infos_.find(SystemAppType::CAMERA) != system_app_infos_.end();
+  profile_->GetPrefs()->SetBoolean(chromeos::prefs::kHasCameraAppMigratedToSWA,
+                                   is_camera_app_installed);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 bool SystemWebAppManager::ShouldForceInstallApps() const {

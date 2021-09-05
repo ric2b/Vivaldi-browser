@@ -33,18 +33,18 @@
 // instead of including more headers. If that is infeasible, adjust the limit.
 // For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 900000
+#pragma clang max_tokens_here 1000000
 
 #include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/input/scroll_snap_data.h"
-#include "components/performance_manager/public/mojom/coordination_unit.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/mojom/base/text_direction.mojom-blink.h"
@@ -56,12 +56,12 @@
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/common/feature_policy/document_policy_features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_sample_collector.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/insecure_input/insecure_input_service.mojom-blink.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
@@ -145,6 +145,7 @@
 #include "third_party/blink/renderer/core/dom/node_with_index.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
 #include "third_party/blink/renderer/core/dom/scripted_animation_controller.h"
+#include "third_party/blink/renderer/core/dom/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
@@ -389,6 +390,26 @@ void NotifyPriorityScrollAnchorStatusChanged(Node* first, Node* second) {
     first->NotifyPriorityScrollAnchorStatusChanged();
   if (second)
     second->NotifyPriorityScrollAnchorStatusChanged();
+}
+
+// Before fetching the default URL, make sure it won't be blocked by CSP. The
+// webpage didn't requested "/favicon.ico", it is automatic. Developers
+// shouldn't suffer from any errors provoked by Chrome.
+// See https://crbug.com/820846
+bool DefaultFaviconAllowedByCSP(const Document* document, const IconURL& icon) {
+  ExecutionContext* context = document->GetExecutionContext();
+  if (!context) {
+    // LocalFrame::UpdateFaviconURL() is sometimes called after a LocalFrame
+    // swap. When this happens, the document has lost its ExecutionContext and
+    // the favicon won't be loaded anyway. The output of this function doesn't
+    // matter anymore.
+    return false;
+  }
+
+  return context->GetContentSecurityPolicy()->AllowImageFromSource(
+      icon.icon_url_, icon.icon_url_, RedirectStatus::kNoRedirect,
+      ReportingDisposition::kSuppressReporting,
+      ContentSecurityPolicy::CheckHeaderType::kCheckAll);
 }
 
 }  // namespace
@@ -819,8 +840,9 @@ Document::Document(const DocumentInit& initializer,
             *MakeGarbageCollected<NullResourceFetcherProperties>());
     fetcher_ = MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
         properties, &FetchContext::NullInstance(),
-        GetTaskRunner(TaskType::kNetworking), nullptr /* loader_factory */,
-        GetExecutionContext()));
+        GetTaskRunner(TaskType::kNetworking),
+        GetTaskRunner(TaskType::kNetworkingUnfreezable),
+        nullptr /* loader_factory */, GetExecutionContext()));
 
     if (imports_controller_) {
       // We don't expect the fetcher to be used, so count such unexpected use.
@@ -1144,8 +1166,7 @@ Element* Document::CreateElementForBinding(
   bool is_v1 =
       string_or_options.IsElementCreationOptions() || !RegistrationContext();
   // V0 is only allowed with the flag.
-  DCHECK(is_v1 || RuntimeEnabledFeatures::CustomElementsV0Enabled(
-                      GetExecutionContext()));
+  DCHECK(is_v1 || RuntimeEnabledFeatures::CustomElementsV0Enabled());
   bool create_v1_builtin = string_or_options.IsElementCreationOptions();
   bool should_create_builtin =
       create_v1_builtin || string_or_options.IsString();
@@ -1223,8 +1244,7 @@ Element* Document::createElementNS(
   bool is_v1 =
       string_or_options.IsElementCreationOptions() || !RegistrationContext();
   // V0 is only allowed with the flag.
-  DCHECK(is_v1 || RuntimeEnabledFeatures::CustomElementsV0Enabled(
-                      GetExecutionContext()));
+  DCHECK(is_v1 || RuntimeEnabledFeatures::CustomElementsV0Enabled());
   bool create_v1_builtin = string_or_options.IsElementCreationOptions();
   bool should_create_builtin =
       create_v1_builtin || string_or_options.IsString();
@@ -1279,6 +1299,10 @@ ScriptValue Document::registerElement(ScriptState* script_state,
                                       const AtomicString& name,
                                       const ElementRegistrationOptions* options,
                                       ExceptionState& exception_state) {
+  // TODO(crbug.com/937746): Anything caught by this DCHECK is using the
+  // now-removed Custom Elements v0 API.
+  DCHECK(false) << "Custom Elements v0 has been removed.";
+
   if (!RegistrationContext()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1302,7 +1326,7 @@ ScriptValue Document::registerElement(ScriptState* script_state,
 }
 
 V0CustomElementRegistrationContext* Document::RegistrationContext() const {
-  if (RuntimeEnabledFeatures::CustomElementsV0Enabled(GetExecutionContext()))
+  if (RuntimeEnabledFeatures::CustomElementsV0Enabled())
     return registration_context_.Get();
   return nullptr;
 }
@@ -3873,8 +3897,8 @@ static bool AllDescendantsAreComplete(Document* document) {
       return false;
   }
   for (PortalContents* portal : DocumentPortals::From(*document).GetPortals()) {
-    auto* frame = portal->GetFrame();
-    if (frame && frame->IsLoading())
+    auto* portal_frame = portal->GetFrame();
+    if (portal_frame && portal_frame->IsLoading())
       return false;
   }
   return true;
@@ -3975,6 +3999,23 @@ bool Document::CheckCompletedInternal() {
   return true;
 }
 
+namespace {
+
+enum class BeforeUnloadUse {
+  kNoDialogNoText,
+  kNoDialogNoUserGesture,
+  kNoDialogMultipleConfirmationForNavigation,
+  kShowDialog,
+  kNoDialogAutoCancelTrue,
+  kMaxValue = kNoDialogAutoCancelTrue,
+};
+
+void RecordBeforeUnloadUse(BeforeUnloadUse metric) {
+  base::UmaHistogramEnumeration("Document.BeforeUnloadDialog", metric);
+}
+
+}  // namespace
+
 bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
                                          bool is_reload,
                                          bool& did_allow_navigation) {
@@ -4013,24 +4054,14 @@ bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
   if (!before_unload_event.defaultPrevented())
     DefaultEventHandler(before_unload_event);
 
-  enum BeforeUnloadDialogHistogramEnum {
-    kNoDialogNoText,
-    kNoDialogNoUserGesture,
-    kNoDialogMultipleConfirmationForNavigation,
-    kShowDialog,
-    kNoDialogAutoCancelTrue,
-    kDialogEnumMax
-  };
-  DEFINE_STATIC_LOCAL(EnumerationHistogram, beforeunload_dialog_histogram,
-                      ("Document.BeforeUnloadDialog", kDialogEnumMax));
   if (before_unload_event.returnValue().IsNull()) {
-    beforeunload_dialog_histogram.Count(kNoDialogNoText);
+    RecordBeforeUnloadUse(BeforeUnloadUse::kNoDialogNoText);
   }
   if (!GetFrame() || before_unload_event.returnValue().IsNull())
     return true;
 
   if (!GetFrame()->HasStickyUserActivation()) {
-    beforeunload_dialog_histogram.Count(kNoDialogNoUserGesture);
+    RecordBeforeUnloadUse(BeforeUnloadUse::kNoDialogNoUserGesture);
     String message =
         "Blocked attempt to show a 'beforeunload' confirmation panel for a "
         "frame that never had a user gesture since its load. "
@@ -4040,8 +4071,8 @@ bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
   }
 
   if (did_allow_navigation) {
-    beforeunload_dialog_histogram.Count(
-        kNoDialogMultipleConfirmationForNavigation);
+    RecordBeforeUnloadUse(
+        BeforeUnloadUse::kNoDialogMultipleConfirmationForNavigation);
     String message =
         "Blocked attempt to show multiple 'beforeunload' confirmation panels "
         "for a single navigation.";
@@ -4052,14 +4083,13 @@ bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
   // If |chrome_client| is null simply indicate that the navigation should
   // not proceed.
   if (!chrome_client) {
-    beforeunload_dialog_histogram.Count(kNoDialogAutoCancelTrue);
+    RecordBeforeUnloadUse(BeforeUnloadUse::kNoDialogAutoCancelTrue);
     did_allow_navigation = false;
     return false;
   }
 
   String text = before_unload_event.returnValue();
-  beforeunload_dialog_histogram.Count(
-      BeforeUnloadDialogHistogramEnum::kShowDialog);
+  RecordBeforeUnloadUse(BeforeUnloadUse::kShowDialog);
   const base::TimeTicks beforeunload_confirmpanel_start =
       base::TimeTicks::Now();
   did_allow_navigation =
@@ -5345,13 +5375,13 @@ Element* Document::SequentialFocusNavigationStartingPoint(
     if (type == mojom::blink::FocusType::kForward) {
       Node* previous = FlatTreeTraversal::Previous(*next_node);
       for (; previous; previous = FlatTreeTraversal::Previous(*previous)) {
-        if (auto* element = DynamicTo<Element>(previous))
-          return element;
+        if (auto* previous_element = DynamicTo<Element>(previous))
+          return previous_element;
       }
     }
     for (Node* next = next_node; next; next = FlatTreeTraversal::Next(*next)) {
-      if (auto* element = DynamicTo<Element>(next))
-        return element;
+      if (auto* next_element = DynamicTo<Element>(next))
+        return next_element;
     }
   }
   return nullptr;
@@ -5757,7 +5787,7 @@ void Document::WillChangeFrameOwnerProperties(
     int margin_height,
     mojom::blink::ScrollbarMode scrollbar_mode,
     bool is_display_none,
-    ColorScheme color_scheme) {
+    mojom::blink::ColorScheme color_scheme) {
   DCHECK(GetFrame() && GetFrame()->Owner());
   FrameOwner* owner = GetFrame()->Owner();
 
@@ -6932,6 +6962,16 @@ void Document::MarkFirstPaint() {
   MaybeExecuteDelayedAsyncScripts();
 }
 
+using AllowState = blink::Document::DeclarativeShadowRootAllowState;
+AllowState Document::GetDeclarativeShadowRootAllowState() const {
+  return declarative_shadow_root_allow_state_;
+}
+
+void Document::setAllowDeclarativeShadowRoot(bool val) {
+  declarative_shadow_root_allow_state_ =
+      val ? AllowState::kAllow : AllowState::kDeny;
+}
+
 void Document::FinishedParsing() {
   DCHECK(!GetScriptableDocumentParser() || !parser_->IsParsing());
   DCHECK(!GetScriptableDocumentParser() || ready_state_ != kLoading);
@@ -7081,7 +7121,9 @@ Vector<IconURL> Document::IconURLs(int icon_types_mask) {
   } else if (url_.ProtocolIsInHTTPFamily() &&
              icon_types_mask & 1 << static_cast<int>(
                                    mojom::blink::FaviconIconType::kFavicon)) {
-    icon_urls.push_back(IconURL::DefaultFavicon(url_));
+    IconURL default_favicon = IconURL::DefaultFavicon(url_);
+    if (DefaultFaviconAllowedByCSP(this, default_favicon))
+      icon_urls.push_back(std::move(default_favicon));
   }
 
   if (first_touch_icon.icon_type_ != mojom::blink::FaviconIconType::kInvalid)
@@ -7110,9 +7152,6 @@ base::Optional<Color> Document::ThemeColor() const {
 }
 
 void Document::ColorSchemeMetaChanged() {
-  if (!RuntimeEnabledFeatures::MetaColorSchemeEnabled())
-    return;
-
   const CSSValue* color_scheme = nullptr;
   if (auto* root_element = documentElement()) {
     for (HTMLMetaElement& meta_element :
@@ -7412,7 +7451,7 @@ void Document::exitPointerLock() {
   if (Element* target = GetPage()->GetPointerLockController().GetElement()) {
     if (target->GetDocument() != this)
       return;
-    GetPage()->GetPointerLockController().RequestPointerUnlock();
+    GetPage()->GetPointerLockController().ExitPointerLock();
   }
 }
 
@@ -7479,8 +7518,7 @@ ScriptedAnimationController& Document::GetScriptedAnimationController() {
   return *scripted_animation_controller_;
 }
 
-int Document::RequestAnimationFrame(
-    FrameRequestCallbackCollection::FrameCallback* callback) {
+int Document::RequestAnimationFrame(FrameCallback* callback) {
   return scripted_animation_controller_->RegisterFrameCallback(callback);
 }
 
@@ -7512,9 +7550,8 @@ ScriptedIdleTaskController& Document::EnsureScriptedIdleTaskController() {
   return *scripted_idle_task_controller_;
 }
 
-int Document::RequestIdleCallback(
-    ScriptedIdleTaskController::IdleTask* idle_task,
-    const IdleRequestOptions* options) {
+int Document::RequestIdleCallback(IdleTask* idle_task,
+                                  const IdleRequestOptions* options) {
   return EnsureScriptedIdleTaskController().RegisterCallback(idle_task,
                                                              options);
 }
@@ -8436,9 +8473,22 @@ void Document::SetShowBeforeUnloadDialog(bool show_dialog) {
 }
 
 void Document::ColorSchemeChanged() {
+  InvalidateScrollbars();
   UpdateForcedColors();
   GetStyleEngine().ColorSchemeChanged();
   MediaQueryAffectingValueChanged(MediaValueChange::kOther);
+}
+
+void Document::InvalidateScrollbars() {
+  if (PaintLayerScrollableArea* scrollable_area =
+          GetLayoutView()->GetScrollableArea()) {
+    if (auto* horizontal_scrollbar = scrollable_area->HorizontalScrollbar()) {
+      horizontal_scrollbar->SetNeedsPaintInvalidation(kAllParts);
+    }
+    if (auto* vertical_scrollbar = scrollable_area->VerticalScrollbar()) {
+      vertical_scrollbar->SetNeedsPaintInvalidation(kAllParts);
+    }
+  }
 }
 
 void Document::VisionDeficiencyChanged() {
@@ -8463,7 +8513,7 @@ bool Document::InForcedColorsMode() const {
 bool Document::InDarkMode() {
   return !InForcedColorsMode() && !Printing() &&
          GetStyleEngine().GetPreferredColorScheme() ==
-             PreferredColorScheme::kDark;
+             mojom::blink::PreferredColorScheme::kDark;
 }
 
 void Document::CountUse(mojom::WebFeature feature) const {

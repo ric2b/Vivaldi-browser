@@ -8,7 +8,9 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/service_worker/service_worker_accessed_callback.h"
+#include "content/browser/service_worker/service_worker_main_resource_handle_core.h"
 #include "content/common/content_export.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 
@@ -24,7 +26,6 @@ struct CrossOriginEmbedderPolicy;
 namespace content {
 
 class ServiceWorkerContextWrapper;
-class ServiceWorkerMainResourceHandleCore;
 
 // This class is used to manage the lifetime of ServiceWorkerContainerHosts
 // created for main resource requests (navigations and web workers). This is a
@@ -84,7 +85,8 @@ class CONTENT_EXPORT ServiceWorkerMainResourceHandle {
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter,
-      blink::mojom::ServiceWorkerContainerInfoForClientPtr* out_container_info);
+      blink::mojom::ServiceWorkerContainerInfoForClientPtr* out_container_info,
+      ukm::SourceId document_ukm_source_id);
 
   // Called after the renderer reports back that the navigation has been
   // committed.
@@ -95,7 +97,8 @@ class CONTENT_EXPORT ServiceWorkerMainResourceHandle {
   // |cross_origin_embedder_policy| is passed to the pre-created container
   // host.
   void OnBeginWorkerCommit(
-      const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy);
+      const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
+      ukm::SourceId worker_ukm_source_id);
 
   blink::mojom::ServiceWorkerContainerInfoForClientPtr TakeContainerInfo() {
     return std::move(container_info_);

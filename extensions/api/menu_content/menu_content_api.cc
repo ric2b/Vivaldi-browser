@@ -5,6 +5,7 @@
 
 #include "base/guid.h"
 #include "base/lazy_instance.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -246,11 +247,24 @@ ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
   NodeModel pair = GetMenu(browser_context(), params->named_menu);
   if (pair.first && pair.first->parent()) {
     success = true;
+    Menu_Node* parent = pair.second->root_node().GetById(
+          GetIdFromString(params->parent_id));
+    int index = params->index < 0 ? parent->children().size() : params->index;
     for (auto& id : params->ids) {
       Menu_Node* node = pair.first->GetById(GetIdFromString(id));
-      Menu_Node* parent = pair.second->root_node().GetById(
-          GetIdFromString(params->parent_id));
-      pair.second->Move(node, parent, params->index);
+      if (!node) {
+        return RespondNow(Error("Illegal menu item identifier: " + id));
+      }
+      // Prevent items (if more than one) to be added in reverse order by
+      // stepping the target index once one element has been added to the model.
+      // Needed when moving items into another folder (parent differs) or when
+      // moving towards the start of the list in the same folder.
+      bool step = node->parent() != parent ||
+                  node->parent()->GetIndexOf(node) > index;
+      pair.second->Move(node, parent, index);
+      if (step) {
+        index ++;
+      }
     }
   }
 

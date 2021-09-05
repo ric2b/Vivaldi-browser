@@ -16,10 +16,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/browser/browser_features.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_core_service_impl.h"
@@ -27,6 +26,7 @@
 #include "chrome/browser/nearby_sharing/certificates/fake_nearby_share_certificate_manager.h"
 #include "chrome/browser/nearby_sharing/certificates/nearby_share_certificate_manager_impl.h"
 #include "chrome/browser/nearby_sharing/certificates/test_util.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/nearby_sharing/constants.h"
 #include "chrome/browser/nearby_sharing/contacts/fake_nearby_share_contact_manager.h"
@@ -37,7 +37,6 @@
 #include "chrome/browser/nearby_sharing/local_device_data/fake_nearby_share_local_device_data_manager.h"
 #include "chrome/browser/nearby_sharing/local_device_data/nearby_share_local_device_data_manager_impl.h"
 #include "chrome/browser/nearby_sharing/mock_nearby_process_manager.h"
-#include "chrome/browser/nearby_sharing/mock_nearby_sharing_decoder.h"
 #include "chrome/browser/nearby_sharing/nearby_connections_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_share_default_device_name.h"
 #include "chrome/browser/nearby_sharing/power_client.h"
@@ -47,11 +46,12 @@
 #include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
 #include "chrome/services/sharing/nearby/decoder/advertisement_decoder.h"
 #include "chrome/services/sharing/public/cpp/advertisement.h"
-#include "chrome/services/sharing/public/mojom/nearby_connections_types.mojom.h"
 #include "chrome/services/sharing/public/proto/wire_format.pb.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/services/nearby/public/cpp/mock_nearby_sharing_decoder.h"
+#include "chromeos/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -331,6 +331,23 @@ std::vector<std::unique_ptr<Attachment>> CreateFileAttachments(
   return attachments;
 }
 
+class MockBluetoothAdapterWithIntervals : public device::MockBluetoothAdapter {
+ public:
+  MOCK_METHOD2(OnSetAdvertisingInterval, void(int64_t, int64_t));
+
+  void SetAdvertisingInterval(
+      const base::TimeDelta& min,
+      const base::TimeDelta& max,
+      base::OnceClosure callback,
+      AdvertisementErrorCallback error_callback) override {
+    std::move(callback).Run();
+    OnSetAdvertisingInterval(min.InMilliseconds(), max.InMilliseconds());
+  }
+
+ protected:
+  ~MockBluetoothAdapterWithIntervals() override = default;
+};
+
 class NearbySharingServiceImplTest : public testing::Test {
  public:
   NearbySharingServiceImplTest()
@@ -354,7 +371,7 @@ class NearbySharingServiceImplTest : public testing::Test {
         &certificate_manager_factory_);
 
     mock_bluetooth_adapter_ =
-        base::MakeRefCounted<NiceMock<device::MockBluetoothAdapter>>();
+        base::MakeRefCounted<NiceMock<MockBluetoothAdapterWithIntervals>>();
     ON_CALL(*mock_bluetooth_adapter_, IsPresent())
         .WillByDefault(
             Invoke(this, &NearbySharingServiceImplTest::IsBluetoothPresent));
@@ -364,6 +381,9 @@ class NearbySharingServiceImplTest : public testing::Test {
     ON_CALL(*mock_bluetooth_adapter_, AddObserver(_))
         .WillByDefault(
             Invoke(this, &NearbySharingServiceImplTest::AddAdapterObserver));
+    ON_CALL(*mock_bluetooth_adapter_, OnSetAdvertisingInterval(_, _))
+        .WillByDefault(Invoke(
+            this, &NearbySharingServiceImplTest::OnSetAdvertisingInterval));
     device::BluetoothAdapterFactory::SetAdapterForTesting(
         mock_bluetooth_adapter_);
 
@@ -405,6 +425,7 @@ class NearbySharingServiceImplTest : public testing::Test {
 
   std::unique_ptr<NearbySharingServiceImpl> CreateService() {
     profile_ = profile_manager_.CreateTestingProfile(kProfileName);
+    prefs_.SetBoolean(prefs::kNearbySharingEnabledPrefName, true);
 
     fake_nearby_connections_manager_ = new FakeNearbyConnectionsManager();
     notification_tester_ =
@@ -464,6 +485,12 @@ class NearbySharingServiceImplTest : public testing::Test {
     adapter_observer_ = observer;
   }
 
+  void OnSetAdvertisingInterval(int64_t min, int64_t max) {
+    ++set_advertising_interval_call_count_;
+    last_advertising_interval_min_ = min;
+    last_advertising_interval_max_ = max;
+  }
+
   void SetConnectionType(net::NetworkChangeNotifier::ConnectionType type) {
     network_notifier_->SetConnectionType(type);
     network_notifier_->NotifyObserversOfNetworkChangeForTests(
@@ -520,7 +547,8 @@ class NearbySharingServiceImplTest : public testing::Test {
         .WillOnce(testing::Invoke(
             [is_incoming](
                 const std::vector<uint8_t>& data,
-                MockNearbySharingDecoder::DecodeFrameCallback callback) {
+                chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                    callback) {
               sharing::mojom::V1FramePtr mojo_v1frame =
                   sharing::mojom::V1Frame::New();
               mojo_v1frame->set_paired_key_encryption(
@@ -542,7 +570,8 @@ class NearbySharingServiceImplTest : public testing::Test {
                 DecodeFrame(testing::Eq(result_bytes), testing::_))
         .WillOnce(testing::Invoke(
             [=](const std::vector<uint8_t>& data,
-                MockNearbySharingDecoder::DecodeFrameCallback callback) {
+                chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                    callback) {
               sharing::mojom::V1FramePtr mojo_v1frame =
                   sharing::mojom::V1Frame::New();
               mojo_v1frame->set_paired_key_result(
@@ -560,10 +589,10 @@ class NearbySharingServiceImplTest : public testing::Test {
                                  bool return_empty_advertisement) {
     EXPECT_CALL(mock_decoder_,
                 DecodeAdvertisement(testing::Eq(endpoint_info), testing::_))
-        .WillOnce(testing::Invoke(
-            [=](const std::vector<uint8_t>& data,
-                MockNearbySharingDecoder::DecodeAdvertisementCallback
-                    callback) {
+        .WillOnce(
+            testing::Invoke([=](const std::vector<uint8_t>& data,
+                                chromeos::nearby::MockNearbySharingDecoder::
+                                    DecodeAdvertisementCallback callback) {
               if (return_empty_advertisement) {
                 std::move(callback).Run(nullptr);
                 return;
@@ -584,7 +613,8 @@ class NearbySharingServiceImplTest : public testing::Test {
     EXPECT_CALL(mock_decoder_, DecodeFrame(testing::Eq(bytes), testing::_))
         .WillOnce(testing::Invoke(
             [=](const std::vector<uint8_t>& data,
-                MockNearbySharingDecoder::DecodeFrameCallback callback) {
+                chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                    callback) {
               std::move(callback).Run(return_empty_introduction_frame
                                           ? GetEmptyIntroductionFrame()
                                           : GetValidIntroductionFrame());
@@ -599,7 +629,8 @@ class NearbySharingServiceImplTest : public testing::Test {
     EXPECT_CALL(mock_decoder_, DecodeFrame(testing::Eq(bytes), testing::_))
         .WillOnce(testing::Invoke(
             [=](const std::vector<uint8_t>& data,
-                MockNearbySharingDecoder::DecodeFrameCallback callback) {
+                chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                    callback) {
               std::move(callback).Run(GetConnectionResponseFrame(status));
             }));
     connection_.AppendReadableData(bytes);
@@ -813,7 +844,8 @@ class NearbySharingServiceImplTest : public testing::Test {
             info.payload_id,
             location::nearby::connections::mojom::PayloadStatus::kSuccess,
             /*total_bytes=*/strlen(kTextPayload),
-            /*bytes_transferred=*/strlen(kTextPayload)));
+            /*bytes_transferred=*/strlen(kTextPayload)),
+        /*upgraded_medium=*/base::nullopt);
     success_run_loop.Run();
   }
 
@@ -857,6 +889,18 @@ class NearbySharingServiceImplTest : public testing::Test {
     return path;
   }
 
+  size_t set_advertising_interval_call_count() {
+    return set_advertising_interval_call_count_;
+  }
+
+  int64_t last_advertising_interval_min() {
+    return last_advertising_interval_min_;
+  }
+
+  int64_t last_advertising_interval_max() {
+    return last_advertising_interval_max_;
+  }
+
   base::test::ScopedFeatureList scoped_feature_list_;
   base::ScopedTempDir temp_dir_;
   // We need to ensure that |network_notifier_| is created and destroyed after
@@ -885,9 +929,13 @@ class NearbySharingServiceImplTest : public testing::Test {
   bool is_bluetooth_present_ = true;
   bool is_bluetooth_powered_ = true;
   device::BluetoothAdapter::Observer* adapter_observer_ = nullptr;
-  scoped_refptr<NiceMock<device::MockBluetoothAdapter>> mock_bluetooth_adapter_;
-  NiceMock<MockNearbySharingDecoder> mock_decoder_;
+  scoped_refptr<NiceMock<MockBluetoothAdapterWithIntervals>>
+      mock_bluetooth_adapter_;
+  NiceMock<chromeos::nearby::MockNearbySharingDecoder> mock_decoder_;
   FakeNearbyConnection connection_;
+  size_t set_advertising_interval_call_count_ = 0u;
+  int64_t last_advertising_interval_min_ = 0;
+  int64_t last_advertising_interval_max_ = 0;
 };
 
 struct ValidSendSurfaceTestData {
@@ -1309,6 +1357,11 @@ TEST_F(NearbySharingServiceImplTest,
       service_->RegisterSendSurface(&transfer_callback2, &discovery_callback2,
                                     SendSurfaceState::kForeground));
   run_loop2.Run();
+
+  // Shut down the service while the discovery callbacks are still in scope.
+  // OnShareTargetLost() will be invoked during shutdown.
+  service_->Shutdown();
+  service_.reset();
 }
 
 TEST_F(NearbySharingServiceImplTest, RegisterSendSurfaceEmptyCertificate) {
@@ -1366,6 +1419,11 @@ TEST_F(NearbySharingServiceImplTest, RegisterSendSurfaceEmptyCertificate) {
       service_->RegisterSendSurface(&transfer_callback2, &discovery_callback2,
                                     SendSurfaceState::kForeground));
   run_loop2.Run();
+
+  // Shut down the service while the discovery callbacks are still in scope.
+  // OnShareTargetLost() will be invoked during shutdown.
+  service_->Shutdown();
+  service_.reset();
 }
 
 TEST_P(NearbySharingServiceImplValidSendTest,
@@ -1652,6 +1710,7 @@ TEST_F(NearbySharingServiceImplTest, SuspendDuringAdvertising) {
   power_client_->SetSuspended(false);
   EXPECT_TRUE(fake_nearby_connections_manager_->IsDiscovering());
 }
+
 TEST_F(NearbySharingServiceImplTest,
        DataUsageChangedRegisterReceiveSurfaceRestartsAdvertising) {
   SetConnectionType(net::NetworkChangeNotifier::CONNECTION_WIFI);
@@ -2121,7 +2180,8 @@ TEST_F(NearbySharingServiceImplTest, IncomingConnection_OutOfStorage) {
   EXPECT_CALL(mock_decoder_, DecodeFrame(testing::Eq(bytes), testing::_))
       .WillOnce(testing::Invoke(
           [](const std::vector<uint8_t>& data,
-             MockNearbySharingDecoder::DecodeFrameCallback callback) {
+             chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                 callback) {
             std::vector<sharing::mojom::FileMetadataPtr> mojo_file_metadatas;
             mojo_file_metadatas.push_back(sharing::mojom::FileMetadata::New(
                 "name", sharing::mojom::FileMetadata::Type::kAudio,
@@ -2191,7 +2251,8 @@ TEST_F(NearbySharingServiceImplTest, IncomingConnection_FileSizeOverflow) {
   EXPECT_CALL(mock_decoder_, DecodeFrame(testing::Eq(bytes), testing::_))
       .WillOnce(testing::Invoke(
           [](const std::vector<uint8_t>& data,
-             MockNearbySharingDecoder::DecodeFrameCallback callback) {
+             chromeos::nearby::MockNearbySharingDecoder::DecodeFrameCallback
+                 callback) {
             std::vector<sharing::mojom::FileMetadataPtr> mojo_file_metadatas;
             mojo_file_metadatas.push_back(sharing::mojom::FileMetadata::New(
                 "name_1", sharing::mojom::FileMetadata::Type::kAudio,
@@ -2467,7 +2528,8 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadSuccessful) {
             id, location::nearby::connections::mojom::PayloadStatus::kSuccess,
             /*total_bytes=*/kPayloadSize,
             /*bytes_transferred=*/kPayloadSize);
-    listener->OnStatusUpdate(std::move(payload));
+    listener->OnStatusUpdate(std::move(payload),
+                             /*upgraded_medium=*/base::nullopt);
     run_loop_progress.Run();
 
     task_environment_.FastForwardBy(kMinProgressUpdateFrequency);
@@ -2506,7 +2568,8 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadSuccessful) {
           location::nearby::connections::mojom::PayloadStatus::kSuccess,
           /*total_bytes=*/kPayloadSize,
           /*bytes_transferred=*/kPayloadSize);
-  listener->OnStatusUpdate(std::move(payload));
+  listener->OnStatusUpdate(std::move(payload),
+                           /*upgraded_medium=*/base::nullopt);
   run_loop_success.Run();
 
   EXPECT_FALSE(
@@ -2585,7 +2648,8 @@ TEST_F(NearbySharingServiceImplTest,
             id, location::nearby::connections::mojom::PayloadStatus::kSuccess,
             /*total_bytes=*/kPayloadSize,
             /*bytes_transferred=*/kPayloadSize);
-    listener->OnStatusUpdate(std::move(payload));
+    listener->OnStatusUpdate(std::move(payload),
+                             /*upgraded_medium=*/base::nullopt);
     run_loop_progress.Run();
 
     task_environment_.FastForwardBy(kMinProgressUpdateFrequency);
@@ -2616,7 +2680,8 @@ TEST_F(NearbySharingServiceImplTest,
           location::nearby::connections::mojom::PayloadStatus::kSuccess,
           /*total_bytes=*/kPayloadSize,
           /*bytes_transferred=*/kPayloadSize);
-  listener->OnStatusUpdate(std::move(payload));
+  listener->OnStatusUpdate(std::move(payload),
+                           /*upgraded_medium=*/base::nullopt);
   run_loop_success.Run();
 
   EXPECT_FALSE(
@@ -2689,7 +2754,8 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadFailed) {
           location::nearby::connections::mojom::PayloadStatus::kFailure,
           /*total_bytes=*/kPayloadSize,
           /*bytes_transferred=*/kPayloadSize);
-  listener->OnStatusUpdate(std::move(payload));
+  listener->OnStatusUpdate(std::move(payload),
+                           /*upgraded_medium=*/base::nullopt);
   run_loop_failure.Run();
 
   EXPECT_FALSE(
@@ -2762,7 +2828,8 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadCancelled) {
           location::nearby::connections::mojom::PayloadStatus::kCanceled,
           /*total_bytes=*/kPayloadSize,
           /*bytes_transferred=*/kPayloadSize);
-  listener->OnStatusUpdate(std::move(payload));
+  listener->OnStatusUpdate(std::move(payload),
+                           /*upgraded_medium=*/base::nullopt);
   run_loop_failure.Run();
 
   EXPECT_FALSE(
@@ -3501,8 +3568,7 @@ TEST_F(NearbySharingServiceImplTest, ShutdownCallsObservers) {
   service_.reset();
 }
 
-TEST_F(NearbySharingServiceImplTest,
-       PeriodicallyRotateBackgroundAdvertisement) {
+TEST_F(NearbySharingServiceImplTest, RotateBackgroundAdvertisement_Periodic) {
   certificate_manager()->set_next_salt({0x00, 0x01});
   SetVisibility(nearby_share::mojom::Visibility::kAllContacts);
   NiceMock<MockTransferUpdateCallback> callback;
@@ -3515,6 +3581,26 @@ TEST_F(NearbySharingServiceImplTest,
 
   certificate_manager()->set_next_salt({0x00, 0x02});
   task_environment_.FastForwardBy(base::TimeDelta::FromMinutes(15));
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+  auto endpoint_info_rotated =
+      fake_nearby_connections_manager_->advertising_endpoint_info();
+  EXPECT_NE(endpoint_info_initial, endpoint_info_rotated);
+}
+
+TEST_F(NearbySharingServiceImplTest,
+       RotateBackgroundAdvertisement_PrivateCertificatesChange) {
+  certificate_manager()->set_next_salt({0x00, 0x01});
+  SetVisibility(nearby_share::mojom::Visibility::kAllContacts);
+  NiceMock<MockTransferUpdateCallback> callback;
+  NearbySharingService::StatusCodes result = service_->RegisterReceiveSurface(
+      &callback, NearbySharingService::ReceiveSurfaceState::kBackground);
+  EXPECT_EQ(result, NearbySharingService::StatusCodes::kOk);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+  auto endpoint_info_initial =
+      fake_nearby_connections_manager_->advertising_endpoint_info();
+
+  certificate_manager()->set_next_salt({0x00, 0x02});
+  certificate_manager()->NotifyPrivateCertificatesChanged();
   EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
   auto endpoint_info_rotated =
       fake_nearby_connections_manager_->advertising_endpoint_info();

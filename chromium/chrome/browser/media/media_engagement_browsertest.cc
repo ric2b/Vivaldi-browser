@@ -17,9 +17,9 @@
 #include "chrome/browser/media/media_engagement_contents_observer.h"
 #include "chrome/browser/media/media_engagement_preloaded_list.h"
 #include "chrome/browser/media/media_engagement_service.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_test_utils.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/prerender/prerender_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/session_restore_test_helper.h"
@@ -33,9 +33,9 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "components/prerender/browser/prerender_handle.h"
-#include "components/prerender/browser/prerender_manager.h"
-#include "components/prerender/common/prerender_final_status.h"
+#include "components/no_state_prefetch/browser/prerender_handle.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
+#include "components/no_state_prefetch/common/prerender_final_status.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -256,7 +256,8 @@ class MediaEngagementBrowserTest : public InProcessBrowserTest {
     // need it before the page navigates.
     InjectTimerTaskRunner();
 
-    ui_test_utils::NavigateToURL(browser(), http_server_origin2_.GetURL("/"));
+    ui_test_utils::NavigateToURL(
+        browser(), http_server_origin2_.GetURL("/engagement_test.html"));
   }
 
   const net::EmbeddedTestServer& http_server() const { return http_server_; }
@@ -730,22 +731,12 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementBrowserTest,
   ExpectScores(2, 2);
 }
 
-class MediaEngagementPrerenderBrowserTest : public MediaEngagementBrowserTest {
- public:
-  void SetUpOnMainThread() override {
-    MediaEngagementBrowserTest::SetUpOnMainThread();
-
-    prerender::PrerenderManager::SetMode(
-        prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
-  }
-};
-
 #if defined(OS_WIN)
 #define MAYBE_Ignored DISABLED_Ignored
 #else
 #define MAYBE_Ignored Ignored
 #endif
-IN_PROC_BROWSER_TEST_F(MediaEngagementPrerenderBrowserTest, MAYBE_Ignored) {
+IN_PROC_BROWSER_TEST_F(MediaEngagementBrowserTest, MAYBE_Ignored) {
   const GURL& url = http_server().GetURL("/engagement_test.html");
 
   prerender::PrerenderManager* prerender_manager =

@@ -9,12 +9,12 @@ import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -52,15 +52,18 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
             StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier) {
+            Supplier<LayerTitleCache> layerTitleCacheSupplier,
+            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplierImpl<LayoutStateProvider> layoutStateProviderOneshotSupplier) {
         super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
-                overviewModeBehaviorSupplier);
+                layerTitleCacheSupplier, overviewModeBehaviorSupplier,
+                layoutStateProviderOneshotSupplier);
 
         // Vivaldi
         Context context = mHost.getContext();
         mTabStripLayoutHelperManager =
                 new StripLayoutHelperManager(context, this, mHost.getLayoutRenderHost(),
-                        () -> mTitleCache);
+                        () -> mTitleCache, layerTitleCacheSupplier);
         mTabStripAdded = false;
         mPreferenceObserver = key -> {
             if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)
@@ -80,17 +83,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            ControlContainer controlContainer,
-            ContextualSearchManagementDelegate contextualSearchDelegate,
-            DynamicResourceLoader dynamicResourceLoader, ActivityTabProvider tabProvider) {
+            ControlContainer controlContainer, DynamicResourceLoader dynamicResourceLoader) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
         // Build Layouts
         mSimpleAnimationLayout = new SimpleAnimationLayout(context, this, renderHost);
 
-        super.init(selector, creator, controlContainer, contextualSearchDelegate,
-                dynamicResourceLoader, tabProvider);
+        super.init(selector, creator, controlContainer, dynamicResourceLoader);
 
         // Set up layout parameters
         mStaticLayout.setLayoutHandlesTabLifecycles(false);
@@ -170,15 +170,15 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     protected void tabCreating(int sourceId, String url, boolean isIncognito) {
-        if (!getActiveLayout().isHiding() && overlaysHandleTabCreating()
-                && getActiveLayout().handlesTabCreating()) {
+        if (getActiveLayout() != null && !getActiveLayout().isStartingToHide()
+                && overlaysHandleTabCreating() && getActiveLayout().handlesTabCreating()) {
             // If the current layout in the foreground, let it handle the tab creation animation.
             // This check allows us to switch from the StackLayout to the SimpleAnimationLayout
             // smoothly.
             getActiveLayout().onTabCreating(sourceId);
         } else if (animationsEnabled()) {
             if (!overviewVisible()) {
-                if (getActiveLayout() != null && getActiveLayout().isHiding()) {
+                if (getActiveLayout() != null && getActiveLayout().isStartingToHide()) {
                     setNextLayout(mSimpleAnimationLayout);
                     // The method Layout#doneHiding() will automatically show the next layout.
                     getActiveLayout().doneHiding();
@@ -186,7 +186,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     startShowing(mSimpleAnimationLayout, false);
                 }
             }
-            getActiveLayout().onTabCreating(sourceId);
+            if (getActiveLayout() != null) {
+                getActiveLayout().onTabCreating(sourceId);
+            }
         }
     }
 

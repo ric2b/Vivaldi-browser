@@ -106,6 +106,10 @@ void V4L2StatefulVideoDecoderBackend::EnqueueDecodeTask(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
 
+  if (!buffer->end_of_stream()) {
+    has_pending_requests_ = true;
+  }
+
   decode_request_queue_.push(
       DecodeRequest(std::move(buffer), std::move(decode_cb), bitstream_id));
 
@@ -213,7 +217,10 @@ void V4L2StatefulVideoDecoderBackend::DoDecodeWork() {
   }
 
   // The V4L2 input buffer contains a decodable entity, queue it.
-  std::move(*current_input_buffer_).QueueMMap();
+  if (!std::move(*current_input_buffer_).QueueMMap()) {
+    LOG(ERROR) << "Error while queuing input buffer!";
+    client_->OnBackendError();
+  }
   current_input_buffer_.reset();
 
   // If we can still progress on a decode request, do it.
@@ -297,8 +304,10 @@ void V4L2StatefulVideoDecoderBackend::EnqueueOutputBuffers() {
     if (no_buffer)
       break;
 
-    if (!ret)
+    if (!ret) {
+      LOG(ERROR) << "Error while queueing output buffer!";
       client_->OnBackendError();
+    }
   }
 
   DVLOGF(3) << output_queue_->QueuedBuffersCount() << "/"
@@ -406,8 +415,9 @@ void V4L2StatefulVideoDecoderBackend::OnOutputBufferDequeued(
   // change event (but not the opposite), so we must make sure both events
   // are processed in the correct order.
   if (buffer->IsLast()){
-    if (!resolution_change_cb_ && !flush_cb_)
-      ProcessEventQueue();
+    // Check that we don't have a resolution change event pending. If we do
+    // then this LAST buffer was related to it.
+    ProcessEventQueue();
 
     if (resolution_change_cb_) {
       std::move(resolution_change_cb_).Run();
@@ -420,6 +430,19 @@ void V4L2StatefulVideoDecoderBackend::OnOutputBufferDequeued(
   EnqueueOutputBuffers();
 }
 
+bool V4L2StatefulVideoDecoderBackend::SendStopCommand() {
+  struct v4l2_decoder_cmd cmd;
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.cmd = V4L2_DEC_CMD_STOP;
+  if (device_->Ioctl(VIDIOC_DECODER_CMD, &cmd) != 0) {
+    LOG(ERROR) << "Failed to issue STOP command";
+    client_->OnBackendError();
+    return false;
+  }
+
+  return true;
+}
+
 bool V4L2StatefulVideoDecoderBackend::InitiateFlush(
     VideoDecoder::DecodeCB flush_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -428,29 +451,32 @@ bool V4L2StatefulVideoDecoderBackend::InitiateFlush(
 
   // Submit any pending input buffer at the time of flush.
   if (current_input_buffer_) {
-    std::move(*current_input_buffer_).QueueMMap();
+    if (!std::move(*current_input_buffer_).QueueMMap()) {
+      LOG(ERROR) << "Error while queuing input buffer!";
+      client_->OnBackendError();
+    }
     current_input_buffer_.reset();
   }
 
   client_->InitiateFlush();
   flush_cb_ = std::move(flush_cb);
 
-  // Special case: if our CAPTURE queue is not streaming, we cannot receive
-  // the CAPTURE buffer with the LAST flag set that signals the end of flush.
-  // In this case, we should complete the flush immediately.
-  if (!output_queue_->IsStreaming())
+  // Special case: if we haven't received any decoding request, we could
+  // complete the flush immediately.
+  if (!has_pending_requests_)
     return CompleteFlush();
 
-  // Send the STOP command to the V4L2 device. The device will let us know
-  // that the flush is completed by sending us a CAPTURE buffer with the LAST
-  // flag set.
-  struct v4l2_decoder_cmd cmd;
-  memset(&cmd, 0, sizeof(cmd));
-  cmd.cmd = V4L2_DEC_CMD_STOP;
-  if (device_->Ioctl(VIDIOC_DECODER_CMD, &cmd) != 0) {
-    LOG(ERROR) << "Failed to issue STOP command";
-    client_->OnBackendError();
-    return false;
+  if (output_queue_->IsStreaming()) {
+    // If the CAPTURE queue is streaming, send the STOP command to the V4L2
+    // device. The device will let us know that the flush is completed by
+    // sending us a CAPTURE buffer with the LAST flag set.
+    return SendStopCommand();
+  } else {
+    // If the CAPTURE queue is not streaming, this means we received the flush
+    // request before the initial resolution has been established. The flush
+    // request will be processed in OnChangeResolutionDone(), when the CAPTURE
+    // queue starts streaming.
+    DVLOGF(2) << "Flush request to be processed after CAPTURE queue starts";
   }
 
   return true;
@@ -483,6 +509,7 @@ bool V4L2StatefulVideoDecoderBackend::CompleteFlush() {
   // Resume decoding if data is available.
   ScheduleDecodeWork();
 
+  has_pending_requests_ = false;
   return true;
 }
 
@@ -511,6 +538,11 @@ void V4L2StatefulVideoDecoderBackend::ChangeResolution() {
 
   auto visible_rect = output_queue_->GetVisibleRect();
   if (!visible_rect) {
+    client_->OnBackendError();
+    return;
+  }
+
+  if (!gfx::Rect(pic_size).Contains(*visible_rect)) {
     client_->OnBackendError();
     return;
   }
@@ -577,6 +609,16 @@ void V4L2StatefulVideoDecoderBackend::OnChangeResolutionDone(bool success) {
   // Enqueue all available output buffers now that they are allocated.
   EnqueueOutputBuffers();
 
+  // If we had a flush request pending before the initial resolution change,
+  // process it now.
+  if (flush_cb_) {
+    DVLOGF(2) << "Processing pending flush request...";
+
+    client_->InitiateFlush();
+    if (!SendStopCommand())
+      return;
+  }
+
   // Also try to progress on our work.
   DoDecodeWork();
 }
@@ -603,6 +645,8 @@ void V4L2StatefulVideoDecoderBackend::ClearPendingRequests(
     std::move(decode_request_queue_.front().decode_cb).Run(status);
     decode_request_queue_.pop();
   }
+
+  has_pending_requests_ = false;
 }
 
 // TODO(b:149663704) move into helper function shared between both backends?

@@ -109,12 +109,16 @@ bool ParseQuad(std::unique_ptr<protocol::Array<double>> quad_array,
 
 }  // namespace
 
+// OverlayNames ----------------------------------------------------------------
+const char* OverlayNames::OVERLAY_HIGHLIGHT = "highlight";
+const char* OverlayNames::OVERLAY_HIGHLIGHT_GRID = "highlightGrid";
+const char* OverlayNames::OVERLAY_SOURCE_ORDER = "sourceOrder";
+const char* OverlayNames::OVERLAY_DISTANCES = "distances";
+const char* OverlayNames::OVERLAY_VIEWPORT_SIZE = "viewportSize";
+const char* OverlayNames::OVERLAY_SCREENSHOT = "screenshot";
+const char* OverlayNames::OVERLAY_PAUSED = "paused";
+
 // InspectTool -----------------------------------------------------------------
-
-int InspectTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_HIGHLIGHT_JS;
-}
-
 bool InspectTool::HandleInputEvent(LocalFrameView* frame_view,
                                    const WebInputEvent& input_event,
                                    bool* swallow_next_mouse_up) {
@@ -215,11 +219,10 @@ Hinge::Hinge(FloatQuad quad,
       outline_color_(outline_color),
       overlay_(overlay) {}
 
-// static
-int Hinge::GetDataResourceId() {
+String Hinge::GetOverlayName() {
   // TODO (soxia): In the future, we should make the hinge working properly
   // with tools using different resources.
-  return IDR_INSPECT_TOOL_HIGHLIGHT_JS;
+  return OverlayNames::OVERLAY_HIGHLIGHT;
 }
 
 void Hinge::Trace(Visitor* visitor) const {
@@ -294,10 +297,8 @@ class InspectorOverlayAgent::InspectorPageOverlayDelegate final
   // cc::ContentLayerClient implementation
   gfx::Rect PaintableRegion() override { return gfx::Rect(layer_->bounds()); }
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
-  scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting) override {
+  scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
     display_list->StartPaint();
     display_list->push<cc::DrawRecordOp>(
@@ -374,7 +375,7 @@ InspectorOverlayAgent::InspectorOverlayAgent(
       inspect_mode_protocol_config_(&agent_state_, std::vector<uint8_t>()) {}
 
 InspectorOverlayAgent::~InspectorOverlayAgent() {
-  DCHECK(!overlay_page_);
+  DCHECK(!overlay_page_ && !inspect_tool_ && !hinge_ && !persistent_tool_);
 }
 
 void InspectorOverlayAgent::Trace(Visitor* visitor) const {
@@ -420,7 +421,6 @@ Response InspectorOverlayAgent::enable() {
   }
   backend_node_id_to_inspect_ = 0;
   SetNeedsUnbufferedInput(true);
-
   return Response::Success();
 }
 
@@ -455,7 +455,6 @@ Response InspectorOverlayAgent::disable() {
   resize_timer_.Stop();
   resize_timer_active_ = false;
   frame_overlay_.reset();
-  frame_resource_name_ = 0;
   persistent_tool_ = nullptr;
   PickTheRightTool();
   SetNeedsUnbufferedInput(false);
@@ -616,11 +615,10 @@ Response InspectorOverlayAgent::highlightRect(
     Maybe<protocol::DOM::RGBA> outline_color) {
   std::unique_ptr<FloatQuad> quad =
       std::make_unique<FloatQuad>(FloatRect(x, y, width, height));
-  SetInspectTool(MakeGarbageCollected<QuadHighlightTool>(
+  return SetInspectTool(MakeGarbageCollected<QuadHighlightTool>(
       this, GetFrontend(), std::move(quad),
       InspectorDOMAgent::ParseColor(color.fromMaybe(nullptr)),
       InspectorDOMAgent::ParseColor(outline_color.fromMaybe(nullptr))));
-  return Response::Success();
 }
 
 Response InspectorOverlayAgent::highlightQuad(
@@ -630,11 +628,10 @@ Response InspectorOverlayAgent::highlightQuad(
   std::unique_ptr<FloatQuad> quad = std::make_unique<FloatQuad>();
   if (!ParseQuad(std::move(quad_array), quad.get()))
     return Response::ServerError("Invalid Quad format");
-  SetInspectTool(MakeGarbageCollected<QuadHighlightTool>(
+  return SetInspectTool(MakeGarbageCollected<QuadHighlightTool>(
       this, GetFrontend(), std::move(quad),
       InspectorDOMAgent::ParseColor(color.fromMaybe(nullptr)),
       InspectorDOMAgent::ParseColor(outline_color.fromMaybe(nullptr))));
-  return Response::Success();
 }
 
 Response InspectorOverlayAgent::setShowHinge(
@@ -669,11 +666,14 @@ Response InspectorOverlayAgent::setShowHinge(
 
   DCHECK(frame_impl_->GetFrameView() && GetFrame());
 
-  LoadFrameForTool(Hinge::GetDataResourceId());
-  EnsureEnableFrameOverlay();
   FloatQuad quad(FloatRect(x, y, width, height));
   hinge_ =
       MakeGarbageCollected<Hinge>(quad, content_color, outline_color, this);
+
+  LoadOverlayPageResource();
+  EvaluateInOverlay("setOverlay", hinge_->GetOverlayName());
+  EnsureEnableFrameOverlay();
+
   ScheduleUpdate();
 
   return Response::Success();
@@ -698,10 +698,9 @@ Response InspectorOverlayAgent::highlightNode(
   if (!response.IsSuccess())
     return response;
 
-  SetInspectTool(MakeGarbageCollected<NodeHighlightTool>(
+  return SetInspectTool(MakeGarbageCollected<NodeHighlightTool>(
       this, GetFrontend(), node, selector_list.fromMaybe(String()),
       std::move(highlight_config)));
-  return Response::Success();
 }
 
 Response InspectorOverlayAgent::setShowGridOverlays(
@@ -747,9 +746,8 @@ Response InspectorOverlayAgent::highlightSourceOrder(
   std::unique_ptr<InspectorSourceOrderConfig> source_order_config =
       std::make_unique<InspectorSourceOrderConfig>(config);
 
-  SetInspectTool(MakeGarbageCollected<SourceOrderTool>(
+  return SetInspectTool(MakeGarbageCollected<SourceOrderTool>(
       this, GetFrontend(), node, std::move(source_order_config)));
-  return Response::Success();
 }
 
 Response InspectorOverlayAgent::highlightFrame(
@@ -761,22 +759,22 @@ Response InspectorOverlayAgent::highlightFrame(
   // FIXME: Inspector doesn't currently work cross process.
   if (!frame)
     return Response::ServerError("Invalid frame id");
-  if (frame->DeprecatedLocalOwner()) {
-    std::unique_ptr<InspectorHighlightConfig> highlight_config =
-        std::make_unique<InspectorHighlightConfig>();
-    highlight_config->show_info = true;  // Always show tooltips for frames.
-    highlight_config->content =
-        InspectorDOMAgent::ParseColor(color.fromMaybe(nullptr));
-    highlight_config->content_outline =
-        InspectorDOMAgent::ParseColor(outline_color.fromMaybe(nullptr));
-
-    SetInspectTool(MakeGarbageCollected<NodeHighlightTool>(
-        this, GetFrontend(), frame->DeprecatedLocalOwner(), String(),
-        std::move(highlight_config)));
-  } else {
+  if (!frame->DeprecatedLocalOwner()) {
     PickTheRightTool();
+    return Response::Success();
   }
-  return Response::Success();
+
+  std::unique_ptr<InspectorHighlightConfig> highlight_config =
+      std::make_unique<InspectorHighlightConfig>();
+  highlight_config->show_info = true;  // Always show tooltips for frames.
+  highlight_config->content =
+      InspectorDOMAgent::ParseColor(color.fromMaybe(nullptr));
+  highlight_config->content_outline =
+      InspectorDOMAgent::ParseColor(outline_color.fromMaybe(nullptr));
+
+  return SetInspectTool(MakeGarbageCollected<NodeHighlightTool>(
+      this, GetFrontend(), frame->DeprecatedLocalOwner(), String(),
+      std::move(highlight_config)));
 }
 
 Response InspectorOverlayAgent::hideHighlight() {
@@ -886,6 +884,9 @@ void InspectorOverlayAgent::DispatchBufferedTouchEvents() {
 
 WebInputEventResult InspectorOverlayAgent::HandleInputEvent(
     const WebInputEvent& input_event) {
+  if (!enabled_.Get())
+    return WebInputEventResult::kNotHandled;
+
   if (input_event.GetType() == WebInputEvent::Type::kMouseUp &&
       swallow_next_mouse_up_) {
     swallow_next_mouse_up_ = false;
@@ -1037,19 +1038,9 @@ float InspectorOverlayAgent::WindowToViewportScale() const {
                                                                     1.0f);
 }
 
-void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
-  if (frame_resource_name_ == data_resource_id)
+void InspectorOverlayAgent::LoadOverlayPageResource() {
+  if (overlay_page_)
     return;
-
-  frame_resource_name_ = data_resource_id;
-
-  if (overlay_page_) {
-    overlay_page_->WillBeDestroyed();
-    overlay_page_.Clear();
-    overlay_chrome_client_.Clear();
-    overlay_host_->ClearDelegate();
-    overlay_host_.Clear();
-  }
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
 
@@ -1091,7 +1082,7 @@ void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
   auto* frame = MakeGarbageCollected<LocalFrame>(
       dummy_local_frame_client, *overlay_page_, nullptr, nullptr, nullptr,
       FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
-      nullptr, nullptr);
+      nullptr, nullptr, /* policy_container */ nullptr);
   frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
   frame->Init(nullptr);
   frame->View()->SetCanHaveScrollbars(false);
@@ -1099,11 +1090,8 @@ void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
 
   scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
 
-  data->Append("<style>", static_cast<size_t>(7));
-  data->Append(UncompressResourceAsBinary(IDR_INSPECT_COMMON_CSS));
-  data->Append("</style>", static_cast<size_t>(8));
   data->Append("<script>", static_cast<size_t>(8));
-  data->Append(UncompressResourceAsBinary(frame_resource_name_));
+  data->Append(UncompressResourceAsBinary(IDR_INSPECT_TOOL_MAIN_JS));
   data->Append("</script>", static_cast<size_t>(9));
 
   frame->ForceSynchronousDocumentInstall("text/html", data);
@@ -1182,7 +1170,7 @@ void InspectorOverlayAgent::EvaluateInOverlay(const String& method,
               String(reinterpret_cast<const char*>(json.data()), json.size()) +
               ")",
           ScriptSourceLocationType::kInspector))
-      ->RunScript(To<LocalFrame>(OverlayMainFrame()),
+      ->RunScript(To<LocalFrame>(OverlayMainFrame())->DomWindow(),
                   ScriptController::kExecuteScriptWhenScriptsDisabled);
 }
 
@@ -1201,7 +1189,7 @@ void InspectorOverlayAgent::EvaluateInOverlay(
               String(reinterpret_cast<const char*>(json.data()), json.size()) +
               ")",
           ScriptSourceLocationType::kInspector))
-      ->RunScript(To<LocalFrame>(OverlayMainFrame()),
+      ->RunScript(To<LocalFrame>(OverlayMainFrame())->DomWindow(),
                   ScriptController::kExecuteScriptWhenScriptsDisabled);
 }
 
@@ -1212,7 +1200,7 @@ String InspectorOverlayAgent::EvaluateInOverlayForTest(const String& script) {
       ClassicScript::CreateUnspecifiedScript(
           ScriptSourceCode(script, ScriptSourceLocationType::kInspector))
           ->RunScriptAndReturnValue(
-              To<LocalFrame>(OverlayMainFrame()),
+              To<LocalFrame>(OverlayMainFrame())->DomWindow(),
               ScriptController::kExecuteScriptWhenScriptsDisabled);
   return ToCoreStringWithUndefinedOrNullCheck(string);
 }
@@ -1359,24 +1347,36 @@ void InspectorOverlayAgent::EnsureEnableFrameOverlay() {
       GetFrame(), std::make_unique<InspectorPageOverlayDelegate>(*this));
 }
 
-void InspectorOverlayAgent::SetInspectTool(InspectTool* inspect_tool) {
+void InspectorOverlayAgent::ClearInspectTool() {
+  inspect_tool_ = nullptr;
+  if (!hinge_)
+    DisableFrameOverlay();
+}
+
+Response InspectorOverlayAgent::SetInspectTool(InspectTool* inspect_tool) {
+  ClearInspectTool();
+
+  if (!inspect_tool)
+    return Response::Success();
+
+  if (!enabled_.Get()) {
+    return Response::InvalidRequest(
+        "Overlay must be enabled before a tool can be shown");
+  }
+
   LocalFrameView* view = frame_impl_->GetFrameView();
   LocalFrame* frame = GetFrame();
   if (!view || !frame)
-    return;
+    return Response::InternalError();
 
-  if (inspect_tool && enabled_.Get()) {
-    inspect_tool_ = inspect_tool;
-    // If the tool supports persistent overlays, the resources of the persistent
-    // tool will be included into the JS resource.
-    LoadFrameForTool(inspect_tool->GetDataResourceId());
-    EnsureEnableFrameOverlay();
-  } else {
-    inspect_tool_ = nullptr;
-    if (!hinge_)
-      DisableFrameOverlay();
-  }
+  inspect_tool_ = inspect_tool;
+  // If the tool supports persistent overlays, the resources of the persistent
+  // tool will be included into the JS resource.
+  LoadOverlayPageResource();
+  EvaluateInOverlay("setOverlay", inspect_tool->GetOverlayName());
+  EnsureEnableFrameOverlay();
   ScheduleUpdate();
+  return Response::Success();
 }
 
 InspectorSourceOrderConfig
@@ -1480,6 +1480,38 @@ InspectorOverlayAgent::ToGridHighlightConfig(
 }
 
 // static
+std::unique_ptr<InspectorFlexContainerHighlightConfig>
+InspectorOverlayAgent::ToFlexContainerHighlightConfig(
+    protocol::Overlay::FlexContainerHighlightConfig* config) {
+  if (!config) {
+    return nullptr;
+  }
+  std::unique_ptr<InspectorFlexContainerHighlightConfig> highlight_config =
+      std::make_unique<InspectorFlexContainerHighlightConfig>();
+  highlight_config->container_border =
+      InspectorOverlayAgent::ToLineStyle(config->getContainerBorder(nullptr));
+  highlight_config->line_separator =
+      InspectorOverlayAgent::ToLineStyle(config->getLineSeparator(nullptr));
+  highlight_config->item_separator =
+      InspectorOverlayAgent::ToLineStyle(config->getItemSeparator(nullptr));
+
+  return highlight_config;
+}
+
+// static
+std::unique_ptr<LineStyle> InspectorOverlayAgent::ToLineStyle(
+    protocol::Overlay::LineStyle* config) {
+  if (!config) {
+    return nullptr;
+  }
+  std::unique_ptr<LineStyle> line_style = std::make_unique<LineStyle>();
+  line_style->color = InspectorDOMAgent::ParseColor(config->getColor(nullptr));
+  line_style->pattern = config->getPattern("solid");
+
+  return line_style;
+}
+
+// static
 std::unique_ptr<InspectorHighlightConfig>
 InspectorOverlayAgent::ToHighlightConfig(
     protocol::Overlay::HighlightConfig* config) {
@@ -1523,6 +1555,10 @@ InspectorOverlayAgent::ToHighlightConfig(
   highlight_config->grid_highlight_config =
       InspectorOverlayAgent::ToGridHighlightConfig(
           config->getGridHighlightConfig(nullptr));
+
+  highlight_config->flex_container_highlight_config =
+      InspectorOverlayAgent::ToFlexContainerHighlightConfig(
+          config->getFlexContainerHighlightConfig(nullptr));
   return highlight_config;
 }
 

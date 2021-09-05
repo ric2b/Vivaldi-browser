@@ -10,7 +10,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
@@ -22,6 +22,7 @@
 #include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
@@ -82,20 +83,24 @@ std::string ResultToString(BinaryUploadService::Result result) {
   }
 }
 
-#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kBinaryUploadServiceUrlFlag[] = "binary-upload-service-url";
-#endif
 
 base::Optional<GURL> GetUrlOverride() {
-#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Ignore this flag on Stable and Beta to avoid abuse.
+  if (!g_browser_process || !g_browser_process->browser_policy_connector()
+                                 ->IsCommandLineSwitchSupported()) {
+    return base::nullopt;
+  }
+
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(kBinaryUploadServiceUrlFlag)) {
     GURL url =
         GURL(command_line->GetSwitchValueASCII(kBinaryUploadServiceUrlFlag));
     if (url.is_valid())
       return url;
+    else
+      LOG(ERROR) << "--binary-upload-service-url is set to an invalid URL";
   }
-#endif
 
   return base::nullopt;
 }
@@ -208,18 +213,21 @@ void BinaryUploadService::MaybeUploadForDeepScanning(
     return;
   }
 
-  if (!can_upload_enterprise_data_.has_value()) {
+  auto connector = request->analysis_connector();
+
+  if (!can_upload_enterprise_data_.contains(request->analysis_connector())) {
     // Get the URL first since |request| is about to move.
     GURL url = request->GetUrlWithParams();
     IsAuthorized(
         std::move(url),
         base::BindOnce(&BinaryUploadService::MaybeUploadForDeepScanningCallback,
-                       weakptr_factory_.GetWeakPtr(), std::move(request)));
+                       weakptr_factory_.GetWeakPtr(), std::move(request)),
+        connector);
     return;
   }
 
   MaybeUploadForDeepScanningCallback(std::move(request),
-                                     can_upload_enterprise_data_.value());
+                                     can_upload_enterprise_data_[connector]);
 }
 
 void BinaryUploadService::MaybeUploadForDeepScanningCallback(
@@ -419,11 +427,10 @@ void BinaryUploadService::FinishRequest(
 
 void BinaryUploadService::FinishRequestCleanup(Request* request,
                                                const std::string& instance_id) {
+  auto connector = request->analysis_connector();
   active_requests_.erase(request);
   active_timers_.erase(request);
   active_uploads_.erase(request);
-  received_malware_verdicts_.erase(request);
-  received_dlp_verdicts_.erase(request);
   received_connector_results_.erase(request);
 
   auto token_it = active_tokens_.find(request);
@@ -436,24 +443,26 @@ void BinaryUploadService::FinishRequestCleanup(Request* request,
     binary_fcm_service_->UnregisterInstanceID(
         instance_id,
         base::BindOnce(&BinaryUploadService::InstanceIDUnregisteredCallback,
-                       weakptr_factory_.GetWeakPtr()));
+                       weakptr_factory_.GetWeakPtr(), connector));
   } else {
     // |binary_fcm_service_| can be null in tests, but
     // InstanceIDUnregisteredCallback should be called anyway so the requests
     // waiting on authentication can complete.
-    InstanceIDUnregisteredCallback(true);
+    InstanceIDUnregisteredCallback(connector, true);
   }
 
   active_tokens_.erase(token_it);
 }
 
-void BinaryUploadService::InstanceIDUnregisteredCallback(bool) {
+void BinaryUploadService::InstanceIDUnregisteredCallback(
+    enterprise_connectors::AnalysisConnector connector,
+    bool) {
   // Calling RunAuthorizationCallbacks after the instance ID of the initial
   // authentication is unregistered avoids registration/unregistration conflicts
   // with normal requests.
   if (!authorization_callbacks_.empty() &&
-      can_upload_enterprise_data_.has_value()) {
-    RunAuthorizationCallbacks();
+      can_upload_enterprise_data_.contains(connector)) {
+    RunAuthorizationCallbacks(connector);
   }
 }
 
@@ -485,32 +494,6 @@ void BinaryUploadService::RecordRequestMetrics(
           result.status() !=
               enterprise_connectors::ContentAnalysisResponse::Result::FAILURE);
     }
-  }
-}
-
-void BinaryUploadService::RecordRequestMetrics(
-    Request* request,
-    Result result,
-    const DeepScanningClientResponse& response) {
-  RecordRequestMetrics(request, result);
-  if (response.has_malware_scan_verdict()) {
-    base::UmaHistogramBoolean("SafeBrowsingBinaryUploadRequest.MalwareResult",
-                              response.malware_scan_verdict().verdict() !=
-                                  MalwareDeepScanningVerdict::SCAN_FAILURE);
-    MalwareDeepScanningVerdict::Verdict verdict_count =
-        static_cast<MalwareDeepScanningVerdict::Verdict>(
-            MalwareDeepScanningVerdict_Verdict_Verdict_ARRAYSIZE);
-    base::UmaHistogramEnumeration(
-        IsAdvancedProtectionRequest(*request)
-            ? "SafeBrowsingBinaryUploadRequest.AdvancedProtectionScanVerdict"
-            : "SafeBrowsingBinaryUploadRequest.MalwareScanVerdict",
-        response.malware_scan_verdict().verdict(), verdict_count);
-  }
-
-  if (response.has_dlp_scan_verdict()) {
-    base::UmaHistogramBoolean("SafeBrowsingBinaryUploadRequest.DlpResult",
-                              response.dlp_scan_verdict().status() ==
-                                  DlpDeepScanningVerdict::SUCCESS);
   }
 }
 
@@ -577,6 +560,11 @@ void BinaryUploadService::Request::add_tag(const std::string& tag) {
 
 void BinaryUploadService::Request::set_email(const std::string& email) {
   content_analysis_request_.mutable_request_data()->set_email(email);
+}
+
+enterprise_connectors::AnalysisConnector
+BinaryUploadService::Request::analysis_connector() {
+  return content_analysis_request_.analysis_connector();
 }
 
 const std::string& BinaryUploadService::Request::device_token() const {
@@ -667,8 +655,10 @@ inline void ValidateDataUploadRequest::GetRequestData(DataCallback callback) {
                           BinaryUploadService::Request::Data());
 }
 
-void BinaryUploadService::IsAuthorized(const GURL& url,
-                                       AuthorizationCallback callback) {
+void BinaryUploadService::IsAuthorized(
+    const GURL& url,
+    AuthorizationCallback callback,
+    enterprise_connectors::AnalysisConnector connector) {
   // Start |timer_| on the first call to IsAuthorized. This is necessary in
   // order to invalidate the authorization every 24 hours.
   if (!timer_.IsRunning()) {
@@ -678,14 +668,14 @@ void BinaryUploadService::IsAuthorized(const GURL& url,
                             weakptr_factory_.GetWeakPtr(), url));
   }
 
-  if (!can_upload_enterprise_data_.has_value()) {
+  if (!can_upload_enterprise_data_.contains(connector)) {
     // Send a request to check if the browser can upload data.
     authorization_callbacks_.push_back(std::move(callback));
     if (!pending_validate_data_upload_request_) {
       auto dm_token = policy::GetDMToken(profile_);
       if (!dm_token.is_valid()) {
-        can_upload_enterprise_data_ = false;
-        RunAuthorizationCallbacks();
+        can_upload_enterprise_data_[connector] = false;
+        RunAuthorizationCallbacks(connector);
         return;
       }
 
@@ -693,45 +683,49 @@ void BinaryUploadService::IsAuthorized(const GURL& url,
       auto request = std::make_unique<ValidateDataUploadRequest>(
           base::BindOnce(
               &BinaryUploadService::ValidateDataUploadRequestConnectorCallback,
-              weakptr_factory_.GetWeakPtr()),
+              weakptr_factory_.GetWeakPtr(), connector),
           url);
       request->set_device_token(dm_token.value());
+      request->set_analysis_connector(connector);
       UploadForDeepScanning(std::move(request));
     }
     return;
   }
-  std::move(callback).Run(can_upload_enterprise_data_.value());
+  std::move(callback).Run(can_upload_enterprise_data_[connector]);
 }
 
 void BinaryUploadService::ValidateDataUploadRequestConnectorCallback(
+    enterprise_connectors::AnalysisConnector connector,
     BinaryUploadService::Result result,
     enterprise_connectors::ContentAnalysisResponse response) {
   pending_validate_data_upload_request_ = false;
-  can_upload_enterprise_data_ = result == BinaryUploadService::Result::SUCCESS;
+  can_upload_enterprise_data_[connector] =
+      (result == BinaryUploadService::Result::SUCCESS);
 }
 
-void BinaryUploadService::ValidateDataUploadRequestCallback(
-    BinaryUploadService::Result result,
-    DeepScanningClientResponse response) {
-  pending_validate_data_upload_request_ = false;
-  can_upload_enterprise_data_ = result == BinaryUploadService::Result::SUCCESS;
-}
-
-void BinaryUploadService::RunAuthorizationCallbacks() {
-  DCHECK(can_upload_enterprise_data_.has_value());
+void BinaryUploadService::RunAuthorizationCallbacks(
+    enterprise_connectors::AnalysisConnector connector) {
+  DCHECK(can_upload_enterprise_data_.contains(connector));
   for (auto& callback : authorization_callbacks_) {
-    std::move(callback).Run(can_upload_enterprise_data_.value());
+    std::move(callback).Run(can_upload_enterprise_data_[connector]);
   }
   authorization_callbacks_.clear();
 }
 
 void BinaryUploadService::ResetAuthorizationData(const GURL& url) {
-  // Setting |can_upload_enterprise_data_| to base::nullopt will make the next
+  // Clearing |can_upload_enterprise_data_| will make the next
   // call to IsAuthorized send out a request to validate data uploads.
-  can_upload_enterprise_data_ = base::nullopt;
+  can_upload_enterprise_data_.clear();
 
   // Call IsAuthorized  to update |can_upload_enterprise_data_| right away.
-  IsAuthorized(url, base::DoNothing());
+  for (enterprise_connectors::AnalysisConnector connector :
+       {enterprise_connectors::AnalysisConnector::
+            ANALYSIS_CONNECTOR_UNSPECIFIED,
+        enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
+        enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
+        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY}) {
+    IsAuthorized(url, base::DoNothing(), connector);
+  }
 }
 
 void BinaryUploadService::Shutdown() {
@@ -740,7 +734,14 @@ void BinaryUploadService::Shutdown() {
 }
 
 void BinaryUploadService::SetAuthForTesting(bool authorized) {
-  can_upload_enterprise_data_ = authorized;
+  for (enterprise_connectors::AnalysisConnector connector :
+       {enterprise_connectors::AnalysisConnector::
+            ANALYSIS_CONNECTOR_UNSPECIFIED,
+        enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
+        enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
+        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY}) {
+    can_upload_enterprise_data_[connector] = authorized;
+  }
 }
 
 // static

@@ -8,11 +8,12 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/android/chrome_jni_headers/AppBannerManager_jni.h"
+#include "chrome/android/chrome_jni_headers/AppBannerManagerHelper_jni.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
@@ -22,12 +23,15 @@
 #include "chrome/browser/android/webapk/webapk_web_manifest_checker.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_coordinator.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_params.h"
+#include "chrome/browser/banners/android/jni_headers/AppBannerManager_jni.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
+#include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/version_info/channel.h"
@@ -43,6 +47,14 @@ using base::android::JavaParamRef;
 namespace {
 
 constexpr char kPlatformPlay[] = "play";
+
+// The key to look up what the minimum engagement score is for showing the
+// in-product help.
+constexpr char kMinEngagementForIphKey[] = "x_min_engagement_for_iph";
+
+// The key to look up whether the in-product help should replace the toolbar or
+// complement it.
+constexpr char kIphReplacesToolbar[] = "x_iph_replaces_toolbar";
 
 // Whether to ignore the Chrome channel in QueryNativeApp() for testing.
 bool gIgnoreChromeChannelForTesting = false;
@@ -123,7 +135,7 @@ bool AppBannerManagerAndroid::OnAppDetailsRetrieved(
 
 void AppBannerManagerAndroid::RequestAppBanner(const GURL& validated_url) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (!Java_AppBannerManager_isEnabledForTab(env, java_banner_manager_))
+  if (!Java_AppBannerManagerHelper_isEnabledForTab(env))
     return;
 
   TabAndroid* tab = TabAndroid::FromWebContents(web_contents());
@@ -307,7 +319,7 @@ void AppBannerManagerAndroid::RecordEventForAppBanner(
       }
       break;
 
-    case AddToHomescreenInstaller::Event::UI_DISMISSED:
+    case AddToHomescreenInstaller::Event::UI_CANCELLED:
       TrackDismissEvent(DISMISS_EVENT_DISMISSED);
 
       SendBannerDismissed();
@@ -457,7 +469,45 @@ base::string16 AppBannerManagerAndroid::GetAppName() const {
   return native_app_title_;
 }
 
+bool AppBannerManagerAndroid::MaybeShowInProductHelp() const {
+  if (!web_contents()) {
+    DVLOG(2) << "IPH for PWA aborted: null WebContents";
+    return false;
+  }
+
+  double last_engagement_score =
+      GetSiteEngagementService()->GetScore(validated_url_);
+  int min_engagement = base::GetFieldTrialParamByFeatureAsInt(
+      feature_engagement::kIPHPwaInstallAvailableFeature,
+      kMinEngagementForIphKey, 0);
+  if (last_engagement_score < min_engagement) {
+    DVLOG(2) << "IPH for PWA aborted: Engagement score too low: "
+             << last_engagement_score << " < " << min_engagement;
+    return false;
+  }
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  std::string error_message = base::android::ConvertJavaStringToUTF8(
+      Java_AppBannerManager_showInProductHelp(
+          env, java_banner_manager_, web_contents()->GetJavaWebContents()));
+  if (!error_message.empty()) {
+    DVLOG(2) << "IPH for PWA showing aborted. " << error_message;
+    return false;
+  }
+
+  DVLOG(2) << "Showing IPH.";
+  return true;
+}
+
 void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
+  if (MaybeShowInProductHelp() &&
+      base::GetFieldTrialParamByFeatureAsBool(
+          feature_engagement::kIPHPwaInstallAvailableFeature,
+          kIphReplacesToolbar, false)) {
+    DVLOG(2) << "Install infobar overridden by IPH, as per experiment.";
+    return;
+  }
+
   if (!base::FeatureList::IsEnabled(features::kInstallableAmbientBadgeInfoBar))
     return;
 
@@ -493,13 +543,13 @@ void AppBannerManagerAndroid::HideAmbientBadge() {
     infobar_service->RemoveInfoBar(ambient_badge_infobar);
 }
 
-bool AppBannerManagerAndroid::IsSupportedAppPlatform(
+bool AppBannerManagerAndroid::IsSupportedNonWebAppPlatform(
     const base::string16& platform) const {
   // TODO(https://crbug.com/949430): Implement for Android apps.
   return false;
 }
 
-bool AppBannerManagerAndroid::IsRelatedAppInstalled(
+bool AppBannerManagerAndroid::IsRelatedNonWebAppInstalled(
     const blink::Manifest::RelatedApplication& related_app) const {
   // TODO(https://crbug.com/949430): Implement for Android apps.
   return false;

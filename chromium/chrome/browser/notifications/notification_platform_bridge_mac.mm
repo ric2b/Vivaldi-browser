@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
@@ -185,6 +184,9 @@ void NotificationPlatformBridgeMac::Display(
                            is_persistent, notification, requires_attribution))];
 
   if (!notification.icon().IsEmpty()) {
+    // TODO(crbug/1138176): Resize images by adding a transparent border so that
+    // its dimensions are uniform and do not get resized once sent to the
+    // notification center
     [builder setIcon:notification.icon().ToNSImage()];
   }
 
@@ -454,7 +456,7 @@ getDisplayedAlertsForProfileId:(NSString*)profileId
         crash_reporter::GetCrashpadClient().GetHandlerMachPort());
     base::scoped_nsobject<CrXPCMachPort> xpcPort(
         [[CrXPCMachPort alloc] initWithMachSendRight:std::move(exceptionPort)]);
-    [proxy setMachExceptionPort:xpcPort];
+    [proxy setUseUNNotification:NO machExceptionPort:xpcPort];
     _setExceptionPort = YES;
   }
 

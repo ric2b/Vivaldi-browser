@@ -11,6 +11,7 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/sys_string_conversions.h"
+#include "media/base/mac/color_space_util_mac.h"
 #include "media/formats/mp4/box_definitions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -57,7 +58,7 @@ base::span<const uint8_t> GetNestedDataValue(CFDictionaryRef dict,
 base::ScopedCFTypeRef<CVImageBufferRef> CreateCVImageBuffer(
     media::VideoColorSpace cs) {
   base::ScopedCFTypeRef<CFDictionaryRef> fmt(CreateFormatExtensions(
-      kCMVideoCodecType_H264, media::H264PROFILE_MAIN, cs, gl::HDRMetadata()));
+      kCMVideoCodecType_H264, media::H264PROFILE_MAIN, cs, gfx::HDRMetadata()));
 
   base::ScopedCFTypeRef<CVImageBufferRef> image_buffer;
   OSStatus err =
@@ -72,6 +73,34 @@ base::ScopedCFTypeRef<CVImageBufferRef> CreateCVImageBuffer(
   CVBufferSetAttachments(image_buffer.get(), fmt,
                          kCVAttachmentMode_ShouldNotPropagate);
   return image_buffer;
+}
+
+base::ScopedCFTypeRef<CMFormatDescriptionRef> CreateFormatDescription(
+    CFStringRef primaries,
+    CFStringRef transfer,
+    CFStringRef matrix) {
+  base::ScopedCFTypeRef<CFMutableDictionaryRef> extensions(
+      CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+                                &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks));
+
+  if (primaries) {
+    CFDictionarySetValue(
+        extensions, kCMFormatDescriptionExtension_ColorPrimaries, primaries);
+  }
+  if (transfer) {
+    CFDictionarySetValue(
+        extensions, kCMFormatDescriptionExtension_TransferFunction, transfer);
+  }
+  if (matrix) {
+    CFDictionarySetValue(extensions, kCMFormatDescriptionExtension_YCbCrMatrix,
+                         matrix);
+  }
+  base::ScopedCFTypeRef<CMFormatDescriptionRef> result;
+  CMFormatDescriptionCreate(nullptr, kCMMediaType_Video,
+                            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                            extensions.get(), result.InitializeInto());
+  return result;
 }
 
 gfx::ColorSpace ToBT709_APPLE(gfx::ColorSpace cs) {
@@ -136,7 +165,7 @@ TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_PQ) {
                       VideoColorSpace::TransferID::SMPTEST2084,
                       VideoColorSpace::MatrixID::BT2020_NCL,
                       gfx::ColorSpace::RangeID::FULL),
-      gl::HDRMetadata()));
+      gfx::HDRMetadata()));
   EXPECT_EQ("avc1", GetStrValue(fmt, kCMFormatDescriptionExtension_FormatName));
   EXPECT_EQ(24, GetIntValue(fmt, kCMFormatDescriptionExtension_Depth));
 
@@ -160,7 +189,7 @@ TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_HLG) {
                       VideoColorSpace::TransferID::ARIB_STD_B67,
                       VideoColorSpace::MatrixID::BT2020_NCL,
                       gfx::ColorSpace::RangeID::FULL),
-      gl::HDRMetadata()));
+      gfx::HDRMetadata()));
   EXPECT_EQ("avc1", GetStrValue(fmt, kCMFormatDescriptionExtension_FormatName));
   EXPECT_EQ(24, GetIntValue(fmt, kCMFormatDescriptionExtension_Depth));
 
@@ -179,7 +208,7 @@ TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_HLG) {
 
 TEST(VTConfigUtil, CreateFormatExtensions_HDRMetadata) {
   // Values from real YouTube HDR content.
-  gl::HDRMetadata hdr_meta;
+  gfx::HDRMetadata hdr_meta;
   hdr_meta.max_content_light_level = 1000;
   hdr_meta.max_frame_average_light_level = 600;
   auto& mastering = hdr_meta.mastering_metadata;
@@ -361,6 +390,28 @@ TEST(VTConfigUtil, GetImageBufferColorSpace_BT2020_HLG) {
     EXPECT_EQ(cs.ToGfxColorSpace(), image_buffer_cs);
   } else {
     EXPECT_EQ(gfx::ColorSpace::CreateREC709(), image_buffer_cs);
+  }
+}
+
+TEST(VTConfigUtil, FormatDescriptionInvalid) {
+  if (__builtin_available(macos 10.11, *)) {
+    auto format_descriptor =
+        CreateFormatDescription(CFSTR("Cows"), CFSTR("Go"), CFSTR("Moo"));
+    ASSERT_TRUE(format_descriptor);
+    auto cs = GetFormatDescriptionColorSpace(format_descriptor);
+    EXPECT_EQ(gfx::ColorSpace::CreateREC709(), cs);
+  }
+}
+
+TEST(VTConfigUtil, FormatDescriptionBT709) {
+  if (__builtin_available(macos 10.11, *)) {
+    auto format_descriptor = CreateFormatDescription(
+        kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+        kCMFormatDescriptionTransferFunction_ITU_R_709_2,
+        kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2);
+    ASSERT_TRUE(format_descriptor);
+    auto cs = GetFormatDescriptionColorSpace(format_descriptor);
+    EXPECT_EQ(ToBT709_APPLE(gfx::ColorSpace::CreateREC709()), cs);
   }
 }
 

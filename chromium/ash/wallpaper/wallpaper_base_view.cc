@@ -16,49 +16,22 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
 
 namespace {
 
-// The value used for alpha to apply a dark filter to the wallpaper in tablet
-// mode. A higher number up to 255 results in a darker wallpaper.
-constexpr int kTabletModeWallpaperAlpha = 102;
-
-// Returns the color used to dim the wallpaper.
-SkColor GetWallpaperDarkenColor() {
-  SkColor darken_color =
-      Shell::Get()->wallpaper_controller()->GetProminentColor(
-          color_utils::ColorProfile(color_utils::LumaRange::DARK,
-                                    color_utils::SaturationRange::MUTED));
-  if (darken_color == kInvalidWallpaperColor) {
-    darken_color =
-        DeprecatedGetLoginBackgroundBaseColor(kLoginBackgroundBaseColor);
-  }
-
-  darken_color = color_utils::GetResultingPaintColor(
-      SkColorSetA(
-          DeprecatedGetLoginBackgroundBaseColor(kLoginBackgroundBaseColor),
-          login_constants::kTranslucentColorDarkenAlpha),
-      SkColorSetA(darken_color, 0xFF));
-
-  int alpha = login_constants::kTranslucentAlpha;
-  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
-    alpha = kTabletModeWallpaperAlpha;
-  } else if (Shell::Get()->overview_controller()->InOverviewSession()) {
-    // Overview mode will apply its own brightness filter on a downscaled image,
-    // so color with full opacity here.
-    alpha = 255;
-  }
-
-  return SkColorSetA(darken_color, alpha);
+// Gets the color filter based on the state. This is used for the login, lock,
+// overview and tablet mode.
+SkColor GetWallpaperFilterColor() {
+  return AshColorProvider::Get()->GetShieldLayerColor(
+      Shell::Get()->overview_controller()->InOverviewSession()
+          ? AshColorProvider::ShieldLayerType::kShield40
+          : AshColorProvider::ShieldLayerType::kShield80);
 }
 
 }  // namespace
-
-const char* WallpaperBaseView::GetClassName() const {
-  return "WallpaperBaseView";
-}
 
 void WallpaperBaseView::OnPaint(gfx::Canvas* canvas) {
   // Scale the image while maintaining the aspect ratio, cropping as necessary
@@ -77,9 +50,9 @@ void WallpaperBaseView::OnPaint(gfx::Canvas* canvas) {
     return;
 
   cc::PaintFlags flags;
-  if (controller->ShouldApplyDimming()) {
+  if (controller->ShouldApplyColorFilter()) {
     flags.setColorFilter(
-        SkColorFilters::Blend(GetWallpaperDarkenColor(), SkBlendMode::kDarken));
+        SkColorFilters::Blend(GetWallpaperFilterColor(), SkBlendMode::kDarken));
   }
 
   switch (layout) {
@@ -148,5 +121,8 @@ void WallpaperBaseView::DrawWallpaper(const gfx::ImageSkia& wallpaper,
                        dst.x(), dst.y(), dst.width(), dst.height(),
                        /*filter=*/true, flags);
 }
+
+BEGIN_METADATA(WallpaperBaseView, views::View)
+END_METADATA
 
 }  // namespace ash

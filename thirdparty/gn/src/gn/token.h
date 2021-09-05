@@ -60,6 +60,9 @@ class Token {
   Token();
   Token(const Location& location, Type t, const std::string_view& v);
 
+  static Token ClassifyAndMake(const Location& location,
+                               const std::string_view& v);
+
   Type type() const { return type_; }
   const std::string_view& value() const { return value_; }
   const Location& location() const { return location_; }

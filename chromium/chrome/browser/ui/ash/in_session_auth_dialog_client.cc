@@ -8,13 +8,18 @@
 
 #include "ash/public/cpp/in_session_auth_dialog_controller.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/quick_unlock/fingerprint_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -26,7 +31,12 @@ using chromeos::Key;
 using chromeos::UserContext;
 
 namespace {
+
+const char kInSessionAuthHelpPageUrl[] =
+    "https://support.google.com/chromebook?p=WebAuthn";
+
 InSessionAuthDialogClient* g_auth_dialog_client_instance = nullptr;
+
 }  // namespace
 
 InSessionAuthDialogClient::InSessionAuthDialogClient() {
@@ -119,7 +129,6 @@ void InSessionAuthDialogClient::AuthenticateUserWithPasswordOrPin(
         user_context.GetAccountId(), *user_context.GetKey(),
         base::BindOnce(&InSessionAuthDialogClient::OnPinAttemptDone,
                        weak_factory_.GetWeakPtr(), user_context));
-    // OnPinAttemptDone will call AuthenticateWithPassword if attempt fails.
     return;
   }
 
@@ -143,8 +152,11 @@ void InSessionAuthDialogClient::OnPinAttemptDone(
     }
     OnAuthSuccess(user_context);
   } else {
-    // PIN authentication has failed; try submitting as a normal password.
-    AuthenticateWithPassword(user_context);
+    // Do not try submitting as password.
+    if (pending_auth_state_) {
+      std::move(pending_auth_state_->callback).Run(false);
+      pending_auth_state_.reset();
+    }
   }
 }
 
@@ -203,6 +215,23 @@ void InSessionAuthDialogClient::OnFingerprintAuthDone(
       // Internal error.
       std::move(callback).Run(false, ash::FingerprintState::UNAVAILABLE);
   }
+}
+
+aura::Window* InSessionAuthDialogClient::OpenInSessionAuthHelpPage() const {
+  // TODO(b/156258540): Use the profile of the source browser window.
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  // Create new browser window because the auth dialog is a child of the
+  // existing one.
+  NavigateParams params(profile, GURL(kInSessionAuthHelpPageUrl),
+                        ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_POPUP;
+  params.trusted_source = true;
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  params.user_gesture = true;
+  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
+  Navigate(&params);
+
+  return params.browser->window()->GetNativeWindow();
 }
 
 // AuthStatusConsumer:

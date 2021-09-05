@@ -14,7 +14,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
@@ -71,9 +70,6 @@
 #include "extraparts/vivaldi_main_delegate.h"
 #endif
 
-ChromeTestSuiteRunner::ChromeTestSuiteRunner() {}
-ChromeTestSuiteRunner::~ChromeTestSuiteRunner() {}
-
 int ChromeTestSuiteRunner::RunTestSuite(int argc, char** argv) {
   ChromeTestSuite test_suite(argc, argv);
   // Browser tests are expected not to tear-down various globals.
@@ -106,6 +102,8 @@ class ChromeTestLauncherDelegate::ScopedFirewallRules {
         << "Failed to add Windows firewall rules -- Windows firewall dialogs "
            "may appear.";
   }
+  ScopedFirewallRules(const ScopedFirewallRules&) = delete;
+  ScopedFirewallRules& operator=(const ScopedFirewallRules&) = delete;
 
   ~ScopedFirewallRules() {
     if (rules_added_)
@@ -116,7 +114,6 @@ class ChromeTestLauncherDelegate::ScopedFirewallRules {
   base::win::ScopedCOMInitializer com_initializer_;
   std::unique_ptr<installer::FirewallManager> firewall_manager_;
   bool rules_added_ = false;
-  DISALLOW_COPY_AND_ASSIGN(ScopedFirewallRules);
 };
 
 #endif  // defined(OS_WIN)

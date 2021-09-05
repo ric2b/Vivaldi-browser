@@ -11,7 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -669,18 +669,16 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
 
   // Helper function that reads uncommitted resource ids from database.
   std::vector<int64_t> GetUncommittedResourceIds() {
-    std::vector<int64_t> ids;
+    std::vector<int64_t> result;
     base::RunLoop loop;
-    ServiceWorkerStorage* internal_storage = storage_impl_->storage();
-    ServiceWorkerDatabase* database_raw = internal_storage->database_.get();
-    internal_storage->database_task_runner_->PostTask(
-        FROM_HERE, base::BindLambdaForTesting([&]() {
-          EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
-                    database_raw->GetUncommittedResourceIds(&ids));
+    storage()->GetUncommittedResourceIdsForTest(base::BindLambdaForTesting(
+        [&](DatabaseStatus status, const std::vector<int64_t>& ids) {
+          EXPECT_EQ(status, ServiceWorkerDatabase::Status::kOk);
+          result = ids;
           loop.Quit();
         }));
     loop.Run();
-    return ids;
+    return result;
   }
 
  private:

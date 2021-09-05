@@ -3,6 +3,7 @@
 <translationbundle lang="as">
 <translation id="1276998909102132017">গেলাৰীৰ প্ৰতিচ্ছবিসমূহ</translation>
 <translation id="1430915738399379752">প্ৰিণ্ট কৰক</translation>
+<translation id="1473110567575736769">৩ ছেকেণ্ডৰ টাইমাৰ</translation>
 <translation id="1620510694547887537">কেমেৰা</translation>
 <translation id="1627744224761163218">৪ x ৪</translation>
 <translation id="1664224225747386870">একো ৰেকৰ্ড কৰা নহ'ল</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">কেমেৰা ৰিজ'লিউশ্বন</translation>
 <translation id="3517926952904427380">প’ৰ্ট্ৰেইট ফট’ ল’ব নোৱাৰিলে</translation>
 <translation id="3569311554794739032">আপুনি সঁচাকৈয়ে <ph name="FILE" /> আঁতৰাবলৈ বিচাৰে বুলি নিশ্চিতনে?</translation>
+<translation id="3750315947605636967">অন্য এটা এপে আপোনাৰ কেমেৰাটো ব্যৱহাৰ কৰি আছে</translation>
 <translation id="3810838688059735925">ভিডিঅ’</translation>
+<translation id="4000398125663085899">নতুন ফট’ আৰু ভিডিঅ’ এতিয়া Files এপ্‌টোৰ এটা ফ’ল্ডাৰত ছেভ কৰা হ’ব: মোৰ ফাইল &gt; কেমেৰা</translation>
 <translation id="4118525110028899586">ৰেকৰ্ডিং পজ কৰক</translation>
 <translation id="4279490309300973883">প্ৰতিবিম্বকৰণ</translation>
 <translation id="4329152592498422850">বৰ্গাকাৰ ফট' ল'বলৈ সলনি কৰক</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">আপোনাৰ কেমেৰা বৰ্তমান উপলব্ধ নহয়।
         অনুগ্ৰহ কৰি কেমেৰাটো সঠিক ধৰণে সংযুক্ত হৈ আছেনে নাই পৰীক্ষা কৰক।</translation>
 <translation id="5152121255775685072">গেলাৰীলৈ যাওক</translation>
+<translation id="5422455049771430511">আপোনাৰ ফট' আৰু ভিডিঅ'সমূহ ৰাখিবৰ বাবে এখন নতুন ঠাই আছে</translation>
 <translation id="5671277269877808209">বৰ্গাকাৰ</translation>
 <translation id="5775960006311140197">বিশেষজ্ঞ ম’ড</translation>
 <translation id="5869546221129391014">গ্ৰিড</translation>
+<translation id="6040143037577758943">বন্ধ কৰক</translation>
 <translation id="6073451960410192870">ৰেকৰ্ডিং কৰা বন্ধ কৰক</translation>
 <translation id="6197807149213783179">মেটাডেটা ছেভ কৰক</translation>
 <translation id="6233780560267770709">৩x৩</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">ঠিক আছে</translation>
 <translation id="698156982839284926">৩ ছেকেণ্ড</translation>
 <translation id="712848772518857951">আপুনি সঁচাকৈয়ে <ph name="COUNT" />টা বস্তু আঁতৰাবলৈ বিচাৰেনে?</translation>
+<translation id="7134221860976209830">১০ ছেকেণ্ডৰ টাইমাৰ</translation>
 <translation id="7243947652761655814">ভিডিঅ’ৰ ৰিজ’লিউশ্বন</translation>
 <translation id="7337660886763914220">ফাইল ছিষ্টেমৰ আসোঁৱাহ।</translation>
 <translation id="7557677699350329807">পৰৱৰ্তী কেমেৰালৈ সলনি কৰক</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">সহায়</translation>
 <translation id="7658239707568436148">বাতিল কৰক</translation>
 <translation id="7670511624014457267">৬০ FPS</translation>
-<translation id="8049189770492311300">টাইমাৰ</translation>
 <translation id="8067883171444229417">ভিডিঅ’ প্লে কৰক</translation>
 <translation id="8131740175452115882">নিশ্চিত কৰক</translation>
 <translation id="8145038249676204903">ফট' উঠাবলৈ সলনি কৰক</translation>

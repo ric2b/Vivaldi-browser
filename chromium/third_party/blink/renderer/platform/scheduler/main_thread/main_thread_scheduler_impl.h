@@ -71,6 +71,8 @@ class MainThreadSchedulerImplTest;
 class MockPageSchedulerImpl;
 FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest, ShouldIgnoreTaskForUkm);
 FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest, Tracing);
+FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest,
+                     LogIpcsPostedToDocumentsInBackForwardCache);
 }  // namespace main_thread_scheduler_impl_unittest
 class AgentGroupSchedulerImpl;
 class FrameSchedulerImpl;
@@ -219,20 +221,24 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
                            Thread::IdleTask) override;
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
-  // TODO(crbug/1113102): rename to CreateAgentGroupScheduler when integrate
-  // with AgentSchedulingGroup
-  AgentGroupSchedulerImpl& EnsureAgentGroupScheduler();
-  std::unique_ptr<PageScheduler> CreatePageScheduler(
-      PageScheduler::Delegate*) override;
-  AgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
+  std::unique_ptr<WebAgentGroupScheduler> CreateAgentGroupScheduler() override;
+  WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
   void SetCurrentAgentGroupScheduler(
-      AgentGroupSchedulerImpl* agent_group_scheduler_impl);
+      WebAgentGroupScheduler* agent_group_scheduler);
   std::unique_ptr<ThreadScheduler::RendererPauseHandle> PauseScheduler()
       override;
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
   WebThreadScheduler* GetWebMainThreadSchedulerForTest() override;
   NonMainThreadSchedulerImpl* AsNonMainThreadScheduler() override {
     return nullptr;
+  }
+
+  // Use a separate task runner so that IPC tasks are not logged via the same
+  // task queue that executes them. Otherwise this would result in an infinite
+  // loop of posting and logging to a single queue.
+  scoped_refptr<base::SingleThreadTaskRunner>
+  BackForwardCacheIpcTrackingTaskRunner() {
+    return back_forward_cache_ipc_tracking_task_runner_;
   }
 
   // WebThreadScheduler implementation:
@@ -282,6 +288,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> NewThrottleableTaskQueueForTest(
       FrameSchedulerImpl* frame_scheduler);
 
+  scoped_refptr<base::sequence_manager::TaskQueue> NewTaskQueueForTest();
+
   using VirtualTimePolicy = PageScheduler::VirtualTimePolicy;
 
   using BaseTimeOverridePolicy =
@@ -310,6 +318,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void MaybeAdvanceVirtualTime(base::TimeTicks new_virtual_time);
 
   void RemoveAgentGroupScheduler(AgentGroupSchedulerImpl*);
+  void AddPageScheduler(PageSchedulerImpl*);
   void RemovePageScheduler(PageSchedulerImpl*);
 
   void OnFrameAdded(const FrameSchedulerImpl& frame_scheduler);
@@ -386,6 +395,13 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       const base::sequence_manager::Task& task,
       base::sequence_manager::TaskQueue::TaskTiming* task_timing,
       base::sequence_manager::LazyNow* lazy_now);
+
+  void UpdateIpcTracking();
+  void SetOnIPCTaskPostedWhileInBackForwardCacheIfNeeded();
+  void OnIPCTaskPostedWhileInAllPagesBackForwardCache(
+      uint32_t ipc_hash,
+      const char* ipc_interface_name);
+  void DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
 
   bool IsAudioPlaying() const;
 
@@ -465,6 +481,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   FRIEND_TEST_ALL_PREFIXES(
       main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest,
       Tracing);
+  FRIEND_TEST_ALL_PREFIXES(
+      main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest,
+      LogIpcsPostedToDocumentsInBackForwardCache);
 
   enum class TimeDomainType {
     kReal,
@@ -474,7 +493,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   static const char* TimeDomainTypeToString(TimeDomainType domain_type);
 
   void AddAgentGroupScheduler(AgentGroupSchedulerImpl*);
-  void AddPageScheduler(PageSchedulerImpl*);
 
   bool IsAnyMainFrameWaitingForFirstContentfulPaint() const;
   bool IsAnyMainFrameWaitingForFirstMeaningfulPaint() const;
@@ -773,6 +791,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // have to check this flag during scheduler's destruction.
   bool was_shutdown_ = false;
 
+  bool has_ipc_callback_set_ = false;
+  bool IsIpcTrackingEnabledForAllPages();
+
   // This controller should be initialized before any TraceableVariables
   // because they require one to initialize themselves.
   TraceableVariableController tracing_controller_;
@@ -787,6 +808,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   std::unique_ptr<base::sequence_manager::SequenceManager> sequence_manager_;
   MainThreadSchedulerHelper helper_;
+  scoped_refptr<MainThreadTaskQueue> idle_helper_queue_;
   IdleHelper idle_helper_;
   std::unique_ptr<TaskQueueThrottler> task_queue_throttler_;
   RenderWidgetSignals render_widget_scheduler_signals_;
@@ -797,6 +819,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   const scoped_refptr<MainThreadTaskQueue> control_task_queue_;
   const scoped_refptr<MainThreadTaskQueue> compositor_task_queue_;
   scoped_refptr<MainThreadTaskQueue> virtual_time_control_task_queue_;
+  scoped_refptr<MainThreadTaskQueue>
+      back_forward_cache_ipc_tracking_task_queue_;
   std::unique_ptr<base::sequence_manager::TaskQueue::QueueEnabledVoter>
       compositor_task_queue_enabled_voter_;
 
@@ -814,6 +838,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> control_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> non_waking_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner>
+      back_forward_cache_ipc_tracking_task_runner_;
 
   MemoryPurgeManager memory_purge_manager_;
 
@@ -1020,9 +1046,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   PollableThreadSafeFlag policy_may_need_update_;
   PollableThreadSafeFlag notify_agent_strategy_task_posted_;
   WTF::HashSet<AgentGroupSchedulerImpl*> agent_group_schedulers_;
-  AgentGroupSchedulerImpl* current_agent_group_scheduler_{nullptr};
-  // TODO(crbug/1113102): tentatively, we hold AgentGroupSchedulerImpl here.
-  std::unique_ptr<AgentGroupSchedulerImpl> agent_group_scheduler_;
+  WebAgentGroupScheduler* current_agent_group_scheduler_{nullptr};
 
   base::WeakPtrFactory<MainThreadSchedulerImpl> weak_factory_{this};
 

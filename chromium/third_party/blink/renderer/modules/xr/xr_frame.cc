@@ -274,6 +274,8 @@ ScriptPromise XRFrame::createAnchor(ScriptState* script_state,
     return {};
   }
 
+  DVLOG(3) << __func__ << ": space->ToString()=" << space->ToString();
+
   // The passed in space may be an offset space, we need to transform the pose
   // to account for origin-offset:
   auto native_origin_from_offset_space = space->NativeFromOffsetMatrix();
@@ -343,6 +345,11 @@ ScriptPromise XRFrame::CreateAnchorFromNonStationarySpace(
   return session_->CreateAnchorHelper(
       script_state, stationary_space_from_anchor,
       reference_space_information->native_origin, exception_state);
+}
+
+HeapVector<Member<XRImageTrackingResult>> XRFrame::getImageTrackingResults(
+    ExceptionState& exception_state) {
+  return session_->ImageTrackingResults(exception_state);
 }
 
 void XRFrame::Trace(Visitor* visitor) const {

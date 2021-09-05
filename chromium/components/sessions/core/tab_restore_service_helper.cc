@@ -351,7 +351,7 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
               tab.group_visual_data.value_or(tab_groups::TabGroupVisualData()),
               static_cast<int>(tab_i) == window.selected_tab_index, tab.pinned,
               tab.from_last_session, tab.platform_data.get(),
-              tab.user_agent_override, tab.ext_data);
+              tab.user_agent_override, tab.page_action_overrides, tab.ext_data);
           if (restored_tab) {
             client_->OnTabRestored(
                 tab.navigations.at(tab.current_navigation_index).virtual_url());
@@ -594,6 +594,17 @@ void TabRestoreServiceHelper::PopulateTab(Tab* tab,
   tab->user_agent_override = live_tab->GetUserAgentOverride();
 
   tab->ext_data = live_tab->GetExtData();
+  const std::map<base::FilePath, bool>* page_action_overrides =
+      client_->GetPageActionOverridesForTab(live_tab);
+  if (page_action_overrides) {
+    std::transform(page_action_overrides->cbegin(),
+                   page_action_overrides->cend(),
+                   std::inserter(tab->page_action_overrides,
+                                 tab->page_action_overrides.end()),
+                   [](const std::pair<const base::FilePath, bool>& p) {
+                     return std::make_pair(p.first.AsUTF8Unsafe(), p.second);
+                   });
+  }
 
   tab->platform_data = live_tab->GetPlatformSpecificTabData();
 
@@ -623,7 +634,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
         tab.navigations, base::nullopt, tab.current_navigation_index,
         tab.from_last_session, tab.extension_app_id, tab.platform_data.get(),
         tab.user_agent_override,
-        tab.ext_data);
+        tab.page_action_overrides, tab.ext_data);
   } else {
     // We only respect the tab's original browser if there's no disposition.
     if (disposition == WindowOpenDisposition::UNKNOWN) {
@@ -671,7 +682,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
         tab.group_visual_data.value_or(tab_groups::TabGroupVisualData()),
         disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB, tab.pinned,
         tab.from_last_session, tab.platform_data.get(),
-        tab.user_agent_override, tab.ext_data);
+        tab.user_agent_override, tab.page_action_overrides, tab.ext_data);
   }
   client_->OnTabRestored(
       tab.navigations.at(tab.current_navigation_index).virtual_url());

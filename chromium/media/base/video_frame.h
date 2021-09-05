@@ -27,14 +27,13 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
-#include "media/base/video_frame_feedback.h"
 #include "media/base/video_frame_layout.h"
 #include "media/base/video_frame_metadata.h"
 #include "media/base/video_types.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gl/hdr_metadata.h"
+#include "ui/gfx/hdr_metadata.h"
 
 #if defined(OS_MAC)
 #include <CoreVideo/CVPixelBuffer.h>
@@ -293,8 +292,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp);
 
   // Wraps a provided IOSurface with a VideoFrame. The IOSurface is retained
-  // and locked for the lifetime of the VideoFrame.
-  static scoped_refptr<VideoFrame> WrapIOSurface(
+  // and locked for the lifetime of the VideoFrame. This is for unaccelerated
+  // (CPU-only) access to the IOSurface, and is not efficient. It is the path
+  // that video capture uses when hardware acceleration is disabled.
+  // https://crbug.com/1125879
+  static scoped_refptr<VideoFrame> WrapUnacceleratedIOSurface(
       gfx::GpuMemoryBufferHandle handle,
       const gfx::Rect& visible_rect,
       base::TimeDelta timestamp);
@@ -440,11 +442,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     color_space_ = color_space;
   }
 
-  const base::Optional<gl::HDRMetadata>& hdr_metadata() const {
+  const base::Optional<gfx::HDRMetadata>& hdr_metadata() const {
     return hdr_metadata_;
   }
 
-  void set_hdr_metadata(const base::Optional<gl::HDRMetadata>& hdr_metadata) {
+  void set_hdr_metadata(const base::Optional<gfx::HDRMetadata>& hdr_metadata) {
     hdr_metadata_ = hdr_metadata;
   }
 
@@ -567,9 +569,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // Resets |metadata_|.
   void clear_metadata() { set_metadata(VideoFrameMetadata()); }
-
-  const VideoFrameFeedback* feedback() const { return &feedback_; }
-  VideoFrameFeedback* feedback() { return &feedback_; }
 
   // The time span between the current frame and the first frame of the stream.
   // This is the media timestamp, and not the reference time.
@@ -724,13 +723,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   VideoFrameMetadata metadata_;
 
-  VideoFrameFeedback feedback_;
-
   // Generated at construction time.
   const int unique_id_;
 
   gfx::ColorSpace color_space_;
-  base::Optional<gl::HDRMetadata> hdr_metadata_;
+  base::Optional<gfx::HDRMetadata> hdr_metadata_;
 
   // Sampler conversion information which is used in vulkan context for android.
   base::Optional<gpu::VulkanYCbCrInfo> ycbcr_info_;

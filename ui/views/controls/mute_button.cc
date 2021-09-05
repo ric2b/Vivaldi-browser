@@ -18,13 +18,12 @@ const char MuteButton::kViewClassName[] = "MuteButton";
 const int kMuteIconSize = 20;
 constexpr SkColor kMuteIconColor = SK_ColorWHITE;
 
-MuteButton::MuteButton(views::ButtonListener* listener)
-    : views::ImageButton(listener) {
+MuteButton::MuteButton(PressedCallback callback)
+    : views::ImageButton(callback) {
   SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
 
   // Accessibility.
-  SetFocusForPlatform();
   SetInstallFocusRingOnFocus(true);
 
   const base::string16 mute_tab_button_label(

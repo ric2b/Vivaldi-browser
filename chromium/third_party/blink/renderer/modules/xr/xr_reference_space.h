@@ -52,6 +52,8 @@ class XRReferenceSpace : public XRSpace {
   base::Optional<device::mojom::blink::XRNativeOriginInformation> NativeOrigin()
       const final;
 
+  std::string ToString() const override;
+
   void Trace(Visitor*) const override;
 
   virtual void OnReset();
@@ -64,7 +66,7 @@ class XRReferenceSpace : public XRSpace {
   // latest display parameters of a session.
   void SetMojoFromFloor();
 
-  unsigned int display_info_id_ = 0;
+  uint32_t stage_parameters_id_ = 0;
 
   // Floor from mojo (aka local-floor_from_mojo) transform.
   std::unique_ptr<TransformationMatrix> mojo_from_floor_;

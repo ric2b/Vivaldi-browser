@@ -12,7 +12,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
@@ -157,14 +157,11 @@ class AudioEncoderTest : public ::testing::TestWithParam<TestScenario> {
 
     receiver_.reset(new TestEncodedAudioFrameReceiver());
 
-    audio_encoder_.reset(new AudioEncoder(
-        cast_environment_,
-        kNumChannels,
-        kDefaultAudioSamplingRate,
-        kDefaultAudioEncoderBitrate,
-        codec,
-        base::Bind(&TestEncodedAudioFrameReceiver::FrameEncoded,
-                   base::Unretained(receiver_.get()))));
+    audio_encoder_ = std::make_unique<AudioEncoder>(
+        cast_environment_, kNumChannels, kDefaultAudioSamplingRate,
+        kDefaultAudioEncoderBitrate, codec,
+        base::BindRepeating(&TestEncodedAudioFrameReceiver::FrameEncoded,
+                            base::Unretained(receiver_.get())));
 
     receiver_->SetSamplesPerFrame(audio_encoder_->GetSamplesPerFrame());
   }

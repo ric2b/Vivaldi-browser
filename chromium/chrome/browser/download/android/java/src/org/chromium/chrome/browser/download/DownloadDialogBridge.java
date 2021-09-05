@@ -10,6 +10,7 @@ import android.content.Context;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.download.DownloadLaterMetrics.DownloadLaterUiEvent;
+import org.chromium.chrome.browser.download.DownloadLocationDialogMetrics.DownloadLocationSuggestionEvent;
 import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialog;
 import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialogImpl;
 import org.chromium.chrome.browser.download.dialogs.DownloadDialogUtils;
@@ -29,6 +30,22 @@ import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 import org.chromium.ui.modelutil.PropertyModel;
+
+// Vivaldi
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.net.Uri;
+import android.text.TextUtils;
+
+import androidx.appcompat.app.AlertDialog;
+
+import org.chromium.base.Log;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
+import java.io.File;
+import java.util.Locale;
+
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Glues download dialogs UI code and handles the communication to download native backend.
@@ -114,6 +131,8 @@ public class DownloadDialogBridge
                     && DownloadDialogUtils.shouldSuggestDownloadLocation(
                             dirs, getDownloadDefaultDirectory(), totalBytes)) {
                 suggestedDialogType = DownloadLocationDialogType.LOCATION_SUGGESTION;
+                DownloadLocationDialogMetrics.recordDownloadLocationSuggestionEvent(
+                        DownloadLocationSuggestionEvent.LOCATION_SUGGESTION_SHOWN);
             }
 
             showDialog(activity, modalDialogManager, getPrefService(), totalBytes,
@@ -232,6 +251,12 @@ public class DownloadDialogBridge
     @Override
     public void onDownloadLocationDialogComplete(String returnedPath) {
         mSuggestedPath = returnedPath;
+
+        if (mLocationDialogType == DownloadLocationDialogType.LOCATION_SUGGESTION) {
+            boolean isSelected = !mSuggestedPath.equals(getDownloadDefaultDirectory());
+            DownloadLocationDialogMetrics.recordDownloadLocationSuggestionChoice(isSelected);
+        }
+
         // The location dialog is triggered automatically, complete the flow.
         if (!mEditLocation) {
             onComplete();
@@ -302,5 +327,66 @@ public class DownloadDialogBridge
         String getDownloadDefaultDirectory();
         void setDownloadAndSaveFileDefaultDirectory(String directory);
         boolean isDataReductionProxyEnabled();
+    }
+
+    /** Vivaldi - Function to start external download manager activity **/
+    @CalledByNative
+    private boolean downloadWithExternalDownloadManager(
+            WindowAndroid windowAndroid, String suggestedPath, String urlToDownload) {
+        SharedPreferencesManager sharedPreferencesManager =
+                VivaldiPreferences.getSharedPreferencesManager();
+        Activity activity = windowAndroid.getActivity().get();
+        // If the activity has gone away, just clean up the native pointer.
+        if (activity == null) {
+            onCancel();
+            return false;
+        }
+
+        boolean isExternalDownloadManagerEnabled = sharedPreferencesManager.readBoolean(
+                VivaldiPreferences.EXTERNAL_DOWNLOAD_MANAGER_ENABLED, false);
+
+        Log.d("vivaldi",
+                "download with External download manager status: "
+                        + isExternalDownloadManagerEnabled);
+
+        if (!isExternalDownloadManagerEnabled) return false;
+
+        String activeDownloadManagerActivityName =
+                VivaldiPreferences.getSharedPreferencesManager().readString(
+                        VivaldiPreferences.DOWNLOAD_MANAGER_ACTIVITY_NAME, "");
+        String activeDownloadManagerPackageName = sharedPreferencesManager.readString(
+                VivaldiPreferences.DOWNLOAD_MANAGER_PACKAGE_NAME, "");
+
+        if (!TextUtils.isEmpty(activeDownloadManagerPackageName)
+                && !TextUtils.isEmpty(activeDownloadManagerActivityName)
+                && activeDownloadManagerPackageName.equals(activity.getPackageName()) != true
+                && !TextUtils.isEmpty(urlToDownload)
+                && (urlToDownload.toLowerCase(Locale.ROOT).startsWith("http:")
+                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("https:")
+                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("magnet:")
+                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("ftp:"))) {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlToDownload));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.setClassName(
+                    activeDownloadManagerPackageName, activeDownloadManagerActivityName);
+            intent.putExtra("android.intent.extra.TEXT", urlToDownload);
+            intent.putExtra("com.android.extra.filename", new File(suggestedPath).getName());
+            intent.putExtra("title", new File(suggestedPath).getName());
+            intent.putExtra("filename", new File(suggestedPath).getName());
+
+            try {
+                activity.startActivity(intent);
+                return true;
+            } catch (ActivityNotFoundException exception) {
+                Log.d("vivaldi", "Activity not found for external download manager");
+                // Display error dialog
+                AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+                builder.setTitle(R.string.external_download_manager_title);
+                builder.setMessage(R.string.external_download_manager_activity_not_found_error);
+                builder.setPositiveButton(R.string.ok, (dialog, id) -> { dialog.dismiss(); });
+                builder.create().show();
+            }
+        }
+        return false;
     }
 }

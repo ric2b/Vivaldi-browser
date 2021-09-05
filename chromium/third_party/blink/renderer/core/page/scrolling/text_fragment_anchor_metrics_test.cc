@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/core/page/scrolling/text_fragment_anchor_metrics.h"
 
 #include "base/test/simple_test_tick_clock.h"
+#include "components/ukm/test_ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/scroll/scroll_enums.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -20,15 +22,16 @@
 
 namespace blink {
 
-namespace {
-
 using test::RunPendingTasks;
+
+const char kSuccessUkmMetric[] = "Success";
+const char kSourceUkmMetric[] = "Source";
 
 class TextFragmentAnchorMetricsTest : public SimTest {
  public:
   void SetUp() override {
     SimTest::SetUp();
-    WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+    WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   }
 
   void RunAsyncMatchingTasks() {
@@ -59,7 +62,12 @@ class TextFragmentAnchorMetricsTest : public SimTest {
     Compositor().BeginFrame();
   }
 
+ protected:
   HistogramTester histogram_tester_;
+
+  // TODO(crbug.com/1153990): Find a better mocking solution and clean up this
+  // variable.
+  std::unique_ptr<ukm::UkmRecorder> old_ukm_recorder_;
 };
 
 // Test UMA metrics collection
@@ -87,58 +95,172 @@ TEST_F(TextFragmentAnchorMetricsTest, UMAMetricsCollected) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 2,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 50, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 1,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DidScrollIntoView",
-                                       1, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
                                      1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 18,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ExactTextLength", 4,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 1);
   histogram_tester_.ExpectUniqueSample(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.SelectorCount", 2, 1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       50, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 1, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 18, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 4, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0, 1);
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
+                                       1);
+}
+
+// Test UMA metrics collection with search engine referrer.
+TEST_F(TextFragmentAnchorMetricsTest, UMAMetricsCollectedSearchEngineReferrer) {
+  // Set the referrer to a known search engine URL. This should cause metrics
+  // to be reported for the SearchEngine variant of histograms.
+  SimRequest::Params params;
+  params.referrer = "https://www.bing.com";
+
+  SimRequest request("https://example.com/test.html#:~:text=test&text=cat",
+                     "text/html", params);
+  LoadURL("https://example.com/test.html#:~:text=test&text=cat");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 1200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <p>This is a test page</p>
+    <p>With ambiguous test content</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  // Render two frames to handle the async step added by the beforematch event.
+  Compositor().BeginFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.SelectorCount", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.SelectorCount", 2, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.MatchRate", 50, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.AmbiguousMatch", 1, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.ScrollCancelled", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.DidScrollIntoView", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.DidScrollIntoView", 1, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.TimeToScrollIntoView", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.DirectiveLength", 18, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.ExactTextLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.ExactTextLength", 4, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.EndTextLength", 0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.Parameters", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.Parameters",
+      static_cast<int>(
+          TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
+      1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.ListItemMatch", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.SearchEngine.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.SearchEngine.TableCellMatch", 0, 1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 1,
                                        1);
 }
 
@@ -165,43 +287,57 @@ TEST_F(TextFragmentAnchorMetricsTest, NoMatchFound) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.SelectorCount", 1, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 0, 1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 8, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
                                      0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 8,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
@@ -222,36 +358,49 @@ TEST_F(TextFragmentAnchorMetricsTest, NoTextFragmentAnchor) {
 
   RunAsyncMatchingTasks();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
                                      0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 0);
 }
@@ -271,56 +420,70 @@ TEST_F(TextFragmentAnchorMetricsTest, MatchFoundNoScroll) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 100, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DidScrollIntoView",
-                                       0, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
                                      1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 9,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ExactTextLength", 4,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 1);
   histogram_tester_.ExpectUniqueSample(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.SelectorCount", 1, 1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       100, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 9, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 4, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0, 1);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
@@ -349,75 +512,89 @@ TEST_F(TextFragmentAnchorMetricsTest, ExactTextParameters) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 4,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 100, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DidScrollIntoView",
-                                       0, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
                                      1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.SelectorCount", 4, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 61,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       100, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 4);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 61, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 4);
   // "this", "test", "some"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.ExactTextLength", 4,
-                                      3);
-  // "a"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.ExactTextLength", 1,
-                                      1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 4);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.ExactTextLength", 4, 3);
+  // "a"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 1, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     4);
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kExactTextWithPrefix),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kExactTextWithSuffix),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kExactTextWithContext),
       1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 4);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
-                                       4);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     4);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 0, 4);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 4);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
-                                       4);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 4);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0, 4);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
@@ -447,86 +624,102 @@ TEST_F(TextFragmentAnchorMetricsTest, TextRangeParameters) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 4,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 100, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DidScrollIntoView",
-                                       0, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
                                      1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.SelectorCount", 4, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 82,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       100, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 4);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DidScrollIntoView", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 82, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 0);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 4);
   // "This is"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.RangeMatchLength", 7,
-                                      1);
-  // "test page", "with some"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.RangeMatchLength", 9,
-                                      2);
-  // "nothing at"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.RangeMatchLength", 10,
-                                      1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 4);
-  // "this", "test", "with"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.StartTextLength", 4,
-                                      3);
-  // "nothing"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.StartTextLength", 7,
-                                      1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 4);
-  // "is", "at"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.EndTextLength", 2, 2);
-  // "page", "some"
-  histogram_tester_.ExpectBucketCount("TextFragmentAnchor.EndTextLength", 4, 2);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 4);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 7, 1);
+  // "test page", "with some"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 9, 2);
+  // "nothing at"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 10, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 4);
+  // "this", "test", "with"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 4, 3);
+  // "nothing"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 7, 1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     4);
+  // "is", "at"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.EndTextLength", 2, 2);
+  // "page", "some"
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.EndTextLength", 4, 2);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     4);
+  histogram_tester_.ExpectBucketCount(
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kTextRange),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kTextRangeWithPrefix),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kTextRangeWithSuffix),
       1);
   histogram_tester_.ExpectBucketCount(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kTextRangeWithContext),
       1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
@@ -581,7 +774,7 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, ScrollCancelled) {
     <p>This is a test page</p>
   )HTML");
 
-  Compositor().PaintFrame();
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
 
   mojom::blink::ScrollType scroll_type = GetParam();
   GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, 100),
@@ -596,66 +789,79 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, ScrollCancelled) {
   Compositor().BeginFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ScrollCancelled", 1);
 
   // A user scroll should have caused this to be canceled, other kinds of
   // scrolls should have no effect.
   if (IsUserScrollType()) {
-    histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled",
-                                         1, 1);
+    histogram_tester_.ExpectUniqueSample(
+        "TextFragmentAnchor.Unknown.ScrollCancelled", 1, 1);
 
-    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView",
-                                       0);
     histogram_tester_.ExpectTotalCount(
-        "TextFragmentAnchor.TimeToScrollIntoView", 0);
+        "TextFragmentAnchor.Unknown.DidScrollIntoView", 0);
+    histogram_tester_.ExpectTotalCount(
+        "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 0);
   } else {
-    histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled",
-                                         0, 1);
-    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView",
-                                       1);
+    histogram_tester_.ExpectUniqueSample(
+        "TextFragmentAnchor.Unknown.ScrollCancelled", 0, 1);
     histogram_tester_.ExpectTotalCount(
-        "TextFragmentAnchor.TimeToScrollIntoView", 1);
+        "TextFragmentAnchor.Unknown.DidScrollIntoView", 1);
+    histogram_tester_.ExpectTotalCount(
+        "TextFragmentAnchor.Unknown.TimeToScrollIntoView", 1);
   }
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.MatchRate", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.MatchRate", 100, 1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 9,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ExactTextLength", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ExactTextLength", 4,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.RangeMatchLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.StartTextLength", 0);
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.SelectorCount",
+                                     1);
   histogram_tester_.ExpectUniqueSample(
-      "TextFragmentAnchor.Parameters",
+      "TextFragmentAnchor.Unknown.SelectorCount", 1, 1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.MatchRate", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.Unknown.MatchRate",
+                                       100, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.AmbiguousMatch", 0, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.DirectiveLength", 9, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ExactTextLength", 4, 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.RangeMatchLength", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.StartTextLength", 0);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.EndTextLength",
+                                     0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.Parameters",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.Parameters",
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 0, 1);
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 0, 1);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
@@ -703,7 +909,8 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, TimeToScrollToTop) {
   BeginEmptyFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
 
   const int64_t time_to_scroll_to_top = 500;
   tick_clock.Advance(base::TimeDelta::FromMilliseconds(time_to_scroll_to_top));
@@ -715,8 +922,8 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, TimeToScrollToTop) {
   {
     GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, -20),
                                                      scroll_type);
-    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
-                                       0);
+    histogram_tester_.ExpectTotalCount(
+        "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
   }
 
   // Scroll to top and ensure the metric is recorded, but only for user type
@@ -726,13 +933,14 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, TimeToScrollToTop) {
                                                             scroll_type);
 
     if (IsUserScrollType()) {
-      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
-                                         1);
+      histogram_tester_.ExpectTotalCount(
+          "TextFragmentAnchor.Unknown.TimeToScrollToTop", 1);
       histogram_tester_.ExpectUniqueSample(
-          "TextFragmentAnchor.TimeToScrollToTop", time_to_scroll_to_top, 1);
+          "TextFragmentAnchor.Unknown.TimeToScrollToTop", time_to_scroll_to_top,
+          1);
     } else {
-      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
-                                         0);
+      histogram_tester_.ExpectTotalCount(
+          "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
     }
   }
 
@@ -745,11 +953,11 @@ TEST_P(TextFragmentAnchorScrollMetricsTest, TimeToScrollToTop) {
                                                             scroll_type);
 
     if (IsUserScrollType()) {
-      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
-                                         1);
+      histogram_tester_.ExpectTotalCount(
+          "TextFragmentAnchor.Unknown.TimeToScrollToTop", 1);
     } else {
-      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
-                                         0);
+      histogram_tester_.ExpectTotalCount(
+          "TextFragmentAnchor.Unknown.TimeToScrollToTop", 0);
     }
   }
 }
@@ -851,9 +1059,10 @@ TEST_F(TextFragmentAnchorMetricsTest, ListItemMatch) {
   BeginEmptyFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 1,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 1, 1);
 }
 
 // Test recording of the TableCellMatch metric
@@ -875,9 +1084,10 @@ TEST_F(TextFragmentAnchorMetricsTest, TableCellMatch) {
   BeginEmptyFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 1,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1, 1);
 }
 
 // Test recording of ListItemMatch for a match nested in a list item
@@ -896,9 +1106,10 @@ TEST_F(TextFragmentAnchorMetricsTest, NestedListItemMatch) {
   BeginEmptyFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 1,
-                                       1);
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Unknown.ListItemMatch",
+                                     1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.ListItemMatch", 1, 1);
 }
 
 // Test recording of TableCellMatch for a match nested in a table cell
@@ -920,9 +1131,10 @@ TEST_F(TextFragmentAnchorMetricsTest, NestedTableCellMatch) {
   BeginEmptyFrame();
   BeginEmptyFrame();
 
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 1,
-                                       1);
+  histogram_tester_.ExpectTotalCount(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample(
+      "TextFragmentAnchor.Unknown.TableCellMatch", 1, 1);
 }
 
 class TextFragmentRelatedMetricTest : public TextFragmentAnchorMetricsTest,
@@ -1256,6 +1468,91 @@ TEST_P(TextFragmentRelatedMetricTest, TextFragmentActivationDoesNotCountAPI) {
       WebFeature::kV8Document_FragmentDirective_AttributeGetter));
 }
 
-}  // namespace
+// Tests that a LinkOpened UKM Event is recorded upon a successful fragment
+// highlight.
+TEST_F(TextFragmentAnchorMetricsTest, LinkOpenedSuccessUKM) {
+  SimRequest request("https://example.com/test.html#:~:text=test%20page",
+                     "text/html");
+  LoadURL("https://example.com/test.html#:~:text=test%20page");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 2200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <p>This is a test page</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  // Stub UKM Recorder. Set the older recorder as member variable as other
+  // instances might depend on it. Its destruction would cause the test to crash
+  // during teardown.
+  old_ukm_recorder_ = std::move(GetDocument().ukm_recorder_);
+  GetDocument().ukm_recorder_ = std::make_unique<ukm::TestUkmRecorder>();
+
+  // Render two frames to handle the async step added by the beforematch event.
+  Compositor().BeginFrame();
+  BeginEmptyFrame();
+
+  auto* recorder =
+      static_cast<ukm::TestUkmRecorder*>(GetDocument().UkmRecorder());
+
+  auto entries = recorder->GetEntriesByName(
+      ukm::builders::SharedHighlights_LinkOpened::kEntryName);
+  ASSERT_EQ(1u, entries.size());
+  const ukm::mojom::UkmEntry* entry = entries[0];
+  EXPECT_EQ(GetDocument().UkmSourceID(), entry->source_id);
+  recorder->ExpectEntryMetric(entry, kSuccessUkmMetric, /*success=*/true);
+  EXPECT_TRUE(recorder->GetEntryMetric(entry, kSourceUkmMetric));
+}
+
+// Tests that a LinkOpened UKM Event is recorded upon a failed fragment
+// highlight.
+TEST_F(TextFragmentAnchorMetricsTest, LinkOpenedFailedUKM) {
+  SimRequest request(
+      "https://example.com/test.html#:~:text=not%20on%20the%20page",
+      "text/html");
+  LoadURL("https://example.com/test.html#:~:text=not%20on%20the%20page");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 2200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <p>This is a test page</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  // Stub UKM Recorder. Set the older recorder as member variable as other
+  // instances might depend on it. Its destruction would cause the test to crash
+  // during teardown.
+  old_ukm_recorder_ = std::move(GetDocument().ukm_recorder_);
+  GetDocument().ukm_recorder_ = std::make_unique<ukm::TestUkmRecorder>();
+
+  // Render two frames to handle the async step added by the beforematch event.
+  Compositor().BeginFrame();
+  BeginEmptyFrame();
+
+  auto* recorder =
+      static_cast<ukm::TestUkmRecorder*>(GetDocument().UkmRecorder());
+
+  auto entries = recorder->GetEntriesByName(
+      ukm::builders::SharedHighlights_LinkOpened::kEntryName);
+  ASSERT_EQ(1u, entries.size());
+  const ukm::mojom::UkmEntry* entry = entries[0];
+  EXPECT_EQ(GetDocument().UkmSourceID(), entry->source_id);
+  recorder->ExpectEntryMetric(entry, kSuccessUkmMetric, /*success=*/false);
+  EXPECT_TRUE(recorder->GetEntryMetric(entry, kSourceUkmMetric));
+}
 
 }  // namespace blink

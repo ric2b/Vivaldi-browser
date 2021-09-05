@@ -16,6 +16,7 @@
 #include "ui/base/models/combobox_model_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/prefix_delegate.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/style/typography.h"
 
 namespace gfx {
@@ -39,7 +40,6 @@ class PrefixSelector;
 // Combobox has two distinct parts, the drop down arrow and the text.
 class VIEWS_EXPORT Combobox : public View,
                               public PrefixDelegate,
-                              public ButtonListener,
                               public ui::ComboboxModelObserver {
  public:
   METADATA_HEADER(Combobox);
@@ -64,7 +64,7 @@ class VIEWS_EXPORT Combobox : public View,
   const gfx::FontList& GetFontList() const;
 
   // Sets the callback which will be called when a selection has been made.
-  void set_callback(base::RepeatingClosure callback) {
+  void SetCallback(base::RepeatingClosure callback) {
     callback_ = std::move(callback);
   }
 
@@ -77,12 +77,14 @@ class VIEWS_EXPORT Combobox : public View,
   bool SelectValue(const base::string16& value);
 
   void SetOwnedModel(std::unique_ptr<ui::ComboboxModel> model);
+
   void SetModel(ui::ComboboxModel* model);
+  ui::ComboboxModel* GetModel() const { return model_; }
 
-  ui::ComboboxModel* model() const { return model_; }
-
-  // Set the tooltip text, and the accessible name if it is currently empty.
-  void SetTooltipText(const base::string16& tooltip_text);
+  // Gets/Sets the tooltip text, and the accessible name if it is currently
+  // empty.
+  base::string16 GetTooltipTextAndAccessibleName() const;
+  void SetTooltipTextAndAccessibleName(const base::string16& tooltip_text);
 
   // Set the accessible name of the combobox.
   void SetAccessibleName(const base::string16& name);
@@ -116,12 +118,13 @@ class VIEWS_EXPORT Combobox : public View,
   void SetSelectedRow(int row) override;
   base::string16 GetTextForRow(int row) override;
 
-  // Overridden from ButtonListener:
-  void ButtonPressed(Button* sender, const ui::Event& event) override;
-
  protected:
   // Overridden from ComboboxModelObserver:
   void OnComboboxModelChanged(ui::ComboboxModel* model) override;
+
+  // Getters to be used by metadata.
+  const base::RepeatingClosure& GetCallback() const;
+  const std::unique_ptr<ui::ComboboxModel>& GetOwnedModel() const;
 
  private:
   friend class test::ComboboxTestApi;
@@ -136,6 +139,9 @@ class VIEWS_EXPORT Combobox : public View,
 
   // Draws the selected value of the drop down list
   void PaintIconAndText(gfx::Canvas* canvas);
+
+  // Opens the dropdown menu in response to |event|.
+  void ArrowButtonPressed(const ui::Event& event);
 
   // Show the drop down list
   void ShowDropDownMenu(ui::MenuSourceType source_type);
@@ -223,6 +229,19 @@ class VIEWS_EXPORT Combobox : public View,
   DISALLOW_COPY_AND_ASSIGN(Combobox);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Combobox, View)
+VIEW_BUILDER_PROPERTY(base::RepeatingClosure, Callback)
+VIEW_BUILDER_PROPERTY(std::unique_ptr<ui::ComboboxModel>, OwnedModel)
+VIEW_BUILDER_PROPERTY(ui::ComboboxModel*, Model)
+VIEW_BUILDER_PROPERTY(int, SelectedIndex)
+VIEW_BUILDER_PROPERTY(bool, Invalid)
+VIEW_BUILDER_PROPERTY(bool, SizeToLargestLabel)
+VIEW_BUILDER_PROPERTY(base::string16, AccessibleName)
+VIEW_BUILDER_PROPERTY(base::string16, TooltipTextAndAccessibleName)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Combobox)
 
 #endif  // UI_VIEWS_CONTROLS_COMBOBOX_COMBOBOX_H_

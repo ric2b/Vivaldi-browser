@@ -14,9 +14,8 @@ declare_args() {
   fieldtrial_testing_like_official_build = is_chrome_branded
 }
 
-# Vivaldi - Don't enable fieldtrial testing if build is Vivaldi
 fieldtrial_testing_enabled =
-    !fieldtrial_testing_like_official_build && !is_chrome_branded && !is_vivaldi
+    !fieldtrial_testing_like_official_build && !is_chrome_branded
 
 buildflag_header("buildflags") {
   header = "buildflags.h"

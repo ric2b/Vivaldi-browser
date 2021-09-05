@@ -4,6 +4,7 @@
 
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -38,6 +39,8 @@ class OemAppPositionTest : public chromeos::LoginManagerTest {
   OemAppPositionTest() : LoginManagerTest() {
     login_mixin_.AppendRegularUsers(1);
   }
+  OemAppPositionTest(const OemAppPositionTest&) = delete;
+  OemAppPositionTest& operator=(const OemAppPositionTest&) = delete;
   ~OemAppPositionTest() override = default;
 
   // LoginManagerTest:
@@ -66,9 +69,6 @@ class OemAppPositionTest : public chromeos::LoginManagerTest {
   }
 
   chromeos::LoginManagerMixin login_mixin_{&mixin_host_};
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OemAppPositionTest);
 };
 
 class AppPositionReorderingTest : public extensions::ExtensionBrowserTest {

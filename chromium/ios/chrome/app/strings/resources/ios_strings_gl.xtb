@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Erro impresión</translation>
 <translation id="1125564390852150847">Crear pestana nova</translation>
 <translation id="1145536944570833626">Elimina os datos existentes.</translation>
+<translation id="1147031633655575115">Tes a sesión iniciada como <ph name="USER" /></translation>
 <translation id="1154690515305205900">Non se puido crear unha ligazón ao texto destacado.</translation>
+<translation id="1157749421655780457">Permitir uso da localización...</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1172898394251786223">Campo seguinte</translation>
 <translation id="1176932207622159128">Impos. gardar imaxe</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Ocultar contrasinal</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> elementos</translation>
 <translation id="1491277525950327607">Toca dúas veces para activar ou desactivar a configuración</translation>
+<translation id="1492417797159476138">Xa gardaches este nome de usuario para este sitio</translation>
 <translation id="1509486075633541495">Iniciar sesión no sitio web</translation>
 <translation id="1509960214886564027">As funcións de moitos sitios poden deixar de funcionar</translation>
 <translation id="152234381334907219">Contrasinais que non se gardan nunca</translation>
@@ -266,6 +269,7 @@ Sigue os pasos indicados a continuación:</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3892144330757387737">Aquí atoparás o teu historial</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3913386780052199712">Sesión iniciada en Chrome</translation>
 <translation id="3915450441834151894">Información sobre o sitio</translation>
 <translation id="3922310737605261887">Buscar texto copiado</translation>
 <translation id="3928666092801078803">Combinar os meus datos</translation>
@@ -340,6 +344,7 @@ Os teus datos están encriptados co teu contrasinal de sincronización. Introdú
 <translation id="4751645464639803239">Nova pestana do modo de incógnito</translation>
 <translation id="4758977202923349869">Coloca a tarxeta de crédito neste marco</translation>
 <translation id="4775879719735953715">Navegador predeterminado</translation>
+<translation id="4778644898150334464">Utilizar outro contrasinal</translation>
 <translation id="4802417911091824046">A encriptación mediante frase de acceso non inclúe métodos de pago nin enderezos de Google Pay.
 
 Para cambiar esta opción de configuración, deberás <ph name="BEGIN_LINK" />restablecer a sincronización<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Para cambiar esta opción de configuración, deberás <ph name="BEGIN_LINK" />re
 <translation id="5059136629401106827">Aceptar</translation>
 <translation id="5062321486222145940">Instalar Google Drive</translation>
 <translation id="5083464117946352670">Imposible determinar tamaño.</translation>
+<translation id="5090832849094901128">Ao eliminar este contrasinal non se eliminará a túa conta de <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Completouse o chío.</translation>
 <translation id="5118764316110575523">Non</translation>
 <translation id="5127805178023152808">A sincronización está desactivada</translation>
@@ -511,6 +517,9 @@ Non poden utilizalas para ver a túa actividade de navegación en distintos siti
 <translation id="6476800141292307438">Traducindo a páxina ao <ph name="LANGUAGE" />. Hai opcións dispoñibles na parte inferior da pantalla.</translation>
 <translation id="648164694371393720">Produciuse un erro de autenticación</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elementos eliminados</translation>
+<translation id="6497772452874122664">Se confías en <ph name="TIME" />, podes usar un contrasinal gardado doutro sitio.
+
+Tenta usar un contrasinal distinto para cada sitio.</translation>
 <translation id="651505212789431520">Queres cancelar a sincronización? Podes activala en calquera momento en Configuración.</translation>
 <translation id="6561262006871132942">Achegar</translation>
 <translation id="6585618849026997638">Engade un marcador para volver acceder a unha páxina que consideres importante</translation>
@@ -590,6 +599,7 @@ Non poden utilizalas para ver a túa actividade de navegación en distintos siti
 <translation id="739941347996872055">Pestana anterior</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> artigos non lidos.</translation>
+<translation id="7412027924265291969">Continuar</translation>
 <translation id="7425346204213733349">Os cambios nos marcadores, no historial, nos contrasinais e noutras opcións de configuración deixarán de sincronizarse coa túa conta de Google. Non obstante, os teus datos actuais permanecerán almacenados na túa conta de Google.</translation>
 <translation id="7435356471928173109">Desactivada polo teu administrador</translation>
 <translation id="7454057999980797137">Estado/provin.</translation>
@@ -600,6 +610,7 @@ Non poden utilizalas para ver a túa actividade de navegación en distintos siti
 <translation id="7472734401283673885">Nome da empresa</translation>
 <translation id="7473891865547856676">Non, grazas</translation>
 <translation id="7481312909269577407">Adiante</translation>
+<translation id="7483467499335917849">Usar a túa localización actual</translation>
 <translation id="750493650310597496">0 seleccionados</translation>
 <translation id="7514365320538308">Descargar</translation>
 <translation id="7537586195939242955">Non se pode instalar o teu pase en Passbook neste momento.</translation>
@@ -733,6 +744,7 @@ Tamén poden utilizalas para ver a túa actividade de navegación en varios siti
 <translation id="9094033019050270033">Actualizar contrasinal</translation>
 <translation id="9100610230175265781">Contrasinal obrigatorio</translation>
 <translation id="9107664647686727385">Comproba se hai contrasinais vulnerados</translation>
+<translation id="9137526406337347448">Servizos de Google</translation>
 <translation id="9148126808321036104">Iniciar sesión de novo</translation>
 <translation id="9152539721251340337">Crear código QR</translation>
 <translation id="9157836665414082580">Suprimir cadros de diálogos</translation>

@@ -274,14 +274,13 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
       CompleteGetEntryProperties(base::File::FILE_ERROR_NOT_FOUND);
       return;
     }
-    root->GetMetadata(
-        path,
-        base::BindOnce(
-            &SingleEntryPropertiesGetterForDocumentsProvider::OnGetMetadata,
-            weak_ptr_factory_.GetWeakPtr()));
+    root->GetExtraFileMetadata(
+        path, base::BindOnce(&SingleEntryPropertiesGetterForDocumentsProvider::
+                                 OnGetExtraFileMetadata,
+                             weak_ptr_factory_.GetWeakPtr()));
   }
 
-  void OnGetMetadata(
+  void OnGetExtraFileMetadata(
       base::File::Error error,
       const arc::ArcDocumentsProviderRoot::ExtraFileMetadata& metadata) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -294,6 +293,9 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
     properties_->can_rename = std::make_unique<bool>(metadata.supports_rename);
     properties_->can_add_children =
         std::make_unique<bool>(metadata.dir_supports_create);
+    properties_->modification_time =
+        std::make_unique<double>(metadata.last_modified.ToJsTimeIgnoringNull());
+    properties_->size = std::make_unique<double>(metadata.size);
     CompleteGetEntryProperties(base::File::FILE_OK);
   }
 
@@ -628,7 +630,7 @@ void FileManagerPrivateSearchDriveFunction::OnSearchDriveFs(
       true, !is_offline_,
       FileManagerPrivateSearchDriveMetadataFunction::SearchType::kText,
       operation_start_);
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 FileManagerPrivateSearchDriveMetadataFunction::
@@ -755,7 +757,8 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnSearchDriveFs(
   }
 
   UmaEmitSearchOutcome(true, !is_offline_, search_type_, operation_start_);
-  Respond(OneArgument(std::move(results_list)));
+  Respond(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(results_list))));
 }
 
 ExtensionFunction::ResponseAction
@@ -878,7 +881,7 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnTokenFetched(
     return;
   }
 
-  Respond(OneArgument(std::make_unique<base::Value>(
+  Respond(OneArgument(base::Value(
       download_url_.Resolve("?alt=media&access_token=" + access_token)
           .spec())));
 }

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -105,7 +105,7 @@ class EasyUnlockService::PowerMonitor : public PowerManagerClient::Observer {
         base::TimeDelta::FromSeconds(5));
     service_->OnSuspendDone();
     service_->UpdateAppState();
-    // Note that |this| may get deleted after |UpdateAppState| is called.
+    // Note that `this` may get deleted after `UpdateAppState` is called.
   }
 
   void ResetWakingUp() {

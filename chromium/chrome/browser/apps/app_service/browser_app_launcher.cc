@@ -10,7 +10,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/common/chrome_features.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 
@@ -22,12 +21,12 @@ BrowserAppLauncher::BrowserAppLauncher(Profile* profile)
 BrowserAppLauncher::~BrowserAppLauncher() = default;
 
 content::WebContents* BrowserAppLauncher::LaunchAppWithParams(
-    const AppLaunchParams& params) {
+    AppLaunchParams&& params) {
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetInstalledExtension(
           params.app_id);
   if (!extension || extension->from_bookmark()) {
-    return web_app_launch_manager_.OpenApplication(params);
+    return web_app_launch_manager_.OpenApplication(std::move(params));
   }
 
   if (params.container ==
@@ -35,7 +34,7 @@ content::WebContents* BrowserAppLauncher::LaunchAppWithParams(
       extension && extension->from_bookmark()) {
     web_app::RecordAppWindowLaunch(profile_, params.app_id);
   }
-  return ::OpenApplication(profile_, params);
+  return ::OpenApplication(profile_, std::move(params));
 }
 
 void BrowserAppLauncher::LaunchAppWithCallback(

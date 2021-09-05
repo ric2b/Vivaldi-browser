@@ -195,16 +195,16 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   LocalDOMWindow* ToLocalDOMWindow() override;
 
   // Same-origin DOM Level 0
-  Screen* screen() const;
-  History* history() const;
-  BarProp* locationbar() const;
-  BarProp* menubar() const;
-  BarProp* personalbar() const;
-  BarProp* scrollbars() const;
-  BarProp* statusbar() const;
-  BarProp* toolbar() const;
-  Navigator* navigator() const;
-  Navigator* clientInformation() const { return navigator(); }
+  Screen* screen();
+  History* history();
+  BarProp* locationbar();
+  BarProp* menubar();
+  BarProp* personalbar();
+  BarProp* scrollbars();
+  BarProp* statusbar();
+  BarProp* toolbar();
+  Navigator* navigator();
+  Navigator* clientInformation() { return navigator(); }
 
   bool offscreenBuffering() const;
 
@@ -238,7 +238,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   Document* document() const;
 
   // CSSOM View Module
-  StyleMedia* styleMedia() const;
+  StyleMedia* styleMedia();
 
   // WebKit extensions
   double devicePixelRatio() const;
@@ -387,7 +387,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void AcceptLanguagesChanged();
 
   // https://dom.spec.whatwg.org/#dom-window-event
-  ScriptValue event(ScriptState*) const;
+  ScriptValue event(ScriptState*);
   Event* CurrentEvent() const;
   void SetCurrentEvent(Event*);
 
@@ -512,6 +512,11 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // creation. Remains valid even after the frame is destroyed and the context
   // is detached.
   const LocalFrameToken token_;
+
+  // Tracks which document policy violation reports have already been sent in
+  // this document, to avoid reporting duplicates. The value stored comes
+  // from |DocumentPolicyViolationReport::MatchId()|.
+  mutable HashSet<unsigned> document_policy_violation_reports_sent_;
 };
 
 template <>

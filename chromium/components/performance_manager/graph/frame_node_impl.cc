@@ -11,7 +11,9 @@
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/process_node_impl.h"
 #include "components/performance_manager/graph/worker_node_impl.h"
-#include "components/performance_manager/public/frame_priority/frame_priority.h"
+#include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
+#include "components/performance_manager/public/v8_memory/web_memory.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace performance_manager {
 
@@ -19,7 +21,7 @@ namespace performance_manager {
 constexpr char FrameNodeImpl::kDefaultPriorityReason[] =
     "default frame priority";
 
-using PriorityAndReason = frame_priority::PriorityAndReason;
+using PriorityAndReason = execution_context_priority::PriorityAndReason;
 
 FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
                              PageNodeImpl* page_node,
@@ -41,8 +43,7 @@ FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
           process_node->render_process_host_proxy()
               .render_process_host_id()
               .value(),
-          render_frame_id)),
-      weak_factory_(this) {
+          render_frame_id)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(process_node);
   DCHECK(page_node);
@@ -230,6 +231,18 @@ bool FrameNodeImpl::is_audible() const {
   return is_audible_.value();
 }
 
+const base::Optional<gfx::Rect>& FrameNodeImpl::viewport_intersection() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The viewport intersection of the main frame is not tracked.
+  DCHECK(!IsMainFrame());
+  return viewport_intersection_.value();
+}
+
+FrameNode::Visibility FrameNodeImpl::visibility() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return visibility_.value();
+}
+
 void FrameNodeImpl::SetIsCurrent(bool is_current) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   is_current_.SetAndMaybeNotify(this, is_current);
@@ -273,6 +286,19 @@ void FrameNodeImpl::SetIsAudible(bool is_audible) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(is_audible, is_audible_.value());
   is_audible_.SetAndMaybeNotify(this, is_audible);
+}
+
+void FrameNodeImpl::SetViewportIntersection(
+    const gfx::Rect& viewport_intersection) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The viewport intersection of the main frame is not tracked.
+  DCHECK(!IsMainFrame());
+  viewport_intersection_.SetAndMaybeNotify(this, viewport_intersection);
+}
+
+void FrameNodeImpl::SetVisibility(Visibility visibility) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  visibility_.SetAndMaybeNotify(this, visibility);
 }
 
 void FrameNodeImpl::OnNavigationCommitted(const GURL& url, bool same_document) {
@@ -498,6 +524,17 @@ bool FrameNodeImpl::IsAudible() const {
   return is_audible();
 }
 
+const base::Optional<gfx::Rect>& FrameNodeImpl::GetViewportIntersection()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return viewport_intersection();
+}
+
+FrameNode::Visibility FrameNodeImpl::GetVisibility() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return visibility();
+}
+
 void FrameNodeImpl::AddChildFrame(FrameNodeImpl* child_frame_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(child_frame_node);
@@ -528,6 +565,12 @@ void FrameNodeImpl::OnJoiningGraph() {
   // Enable querying this node using process and frame routing ids.
   graph()->RegisterFrameNodeForId(process_node_->GetRenderProcessId(),
                                   render_frame_id_, this);
+
+  // Set the initial frame visibility. This is done on the graph because the
+  // page node must be accessed. OnFrameNodeAdded() has not been called yet for
+  // this frame, so it is important to avoid sending a notification for this
+  // property change.
+  visibility_.Set(GetInitialFrameVisibility());
 
   // Wire this up to the other nodes in the graph.
   if (parent_frame_node_)
@@ -624,6 +667,25 @@ bool FrameNodeImpl::HasFrameNodeInTree(FrameNodeImpl* frame_node) const {
   return GetFrameTreeRoot() == frame_node->GetFrameTreeRoot();
 }
 
+FrameNode::Visibility FrameNodeImpl::GetInitialFrameVisibility() const {
+  DCHECK(!viewport_intersection_.value());
+
+  // If the page hosting this frame is not visible, then the frame is also not
+  // visible.
+  if (!page_node()->is_visible())
+    return FrameNode::Visibility::kNotVisible;
+
+  // The visibility of the frame depends on the viewport intersection of said
+  // frame. Since a main frame has no viewport intersection, it is always
+  // visible in the page.
+  if (IsMainFrame())
+    return FrameNode::Visibility::kVisible;
+
+  // Since the viewport intersection of a frame is not initially available, the
+  // visibility of a child frame is initially unknown.
+  return FrameNode::Visibility::kUnknown;
+}
+
 FrameNodeImpl::DocumentProperties::DocumentProperties() = default;
 FrameNodeImpl::DocumentProperties::~DocumentProperties() = default;
 
@@ -636,6 +698,14 @@ void FrameNodeImpl::DocumentProperties::Reset(FrameNodeImpl* frame_node,
   origin_trial_freeze_policy.SetAndMaybeNotify(
       frame_node, mojom::InterventionPolicy::kDefault);
   had_form_interaction.SetAndMaybeNotify(frame_node, false);
+}
+
+void FrameNodeImpl::OnWebMemoryMeasurementRequested(
+    mojom::WebMemoryMeasurement::Mode mode,
+    OnWebMemoryMeasurementRequestedCallback callback) {
+  CHECK(base::FeatureList::IsEnabled(
+      blink::features::kWebMeasureMemoryViaPerformanceManager));
+  v8_memory::WebMeasureMemory(this, mode, std::move(callback));
 }
 
 }  // namespace performance_manager

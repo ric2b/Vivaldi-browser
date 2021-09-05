@@ -64,13 +64,13 @@ PaintLayer* FindFirstStickyBetween(LayoutObject* from, LayoutObject* to) {
   LayoutObject* maybe_sticky_ancestor = from;
   while (maybe_sticky_ancestor && maybe_sticky_ancestor != to) {
     if (maybe_sticky_ancestor->StyleRef().HasStickyConstrainedPosition()) {
-      return ToLayoutBoxModelObject(maybe_sticky_ancestor)->Layer();
+      return To<LayoutBoxModelObject>(maybe_sticky_ancestor)->Layer();
     }
 
     maybe_sticky_ancestor =
         maybe_sticky_ancestor->IsLayoutInline()
             ? maybe_sticky_ancestor->Container()
-            : ToLayoutBox(maybe_sticky_ancestor)->LocationContainer();
+            : To<LayoutBox>(maybe_sticky_ancestor)->LocationContainer();
   }
   return nullptr;
 }
@@ -107,7 +107,7 @@ static bool HasInsetBoxShadow(const ComputedStyle& style) {
   if (!style.BoxShadow())
     return false;
   for (const ShadowData& shadow : style.BoxShadow()->Shadows()) {
-    if (shadow.Style() == kInset)
+    if (shadow.Style() == ShadowStyle::kInset)
       return true;
   }
   return false;
@@ -198,6 +198,14 @@ LayoutBoxModelObject::ComputeBackgroundPaintLocationIfComposited() const {
     }
     return kBackgroundPaintInGraphicsLayer;
   }
+
+  // It can't paint in the scrolling contents because it has different 3d
+  // context than the scrolling contents.
+  if (!StyleRef().Preserves3D() && Parent() &&
+      Parent()->StyleRef().Preserves3D()) {
+    return kBackgroundPaintInGraphicsLayer;
+  }
+
   return paint_location;
 }
 
@@ -406,9 +414,9 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
       if (!child->IsBox())
         continue;
       if (new_horizontal_writing_mode != child->IsHorizontalWritingMode())
-        ToLayoutBox(child)->MarkOrthogonalWritingModeRoot();
+        To<LayoutBox>(child)->MarkOrthogonalWritingModeRoot();
       else
-        ToLayoutBox(child)->UnmarkOrthogonalWritingModeRoot();
+        To<LayoutBox>(child)->UnmarkOrthogonalWritingModeRoot();
     }
   }
 
@@ -419,7 +427,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     if (HTMLBodyElement* body = GetDocument().FirstBodyElement()) {
       if (auto* body_object = body->GetLayoutObject()) {
         if (body_object->IsBoxModelObject()) {
-          auto* body_box_model = ToLayoutBoxModelObject(body_object);
+          auto* body_box_model = To<LayoutBoxModelObject>(body_object);
           bool new_body_background_transfers =
               body_box_model->BackgroundTransfersToView(Style());
           bool old_body_background_transfers =
@@ -627,7 +635,7 @@ void LayoutBoxModelObject::AddOutlineRectsForDescendant(
 
   if (descendant.IsBox()) {
     descendant.AddOutlineRects(
-        rects, additional_offset + ToLayoutBox(descendant).PhysicalLocation(),
+        rects, additional_offset + To<LayoutBox>(descendant).PhysicalLocation(),
         include_block_overflows);
     return;
   }
@@ -639,7 +647,7 @@ void LayoutBoxModelObject::AddOutlineRectsForDescendant(
     // for its RootOutlineBoxes which cover the line boxes of this LayoutInline.
     // So the LayoutInline needs to add rects for children and continuations
     // only.
-    ToLayoutInline(descendant)
+    To<LayoutInline>(descendant)
         .AddOutlineRectsForChildrenAndContinuations(rects, additional_offset,
                                                     include_block_overflows);
     return;
@@ -740,13 +748,13 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight(
   NOT_DESTROYED();
   // TODO(rego): Check if we can somehow reuse LayoutBlock::
   // availableLogicalHeightForPercentageComputation() (see crbug.com/635655).
-  const LayoutBox* this_box = IsBox() ? ToLayoutBox(this) : nullptr;
+  const auto* this_box = DynamicTo<LayoutBox>(this);
   const Length& logical_height_length = StyleRef().LogicalHeight();
   LayoutBlock* cb =
       ContainingBlockForAutoHeightDetection(logical_height_length);
   if (register_percentage_descendant == kRegisterPercentageDescendant &&
       logical_height_length.IsPercentOrCalc() && cb && IsBox()) {
-    cb->AddPercentHeightDescendant(const_cast<LayoutBox*>(ToLayoutBox(this)));
+    cb->AddPercentHeightDescendant(const_cast<LayoutBox*>(To<LayoutBox>(this)));
   }
   if (this_box && this_box->IsFlexItemIncludingNG()) {
     if (this_box->IsFlexItem()) {
@@ -768,14 +776,20 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight(
     }
   }
   if (this_box && this_box->IsGridItem() &&
-      this_box->HasOverrideContainingBlockContentLogicalHeight())
+      this_box->HasOverrideContainingBlockContentLogicalHeight()) {
+    if (RuntimeEnabledFeatures::TableCellNewPercentsEnabled()) {
+      return this_box->OverrideContainingBlockContentLogicalHeight() ==
+             kIndefiniteSize;
+    }
     return false;
+  }
   if (this_box && this_box->IsCustomItem() &&
       (this_box->HasOverrideContainingBlockContentLogicalHeight() ||
        this_box->HasOverridePercentageResolutionBlockSize()))
     return false;
 
-  if (logical_height_length.IsIntrinsicOrAuto() &&
+  if ((logical_height_length.IsAutoOrContentOrIntrinsic() ||
+       logical_height_length.IsFillAvailable()) &&
       !IsOutOfFlowPositionedWithImplicitHeight(this))
     return true;
 
@@ -944,7 +958,7 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   LayoutBlock* containing_block = ContainingBlock();
   // The location container for boxes is not always the containing block.
   LayoutObject* location_container =
-      IsLayoutInline() ? Container() : ToLayoutBox(this)->LocationContainer();
+      IsLayoutInline() ? Container() : To<LayoutBox>(this)->LocationContainer();
   // Skip anonymous containing blocks.
   while (containing_block->IsAnonymous()) {
     containing_block = containing_block->ContainingBlock();
@@ -958,8 +972,8 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
       kIgnoreTransforms | kIgnoreScrollOffset | kIgnoreStickyOffset;
   skipped_containers_offset = location_container->LocalToAncestorPoint(
       PhysicalOffset(), containing_block, flags);
-  LayoutBox& scroll_ancestor =
-      ToLayoutBox(Layer()->AncestorScrollContainerLayer()->GetLayoutObject());
+  auto& scroll_ancestor =
+      To<LayoutBox>(Layer()->AncestorScrollContainerLayer()->GetLayoutObject());
 
   LayoutUnit max_container_width =
       IsA<LayoutView>(containing_block)
@@ -1016,10 +1030,10 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
 
   PhysicalRect sticky_box_rect;
   if (IsLayoutInline()) {
-    sticky_box_rect = ToLayoutInline(this)->PhysicalLinesBoundingBox();
+    sticky_box_rect = To<LayoutInline>(this)->PhysicalLinesBoundingBox();
   } else {
     sticky_box_rect =
-        containing_block->FlipForWritingMode(ToLayoutBox(this)->FrameRect());
+        containing_block->FlipForWritingMode(To<LayoutBox>(this)->FrameRect());
   }
   PhysicalOffset sticky_location =
       sticky_box_rect.offset + skipped_containers_offset;
@@ -1183,8 +1197,10 @@ PhysicalOffset LayoutBoxModelObject::StickyPositionOffset() const {
   // The sticky offset is physical, so we can just return the delta computed in
   // absolute coords (though it may be wrong with transforms).
   PhysicalRect constraining_rect = ComputeStickyConstrainingRect();
-  constraining_rect.Move(PhysicalOffset::FromFloatPointRound(
-      ancestor_scroll_container_layer->GetScrollableArea()->ScrollPosition()));
+  FloatPoint scroll_position =
+      ancestor_scroll_container_layer->GetScrollableArea()->ScrollPosition();
+  constraining_rect.Move(PhysicalOffset(LayoutUnit(scroll_position.X()),
+                                        LayoutUnit(scroll_position.Y())));
   return constraints->ComputeStickyOffset(
       constraining_rect, ancestor_scroll_container_layer->GetScrollableArea()
                              ->GetStickyConstraintsMap());
@@ -1223,36 +1239,35 @@ PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
         // FIXME: What are we supposed to do inside SVG content?
         reference_point += PhysicalOffsetToBeNoop(
             current->ColumnOffset(reference_point.ToLayoutPoint()));
-        if (current->IsBox() && !current->IsTableRow())
-          reference_point += ToLayoutBox(current)->PhysicalLocation();
+        if (current->IsBox() && !current->IsLegacyTableRow())
+          reference_point += To<LayoutBox>(current)->PhysicalLocation();
       }
 
       if (offset_parent_object->IsBox() && offset_parent_object->IsBody() &&
           !offset_parent_object->IsPositioned()) {
         reference_point +=
-            ToLayoutBox(offset_parent_object)->PhysicalLocation();
+            To<LayoutBox>(offset_parent_object)->PhysicalLocation();
       }
     }
 
     if (offset_parent_object->IsLayoutInline()) {
-      const LayoutInline* inline_parent = ToLayoutInline(offset_parent_object);
+      const auto* inline_parent = To<LayoutInline>(offset_parent_object);
 
       if (IsBox() && IsOutOfFlowPositioned() &&
           inline_parent->CanContainOutOfFlowPositionedElement(
               StyleRef().GetPosition())) {
         // Offset for out of flow positioned elements with inline containers is
         // a special case in the CSS spec
-        reference_point +=
-            inline_parent->OffsetForInFlowPositionedInline(*ToLayoutBox(this));
+        reference_point += inline_parent->OffsetForInFlowPositionedInline(
+            *To<LayoutBox>(this));
       }
 
       reference_point -= inline_parent->FirstLineBoxTopLeft();
     }
 
     if (offset_parent_object->IsBox() && !offset_parent_object->IsBody()) {
-      reference_point -=
-          PhysicalOffset(ToLayoutBox(offset_parent_object)->BorderLeft(),
-                         ToLayoutBox(offset_parent_object)->BorderTop());
+      auto* box = To<LayoutBox>(offset_parent_object);
+      reference_point -= PhysicalOffset(box->BorderLeft(), box->BorderTop());
     }
   }
 
@@ -1505,7 +1520,7 @@ void LayoutBoxModelObject::MoveChildTo(
   }
 
   if (full_remove_insert && IsLayoutBlock() && child->IsBox())
-    ToLayoutBox(child)->RemoveFromPercentHeightContainer();
+    To<LayoutBox>(child)->RemoveFromPercentHeightContainer();
 
   if (full_remove_insert && (to_box_model_object->IsLayoutBlock() ||
                              to_box_model_object->IsLayoutInline())) {

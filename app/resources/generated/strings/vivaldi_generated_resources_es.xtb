@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Solo lo seleccionado</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
 <translation id="125220115284141797">Por defecto</translation>
-<translation id="1274977772557788323">Ajustes del almacenamiento de Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de marcadores</translation>
 <translation id="1380436189840894976">¿Quieres salir del modo de incógnito de todos modos?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Pegar como texto sin formato</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores para contenido protegido (puede requerir el reinicio del sistema)</translation>
-<translation id="2263497240924215535">(Desactivado)</translation>
 <translation id="2277255602909579701">Todos los datos de los sitios y las cookies</translation>
 <translation id="2280486287150724112">Margen derecho</translation>
 <translation id="2282146716419988068">Proceso de la GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
 <translation id="2721037002783622288">&amp;Buscar imagen con <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Crear acceso directo...</translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
 <translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
 <translation id="2812989263793994277">No mostrar imágenes</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3021678814754966447">Ver código fuente del &amp;marco</translation>
 <translation id="3036546437875325427">Activar Flash</translation>
-<translation id="3038675903128704560">No permitir a los sitios usar complementos para acceder a tu equipo</translation>
 <translation id="3046910703532196514">Página web (completa)</translation>
 <translation id="3067198360141518313">Ejecutar este complemento</translation>
 <translation id="3080207940057008665">Otro programa de tu equipo añadió un tema que puede cambiar el funcionamiento de Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Esta extensión puede estar dañada.</translation>
 <translation id="3387614642886316601">Usar la revisión ortográfica mejorada</translation>
 <translation id="3432227430032737297">Eliminar todo lo mostrado</translation>
-<translation id="3440761377721825626">Preguntar cuando un sitio intente usar un complemento para acceder a tu equipo</translation>
 <translation id="345693547134384690">Abrir &amp;imagen en una pestaña nueva</translation>
 <translation id="3494769164076977169">Preguntar cuando un sitio intente descargar automáticamente archivos tras descargar uno antes (recomendado)</translation>
 <translation id="3505030558724226696">Revocar acceso al dispositivo</translation>
 <translation id="3511307672085573050">Copi&amp;ar dirección del enlace</translation>
-<translation id="3523642406908660543">Preguntar cuando un sitio intente usar un complemento para acceder a tu equipo (recomendado)</translation>
 <translation id="354068948465830244">Puede leer y cambiar datos de sitios</translation>
 <translation id="3560034655160545939">Revi&amp;sión ortográfica</translation>
 <translation id="3574917942258583917">¿Quieres salir del modo de incógnito de todos modos?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir una impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un grupo que te pertenece: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si aceptas, todos los miembros del grupo podrán imprimir en ella.</translation>
 <translation id="3587482841069643663">Todas</translation>
 <translation id="3627588569887975815">Abrir enlace en una ventana de incó&amp;gnito</translation>
+<translation id="3627879631695760395">Instalar <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Controladores</translation>
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> solicita compartir pantalla</translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Restaurar ajustes</translation>
 <translation id="4434045419905280838">Ventanas emergentes y redirecciones</translation>
 <translation id="4478664379124702289">Guardar &amp;enlace como...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">No se pudo transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Solo el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar aplicaciones y extensiones.</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Desconocido</translation>
 <translation id="5860491529813859533">Activar</translation>
 <translation id="5867841422488265304">Busca o escribe una dirección web</translation>
-<translation id="5908769186679515905">Impedir que los sitios ejecuten Flash</translation>
 <translation id="5910363049092958439">Guar&amp;dar imagen como...</translation>
 <translation id="5956585768868398362">¿Es esta la página de búsqueda que esperabas?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostrar &amp;controles</translation>
-<translation id="7311079019872751559">Acceso de complementos sin pasar por un entorno aislado</translation>
 <translation id="7385854874724088939">Se produjo un error al intentar imprimir. Revisa tu impresora y reinténtalo.</translation>
 <translation id="7412226954991670867">Memoria de la GPU</translation>
 <translation id="7421925624202799674">Ver código &amp;fuente de la página</translation>
@@ -477,6 +471,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="9027459031423301635">Abrir enlace en una pes&amp;taña nueva</translation>
 <translation id="9056810968620647706">No se encontraron coincidencias.</translation>
 <translation id="9137916601698928395">Abrir enlace como <ph name="USER" /></translation>
+<translation id="91568222606626347">Crear acceso directo...</translation>
 <translation id="916607977885256133">Video flotante</translation>
 <translation id="9170848237812810038">&amp;Deshacer</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" añadida</translation>

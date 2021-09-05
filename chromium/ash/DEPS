@@ -27,7 +27,6 @@ include_rules = [
   "+gpu/config",
   "+media",
   "+mojo/public",
-  "+services/content/public",
   "+services/device/public",
   "+services/data_decoder/public",
   "+services/media_session/public",
@@ -87,8 +86,7 @@ include_rules = [
   "+chromeos/strings",
   "+chromeos/system",
   # Do not eliminate this.
-  "+chromeos/ui/vector_icons",
-  "+chromeos/ui/chromeos_ui_constants.h",
+  "+chromeos/ui",
 
   # ui/base/idle depends on SessionManagerClient so disallow it.
   "-ui/base/idle"

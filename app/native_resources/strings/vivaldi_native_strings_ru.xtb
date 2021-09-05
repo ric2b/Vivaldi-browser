@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Отправить ссылку по почте</translation>
 <translation id="1454726940098520109">Не показывать подтверждение</translation>
 <translation id="1462666970065907900">Вы действительно хотите закрыть это окно?</translation>
+<translation id="1526344461589023948">Произошла ошибка при сохранении загруженного обновления. Проверьте наличие дискового пространства и повторите попытку.</translation>
 <translation id="1657174850639146440">Монстр 9</translation>
 <translation id="1676595396635191120">Новое приватное окно</translation>
+<translation id="1702758681952953055">Если ошибка повторяется, сообщите нам о ней, включая следующие детали:</translation>
 <translation id="1728549374069268714">Вставить и перейти</translation>
 <translation id="1756026472674246267">Открыть ссылку в новой вкладке</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Пейзаж 15</translation>
 <translation id="19598411548897379">Общий</translation>
 <translation id="2079036669923635404">Нажмите здесь, чтобы обновить Vivaldi до версии <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Произошла ошибка при загрузке обновления. Проверьте сетевое подключение и повторите попытку.</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставить заметку</translation>
 <translation id="2486841023299517366">Зверушка 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Открыть ссылку в новом окне</translation>
 <translation id="3588820906588687999">Открыть картинку в новой вкладке</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
+<translation id="3708982624815781692">Загрузка была отменена.</translation>
 <translation id="3732157130969736834">Поместить ссылку в закладки</translation>
 <translation id="3732388226447288666">Зверушка 2</translation>
 <translation id="3732439195215136813">Зверушка 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Монстр 5</translation>
 <translation id="5615637589913244581">Opera версии 15+ (Бета)</translation>
 <translation id="5648110075441906505">Открыть картинку в новом окне</translation>
+<translation id="5656371807944747581">Ошибка обновления!</translation>
 <translation id="5716238312826274098">Отключение уведомлений</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Новая папка</translation>
 <translation id="588258955323874662">Полноэкранный режим</translation>
 <translation id="5916080360077521750">К сожалению, настройки Chrome недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Chrome. Затем нажмите "Продолжить".</translation>
+<translation id="6040143037577758943">Закрыть</translation>
 <translation id="6229528619562190452">Нажмите здесь для обновления Vivaldi.</translation>
 <translation id="6234173136417926046">Установить фоном Экспресс-панели</translation>
 <translation id="630690498669249215">Файл закладок Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi создан с использованием проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> с открытым исходным кодом и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Ошибка запуска установщика обновления. Проверьте наличие дискового пространства и памяти, повторите попытку.</translation>
 <translation id="7715497554424665066">&amp;Не обновляться</translation>
 <translation id="7724603315864178912">Вырезать</translation>
 <translation id="7793738202466490491">Добавить как событие календаря</translation>
+<translation id="7848222781052558334">Сбой проверки цифровой подписи загруженных файлов.</translation>
 <translation id="7865983598101744945">Подтвердите выход</translation>
 <translation id="7957213167373139414">Мой календарь</translation>
 <translation id="8027581147000338959">Открыть в новом окне</translation>

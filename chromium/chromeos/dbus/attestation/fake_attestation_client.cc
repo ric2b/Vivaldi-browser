@@ -10,6 +10,7 @@
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "third_party/cros_system_api/dbus/attestation/dbus-constants.h"
 
 namespace chromeos {
@@ -17,14 +18,34 @@ namespace {
 
 constexpr int kCertificateNotAssigned = 0;
 constexpr char kFakeCertPrefix[] = "fake cert";
+constexpr char kResponseSuffix[] = "_response";
+constexpr char kSignatureSuffix[] = "_signature";
+constexpr char kEnterpriseChallengeResponseSuffix[] = "enterprise_challenge";
+constexpr char kIncludeSpkacSuffix[] = "_with_spkac";
+constexpr char kFakePcaEnrollRequest[] = "fake enroll request";
+constexpr char kFakePcaEnrollResponse[] = "fake enroll response";
+constexpr char kFakePcaCertRequest[] = "fake cert request";
+constexpr char kFakePcaCertResponse[] = "fake cert response";
+constexpr char kFakeCertificate[] = "fake certificate";
 
-// Posts |callback| on the current thread's task runner, passing it the
-// |response| message.
+// Posts `callback` on the current thread's task runner, passing it the
+// `reply` message.
 template <class ReplyType>
 void PostProtoResponse(base::OnceCallback<void(const ReplyType&)> callback,
                        const ReplyType& reply) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), reply));
+}
+
+// Posts `callback` on the current thread's task runner, passing it the
+// `reply` message with `delay`.
+template <class ReplyType>
+void PostProtoResponseWithDelay(
+    base::OnceCallback<void(const ReplyType&)> callback,
+    const ReplyType& reply,
+    const base::TimeDelta& delay) {
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(std::move(callback), reply), delay);
 }
 
 bool GetCertificateRequestEqual(::attestation::GetCertificateRequest r1,
@@ -45,14 +66,29 @@ bool GetCertificateRequestEqual(::attestation::GetCertificateRequest r1,
 
 }  // namespace
 
-FakeAttestationClient::FakeAttestationClient() = default;
+FakeAttestationClient::FakeAttestationClient() {
+  status_reply_.set_enrolled(true);
+}
 
 FakeAttestationClient::~FakeAttestationClient() = default;
 
 void FakeAttestationClient::GetKeyInfo(
     const ::attestation::GetKeyInfoRequest& request,
     GetKeyInfoCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::GetKeyInfoReply reply;
+  if (key_info_dbus_error_count_ > 0) {
+    reply.set_status(::attestation::STATUS_DBUS_ERROR);
+    key_info_dbus_error_count_--;
+  } else {
+    auto iter = key_info_database_.find(request);
+    if (iter != key_info_database_.end()) {
+      reply = iter->second;
+    } else {
+      reply.set_status(::attestation::STATUS_INVALID_PARAMETER);
+    }
+  }
+
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::GetEndorsementInfo(
@@ -93,30 +129,51 @@ void FakeAttestationClient::Sign(const ::attestation::SignRequest& request,
 void FakeAttestationClient::RegisterKeyWithChapsToken(
     const ::attestation::RegisterKeyWithChapsTokenRequest& request,
     RegisterKeyWithChapsTokenCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::RegisterKeyWithChapsTokenReply reply;
+  if (allowlisted_register_keys_.count(
+          {request.username(), request.key_label()}) == 0) {
+    reply.set_status(::attestation::STATUS_INVALID_PARAMETER);
+  } else {
+    reply.set_status(register_key_status_);
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::GetEnrollmentPreparations(
     const ::attestation::GetEnrollmentPreparationsRequest& request,
     GetEnrollmentPreparationsCallback callback) {
-  bool is_prepared = is_prepared_;
-  // Override the state if there is a customized sequence.
-  if (!preparation_sequences_.empty()) {
-    is_prepared = preparation_sequences_.front();
-    preparation_sequences_.pop_front();
+  ::attestation::GetEnrollmentPreparationsReply reply;
+  reply.set_status(preparations_status_);
+
+  if (reply.status() == ::attestation::STATUS_SUCCESS) {
+    bool is_prepared = is_prepared_;
+    // Override the state if there is a customized sequence.
+    if (!preparation_sequences_.empty()) {
+      is_prepared = preparation_sequences_.front();
+      preparation_sequences_.pop_front();
+    }
+    if (is_prepared) {
+      std::vector<::attestation::ACAType> prepared_types;
+      // As we do in the attestation service, if the ACA type is not specified,
+      // returns the statuses with all the possible ACA types.
+      if (request.has_aca_type()) {
+        prepared_types = {request.aca_type()};
+      } else {
+        prepared_types = {::attestation::DEFAULT_ACA, ::attestation::TEST_ACA};
+      }
+      for (const auto& type : prepared_types) {
+        (*reply.mutable_enrollment_preparations())[type] = true;
+      }
+    }
   }
 
-  ::attestation::GetEnrollmentPreparationsReply reply;
-  if (is_prepared) {
-    (*reply.mutable_enrollment_preparations())[request.aca_type()] = true;
-  }
   PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::GetStatus(
     const ::attestation::GetStatusRequest& request,
     GetStatusCallback callback) {
-  NOTIMPLEMENTED();
+  PostProtoResponse(std::move(callback), status_reply_);
 }
 
 void FakeAttestationClient::Verify(const ::attestation::VerifyRequest& request,
@@ -127,25 +184,61 @@ void FakeAttestationClient::Verify(const ::attestation::VerifyRequest& request,
 void FakeAttestationClient::CreateEnrollRequest(
     const ::attestation::CreateEnrollRequestRequest& request,
     CreateEnrollRequestCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::CreateEnrollRequestReply reply;
+  reply.set_status(enroll_request_status_);
+  if (reply.status() == ::attestation::STATUS_SUCCESS) {
+    reply.set_pca_request(GetFakePcaEnrollRequest());
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::FinishEnroll(
     const ::attestation::FinishEnrollRequest& request,
     FinishEnrollCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::FinishEnrollReply reply;
+  reply.set_status(request.pca_response() == GetFakePcaEnrollResponse()
+                       ? ::attestation::STATUS_SUCCESS
+                       : ::attestation::STATUS_UNEXPECTED_DEVICE_ERROR);
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::CreateCertificateRequest(
     const ::attestation::CreateCertificateRequestRequest& request,
     CreateCertificateRequestCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::CreateCertificateRequestReply reply;
+  reply.set_status(cert_request_status_);
+  if (reply.status() != ::attestation::STATUS_SUCCESS) {
+    PostProtoResponse(std::move(callback), reply);
+    return;
+  }
+  for (const auto& req : allowlisted_create_requests_) {
+    if (req.username() == request.username() &&
+        req.request_origin() == request.request_origin() &&
+        req.certificate_profile() == request.certificate_profile() &&
+        req.key_type() == request.key_type()) {
+      reply.set_pca_request(GetFakePcaCertRequest());
+      PostProtoResponse(std::move(callback), reply);
+      return;
+    }
+  }
+  reply.set_status(::attestation::STATUS_UNEXPECTED_DEVICE_ERROR);
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::FinishCertificateRequest(
     const ::attestation::FinishCertificateRequestRequest& request,
     FinishCertificateRequestCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::FinishCertificateRequestReply reply;
+  if (request.pca_response() != GetFakePcaCertResponse()) {
+    reply.set_status(::attestation::STATUS_UNEXPECTED_DEVICE_ERROR);
+  }
+  if (reply.status() == ::attestation::STATUS_SUCCESS) {
+    reply.set_certificate(GetFakeCertificate());
+    // Also, insert the certificate into the fake database.
+    GetMutableKeyInfoReply(request.username(), request.key_label())
+        ->set_certificate(GetFakeCertificate());
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::Enroll(const ::attestation::EnrollRequest& request,
@@ -160,8 +253,10 @@ void FakeAttestationClient::GetCertificate(
   reply.set_status(
       ::attestation::AttestationStatus::STATUS_UNEXPECTED_DEVICE_ERROR);
 
-  is_enrolled_ |= request.shall_trigger_enrollment();
-  if (!is_enrolled_) {
+  if (request.shall_trigger_enrollment()) {
+    status_reply_.set_enrolled(true);
+  }
+  if (!status_reply_.enrolled()) {
     PostProtoResponse(std::move(callback), reply);
     return;
   }
@@ -186,25 +281,62 @@ void FakeAttestationClient::GetCertificate(
 void FakeAttestationClient::SignEnterpriseChallenge(
     const ::attestation::SignEnterpriseChallengeRequest& request,
     SignEnterpriseChallengeCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::SignEnterpriseChallengeReply reply;
+  if (allowlisted_sign_enterprise_challenge_keys_.count(request) == 0) {
+    reply.set_status(::attestation::STATUS_INVALID_PARAMETER);
+  } else {
+    reply.set_status(sign_enterprise_challenge_status_);
+  }
+  if (reply.status() == ::attestation::STATUS_SUCCESS) {
+    reply.set_challenge_response(GetEnterpriseChallengeFakeSignature(
+        request.challenge(), request.include_signed_public_key()));
+  }
+  PostProtoResponseWithDelay(std::move(callback), reply,
+                             sign_enterprise_challenge_delay_);
 }
 
 void FakeAttestationClient::SignSimpleChallenge(
     const ::attestation::SignSimpleChallengeRequest& request,
     SignSimpleChallengeCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::SignSimpleChallengeReply reply;
+  if (allowlisted_sign_simple_challenge_keys_.count(
+          {request.username(), request.key_label()}) == 0) {
+    reply.set_status(::attestation::STATUS_INVALID_PARAMETER);
+  } else {
+    reply.set_status(sign_simple_challenge_status_);
+  }
+  if (reply.status() == ::attestation::STATUS_SUCCESS) {
+    ::attestation::SignedData signed_data;
+    signed_data.set_data(request.challenge() + kResponseSuffix);
+    signed_data.set_signature(request.challenge() + kSignatureSuffix);
+    reply.set_challenge_response(signed_data.SerializeAsString());
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::SetKeyPayload(
     const ::attestation::SetKeyPayloadRequest& request,
     SetKeyPayloadCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::GetKeyInfoRequest get_key_info_request;
+  get_key_info_request.set_username(request.username());
+  get_key_info_request.set_key_label(request.key_label());
+  auto iter = key_info_database_.find(get_key_info_request);
+  ::attestation::SetKeyPayloadReply reply;
+  if (iter == key_info_database_.end()) {
+    reply.set_status(::attestation::STATUS_INVALID_PARAMETER);
+  } else {
+    iter->second.set_payload(request.payload());
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::DeleteKeys(
     const ::attestation::DeleteKeysRequest& request,
     DeleteKeysCallback callback) {
-  NOTIMPLEMENTED();
+  delete_keys_history_.push_back(request);
+  ::attestation::DeleteKeysReply reply;
+  reply.set_status(::attestation::STATUS_SUCCESS);
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::ResetIdentity(
@@ -216,7 +348,16 @@ void FakeAttestationClient::ResetIdentity(
 void FakeAttestationClient::GetEnrollmentId(
     const ::attestation::GetEnrollmentIdRequest& request,
     GetEnrollmentIdCallback callback) {
-  NOTIMPLEMENTED();
+  ::attestation::GetEnrollmentIdReply reply;
+  if (enrollment_id_dbus_error_count_ != 0) {
+    reply.set_status(::attestation::STATUS_DBUS_ERROR);
+    enrollment_id_dbus_error_count_--;
+  } else {
+    reply.set_status(::attestation::STATUS_SUCCESS);
+    reply.set_enrollment_id(request.ignore_cache() ? enrollment_id_ignore_cache_
+                                                   : enrollment_id_);
+  }
+  PostProtoResponse(std::move(callback), reply);
 }
 
 void FakeAttestationClient::GetCertifiedNvIndex(
@@ -226,12 +367,24 @@ void FakeAttestationClient::GetCertifiedNvIndex(
 }
 
 void FakeAttestationClient::ConfigureEnrollmentPreparations(bool is_prepared) {
+  preparations_status_ = ::attestation::STATUS_SUCCESS;
   is_prepared_ = is_prepared;
 }
 
 void FakeAttestationClient::ConfigureEnrollmentPreparationsSequence(
     std::deque<bool> sequence) {
+  preparations_status_ = ::attestation::STATUS_SUCCESS;
   preparation_sequences_ = std::move(sequence);
+}
+
+void FakeAttestationClient::ConfigureEnrollmentPreparationsStatus(
+    ::attestation::AttestationStatus status) {
+  CHECK_NE(status, ::attestation::STATUS_SUCCESS);
+  preparations_status_ = status;
+}
+
+::attestation::GetStatusReply* FakeAttestationClient::mutable_status_reply() {
+  return &status_reply_;
 }
 
 void FakeAttestationClient::AllowlistCertificateRequest(
@@ -243,6 +396,143 @@ void FakeAttestationClient::AllowlistCertificateRequest(
   }
   allowlisted_requests_.push_back(request);
   certificate_indices_.push_back(kCertificateNotAssigned);
+}
+
+const std::vector<::attestation::DeleteKeysRequest>&
+FakeAttestationClient::delete_keys_history() const {
+  return delete_keys_history_;
+}
+
+void FakeAttestationClient::ClearDeleteKeysHistory() {
+  delete_keys_history_.clear();
+}
+
+void FakeAttestationClient::set_enrollment_id_ignore_cache(
+    const std::string& id) {
+  enrollment_id_ignore_cache_ = id;
+}
+
+void FakeAttestationClient::set_cached_enrollment_id(const std::string& id) {
+  enrollment_id_ = id;
+}
+
+void FakeAttestationClient::set_enrollment_id_dbus_error_count(int count) {
+  enrollment_id_dbus_error_count_ = count;
+}
+
+::attestation::GetKeyInfoReply* FakeAttestationClient::GetMutableKeyInfoReply(
+    const std::string& username,
+    const std::string& label) {
+  ::attestation::GetKeyInfoRequest request;
+  request.set_username(username);
+  request.set_key_label(label);
+  // If there doesn't exist the entry yet, just create a new one.
+  return &(key_info_database_[request]);
+}
+
+void FakeAttestationClient::set_key_info_dbus_error_count(int count) {
+  key_info_dbus_error_count_ = count;
+}
+
+int FakeAttestationClient::key_info_dbus_error_count() const {
+  return key_info_dbus_error_count_;
+}
+
+bool FakeAttestationClient::VerifySimpleChallengeResponse(
+    const std::string& challenge,
+    const ::attestation::SignedData& signed_data) {
+  return signed_data.data() == challenge + kResponseSuffix &&
+         signed_data.signature() == challenge + kSignatureSuffix;
+}
+
+void FakeAttestationClient::set_sign_simple_challenge_status(
+    ::attestation::AttestationStatus status) {
+  sign_simple_challenge_status_ = status;
+}
+
+void FakeAttestationClient::AllowlistSignSimpleChallengeKey(
+    const std::string& username,
+    const std::string& label) {
+  allowlisted_sign_simple_challenge_keys_.insert({username, label});
+}
+
+void FakeAttestationClient::set_register_key_status(
+    ::attestation::AttestationStatus status) {
+  register_key_status_ = status;
+}
+
+void FakeAttestationClient::AllowlistRegisterKey(const std::string& username,
+                                                 const std::string& label) {
+  allowlisted_register_keys_.insert({username, label});
+}
+
+void FakeAttestationClient::set_sign_enterprise_challenge_status(
+    ::attestation::AttestationStatus status) {
+  sign_enterprise_challenge_status_ = status;
+}
+
+void FakeAttestationClient::AllowlistSignEnterpriseChallengeKey(
+    const ::attestation::SignEnterpriseChallengeRequest& request) {
+  allowlisted_sign_enterprise_challenge_keys_.insert(request);
+}
+
+std::string FakeAttestationClient::GetEnterpriseChallengeFakeSignature(
+    const std::string& challenge,
+    bool include_spkac) const {
+  std::string challenge_response =
+      challenge + kEnterpriseChallengeResponseSuffix;
+  if (include_spkac) {
+    challenge_response += kIncludeSpkacSuffix;
+  }
+  return challenge_response;
+}
+
+void FakeAttestationClient::set_sign_enterprise_challenge_delay(
+    const base::TimeDelta& delay) {
+  sign_enterprise_challenge_delay_ = delay;
+}
+
+void FakeAttestationClient::set_enroll_request_status(
+    ::attestation::AttestationStatus status) {
+  enroll_request_status_ = status;
+}
+
+std::string FakeAttestationClient::GetFakePcaEnrollRequest() const {
+  return kFakePcaEnrollRequest;
+}
+
+std::string FakeAttestationClient::GetFakePcaEnrollResponse() const {
+  return kFakePcaEnrollResponse;
+}
+
+void FakeAttestationClient::AllowlistLegacyCreateCertificateRequest(
+    const std::string& username,
+    const std::string& request_origin,
+    ::attestation::CertificateProfile profile,
+    ::attestation::KeyType key_type) {
+  ::attestation::CreateCertificateRequestRequest request;
+  request.set_username(username);
+  request.set_request_origin(request_origin);
+  request.set_certificate_profile(profile);
+  request.set_key_type(key_type);
+  allowlisted_create_requests_.push_back(request);
+}
+
+void FakeAttestationClient::set_cert_request_status(
+    ::attestation::AttestationStatus status) {
+  cert_request_status_ = status;
+}
+
+std::string FakeAttestationClient::GetFakePcaCertRequest() const {
+  return kFakePcaCertRequest;
+}
+
+std::string FakeAttestationClient::GetFakePcaCertResponse() const {
+  return kFakePcaCertResponse;
+}
+
+std::string FakeAttestationClient::GetFakeCertificate() const {
+  return kFakeCertificate;
 }
 
 AttestationClient::TestInterface* FakeAttestationClient::GetTestInterface() {

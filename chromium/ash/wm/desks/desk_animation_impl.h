@@ -5,6 +5,7 @@
 #ifndef ASH_WM_DESKS_DESK_ANIMATION_IMPL_H_
 #define ASH_WM_DESKS_DESK_ANIMATION_IMPL_H_
 
+#include "ash/ash_export.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/wm/desks/desk_animation_base.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
@@ -14,12 +15,13 @@ namespace ash {
 class DesksController;
 class PresentationTimeRecorder;
 
-class DeskActivationAnimation : public DeskAnimationBase {
+class ASH_EXPORT DeskActivationAnimation : public DeskAnimationBase {
  public:
   DeskActivationAnimation(DesksController* controller,
                           int starting_desk_index,
                           int ending_desk_index,
-                          DesksSwitchSource source);
+                          DesksSwitchSource source,
+                          bool update_window_activation);
   DeskActivationAnimation(const DeskActivationAnimation&) = delete;
   DeskActivationAnimation& operator=(const DeskActivationAnimation&) = delete;
   ~DeskActivationAnimation() override;
@@ -40,6 +42,10 @@ class DeskActivationAnimation : public DeskAnimationBase {
 
   // The switch source that requested this animation.
   const DesksSwitchSource switch_source_;
+
+  // True if we should pass window activation to a window on the target desk
+  // when the desk is switched.
+  const bool update_window_activation_;
 
   // Used to measure the presentation time of a continuous gesture swipe.
   std::unique_ptr<PresentationTimeRecorder> presentation_time_recorder_;

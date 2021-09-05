@@ -17,11 +17,11 @@
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> сайты қосылды</translation>
 <translation id="1383876407941801731">Іздеу</translation>
 <translation id="1384959399684842514">Жүктеу кідіртілді</translation>
+<translation id="1415402041810619267">URL қысқартылды</translation>
 <translation id="1431402976894535801">Сайттардың сіздің бар болу уақытыңызды анықтауын бөгейді.</translation>
 <translation id="1446450296470737166">MIDI толық бақылауға рұқсат беру</translation>
 <translation id="1509960214886564027">Көптеген сайттағы функциялар дұрыс жұмыс істемеуі мүмкін.</translation>
 <translation id="1620510694547887537">Камера</translation>
-<translation id="1647391597548383849">Камераңызға кіру</translation>
 <translation id="1660204651932907780">Сайттарда дыбыстың шығуына рұқсат ету (ұсынылады)</translation>
 <translation id="1677097821151855053">Cookie файлдары мен сайттың басқа деректері сізді есте сақтап қалу (мысалы, есептік жазбаңызға кіру процесін жеңілдету немесе жарнамаларды сізге бейімдеу) үшін қолданылады. Барлық сайт үшін cookie файлдарын басқару үшін <ph name="BEGIN_LINK" />Параметрлер<ph name="END_LINK" /> бөлімін қараңыз.</translation>
 <translation id="1688867105868176567">Сайт деректері өшірілсін бе?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">URL сайты</translation>
 <translation id="2025115093177348061">Толықтырылған шындық</translation>
 <translation id="2030769033451695672"><ph name="URL_OF_THE_CURRENT_TAB" /> қойындысына оралу үшін түртіңіз.</translation>
+<translation id="2054665754582400095">Бар болу деректері</translation>
 <translation id="2079545284768500474">Қайтару</translation>
 <translation id="2091887806945687916">Дыбыс</translation>
 <translation id="2107397443965016585">Қорғалған мазмұнды ойнатуға рұқсат сұрау (ұсынылады)</translation>
 <translation id="2146738493024040262">Instant App ашу</translation>
 <translation id="2148716181193084225">Бүгін</translation>
 <translation id="2182457891543959921">Cайттарға айналаңыздың 3D картасын жасауға немесе камераңыздың орнын бақылауға рұқсат беру алдында сізден сұраy (ұсынылады)</translation>
-<translation id="2187243482123994665">Пайдаланушының бар-жоғы</translation>
 <translation id="2212565012507486665">Cookie файлдарына рұқсат беру</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" /> браузері камераны пайдалануы үшін, <ph name="BEGIN_LINK" />Android параметрлерінде<ph name="END_LINK" /> оны да қосыңыз.</translation>
 <translation id="2241634353105152135">Бір-ақ рет</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> МБ</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> және тағы <ph name="NUM_MORE" /> қызметті пайдалануға рұқсат етілген.}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> және тағы <ph name="NUM_MORE" /> қызметті пайдалануға рұқсат етілген.}}</translation>
 <translation id="2434158240863470628"><ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /> жүктеп алынды</translation>
-<translation id="2440823041667407902">Орналасқан жерін көру</translation>
 <translation id="2482878487686419369">Хабарландырулар</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> басқарады</translation>
 <translation id="2498359688066513246">Анықтама және пікір</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3277252321222022663">Сайттардың датчиктерді пайдалануына рұқсат ету (ұсынылады)</translation>
 <translation id="3295602654194328831">Ақпаратты жасыру</translation>
+<translation id="3328801116991980348">Сайт ақпараты</translation>
 <translation id="3333961966071413176">Барлық контакт</translation>
 <translation id="3386292677130313581">Сайттар орналасқан орныңызды анықтау үшін рұқсат сұрайды (ұсынылады)</translation>
 <translation id="3538390592868664640">Сайттарға айналаңыздың 3D картасын жасауға немесе камера орнын бақылауға тыйым салу</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Сайттарға қорғалған мазмұнды ойнатуға рұқсат беру</translation>
 <translation id="4468959413250150279">Белгілі бір сайтта дыбысты өшіру.</translation>
 <translation id="4479647676395637221">Сайттар камераңызды пайдалану үшін рұқсат сұрайды (ұсынылады)</translation>
+<translation id="4505788138578415521">URL жайылды</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> браузері микрофонды пайдалануы үшін, <ph name="BEGIN_LINK" />Android параметрлерінде<ph name="END_LINK" /> оны да қосыңыз.</translation>
 <translation id="4570913071927164677">Мәліметтер</translation>
 <translation id="4645575059429386691">Ата-ана басқарады</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> және тағы <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> және тағы <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289"><ph name="APP_NAME" /> браузері үшін рұқсаттарды <ph name="BEGIN_LINK" />Android параметрлерінде<ph name="END_LINK" /> қосыңыз.</translation>
-<translation id="945632385593298557">Микрофонды пайдалану мүмкіндігі</translation>
 <translation id="965817943346481315">Сайт мазалайтын немесе жалған ақпаратты жарнамалар көрсеткен жағдайда бөгеу (ұсынылады)</translation>
 <translation id="967624055006145463">Сақталған деректер</translation>
 </translationbundle>

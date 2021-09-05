@@ -8,9 +8,11 @@
 #include "content/public/browser/web_contents_observer.h"
 
 #include "android_webview/common/aw_hit_test_data.h"
+#include "android_webview/common/mojom/frame.mojom.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/sequence_checker.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
@@ -44,12 +46,6 @@ class AwRenderViewHostExt : public content::WebContentsObserver {
   using DocumentHasImagesResult = base::OnceCallback<void(bool)>;
   void DocumentHasImages(DocumentHasImagesResult result);
 
-  // Clear all WebCore memory cache (not only for this view).
-  void ClearCache();
-
-  // Tells render process to kill itself (only for testing).
-  void KillRenderProcess();
-
   // Do a hit test at the view port coordinates and asynchronously update
   // |last_hit_test_data_|. Width and height in |touch_area| are in density
   // independent pixels used by blink::WebView.
@@ -75,7 +71,6 @@ class AwRenderViewHostExt : public content::WebContentsObserver {
   void SetInitialPageScale(double page_scale_factor);
   void SetBackgroundColor(SkColor c);
   void SetWillSuppressErrorPage(bool suppress);
-  void SetJsOnlineProperty(bool network_up);
 
   void SmoothScroll(int target_x, int target_y, base::TimeDelta duration);
 
@@ -120,6 +115,9 @@ class AwRenderViewHostExt : public content::WebContentsObserver {
 
   // Some WebView users might want to show their own error pages / logic.
   bool will_suppress_error_page_ = false;
+
+  // Associated channel to the webview LocalMainFrame extensions.
+  mojo::AssociatedRemote<mojom::LocalMainFrame> local_main_frame_remote_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

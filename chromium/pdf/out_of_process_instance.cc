@@ -28,6 +28,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "net/base/escape.h"
 #include "net/base/filename_util.h"
 #include "pdf/accessibility.h"
@@ -1398,7 +1399,7 @@ void OutOfProcessInstance::SaveToBuffer(const std::string& token) {
       message.Set(kJSDataToSave, buffer);
     }
   } else {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     uint32_t length = engine()->GetLoadedByteSize();
     if (IsSaveDataSizeValid(length)) {
       pp::VarArrayBuffer buffer(length);
@@ -1408,7 +1409,7 @@ void OutOfProcessInstance::SaveToBuffer(const std::string& token) {
     }
 #else
     NOTREACHED();
-#endif
+#endif  // BUILDFLAG(IS_ASH)
   }
 
   PostMessage(message);
@@ -2192,6 +2193,19 @@ void OutOfProcessInstance::DocumentFocusChanged(bool document_has_focus) {
   PostMessage(message);
 }
 
+void OutOfProcessInstance::SetSelectedText(const std::string& selected_text) {
+  pp::PDF::SetSelectedText(this, selected_text.c_str());
+}
+
+void OutOfProcessInstance::SetLinkUnderCursor(
+    const std::string& link_under_cursor) {
+  pp::PDF::SetLinkUnderCursor(this, link_under_cursor.c_str());
+}
+
+bool OutOfProcessInstance::IsValidLink(const std::string& url) {
+  return pp::Var(url).is_string();
+}
+
 void OutOfProcessInstance::ProcessPreviewPageInfo(const std::string& url,
                                                   int dest_page_index) {
   DCHECK(IsPrintPreview());
@@ -2257,8 +2271,9 @@ void OutOfProcessInstance::SendDocumentMetadata() {
 
   metadata_message.Set(pp::Var(kJSAttachments), GetDocumentAttachments());
 
-  pp::VarArray bookmarks = engine()->GetBookmarks();
-  metadata_message.Set(pp::Var(kJSBookmarks), bookmarks);
+  base::Value bookmarks = engine()->GetBookmarks();
+  DCHECK(bookmarks.is_list());
+  metadata_message.Set(pp::Var(kJSBookmarks), VarFromValue(bookmarks));
 
   metadata_message.Set(
       pp::Var(kJSCanSerializeDocument),

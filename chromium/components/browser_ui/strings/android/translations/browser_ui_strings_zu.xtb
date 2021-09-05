@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Isayithi le-<ph name="SITE_NAME" /> lingeziwe</translation>
 <translation id="1383876407941801731">Sesha</translation>
 <translation id="1384959399684842514">Ukulayisha kumiswe isikhashana</translation>
+<translation id="1415402041810619267">I-URL inciphisiwe</translation>
 <translation id="1431402976894535801">Vimbela amasayithi ukuthi azi lapho ukhona</translation>
 <translation id="1446450296470737166">Vumela ulawulo olugcwele lwamadivayisi we-MIDI</translation>
 <translation id="1509960214886564027">Izici ezikumasayithi amaningi zingase zinqamuke</translation>
 <translation id="1620510694547887537">Ikhamela</translation>
-<translation id="1647391597548383849">Finyelela kukhamela yakho</translation>
 <translation id="1660204651932907780">Vumela amasayithi ukuthi adlale umsindo (kunconyiwe)</translation>
 <translation id="1677097821151855053">Amakhukhi nenye idatha yesayithi kusetshenziselwa ukukukhumbula, ngokwesibonelo ukungenisa ngemvume noma ukwenza izikhangiso zibe ngezakho. Ukuze uphathe amakhukhi awo wonke amasayithi, bona okuthi<ph name="BEGIN_LINK" />Amasethingi<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Sula idatha yesayithi?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">I-URL yesayithi</translation>
 <translation id="2025115093177348061">I-Augmented Reality</translation>
 <translation id="2030769033451695672">Thepha ukubuyela ku-<ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Ubukhona bakho</translation>
 <translation id="2079545284768500474">Hlehlisa</translation>
 <translation id="2091887806945687916">Umsindo</translation>
 <translation id="2107397443965016585">Buza ngaphambi kokuvumela amasayithi ukudlala okuqukethwe okuvikelwe (kunconyiwe)</translation>
 <translation id="2146738493024040262">Vula i-app elisheshayo</translation>
 <translation id="2148716181193084225">Namhlanje</translation>
 <translation id="2182457891543959921">Buza ngaphambi kokuvumela amasayithi ukudala imephu ye-3D yendawo ekuzungezile noma ukulandelela indawo yekhamera (kuyanconywa)</translation>
-<translation id="2187243482123994665">Ukuba khona komsebenzisi</translation>
 <translation id="2212565012507486665">Vumela amakhukhi</translation>
 <translation id="2228071138934252756">Ukuze uvumele i-<ph name="APP_NAME" /> ifinyelele ikhamera yakho, vula nekhamera <ph name="BEGIN_LINK" />Kumasethingi e-Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Kanye nje</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{I-<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nezinye ezingu-<ph name="NUM_MORE" /> zivunyelwe}one{I-<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nezinye ezingu-<ph name="NUM_MORE" /> zivunyelwe}other{I-<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nezinye ezingu-<ph name="NUM_MORE" /> zivunyelwe}}</translation>
 <translation id="2434158240863470628">Ukulanda kuqedile <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Ukufinyelela kundawo</translation>
 <translation id="2482878487686419369">Izaziso</translation>
 <translation id="2490684707762498678">Ilawulwa ngu-<ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Usizo nempendulo</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Imakrofoni</translation>
 <translation id="3277252321222022663">Vumela amasayithi ukuthi afinyelele kuzinzwa (kunconyiwe)</translation>
 <translation id="3295602654194328831">Fihla ulwazi</translation>
+<translation id="3328801116991980348">Ulwazi lwesayithi</translation>
 <translation id="3333961966071413176">Bonke oxhumana nabo</translation>
 <translation id="3386292677130313581">Buza ngaphambi kokuvumela amasayithi ukuthi azi indawo yakho (kunconyiwe)</translation>
 <translation id="3538390592868664640">Vimbela amasayithi ekudaleni imephu ye-3D yendawo ekuzungezile noma ukulandelela indawo yekhamera</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Vumela amasayithi ukudlala okuqukethwe okuvikelekile</translation>
 <translation id="4468959413250150279">Thulisa umsindo kusayithi elithile.</translation>
 <translation id="4479647676395637221">Buza kuqala ngaphambi kokuvumela amasayithi ukuthi asebenzise ikhamera yakho (kunconyiwe)</translation>
+<translation id="4505788138578415521">I-URL inwetshiwe</translation>
 <translation id="4534723447064627427">Ukuze uvumele i-<ph name="APP_NAME" /> ifinyelele imakrofoni yakho, vula nemakrofoni <ph name="BEGIN_LINK" />Kumasethingi e-Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Imininingwane</translation>
 <translation id="4645575059429386691">Kuphethwe umzali wakho</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">I-Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nokungu-<ph name="NUM_MORE" /> ngaphezulu}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nokungu-<ph name="NUM_MORE" /> ngaphezulu}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, nokungu-<ph name="NUM_MORE" /> ngaphezulu}}</translation>
 <translation id="913657688200966289">Vula izimvume ze-<ph name="APP_NAME" /> <ph name="BEGIN_LINK" />Kumasethingi e-Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Finyelela imakrofoni yakho</translation>
 <translation id="965817943346481315">Vimba uma isayithi libonisa izikhangiso ezingathandeki noma ezidukisayo (kunconyiwe)</translation>
 <translation id="967624055006145463">Idatha ilondoloziwe</translation>
 </translationbundle>

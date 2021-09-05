@@ -6,24 +6,42 @@
 #define ASH_PUBLIC_CPP_HOLDING_SPACE_HOLDING_SPACE_PREFS_H_
 
 #include "ash/public/cpp/ash_public_export.h"
+#include "base/callback_forward.h"
 #include "base/optional.h"
 
+class PrefChangeRegistrar;
+class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
 class Time;
 }  // namespace base
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}  // namespace user_prefs
-
 namespace ash {
 namespace holding_space_prefs {
 
 // Registers holding space profile preferences to `registry`.
-ASH_PUBLIC_EXPORT void RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry);
+ASH_PUBLIC_EXPORT void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
+// Adds `callback` to `registrar` to be invoked on changes to previews enabled.
+ASH_PUBLIC_EXPORT void AddPreviewsEnabledChangedCallback(
+    PrefChangeRegistrar* registrar,
+    base::RepeatingClosure callback);
+
+// Returns whether previews are enabled.
+ASH_PUBLIC_EXPORT bool IsPreviewsEnabled(PrefService* prefs);
+
+// Sets whether previews are `enabled`.
+ASH_PUBLIC_EXPORT void SetPreviewsEnabled(PrefService* prefs, bool enabled);
+
+// Returns the time when a holding space item was first added. Note that if the
+// time of first add is unmarked, `base::nullopt` is returned.
+ASH_PUBLIC_EXPORT base::Optional<base::Time> GetTimeOfFirstAdd(
+    PrefService* prefs);
+
+// Marks the time when the first holding space item was added. If the time of
+// first add was previously marked, this no-ops and returns false.
+ASH_PUBLIC_EXPORT bool MarkTimeOfFirstAdd(PrefService* prefs);
 
 // Returns the time when holding space first became available. Note that if the
 // time of first availability is unmarked, `base::nullopt` is returned.

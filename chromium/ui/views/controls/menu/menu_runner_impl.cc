@@ -31,6 +31,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event_constants.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/platform_menu_utils.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -56,8 +57,11 @@ void FireFocusAfterMenuClose(base::WeakPtr<Widget> widget) {
 bool IsAltPressed() {
 #if defined(USE_OZONE)
   if (features::IsUsingOzonePlatform()) {
-    return (ui::OzonePlatform::GetInstance()->GetKeyModifiers() &
-            ui::EF_ALT_DOWN) != 0;
+    const auto* const platorm_menu_utils =
+        ui::OzonePlatform::GetInstance()->GetPlatformMenuUtils();
+    if (platorm_menu_utils)
+      return (platorm_menu_utils->GetCurrentKeyModifiers() & ui::EF_ALT_DOWN) !=
+             0;
   }
 #endif
 #if defined(USE_X11)
@@ -186,6 +190,8 @@ void MenuRunnerImpl::RunMenuAt(Widget* parent,
       (run_types & MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER) != 0);
   controller->set_use_touchable_layout(
       (run_types & MenuRunner::USE_TOUCHABLE_LAYOUT) != 0);
+  controller->set_should_take_keyboard_focus(
+      (run_types & MenuRunner::TAKE_KEYBOARD_FOCUS) != 0);
   controller_ = controller->AsWeakPtr();
   menu_->set_controller(controller_.get());
   menu_->PrepareForRun(owns_controller_, has_mnemonics,

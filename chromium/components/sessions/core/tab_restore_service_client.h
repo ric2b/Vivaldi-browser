@@ -98,6 +98,10 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // Called when a tab is restored. |url| is the URL that the tab is currently
   // visiting.
   virtual void OnTabRestored(const GURL& url);
+
+  // Vivaldi
+  virtual const std::map<base::FilePath, bool>* GetPageActionOverridesForTab(
+      LiveTab* tab) = 0;
 };
 
 }  // namespace sessions

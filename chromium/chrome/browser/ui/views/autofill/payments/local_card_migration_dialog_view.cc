@@ -160,7 +160,8 @@ std::unique_ptr<views::ScrollView> CreateCardList(
   }
 
   auto card_list_scroll_view = std::make_unique<views::ScrollView>();
-  card_list_scroll_view->SetHideHorizontalScrollBar(true);
+  card_list_scroll_view->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
   card_list_scroll_view->SetContents(std::move(card_list_view));
   card_list_scroll_view->SetDrawOverflowIndicator(false);
   constexpr int kCardListScrollViewHeight = 140;
@@ -357,6 +358,8 @@ LocalCardMigrationDialogView::LocalCardMigrationDialogView(
       &LocalCardMigrationDialogView::OnDialogAccepted, base::Unretained(this)));
   set_close_on_deactivate(false);
   set_margins(gfx::Insets());
+  set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
+      DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH));
 }
 
 LocalCardMigrationDialogView::~LocalCardMigrationDialogView() {}
@@ -371,13 +374,6 @@ void LocalCardMigrationDialogView::ShowDialog() {
 void LocalCardMigrationDialogView::CloseDialog() {
   controller_ = nullptr;
   GetWidget()->Close();
-}
-
-gfx::Size LocalCardMigrationDialogView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 ui::ModalType LocalCardMigrationDialogView::GetModalType() const {

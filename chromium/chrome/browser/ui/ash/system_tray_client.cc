@@ -117,7 +117,10 @@ SystemTrayClient::SystemTrayClient()
       update_notification_style_(ash::NotificationStyle::kDefault) {
   // If this observes clock setting changes before ash comes up the IPCs will
   // be queued on |system_tray_|.
-  g_browser_process->platform_part()->GetSystemClock()->AddObserver(this);
+  chromeos::system::SystemClock* clock =
+      g_browser_process->platform_part()->GetSystemClock();
+  clock->AddObserver(this);
+  system_tray_->SetUse24HourClock(clock->ShouldUse24HourClock());
 
   // If an upgrade is available at startup then tell ash about it.
   if (UpgradeDetector::GetInstance()->notify_upgrade())
@@ -130,7 +133,7 @@ SystemTrayClient::SystemTrayClient()
       policy_connector->GetDeviceCloudPolicyManager();
   if (policy_manager)
     policy_manager->core()->store()->AddObserver(this);
-  UpdateEnterpriseDisplayDomain();
+  UpdateEnterpriseDomainInfo();
 
   system_tray_->SetClient(this);
 
@@ -264,6 +267,11 @@ void SystemTrayClient::ShowIMESettings() {
 void SystemTrayClient::ShowConnectedDevicesSettings() {
   ShowSettingsSubPageForActiveUser(
       chromeos::settings::mojom::kMultiDeviceFeaturesSubpagePath);
+}
+
+void SystemTrayClient::ShowTetherNetworkSettings() {
+  ShowSettingsSubPageForActiveUser(
+      chromeos::settings::mojom::kMobileDataNetworksSubpagePath);
 }
 
 void SystemTrayClient::ShowAboutChromeOS() {
@@ -521,26 +529,26 @@ void SystemTrayClient::OnUpgradeRecommended() {
 ////////////////////////////////////////////////////////////////////////////////
 // policy::CloudPolicyStore::Observer
 void SystemTrayClient::OnStoreLoaded(policy::CloudPolicyStore* store) {
-  UpdateEnterpriseDisplayDomain();
+  UpdateEnterpriseDomainInfo();
 }
 
 void SystemTrayClient::OnStoreError(policy::CloudPolicyStore* store) {
-  UpdateEnterpriseDisplayDomain();
+  UpdateEnterpriseDomainInfo();
 }
 
-void SystemTrayClient::UpdateEnterpriseDisplayDomain() {
+void SystemTrayClient::UpdateEnterpriseDomainInfo() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  const std::string enterprise_display_domain =
-      connector->GetEnterpriseDisplayDomain();
+  const std::string enterprise_domain_manager =
+      connector->GetEnterpriseDomainManager();
   const bool active_directory_managed = connector->IsActiveDirectoryManaged();
-  if (enterprise_display_domain == last_enterprise_display_domain_ &&
+  if (enterprise_domain_manager == last_enterprise_domain_manager_ &&
       active_directory_managed == last_active_directory_managed_) {
     return;
   }
   // Send to ash, which will add an item to the system tray.
-  system_tray_->SetEnterpriseDisplayDomain(enterprise_display_domain,
-                                           active_directory_managed);
-  last_enterprise_display_domain_ = enterprise_display_domain;
+  system_tray_->SetEnterpriseDomainInfo(enterprise_domain_manager,
+                                        active_directory_managed);
+  last_enterprise_domain_manager_ = enterprise_domain_manager;
   last_active_directory_managed_ = active_directory_managed;
 }

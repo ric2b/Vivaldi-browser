@@ -15,10 +15,10 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
-#include "third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
@@ -138,9 +138,8 @@ void RemoteFrameClientImpl::DidChangeVisibleViewportSize(
   web_frame_->Client()->DidChangeVisibleViewportSize(visible_viewport_size);
 }
 
-void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(
-    const ViewportIntersectionState& intersection_state) {
-  web_frame_->Client()->UpdateRemoteViewportIntersection(intersection_state);
+void RemoteFrameClientImpl::SynchronizeVisualProperties() {
+  web_frame_->Client()->SynchronizeVisualProperties();
 }
 
 AssociatedInterfaceProvider*

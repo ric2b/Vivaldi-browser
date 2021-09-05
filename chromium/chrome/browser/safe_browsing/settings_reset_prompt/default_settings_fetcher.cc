@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -67,8 +67,8 @@ void DefaultSettingsFetcher::Start() {
     config_fetcher_.reset(new BrandcodeConfigFetcher(
         g_browser_process->system_network_context_manager()
             ->GetURLLoaderFactory(),
-        base::Bind(&DefaultSettingsFetcher::OnSettingsFetched,
-                   base::Unretained(this)),
+        base::BindOnce(&DefaultSettingsFetcher::OnSettingsFetched,
+                       base::Unretained(this)),
         GURL(kOmahaUrl), brandcode));
     return;
   }

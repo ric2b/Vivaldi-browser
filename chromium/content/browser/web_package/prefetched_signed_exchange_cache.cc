@@ -611,8 +611,10 @@ void PrefetchedSignedExchangeCache::Clear() {
 }
 
 std::unique_ptr<NavigationLoaderInterceptor>
-PrefetchedSignedExchangeCache::MaybeCreateInterceptor(const GURL& outer_url,
-                                                      int frame_tree_node_id) {
+PrefetchedSignedExchangeCache::MaybeCreateInterceptor(
+    const GURL& outer_url,
+    int frame_tree_node_id,
+    const net::NetworkIsolationKey& network_isolation_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const auto it = exchanges_.find(outer_url);
   if (it == exchanges_.end())
@@ -625,8 +627,8 @@ PrefetchedSignedExchangeCache::MaybeCreateInterceptor(const GURL& outer_url,
     exchanges_.erase(it);
     return nullptr;
   }
-  auto info_list = GetInfoListForNavigation(*exchange, verification_time,
-                                            frame_tree_node_id);
+  auto info_list = GetInfoListForNavigation(
+      *exchange, verification_time, frame_tree_node_id, network_isolation_key);
 
   return std::make_unique<PrefetchedNavigationLoaderInterceptor>(
       exchange->Clone(), std::move(info_list));
@@ -669,7 +671,8 @@ std::vector<mojom::PrefetchedSignedExchangeInfoPtr>
 PrefetchedSignedExchangeCache::GetInfoListForNavigation(
     const PrefetchedSignedExchangeCacheEntry& main_exchange,
     const base::Time& verification_time,
-    int frame_tree_node_id) {
+    int frame_tree_node_id,
+    const net::NetworkIsolationKey& network_isolation_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   const url::Origin outer_url_origin =
@@ -705,7 +708,8 @@ PrefetchedSignedExchangeCache::GetInfoListForNavigation(
       ++exchanges_it;
       auto reporter = SignedExchangeReporter::MaybeCreate(
           exchange->outer_url(), main_exchange.outer_url().spec(),
-          *exchange->outer_response(), frame_tree_node_id);
+          *exchange->outer_response(), network_isolation_key,
+          frame_tree_node_id);
       if (reporter) {
         reporter->set_cert_server_ip_address(
             exchange->cert_server_ip_address());

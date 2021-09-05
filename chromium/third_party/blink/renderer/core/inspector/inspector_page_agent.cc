@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_timing.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -135,6 +136,16 @@ String NavigationPolicyToProtocol(NavigationPolicy policy) {
       return DispositionEnum::NewWindow;
   }
   return DispositionEnum::CurrentTab;
+}
+
+String FrameDetachTypeToProtocol(FrameDetachType type) {
+  namespace ReasonEnum = protocol::Page::FrameDetached::ReasonEnum;
+  switch (type) {
+    case FrameDetachType::kRemove:
+      return ReasonEnum::Remove;
+    case FrameDetachType::kSwap:
+      return ReasonEnum::Swap;
+  }
 }
 
 Resource* CachedResource(LocalFrame* frame,
@@ -886,7 +897,7 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
     const String world_name = worlds_to_evaluate_on_load_.Get(key);
     if (world_name.IsEmpty()) {
       ClassicScript::CreateUnspecifiedScript(ScriptSourceCode(source))
-          ->RunScript(frame,
+          ->RunScript(frame->DomWindow(),
                       ScriptController::kExecuteScriptWhenScriptsDisabled);
       continue;
     }
@@ -900,13 +911,15 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
     // a foreign world.
     v8::HandleScope handle_scope(V8PerIsolateData::MainThreadIsolate());
     ClassicScript::CreateUnspecifiedScript(ScriptSourceCode(source))
-        ->RunScriptInIsolatedWorldAndReturnValue(frame, world->GetWorldId());
+        ->RunScriptInIsolatedWorldAndReturnValue(frame->DomWindow(),
+                                                 world->GetWorldId());
   }
 
   if (!script_to_evaluate_on_load_once_.IsEmpty()) {
     ClassicScript::CreateUnspecifiedScript(
         ScriptSourceCode(script_to_evaluate_on_load_once_))
-        ->RunScript(frame, ScriptController::kExecuteScriptWhenScriptsDisabled);
+        ->RunScript(frame->DomWindow(),
+                    ScriptController::kExecuteScriptWhenScriptsDisabled);
   }
 }
 
@@ -948,8 +961,10 @@ void InspectorPageAgent::FrameAttachedToParent(LocalFrame* frame) {
   GetFrontend()->flush();
 }
 
-void InspectorPageAgent::FrameDetachedFromParent(LocalFrame* frame) {
-  GetFrontend()->frameDetached(IdentifiersFactory::FrameId(frame));
+void InspectorPageAgent::FrameDetachedFromParent(LocalFrame* frame,
+                                                 FrameDetachType type) {
+  GetFrontend()->frameDetached(IdentifiersFactory::FrameId(frame),
+                               FrameDetachTypeToProtocol(type));
 }
 
 bool InspectorPageAgent::ScreencastEnabled() {
@@ -1087,6 +1102,28 @@ CreateProtocolCrossOriginIsolatedContextType(ExecutionContext* context) {
   return protocol::Page::CrossOriginIsolatedContextTypeEnum::
       NotIsolatedFeatureDisabled;
 }
+std::unique_ptr<std::vector<protocol::Page::GatedAPIFeatures>>
+CreateGatedAPIFeaturesArray(LocalDOMWindow* window) {
+  auto features =
+      std::make_unique<std::vector<protocol::Page::GatedAPIFeatures>>();
+  // SABs are available if at least one of the following is true:
+  //  - features::kWebAssemblyThreads enabled
+  //  - features::kSharedArrayBuffer enabled
+  //  - agent has the cross-origin isolated bit (but not necessarily the
+  //    capability)
+  if (RuntimeEnabledFeatures::SharedArrayBufferEnabled(window) ||
+      Agent::IsCrossOriginIsolated()) {
+    features->push_back(
+        protocol::Page::GatedAPIFeaturesEnum::SharedArrayBuffers);
+  }
+  if (window->SharedArrayBufferTransferAllowed()) {
+    features->push_back(protocol::Page::GatedAPIFeaturesEnum::
+                            SharedArrayBuffersTransferAllowed);
+  }
+  // TODO(chromium:1139899): Report availablility of performance.measureMemory()
+  // and performance.profile() once they are gated/available, respectively.
+  return features;
+}
 }  // namespace
 
 std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
@@ -1110,6 +1147,7 @@ std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
                   .GetSecureContextModeExplanation()))
           .setCrossOriginIsolatedContextType(
               CreateProtocolCrossOriginIsolatedContextType(frame->DomWindow()))
+          .setGatedAPIFeatures(CreateGatedAPIFeaturesArray(frame->DomWindow()))
           .build();
   if (loader->Url().HasFragmentIdentifier())
     frame_object->setUrlFragment("#" + loader->Url().FragmentIdentifier());

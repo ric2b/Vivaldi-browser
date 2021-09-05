@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Изпрати препратката по е-поща</translation>
 <translation id="1454726940098520109">Повече не показвай потвърждението</translation>
 <translation id="1462666970065907900">Наистина ли затваряте прозореца?</translation>
+<translation id="1526344461589023948">Възникна грешка при запис на изтеглено обновяване. Моля, проверете дали компютърът разполага с достатъчно свободно място и по-късно опитайте отново.</translation>
 <translation id="1657174850639146440">Чудовище 9</translation>
 <translation id="1676595396635191120">Създай частен прозорец</translation>
+<translation id="1702758681952953055">Ако грешката продължи, моля, докладвайте я като включите следните детайли:</translation>
 <translation id="1728549374069268714">Постави и премини</translation>
 <translation id="1756026472674246267">Отвори препратката в нов раздел</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Пейзаж 15</translation>
 <translation id="19598411548897379">Основен</translation>
 <translation id="2079036669923635404">Щракнете за обновяване на Vivaldi до <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Възникна грешка при изтегляне на файловете с обновяване. Моля, проверете свързването с интернет и по-късно опитайте отново.</translation>
 <translation id="2441056087170876076">Чудовище 2</translation>
 <translation id="2444387452209867610">Вмъкни записка</translation>
 <translation id="2486841023299517366">Животно 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Отвори препратката в нов прозорец</translation>
 <translation id="3588820906588687999">Отвори картината в нов раздел</translation>
 <translation id="3601066750251199488">Чудовище 3</translation>
+<translation id="3708982624815781692">Изтеглянето е отменено.</translation>
 <translation id="3732157130969736834">Отметни препратката</translation>
 <translation id="3732388226447288666">Животно 2</translation>
 <translation id="3732439195215136813">Животно 5</translation>
@@ -81,14 +85,16 @@
 <translation id="5594602170491763400">Чудовище 5</translation>
 <translation id="5615637589913244581">Opera версия 15+ (Бета)</translation>
 <translation id="5648110075441906505">Отвори картината в нов прозорец</translation>
+<translation id="5656371807944747581">Грешка при обновяване!</translation>
 <translation id="5716238312826274098">Забрана на известяването</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Създай папка</translation>
 <translation id="588258955323874662">Целоекранен режим</translation>
 <translation id="5916080360077521750">Настройките на вашия Chrome са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Chrome. После натиснете „Напред“.</translation>
+<translation id="6040143037577758943">Затвори</translation>
 <translation id="6229528619562190452">Щракнете за обновяване на Vivaldi</translation>
 <translation id="6234173136417926046">Ползвай картината за фон на решетката</translation>
-<translation id="630690498669249215">Файл на Opera с отметки</translation>
+<translation id="630690498669249215">Файл с отметки на Opera</translation>
 <translation id="6339818817272922368">Локален профил</translation>
 <translation id="6438786710866753178">Пейзаж 4</translation>
 <translation id="6477028720702061455">Изберете папка с профил на Opera за внасяне.</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi се създава благодарение на проекта с отворен код <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и друг <ph name="BEGIN_LINK_OSS" />софтуер с отворен код<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Провалено зареждане на инсталатора с обновяване. Моля, проверете дали компютърът разполага с достатъчно памет или свободно място и по-късно опитайте отново.</translation>
 <translation id="7715497554424665066">&amp;Подмини обновяването</translation>
 <translation id="7724603315864178912">Изрежи</translation>
 <translation id="7793738202466490491">Добави като събитие</translation>
+<translation id="7848222781052558334">Провалена проверка на цифровия подпис на изтеглените файлове.</translation>
 <translation id="7865983598101744945">Потвърждение при изход</translation>
 <translation id="7957213167373139414">Личен</translation>
 <translation id="8027581147000338959">Отвори в нов прозорец</translation>
@@ -125,7 +133,7 @@
 <translation id="8773635261052182196">Повече няма да виждате известия. Можете да ги разрешите отново от настройките на Vivaldi.</translation>
 <translation id="8894900864683381599">Добави препратката като панел</translation>
 <translation id="8912720443398351457">Наистина ли излизате от Vivaldi?</translation>
-<translation id="8947109330183116400">Изберете файл HTML с отметки.</translation>
+<translation id="8947109330183116400">Изберете файл с отметки HTML.</translation>
 <translation id="9017566390391482291">Изберете папка с профил на Vivaldi за внасяне.</translation>
 <translation id="9065203028668620118">Редактирай</translation>
 <translation id="9157539936604258187">Отвори препратката</translation>

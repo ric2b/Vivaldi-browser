@@ -154,7 +154,7 @@ template("msvc_toolchain") {
       if (defined(is_vivaldi) && is_vivaldi &&
           vivaldi_signing_key != "" && vivaldi_signing_command != "") {
         vivaldi_signing_wrapper = rebase_path("//vivaldi/scripts/signing_wrapper.py", root_build_dir)
-        linker_wrapper = "$python_path $vivaldi_signing_wrapper --key \"$vivaldi_signing_key\" --cmd \"$vivaldi_signing_command\" $linker_wrapper"
+        linker_wrapper = "$linker_wrapper$python_path $vivaldi_signing_wrapper --key \"$vivaldi_signing_key\" --cmd \"$vivaldi_signing_command\" $linker_wrapper"
       }
     } else {
       # Note trailing space:

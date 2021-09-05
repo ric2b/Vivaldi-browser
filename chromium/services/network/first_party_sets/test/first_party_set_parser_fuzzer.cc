@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "net/base/schemeful_site.h"
+
 namespace network {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {

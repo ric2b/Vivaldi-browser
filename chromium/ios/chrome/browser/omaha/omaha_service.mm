@@ -469,18 +469,20 @@ void OmahaService::StopInternal() {
 
 // static
 void OmahaService::GetDebugInformation(
-    const base::Callback<void(base::DictionaryValue*)> callback) {
+    base::OnceCallback<void(base::DictionaryValue*)> callback) {
   if (OmahaService::IsEnabled()) {
     OmahaService* service = GetInstance();
-    base::PostTask(FROM_HERE, {web::WebThread::IO},
-                   base::BindOnce(&OmahaService::GetDebugInformationOnIOThread,
-                                  base::Unretained(service), callback));
+    base::PostTask(
+        FROM_HERE, {web::WebThread::IO},
+        base::BindOnce(&OmahaService::GetDebugInformationOnIOThread,
+                       base::Unretained(service), std::move(callback)));
 
   } else {
     auto result = std::make_unique<base::DictionaryValue>();
     // Invoke the callback with an empty response.
-    base::PostTask(FROM_HERE, {web::WebThread::UI},
-                   base::BindOnce(callback, base::Owned(result.release())));
+    base::PostTask(
+        FROM_HERE, {web::WebThread::UI},
+        base::BindOnce(std::move(callback), base::Owned(result.release())));
   }
 }
 
@@ -517,7 +519,9 @@ std::string OmahaService::GetPingContent(const std::string& requestId,
   XmlWrapper xml_wrapper;
   xml_wrapper.StartElement("request");
   xml_wrapper.WriteAttribute("protocol", "3.0");
-  xml_wrapper.WriteAttribute("version", "iOS-1.0.0.0");
+  xml_wrapper.WriteAttribute("updater", "iOS");
+  xml_wrapper.WriteAttribute("updaterversion", versionName.c_str());
+  xml_wrapper.WriteAttribute("updaterchannel", channelName.c_str());
   xml_wrapper.WriteAttribute("ismachine", "1");
   xml_wrapper.WriteAttribute("requestid", requestId.c_str());
   xml_wrapper.WriteAttribute("sessionid", sessionId.c_str());
@@ -771,7 +775,7 @@ void OmahaService::OnURLLoadComplete(
 }
 
 void OmahaService::GetDebugInformationOnIOThread(
-    const base::Callback<void(base::DictionaryValue*)> callback) {
+    base::OnceCallback<void(base::DictionaryValue*)> callback) {
   auto result = std::make_unique<base::DictionaryValue>();
 
   result->SetString("message", GetCurrentPingContent());
@@ -795,8 +799,9 @@ void OmahaService::GetDebugInformationOnIOThread(
                         (timer_.desired_run_time() - base::TimeTicks::Now())));
 
   // Sending the value to the callback.
-  base::PostTask(FROM_HERE, {web::WebThread::UI},
-                 base::BindOnce(callback, base::Owned(result.release())));
+  base::PostTask(
+      FROM_HERE, {web::WebThread::UI},
+      base::BindOnce(std::move(callback), base::Owned(result.release())));
 }
 
 bool OmahaService::IsNextPingInstallRetry() {

@@ -42,16 +42,8 @@
 
 namespace blink {
 
+using testing::ElementsAre;
 using testing::Pointee;
-
-PaintChunk::Id DefaultId() {
-  DEFINE_STATIC_LOCAL(FakeDisplayItemClient, fake_client, ());
-  return PaintChunk::Id(fake_client, DisplayItem::kDrawingFirst);
-}
-
-PaintChunk DefaultChunk() {
-  return PaintChunk(0, 1, DefaultId(), PropertyTreeState::Root());
-}
 
 gfx::Transform Translation(SkScalar x, SkScalar y) {
   gfx::Transform transform;
@@ -149,11 +141,11 @@ class PaintArtifactCompositorTest : public testing::Test,
       const ViewportProperties& viewport_properties = ViewportProperties(),
       const WTF::Vector<const TransformPaintPropertyNode*>&
           scroll_translation_nodes = {}) {
-    HashSet<const GraphicsLayer*> repainted_layers;
     paint_artifact_compositor_->SetNeedsUpdate();
-    paint_artifact_compositor_->Update(artifact, viewport_properties,
-                                       scroll_translation_nodes,
-                                       repainted_layers);
+    Vector<PreCompositedLayerInfo> pre_composited_layers = {
+        {PaintChunkSubset(artifact)}};
+    paint_artifact_compositor_->Update(
+        pre_composited_layers, viewport_properties, scroll_translation_nodes);
     layer_tree_->layer_tree_host()->LayoutAndUpdateLayers();
   }
 
@@ -280,6 +272,13 @@ class PaintArtifactCompositorTest : public testing::Test,
     return *paint_artifact_compositor_;
   }
 
+  Vector<wtf_size_t> ChunkIndices(const PendingLayer& layer) {
+    Vector<wtf_size_t> indices;
+    for (auto it = layer.chunks.begin(); it != layer.chunks.end(); ++it)
+      indices.push_back(it.IndexInPaintArtifact());
+    return indices;
+  }
+
  private:
   MockScrollCallbacks scroll_callbacks_;
   std::unique_ptr<PaintArtifactCompositor> paint_artifact_compositor_;
@@ -295,7 +294,7 @@ const auto kNotScrollingOnMain =
     cc::MainThreadScrollingReason::kNotScrollingOnMain;
 
 TEST_P(PaintArtifactCompositorTest, EmptyPaintArtifact) {
-  Update(PaintArtifact::Empty());
+  Update(base::MakeRefCounted<PaintArtifact>());
   EXPECT_TRUE(RootLayer()->children().empty());
 }
 
@@ -1684,13 +1683,13 @@ TEST_P(PaintArtifactCompositorTest, MergeNestedWithAlias) {
 TEST_P(PaintArtifactCompositorTest, CanNotMergeAcrossPaintArtifacts) {
   TestPaintArtifact test_artifact_a;
   test_artifact_a.Chunk().RectDrawing(IntRect(0, 0, 100, 100), Color::kWhite);
-  auto artifact_a = test_artifact_a.Build();
-  PendingLayer layer_a(artifact_a, artifact_a->PaintChunks()[0], 0);
+  PaintChunkSubset chunks_a(test_artifact_a.Build());
+  PendingLayer layer_a(chunks_a, chunks_a.begin());
 
   TestPaintArtifact test_artifact_b;
   test_artifact_b.Chunk().RectDrawing(IntRect(0, 0, 100, 100), Color::kGray);
-  auto artifact_b = test_artifact_b.Build();
-  PendingLayer layer_b(artifact_b, artifact_b->PaintChunks()[0], 0);
+  PaintChunkSubset chunks_b(test_artifact_b.Build());
+  PendingLayer layer_b(chunks_b, chunks_b.begin());
 
   EXPECT_FALSE(layer_a.CanMerge(layer_b, layer_b.property_tree_state));
 }
@@ -1937,43 +1936,30 @@ TEST_P(PaintArtifactCompositorTest, OverlapTransform) {
 }
 
 TEST_P(PaintArtifactCompositorTest, MightOverlap) {
-  PaintChunk paint_chunk = DefaultChunk();
-  paint_chunk.bounds = IntRect(0, 0, 100, 100);
-  PendingLayer pending_layer(nullptr, paint_chunk, 0);
-
-  PaintChunk paint_chunk2 = DefaultChunk();
-  paint_chunk2.bounds = IntRect(0, 0, 100, 100);
-
-  {
-    PendingLayer pending_layer2(nullptr, paint_chunk2, 1);
-    EXPECT_TRUE(MightOverlap(pending_layer, pending_layer2));
-  }
-
-  auto transform = CreateTransform(
-      t0(), TransformationMatrix().Translate(99, 0), FloatPoint3D(100, 100, 0));
-  {
-    SetTransform(paint_chunk2, *transform);
-    PendingLayer pending_layer2(nullptr, paint_chunk2, 1);
-    EXPECT_TRUE(MightOverlap(pending_layer, pending_layer2));
-  }
-
-  auto transform2 =
-      CreateTransform(t0(), TransformationMatrix().Translate(100, 0),
-                      FloatPoint3D(100, 100, 0));
-  {
-    SetTransform(paint_chunk2, *transform2);
-    PendingLayer pending_layer2(nullptr, paint_chunk2, 1);
-    EXPECT_FALSE(MightOverlap(pending_layer, pending_layer2));
-  }
-
-  auto transform3 =
+  TestPaintArtifact artifact;
+  artifact.Chunk().Bounds(IntRect(0, 0, 100, 100));
+  artifact.Chunk().Bounds(IntRect(0, 0, 100, 100));
+  auto t2 = CreateTransform(t0(), TransformationMatrix().Translate(99, 0),
+                            FloatPoint3D(100, 100, 0));
+  artifact.Chunk(*t2, c0(), e0()).Bounds(IntRect(0, 0, 100, 100));
+  auto t3 = CreateTransform(t0(), TransformationMatrix().Translate(100, 0),
+                            FloatPoint3D(100, 100, 0));
+  artifact.Chunk(*t3, c0(), e0()).Bounds(IntRect(0, 0, 100, 100));
+  auto t4 =
       CreateAnimatingTransform(t0(), TransformationMatrix().Translate(100, 0),
                                FloatPoint3D(100, 100, 0));
-  {
-    SetTransform(paint_chunk2, *transform3);
-    PendingLayer pending_layer2(nullptr, paint_chunk2, 1);
-    EXPECT_TRUE(MightOverlap(pending_layer, pending_layer2));
-  }
+  artifact.Chunk(*t4, c0(), e0()).Bounds(IntRect(0, 0, 100, 100));
+  PaintChunkSubset chunks(artifact.Build());
+
+  PendingLayer pending_layer(chunks, chunks.begin());
+  EXPECT_TRUE(
+      MightOverlap(pending_layer, PendingLayer(chunks, chunks.begin() + 1)));
+  EXPECT_TRUE(
+      MightOverlap(pending_layer, PendingLayer(chunks, chunks.begin() + 2)));
+  EXPECT_FALSE(
+      MightOverlap(pending_layer, PendingLayer(chunks, chunks.begin() + 3)));
+  EXPECT_TRUE(
+      MightOverlap(pending_layer, PendingLayer(chunks, chunks.begin() + 4)));
 }
 
 TEST_P(PaintArtifactCompositorTest, UniteRectsKnownToBeOpaque) {
@@ -2021,205 +2007,154 @@ TEST_P(PaintArtifactCompositorTest, UniteRectsKnownToBeOpaque) {
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayer) {
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  chunk1.known_to_be_opaque = true;
-  chunk1.bounds = IntRect(0, 0, 30, 40);
+  TestPaintArtifact artifact;
+  artifact.Chunk().Bounds(IntRect(0, 0, 30, 40)).KnownToBeOpaque();
+  artifact.Chunk().Bounds(IntRect(10, 20, 30, 40)).KnownToBeOpaque();
+  artifact.Chunk().Bounds(IntRect(-5, -25, 20, 20)).KnownToBeOpaque();
+  PaintChunkSubset chunks(artifact.Build());
 
-  PendingLayer pending_layer(nullptr, chunk1, 0);
+  PendingLayer pending_layer(chunks, chunks.begin());
 
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
-  EXPECT_EQ((Vector<wtf_size_t>{0}), pending_layer.paint_chunk_indices);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0));
   EXPECT_EQ(pending_layer.bounds, pending_layer.rect_known_to_be_opaque);
 
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = chunk1.properties;
-  chunk2.known_to_be_opaque = true;
-  chunk2.bounds = IntRect(10, 20, 30, 40);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
 
   // Bounds not equal to one PaintChunk.
   EXPECT_EQ(FloatRect(0, 0, 40, 60), pending_layer.bounds);
-  EXPECT_EQ((Vector<wtf_size_t>{0, 1}), pending_layer.paint_chunk_indices);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0, 1));
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.rect_known_to_be_opaque);
 
-  PaintChunk chunk3 = DefaultChunk();
-  chunk3.properties = chunk1.properties;
-  chunk3.known_to_be_opaque = true;
-  chunk3.bounds = IntRect(-5, -25, 20, 20);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk3, 2)));
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 2)));
 
   EXPECT_EQ(FloatRect(-5, -25, 45, 85), pending_layer.bounds);
-  EXPECT_EQ((Vector<wtf_size_t>{0, 1, 2}), pending_layer.paint_chunk_indices);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0, 1, 2));
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.rect_known_to_be_opaque);
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerMergeWithGuestTransform) {
+  TestPaintArtifact artifact;
+  artifact.Chunk().Bounds(IntRect(0, 0, 30, 40));
   auto transform = Create2DTranslation(t0(), 20, 25);
+  artifact.Chunk(*transform, c0(), e0()).Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = chunk1.properties;
-  SetTransform(chunk2, *transform);
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(0, 0, 70, 85), pending_layer.bounds);
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.property_tree_state);
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerMergeWithHomeTransform) {
+  TestPaintArtifact artifact;
   auto transform = Create2DTranslation(t0(), 20, 25);
+  artifact.Chunk(*transform, c0(), e0()).Bounds(IntRect(0, 0, 30, 40));
+  artifact.Chunk().Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  SetTransform(chunk1, *transform);
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = PropertyTreeState::Root();
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(0, 0, 50, 65), pending_layer.bounds);
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.property_tree_state);
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerMergeWithBothTransforms) {
+  TestPaintArtifact artifact;
   auto t1 = Create2DTranslation(t0(), 20, 25);
+  artifact.Chunk(*t1, c0(), e0()).Bounds(IntRect(0, 0, 30, 40));
   auto t2 = Create2DTranslation(t0(), -20, -25);
+  artifact.Chunk(*t2, c0(), e0()).Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  SetTransform(chunk1, *t1);
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = PropertyTreeState::Root();
-  SetTransform(chunk2, *t2);
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(-20, -25, 70, 90), pending_layer.bounds);
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.property_tree_state);
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerDontMergeSparse) {
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();  // (t0(), c0(), *e1);
-  chunk1.known_to_be_opaque = true;
-  chunk1.bounds = IntRect(0, 0, 30, 40);
+  TestPaintArtifact artifact;
+  artifact.Chunk().Bounds(IntRect(0, 0, 30, 40)).KnownToBeOpaque();
+  artifact.Chunk().Bounds(IntRect(200, 200, 30, 40)).KnownToBeOpaque();
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = chunk1.properties;
-  chunk2.known_to_be_opaque = true;
-  chunk2.bounds = IntRect(200, 200, 30, 40);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_FALSE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_FALSE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
-  EXPECT_EQ(chunk1.properties, pending_layer.property_tree_state);
-  EXPECT_EQ(Vector<wtf_size_t>{0}, pending_layer.paint_chunk_indices);
+  EXPECT_EQ(chunks.begin()->properties, pending_layer.property_tree_state);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0));
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerDontMergeSparseWithTransforms) {
+  TestPaintArtifact artifact;
   auto t1 = Create2DTranslation(t0(), 20, 25);
+  artifact.Chunk(*t1, c0(), e0()).Bounds(IntRect(0, 0, 30, 40));
   auto t2 = Create2DTranslation(t0(), 1000, 1000);
+  artifact.Chunk(*t2, c0(), e0()).Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  SetTransform(chunk1, *t1);
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = PropertyTreeState::Root();
-  SetTransform(chunk2, *t2);
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_FALSE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_FALSE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
-  EXPECT_EQ(chunk1.properties, pending_layer.property_tree_state);
-  EXPECT_EQ(Vector<wtf_size_t>{0}, pending_layer.paint_chunk_indices);
+  EXPECT_EQ(chunks.begin()->properties, pending_layer.property_tree_state);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0));
 }
 
 TEST_P(PaintArtifactCompositorTest,
        PendingLayerDontMergeSparseInCompositedEffect) {
+  TestPaintArtifact artifact;
   auto t1 = Create2DTranslation(t0(), 20, 25);
-  auto t2 = Create2DTranslation(t0(), 1000, 1000);
   auto e1 =
       CreateOpacityEffect(e0(), 1.0f, CompositingReason::kWillChangeOpacity);
+  artifact.Chunk(*t1, c0(), *e1).Bounds(IntRect(0, 0, 30, 40));
+  auto t2 = Create2DTranslation(t0(), 1000, 1000);
+  artifact.Chunk(*t2, c0(), *e1).Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState(*t1, c0(), *e1);
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = PropertyTreeState(*t2, c0(), *e1);
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_FALSE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_FALSE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
-  EXPECT_EQ(chunk1.properties, pending_layer.property_tree_state);
-  EXPECT_EQ(Vector<wtf_size_t>{0}, pending_layer.paint_chunk_indices);
+  EXPECT_EQ(chunks.begin()->properties, pending_layer.property_tree_state);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0));
 }
 
 TEST_P(PaintArtifactCompositorTest,
        PendingLayerMergeSparseInNonCompositedEffect) {
+  TestPaintArtifact artifact;
   auto t1 = Create2DTranslation(t0(), 20, 25);
   auto t2 = Create2DTranslation(t0(), 1000, 1000);
   auto e1 = CreateOpacityEffect(e0(), 1.0f, CompositingReason::kNone);
+  artifact.Chunk(*t1, c0(), *e1).Bounds(IntRect(0, 0, 30, 40));
+  artifact.Chunk(*t2, c0(), *e1).Bounds(IntRect(0, 0, 50, 60));
+  PaintChunkSubset chunks(artifact.Build());
 
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState(*t1, c0(), *e1);
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = PropertyTreeState(*t2, c0(), *e1);
-  chunk2.bounds = IntRect(0, 0, 50, 60);
-
-  PendingLayer pending_layer(nullptr, chunk1, 0);
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
+  PendingLayer pending_layer(chunks, chunks.begin());
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   EXPECT_EQ(FloatRect(20, 25, 1030, 1035), pending_layer.bounds);
   EXPECT_EQ(PropertyTreeState(t0(), c0(), *e1),
             pending_layer.property_tree_state);
-  EXPECT_EQ((Vector<wtf_size_t>{0, 1}), pending_layer.paint_chunk_indices);
+  EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0, 1));
 }
 
 TEST_P(PaintArtifactCompositorTest, PendingLayerKnownOpaque) {
-  PaintChunk chunk1 = DefaultChunk();
-  chunk1.properties = PropertyTreeState::Root();
-  chunk1.bounds = IntRect(0, 0, 30, 40);
-  chunk1.known_to_be_opaque = false;
-  PendingLayer pending_layer(nullptr, chunk1, 0);
+  TestPaintArtifact artifact;
+  artifact.Chunk().Bounds(IntRect(0, 0, 30, 40));
+  artifact.Chunk().Bounds(IntRect(0, 0, 25, 35)).KnownToBeOpaque();
+  artifact.Chunk().Bounds(IntRect(0, 0, 50, 60)).KnownToBeOpaque();
+  PaintChunkSubset chunks(artifact.Build());
 
+  PendingLayer pending_layer(chunks, chunks.begin());
   EXPECT_TRUE(pending_layer.rect_known_to_be_opaque.IsEmpty());
 
-  PaintChunk chunk2 = DefaultChunk();
-  chunk2.properties = chunk1.properties;
-  chunk2.bounds = IntRect(0, 0, 25, 35);
-  chunk2.known_to_be_opaque = true;
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk2, 1)));
-
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 1)));
   // Chunk 2 doesn't cover the entire layer, so not opaque.
-  EXPECT_EQ(FloatRect(chunk2.bounds), pending_layer.rect_known_to_be_opaque);
+  EXPECT_EQ(FloatRect(0, 0, 25, 35), pending_layer.rect_known_to_be_opaque);
   EXPECT_NE(pending_layer.bounds, pending_layer.rect_known_to_be_opaque);
 
-  PaintChunk chunk3 = DefaultChunk();
-  chunk3.properties = chunk1.properties;
-  chunk3.bounds = IntRect(0, 0, 50, 60);
-  chunk3.known_to_be_opaque = true;
-  ASSERT_TRUE(pending_layer.Merge(PendingLayer(nullptr, chunk3, 2)));
-
+  ASSERT_TRUE(pending_layer.Merge(PendingLayer(chunks, chunks.begin() + 2)));
   // Chunk 3 covers the entire layer, so now it's opaque.
-  EXPECT_EQ(FloatRect(chunk3.bounds), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(0, 0, 50, 60), pending_layer.bounds);
   EXPECT_EQ(pending_layer.bounds, pending_layer.rect_known_to_be_opaque);
 }
 
@@ -3115,7 +3050,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipSimple) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 }
 
@@ -3214,7 +3149,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClip90DegRotationSupported) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 }
 
@@ -3369,7 +3304,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipNested) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 
   ASSERT_EQ(e1_id, cc_filter.parent_id);
@@ -3381,13 +3316,13 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipNested) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_1.blend_mode);
   EXPECT_TRUE(mask_isolation_1.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_1.rounded_corner_bounds);
+            mask_isolation_1.mask_filter_info.rounded_corner_bounds());
   EXPECT_TRUE(mask_isolation_1.HasRenderSurface());
 
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_2.blend_mode);
   EXPECT_TRUE(mask_isolation_2.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_2.rounded_corner_bounds);
+            mask_isolation_2.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_2.HasRenderSurface());
 }
 
@@ -3574,7 +3509,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipContiguous) {
 
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 }
 
@@ -3627,7 +3562,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDiscontiguous) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 
   int t1_id = content1->transform_tree_index();
@@ -3647,7 +3582,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDiscontiguous) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_1.blend_mode);
   EXPECT_TRUE(mask_isolation_1.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_1.rounded_corner_bounds);
+            mask_isolation_1.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_1.HasRenderSurface());
 }
 
@@ -3708,7 +3643,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipAcrossChildEffect) {
   const cc::EffectNode& cc_e2 = *GetPropertyTrees().effect_tree.Node(e2_id);
   EXPECT_TRUE(cc_e2.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
 }
 
 TEST_P(PaintArtifactCompositorTest, SynthesizedClipRespectOutputClip) {
@@ -3763,7 +3698,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipRespectOutputClip) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_0.HasRenderSurface());
 
   EXPECT_EQ(c1_id, content1->clip_tree_index());
@@ -3777,7 +3712,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipRespectOutputClip) {
   ASSERT_EQ(e0_id, cc_e1.parent_id);
   EXPECT_TRUE(mask_isolation_1.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_1.rounded_corner_bounds);
+            mask_isolation_1.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_1.HasRenderSurface());
 
   EXPECT_EQ(c1_id, content2->clip_tree_index());
@@ -3790,7 +3725,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipRespectOutputClip) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_2.blend_mode);
   EXPECT_TRUE(mask_isolation_2.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_2.rounded_corner_bounds);
+            mask_isolation_2.mask_filter_info.rounded_corner_bounds());
   EXPECT_FALSE(mask_isolation_2.HasRenderSurface());
 }
 
@@ -3848,7 +3783,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBlending) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
 
   EXPECT_EQ(c1_id, content1->clip_tree_index());
   int e1_id = content1->effect_tree_index();
@@ -3862,7 +3797,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBlending) {
   EXPECT_EQ(SkBlendMode::kMultiply, mask_isolation_1.blend_mode);
   EXPECT_TRUE(mask_isolation_1.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_1.rounded_corner_bounds);
+            mask_isolation_1.mask_filter_info.rounded_corner_bounds());
 
   EXPECT_EQ(c1_id, content2->clip_tree_index());
   int mask_isolation_2_id = content2->effect_tree_index();
@@ -3874,7 +3809,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBlending) {
   EXPECT_EQ(SkBlendMode::kSrcOver, mask_isolation_0.blend_mode);
   EXPECT_TRUE(mask_isolation_2.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_2.rounded_corner_bounds);
+            mask_isolation_2.mask_filter_info.rounded_corner_bounds());
 }
 
 TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
@@ -3946,7 +3881,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
   EXPECT_EQ(1.0f, mask_isolation_0.opacity);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_0.rounded_corner_bounds);
+            mask_isolation_0.mask_filter_info.rounded_corner_bounds());
 
   EXPECT_EQ(t1_id, content1->transform_tree_index());
   int c2_id = content1->clip_tree_index();
@@ -3973,9 +3908,10 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_FALSE(mask_isolation_1.is_fast_rounded_corner);
   // Opacity should also be moved to mask_isolation_1.
   EXPECT_EQ(0.5f, mask_isolation_1.opacity);
-  EXPECT_EQ(gfx::RRectF(), mask_isolation_1.rounded_corner_bounds);
+  EXPECT_EQ(gfx::RRectF(),
+            mask_isolation_1.mask_filter_info.rounded_corner_bounds());
 
-  EXPECT_EQ(t0_id, clip_mask1->transform_tree_index());
+  EXPECT_EQ(t1_id, clip_mask1->transform_tree_index());
   EXPECT_EQ(c2_id, clip_mask1->clip_tree_index());
   const cc::EffectNode& mask =
       *GetPropertyTrees().effect_tree.Node(clip_mask1->effect_tree_index());
@@ -4001,7 +3937,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_TRUE(mask_isolation_2.is_fast_rounded_corner);
   EXPECT_EQ(1.0f, mask_isolation_2.opacity);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation_2.rounded_corner_bounds);
+            mask_isolation_2.mask_filter_info.rounded_corner_bounds());
 }
 
 TEST_P(PaintArtifactCompositorTest, SynthesizedClipMultipleNonBackdropEffects) {
@@ -4069,7 +4005,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipMultipleNonBackdropEffects) {
   EXPECT_EQ(c1_id, mask_isolation.clip_id);
   EXPECT_TRUE(mask_isolation.is_fast_rounded_corner);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
-            mask_isolation.rounded_corner_bounds);
+            mask_isolation.mask_filter_info.rounded_corner_bounds());
 
   EXPECT_EQ(c0_id, content2->clip_tree_index());
   EXPECT_EQ(e0_id, content2->effect_tree_index());
@@ -4876,8 +4812,7 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
              .Build());
   ASSERT_EQ(1u, LayerCount());
   auto* layer = static_cast<cc::PictureLayer*>(LayerAt(0));
-  auto display_item_list = layer->client()->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  auto display_item_list = layer->client()->PaintContentsToDisplayList();
 
   // Change t1 but not t2.
   layer->ClearSubtreePropertyChangedForTesting();
@@ -4895,10 +4830,7 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
   ASSERT_EQ(1u, LayerCount());
   ASSERT_EQ(layer, LayerAt(0));
   EXPECT_EQ(display_item_list.get(),
-            layer->client()
-                ->PaintContentsToDisplayList(
-                    cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL)
-                .get());
+            layer->client()->PaintContentsToDisplayList().get());
   // TODO(wangxianzhu): Probably avoid setting this flag on transform change.
   EXPECT_TRUE(layer->subtree_property_changed());
   // This is set by cc when propagating ancestor change flag to descendants.
@@ -4925,10 +4857,7 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
   ASSERT_EQ(1u, LayerCount());
   ASSERT_EQ(layer, LayerAt(0));
   EXPECT_EQ(display_item_list.get(),
-            layer->client()
-                ->PaintContentsToDisplayList(
-                    cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL)
-                .get());
+            layer->client()->PaintContentsToDisplayList().get());
   // TODO(wangxianzhu): Probably avoid setting this flag on transform change.
   EXPECT_TRUE(layer->subtree_property_changed());
   EXPECT_TRUE(GetTransformNode(layer).transform_changed);
@@ -4952,10 +4881,7 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
   ASSERT_EQ(1u, LayerCount());
   ASSERT_EQ(layer, LayerAt(0));
   EXPECT_EQ(display_item_list.get(),
-            layer->client()
-                ->PaintContentsToDisplayList(
-                    cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL)
-                .get());
+            layer->client()->PaintContentsToDisplayList().get());
   // The new transform is decomposited, so there is no transform_changed, but
   // we set subtree_property_changed because offset_from_transform_parent
   // (calculated from the decomposited transforms) changed.
@@ -4975,10 +4901,7 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
   ASSERT_EQ(1u, LayerCount());
   ASSERT_EQ(layer, LayerAt(0));
   EXPECT_NE(display_item_list.get(),
-            layer->client()
-                ->PaintContentsToDisplayList(
-                    cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL)
-                .get());
+            layer->client()->PaintContentsToDisplayList().get());
 }
 
 TEST_P(PaintArtifactCompositorTest, EffectChange) {
@@ -5073,7 +4996,7 @@ TEST_P(PaintArtifactCompositorTest, DirectlySetScrollOffset) {
   EXPECT_EQ(gfx::ScrollOffset(-7, -9), transform_node->scroll_offset);
 
   auto& host = GetLayerTreeHost();
-  host.Composite(base::TimeTicks::Now(), true);
+  host.CompositeForTest(base::TimeTicks::Now(), true);
   ASSERT_FALSE(host.LayersThatShouldPushProperties().contains(scroll_layer));
   ASSERT_FALSE(host.proxy()->CommitRequested());
   ASSERT_FALSE(transform_tree.needs_update());

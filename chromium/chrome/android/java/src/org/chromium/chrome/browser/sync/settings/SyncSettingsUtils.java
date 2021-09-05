@@ -42,6 +42,7 @@ import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.sync.KeyRetrievalTriggerForUMA;
 import org.chromium.components.sync.StopSource;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -297,7 +298,6 @@ public class SyncSettingsUtils {
                     : UiUtils.getTintedDrawable(context, R.drawable.ic_sync_green_legacy_40dp,
                             R.color.default_icon_color);
         }
-
         if (profileSyncService.isSyncDisabledByEnterprisePolicy()) {
             return useNewIcon
                     ? AppCompatResources.getDrawable(context, R.drawable.ic_sync_off_48dp)
@@ -305,17 +305,7 @@ public class SyncSettingsUtils {
                             R.color.default_icon_color);
         }
 
-        if (!profileSyncService.isFirstSetupComplete() || profileSyncService.hasUnrecoverableError()
-                || profileSyncService.getAuthError() != GoogleServiceAuthError.State.NONE) {
-            return useNewIcon
-                    ? AppCompatResources.getDrawable(context, R.drawable.ic_sync_error_48dp)
-                    : UiUtils.getTintedDrawable(
-                            context, R.drawable.ic_sync_error_legacy_40dp, R.color.default_red);
-        }
-
-        if (profileSyncService.isEngineInitialized()
-                && (profileSyncService.isPassphraseRequiredForPreferredDataTypes()
-                        || profileSyncService.isTrustedVaultKeyRequiredForPreferredDataTypes())) {
+        if (getSyncError() != SyncError.NO_ERROR) {
             return useNewIcon
                     ? AppCompatResources.getDrawable(context, R.drawable.ic_sync_error_48dp)
                     : UiUtils.getTintedDrawable(
@@ -436,5 +426,16 @@ public class SyncSettingsUtils {
                         (exception) -> {
                             Log.e(TAG, "Error opening key retrieval dialog: ", exception);
                         });
+    }
+
+    /**
+     * Shows a toast indicating that sync is disabled for the account by the system administrator.
+     *
+     * @param context The context where the toast will be shown.
+     */
+    public static void showSyncDisabledByAdministratorToast(Context context) {
+        Toast.makeText(context, context.getString(R.string.sync_is_disabled_by_administrator),
+                     Toast.LENGTH_LONG)
+                .show();
     }
 }

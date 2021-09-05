@@ -10,12 +10,20 @@
 #include "base/win/windows_version.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
+
 namespace features {
 
 #if defined(OS_WIN)
 // If enabled, calculate native window occlusion - Windows-only.
 const base::Feature kCalculateNativeWinOcclusion{
     "CalculateNativeWinOcclusion", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kCalculateNativeWinOcclusionCheckVirtualDesktopUsed{
+    "CalculateNativeWinOcclusionCheckVirtualDesktopUsed",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // OW_WIN
 
 // Whether or not to delegate color queries to the color provider.
@@ -50,7 +58,7 @@ const base::Feature kPercentBasedScrolling = {
 
 // Allows requesting unadjusted movement when entering pointerlock.
 const base::Feature kPointerLockOptions = {"PointerLockOptions",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allows system caption style for WebVTT Captions.
 const base::Feature kSystemCaptionStyle{"SystemCaptionStyle",
@@ -67,7 +75,7 @@ bool IsNotificationIndicatorEnabled() {
   return base::FeatureList::IsEnabled(kNotificationIndicator);
 }
 
-// Enables GPU rasterization for all UI drawing (where not blacklisted).
+// Enables GPU rasterization for all UI drawing (where not blocklisted).
 const base::Feature kUiGpuRasterization = {"UiGpuRasterization",
 #if defined(OS_APPLE) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
                                            base::FEATURE_ENABLED_BY_DEFAULT
@@ -100,7 +108,8 @@ const base::Feature kCompositorThreadedScrollbarScrolling = {
 // native apps on Windows.
 const base::Feature kExperimentalFlingAnimation {
   "ExperimentalFlingAnimation",
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(OS_WIN) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS))
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -156,9 +165,16 @@ bool IsForcedColorsEnabled() {
   return forced_colors_enabled;
 }
 
-// Enables the eye-dropper in the refresh color-picker.
-const base::Feature kEyeDropper{"EyeDropper",
-                                base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables the eye-dropper in the refresh color-picker for Windows and Mac.
+// This feature will be released for other platforms in later milestones.
+const base::Feature kEyeDropper {
+  "EyeDropper",
+#if defined(OS_WIN) || defined(OS_MAC)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 bool IsEyeDropperEnabled() {
   return IsFormControlsRefreshEnabled() &&
@@ -257,5 +273,17 @@ const char kFilterNameOneEuro[] = "one_euro_filter";
 
 const base::Feature kSwipeToMoveCursor{"SwipeToMoveCursor",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsSwipeToMoveCursorEnabled() {
+  static const bool enabled =
+      base::FeatureList::IsEnabled(kSwipeToMoveCursor)
+#if defined(OS_ANDROID)
+      && base::android::BuildInfo::GetInstance()->sdk_int() >=
+             base::android::SDK_VERSION_R;
+#else
+      ;
+#endif
+  return enabled;
+}
 
 }  // namespace features

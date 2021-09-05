@@ -95,9 +95,11 @@ const CGFloat kSpinnerButtonPadding = 18;
     ChromeBrowserState* browserState = self.browser->GetBrowserState();
     self.title = l10n_util::GetNSString(IDS_IOS_SYNC_ENTER_PASSPHRASE_TITLE);
     self.shouldHideDoneButton = YES;
+    AuthenticationService* authenticationService =
+        AuthenticationServiceFactory::GetForBrowserState(browserState);
+    authenticationService->WaitUntilCacheIsPopulated();
     NSString* userEmail =
-        [AuthenticationServiceFactory::GetForBrowserState(browserState)
-                ->GetAuthenticatedIdentity() userEmail];
+        authenticationService->GetAuthenticatedIdentity().userEmail;
     DCHECK(userEmail);
     syncer::SyncService* service =
         ProfileSyncServiceFactory::GetForBrowserState(browserState);
@@ -328,7 +330,6 @@ const CGFloat kSpinnerButtonPadding = 18;
       [self hideDecryptionProgress];
     }
   } else {
-    service->GetUserSettings()->EnableEncryptEverything();
     service->GetUserSettings()->SetEncryptionPassphrase(passphrase);
   }
   [self reloadData];

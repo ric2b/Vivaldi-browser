@@ -47,6 +47,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                        const NGPhysicalBoxFragment& fragment);
 
   void Paint(const PaintInfo&);
+  // Routes single PaintPhase to actual painters, and traverses children.
   void PaintObject(const PaintInfo&,
                    const PhysicalOffset&,
                    bool suppress_box_decoration_background = false);
@@ -207,6 +208,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
     // Add |node| to |HitTestResult|. Returns true if the hit-testing should
     // stop.
     bool AddNodeToResult(Node* node,
+                         const NGPhysicalBoxFragment* box_fragment,
                          const PhysicalRect& bounds_rect,
                          const PhysicalOffset& offset) const;
 
@@ -295,7 +297,6 @@ class NGBoxFragmentPainter : public BoxPainterBase {
     return display_item_client_;
   }
   PhysicalRect SelfInkOverflow() const;
-  PhysicalRect ContentsInkOverflow() const;
 
   const NGPhysicalBoxFragment& box_fragment_;
   const DisplayItemClient& display_item_client_;

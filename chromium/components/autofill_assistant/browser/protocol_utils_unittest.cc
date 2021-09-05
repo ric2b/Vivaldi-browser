@@ -5,7 +5,10 @@
 #include "components/autofill_assistant/browser/protocol_utils.h"
 
 #include "base/macros.h"
+#include "base/optional.h"
+#include "components/autofill_assistant/browser/selector.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
@@ -17,6 +20,8 @@ using ::testing::Eq;
 using ::testing::IsEmpty;
 using ::testing::Not;
 using ::testing::Pair;
+using ::testing::Pointee;
+using ::testing::Property;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAreArray;
 
@@ -143,7 +148,7 @@ TEST_F(ProtocolUtilsTest, CreateNextScriptActionsRequest) {
   EXPECT_TRUE(
       request.ParseFromString(ProtocolUtils::CreateNextScriptActionsRequest(
           "global_payload", "script_payload", processed_actions,
-          client_context_proto_)));
+          RoundtripTimingStats(), client_context_proto_)));
 
   AssertClientContext(request.client_context());
   EXPECT_EQ(1, request.next_request().processed_actions().size());
@@ -319,6 +324,68 @@ TEST_F(ProtocolUtilsTest, ParseActionsUpdateScriptListFullFeatured) {
   EXPECT_THAT(scripts, SizeIs(1));
   EXPECT_THAT("a", Eq(scripts[0]->handle.path));
   EXPECT_THAT("name", Eq(scripts[0]->handle.chip.text));
+}
+
+TEST_F(ProtocolUtilsTest, ParseTriggerScriptsParseError) {
+  std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
+  std::vector<std::string> additional_allowed_domains;
+  int interval_ms;
+  base::Optional<int> timeout_ms;
+  EXPECT_FALSE(ProtocolUtils::ParseTriggerScripts("invalid", &trigger_scripts,
+                                                  &additional_allowed_domains,
+                                                  &interval_ms, &timeout_ms));
+  EXPECT_TRUE(trigger_scripts.empty());
+}
+
+TEST_F(ProtocolUtilsTest, CreateGetTriggerScriptsRequest) {
+  std::map<std::string, std::string> parameters = {{"key_a", "value_a"},
+                                                   {"key_b", "value_b"}};
+
+  GetTriggerScriptsRequestProto request;
+  EXPECT_TRUE(
+      request.ParseFromString(ProtocolUtils::CreateGetTriggerScriptsRequest(
+          GURL("http://example.com/"), client_context_proto_, parameters)));
+
+  AssertClientContext(request.client_context());
+  AssertScriptParameters(request.debug_script_parameters(), parameters);
+  EXPECT_EQ("http://example.com/", request.url());
+}
+
+TEST_F(ProtocolUtilsTest, ParseTriggerScriptsValid) {
+  GetTriggerScriptsResponseProto proto;
+  proto.add_additional_allowed_domains("example.com");
+  proto.add_additional_allowed_domains("other-example.com");
+
+  proto.set_trigger_condition_check_interval_ms(2000);
+  proto.set_timeout_ms(500000);
+
+  TriggerScriptProto trigger_script_1;
+  *trigger_script_1.mutable_trigger_condition()->mutable_selector() =
+      ToSelectorProto("fake_element_1");
+  TriggerScriptProto trigger_script_2;
+
+  *proto.add_trigger_scripts() = trigger_script_1;
+  *proto.add_trigger_scripts() = trigger_script_2;
+
+  std::string proto_str;
+  proto.SerializeToString(&proto_str);
+
+  std::vector<std::unique_ptr<TriggerScript>> trigger_scripts;
+  std::vector<std::string> additional_allowed_domains;
+  int interval_ms;
+  base::Optional<int> timeout_ms;
+  EXPECT_TRUE(ProtocolUtils::ParseTriggerScripts(proto_str, &trigger_scripts,
+                                                 &additional_allowed_domains,
+                                                 &interval_ms, &timeout_ms));
+  EXPECT_THAT(
+      trigger_scripts,
+      ElementsAre(
+          Pointee(Property(&TriggerScript::AsProto, Eq(trigger_script_1))),
+          Pointee(Property(&TriggerScript::AsProto, Eq(trigger_script_2)))));
+  EXPECT_THAT(additional_allowed_domains,
+              ElementsAre("example.com", "other-example.com"));
+  EXPECT_EQ(interval_ms, 2000);
+  EXPECT_EQ(timeout_ms, 500000);
 }
 
 }  // namespace

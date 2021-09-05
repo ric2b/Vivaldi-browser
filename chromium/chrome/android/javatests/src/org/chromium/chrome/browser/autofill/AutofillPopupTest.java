@@ -29,6 +29,9 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
@@ -45,9 +48,6 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -187,12 +187,10 @@ public class AutofillPopupTest {
 
         // Add an Autofill profile.
         mHelper = new AutofillTestHelper();
-        AutofillProfile profile = new AutofillProfile(
-                "" /* guid */, ORIGIN, FIRST_NAME + " " + LAST_NAME, COMPANY_NAME,
-                STREET_ADDRESS_TEXTAREA,
-                STATE, CITY, DEPENDENT_LOCALITY,
-                ZIP_CODE, SORTING_CODE, COUNTRY, PHONE_NUMBER, EMAIL,
-                LANGUAGE_CODE);
+        AutofillProfile profile = new AutofillProfile("" /* guid */, ORIGIN,
+                "" /* honorific prefix */, FIRST_NAME + " " + LAST_NAME, COMPANY_NAME,
+                STREET_ADDRESS_TEXTAREA, STATE, CITY, DEPENDENT_LOCALITY, ZIP_CODE, SORTING_CODE,
+                COUNTRY, PHONE_NUMBER, EMAIL, LANGUAGE_CODE);
         mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesToSuggest());
 

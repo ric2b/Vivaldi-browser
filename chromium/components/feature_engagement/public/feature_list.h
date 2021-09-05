@@ -93,9 +93,18 @@ DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPasswordFillingFeature,
                        "IPH_KeyboardAccessoryPasswordFilling");
 DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPaymentFillingFeature,
                        "IPH_KeyboardAccessoryPaymentFilling");
+DEFINE_VARIATION_PARAM(kIPHNewTabPageButtonFeature, "IPH_NewTabPageHomeButton");
 DEFINE_VARIATION_PARAM(kIPHPreviewsOmniboxUIFeature, "IPH_PreviewsOmniboxUI");
+DEFINE_VARIATION_PARAM(kIPHPwaInstallAvailableFeature,
+                       "IPH_PwaInstallAvailableFeature");
 DEFINE_VARIATION_PARAM(kIPHQuietNotificationPromptsFeature,
                        "IPH_QuietNotificationPrompts");
+DEFINE_VARIATION_PARAM(kIPHReadLaterContextMenuFeature,
+                       "IPH_ReadLaterContextMenu");
+DEFINE_VARIATION_PARAM(kIPHReadLaterAppMenuBookmarkThisPageFeature,
+                       "IPH_ReadLaterAppMenuBookmarkThisPage");
+DEFINE_VARIATION_PARAM(kIPHReadLaterAppMenuBookmarksFeature,
+                       "IPH_ReadLaterAppMenuBookmarks");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsQuicklyComparePagesFeature,
                        "IPH_TabGroupsQuicklyComparePages");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsTapToSeeAnotherTabFeature,
@@ -104,12 +113,19 @@ DEFINE_VARIATION_PARAM(kIPHTabGroupsYourTabsAreTogetherFeature,
                        "IPH_TabGroupsYourTabsTogether");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsDragAndDropFeature,
                        "IPH_TabGroupsDragAndDrop");
+DEFINE_VARIATION_PARAM(kIPHTabSwitcherButtonFeature, "IPH_TabSwitcherButton");
 DEFINE_VARIATION_PARAM(kIPHTranslateMenuButtonFeature,
                        "IPH_TranslateMenuButton");
-DEFINE_VARIATION_PARAM(kIPHVideoTutorialDownloadFeature,
-                       "IPH_VideoTutorial_Download");
-DEFINE_VARIATION_PARAM(kIPHVideoTutorialSearchFeature,
-                       "IPH_VideoTutorial_Search");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPChromeIntroFeature,
+                       "IPH_VideoTutorial_NTP_ChromeIntro");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPDownloadFeature,
+                       "IPH_VideoTutorial_NTP_Download");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPSearchFeature,
+                       "IPH_VideoTutorial_NTP_Search");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPVoiceSearchFeature,
+                       "IPH_VideoTutorial_NTP_VoiceSearch");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialNTPSummaryFeature,
+                       "IPH_VideoTutorial_NTP_Summary");
 DEFINE_VARIATION_PARAM(kIPHExploreSitesTileFeature, "IPH_ExploreSitesTile");
 DEFINE_VARIATION_PARAM(kIPHFeedHeaderMenuFeature, "IPH_FeedHeaderMenu");
 #endif  // defined(OS_ANDROID)
@@ -137,6 +153,7 @@ DEFINE_VARIATION_PARAM(kIPHPasswordsAccountStorageFeature,
                        "IPH_PasswordsAccountStorage");
 DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 DEFINE_VARIATION_PARAM(kIPHWebUITabStripFeature, "IPH_WebUITabStrip");
+DEFINE_VARIATION_PARAM(kIPHDesktopPwaInstallFeature, "IPH_DesktopPwaInstall");
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -177,15 +194,24 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHKeyboardAccessoryBarSwipingFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryPasswordFillingFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryPaymentFillingFeature),
+        VARIATION_ENTRY(kIPHNewTabPageButtonFeature),
         VARIATION_ENTRY(kIPHPreviewsOmniboxUIFeature),
+        VARIATION_ENTRY(kIPHPwaInstallAvailableFeature),
         VARIATION_ENTRY(kIPHQuietNotificationPromptsFeature),
+        VARIATION_ENTRY(kIPHReadLaterContextMenuFeature),
+        VARIATION_ENTRY(kIPHReadLaterAppMenuBookmarkThisPageFeature),
+        VARIATION_ENTRY(kIPHReadLaterAppMenuBookmarksFeature),
         VARIATION_ENTRY(kIPHTabGroupsQuicklyComparePagesFeature),
         VARIATION_ENTRY(kIPHTabGroupsTapToSeeAnotherTabFeature),
         VARIATION_ENTRY(kIPHTabGroupsYourTabsAreTogetherFeature),
         VARIATION_ENTRY(kIPHTabGroupsDragAndDropFeature),
+        VARIATION_ENTRY(kIPHTabSwitcherButtonFeature),
         VARIATION_ENTRY(kIPHTranslateMenuButtonFeature),
-        VARIATION_ENTRY(kIPHVideoTutorialDownloadFeature),
-        VARIATION_ENTRY(kIPHVideoTutorialSearchFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialNTPChromeIntroFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialNTPDownloadFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialNTPSearchFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialNTPVoiceSearchFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialNTPSummaryFeature),
         VARIATION_ENTRY(kIPHExploreSitesTileFeature),
         VARIATION_ENTRY(kIPHFeedHeaderMenuFeature),
 #elif defined(OS_IOS)
@@ -205,6 +231,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHPasswordsAccountStorageFeature),
         VARIATION_ENTRY(kIPHReopenTabFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
+        VARIATION_ENTRY(kIPHDesktopPwaInstallFeature),
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 };

@@ -11,13 +11,17 @@
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/hash/hash.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "media/fuchsia/cdm/service/provisioning_fetcher_impl.h"
 #include "url/origin.h"
 
@@ -25,9 +29,110 @@ namespace media {
 
 namespace {
 
+struct CdmDirectoryInfo {
+  base::FilePath path;
+  base::Time last_used;
+  uint64_t size_bytes;
+};
+
+// Enumerates all the files in the directory to determine its size and
+// the most recent "last used" time.
+// The implementation is based on base::ComputeDirectorySize(), with the
+// addition of most-recently-modified calculation, and inclusion of directory
+// node sizes toward the total.
+CdmDirectoryInfo GetCdmDirectoryInfo(const base::FilePath& path) {
+  int64_t directory_size = 0;
+  base::Time last_used;
+  base::FileEnumerator enumerator(
+      path, true /* recursive */,
+      base::FileEnumerator::DIRECTORIES | base::FileEnumerator::FILES);
+  while (!enumerator.Next().empty()) {
+    const base::FileEnumerator::FileInfo info = enumerator.GetInfo();
+    if (info.GetSize() > 0)
+      directory_size += info.GetSize();
+    last_used = std::max(last_used, info.GetLastModifiedTime());
+  }
+  return {
+      .path = path,
+      .last_used = last_used,
+      .size_bytes = directory_size,
+  };
+}
+
+void ApplyCdmStorageQuota(base::FilePath cdm_data_path,
+                          uint64_t cdm_data_quota_bytes) {
+  // TODO(crbug.com/1148334): Migrate to using a platform-provided quota
+  // mechanism to manage CDM storage.
+  VLOG(2) << "Enumerating CDM data directories.";
+
+  uint64_t directories_size_bytes = 0;
+  std::vector<CdmDirectoryInfo> directories_info;
+
+  // CDM storage consistes of per-origin directories, each containing one or
+  // more per-key-system sub-directories. Each per-origin-per-key-system
+  // directory is assumed to be independent of other CDM data.
+  base::FileEnumerator by_origin(cdm_data_path, false /* recursive */,
+                                 base::FileEnumerator::DIRECTORIES);
+  for (;;) {
+    const base::FilePath origin_directory = by_origin.Next();
+    if (origin_directory.empty())
+      break;
+    base::FileEnumerator by_key_system(origin_directory, false /* recursive */,
+                                       base::FileEnumerator::DIRECTORIES);
+    for (;;) {
+      const base::FilePath key_system_directory = by_key_system.Next();
+      if (key_system_directory.empty())
+        break;
+      directories_info.push_back(GetCdmDirectoryInfo(key_system_directory));
+      directories_size_bytes += directories_info.back().size_bytes;
+    }
+  }
+
+  if (directories_size_bytes <= cdm_data_quota_bytes)
+    return;
+
+  VLOG(1) << "Removing least recently accessed CDM data.";
+
+  // Enumerate directories starting with the least most recently "used",
+  // deleting them until the the total amount of CDM data is within quota.
+  std::sort(directories_info.begin(), directories_info.end(),
+            [](const CdmDirectoryInfo& lhs, const CdmDirectoryInfo& rhs) {
+              return lhs.last_used < rhs.last_used;
+            });
+  base::flat_set<base::FilePath> affected_origin_directories;
+  for (const auto& directory_info : directories_info) {
+    if (directories_size_bytes <= cdm_data_quota_bytes)
+      break;
+
+    VLOG(1) << "Removing " << directory_info.path;
+    base::DeletePathRecursively(directory_info.path);
+    affected_origin_directories.insert(directory_info.path.DirName());
+
+    DCHECK_GE(directories_size_bytes, directory_info.size_bytes);
+    directories_size_bytes -= directory_info.size_bytes;
+  }
+
+  // Enumerate all the origin directories that had sub-directories deleted,
+  // and delete any that are now empty.
+  for (const auto& origin_directory : affected_origin_directories) {
+    if (base::IsDirectoryEmpty(origin_directory))
+      base::DeleteFile(origin_directory);
+  }
+}
+
 std::string HexEncodeHash(const std::string& name) {
   uint32_t hash = base::PersistentHash(name);
   return base::HexEncode(&hash, sizeof(uint32_t));
+}
+
+// Returns a nullopt if storage was created successfully.
+base::Optional<base::File::Error> CreateStorageDirectory(base::FilePath path) {
+  base::File::Error error;
+  bool success = base::CreateDirectoryAndGetError(path, &error);
+  if (!success) {
+    return error;
+  }
+  return {};
 }
 
 }  // namespace
@@ -93,7 +198,7 @@ class FuchsiaCdmManager::KeySystemClient {
     }
 
     fidl::InterfaceHandle<fuchsia::io::Directory> data_directory =
-        base::fuchsia::OpenDirectory(storage_path);
+        base::OpenDirectoryHandle(storage_path);
     if (!data_directory.is_valid()) {
       DLOG(ERROR) << "Unable to OpenDirectory " << storage_path;
       return base::nullopt;
@@ -159,10 +264,21 @@ class FuchsiaCdmManager::KeySystemClient {
 
 FuchsiaCdmManager::FuchsiaCdmManager(
     CreateKeySystemCallbackMap create_key_system_callbacks_by_name,
-    base::FilePath cdm_data_path)
+    base::FilePath cdm_data_path,
+    base::Optional<uint64_t> cdm_data_quota_bytes)
     : create_key_system_callbacks_by_name_(
           std::move(create_key_system_callbacks_by_name)),
-      cdm_data_path_(std::move(cdm_data_path)) {}
+      cdm_data_path_(std::move(cdm_data_path)),
+      cdm_data_quota_bytes_(std::move(cdm_data_quota_bytes)),
+      storage_task_runner_(
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})) {
+  // To avoid potential for the CDM directory "cleanup" task removing
+  // CDM data directories that are in active use, the |storage_task_runner_| is
+  // sequenced, thereby ensuring cleanup completes before any CDM activities
+  // start.
+  if (cdm_data_quota_bytes)
+    ApplyCdmStorageQuota(cdm_data_path_, *cdm_data_quota_bytes);
+}
 
 FuchsiaCdmManager::~FuchsiaCdmManager() = default;
 
@@ -174,24 +290,13 @@ void FuchsiaCdmManager::CreateAndProvision(
         request) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  KeySystemClient* key_system_client = GetOrCreateKeySystemClient(key_system);
-  if (!key_system_client) {
-    // GetOrCreateKeySystemClient will log the reason for failure.
-    return;
-  }
-
   base::FilePath storage_path = GetStoragePath(key_system, origin);
-  base::File::Error error;
-  bool success = base::CreateDirectoryAndGetError(storage_path, &error);
-  if (!success) {
-    DLOG(ERROR) << "Failed to create directory: " << storage_path
-                << ", error: " << error;
-    return;
-  }
 
-  key_system_client->CreateCdm(std::move(storage_path),
-                               std::move(create_fetcher_cb),
-                               std::move(request));
+  storage_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&CreateStorageDirectory, storage_path),
+      base::BindOnce(&FuchsiaCdmManager::CreateCdm, weak_factory_.GetWeakPtr(),
+                     key_system, std::move(create_fetcher_cb),
+                     std::move(request), storage_path));
 }
 
 void FuchsiaCdmManager::set_on_key_system_disconnect_for_test_callback(
@@ -239,6 +344,35 @@ base::FilePath FuchsiaCdmManager::GetStoragePath(const std::string& key_system,
                                                  const url::Origin& origin) {
   return cdm_data_path_.Append(HexEncodeHash(origin.Serialize()))
       .Append(HexEncodeHash(key_system));
+}
+
+void FuchsiaCdmManager::CreateCdm(
+    const std::string& key_system_name,
+    CreateFetcherCB create_fetcher_cb,
+    fidl::InterfaceRequest<fuchsia::media::drm::ContentDecryptionModule>
+        request,
+    base::FilePath storage_path,
+    base::Optional<base::File::Error> storage_creation_error) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (storage_creation_error) {
+    DLOG(ERROR) << "Failed to create directory: " << storage_path
+                << ", error: " << *storage_creation_error;
+    request.Close(ZX_ERR_NO_RESOURCES);
+    return;
+  }
+
+  KeySystemClient* key_system_client =
+      GetOrCreateKeySystemClient(key_system_name);
+  if (!key_system_client) {
+    // GetOrCreateKeySystemClient will log the reason for failure.
+    request.Close(ZX_ERR_NOT_FOUND);
+    return;
+  }
+
+  key_system_client->CreateCdm(std::move(storage_path),
+                               std::move(create_fetcher_cb),
+                               std::move(request));
 }
 
 void FuchsiaCdmManager::OnKeySystemClientError(

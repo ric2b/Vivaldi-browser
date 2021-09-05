@@ -3,6 +3,7 @@
 <translationbundle lang="eu">
 <translation id="1276998909102132017">Galeriako irudiak</translation>
 <translation id="1430915738399379752">Inprimatu</translation>
+<translation id="1473110567575736769">Hiru segundoko tenporizadorea</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Ez da grabatu ezer</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Kameraren bereizmena</translation>
 <translation id="3517926952904427380">Ezin da atera erretratu-argazkia</translation>
 <translation id="3569311554794739032">Ziur zaude <ph name="FILE" /> kendu nahi duzula?</translation>
+<translation id="3750315947605636967">Beste aplikazio bat kamera erabiltzen ari da</translation>
 <translation id="3810838688059735925">Bideoa</translation>
+<translation id="4000398125663085899">Orain, Fitxategiak aplikazioko karpeta honetan gordeko dira argazki eta bideo berriak: Nire fitxategiak &gt; Kamera</translation>
 <translation id="4118525110028899586">Pausatu grabaketa</translation>
 <translation id="4279490309300973883">Islatzen</translation>
 <translation id="4329152592498422850">Aldatu argazki karratuak ateratzeko modura</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Kamera ez dago erabilgarri une honetan.
         Egiaztatu kamera ongi konektatuta dagoela.</translation>
 <translation id="5152121255775685072">Joan galeriara</translation>
+<translation id="5422455049771430511">Etxe berria dute zure argazki eta bideoek</translation>
 <translation id="5671277269877808209">Karratua</translation>
 <translation id="5775960006311140197">Adituen modua</translation>
 <translation id="5869546221129391014">Sareta</translation>
+<translation id="6040143037577758943">Itxi</translation>
 <translation id="6073451960410192870">Utzi grabatzeari</translation>
 <translation id="6197807149213783179">Gorde metadatuak</translation>
 <translation id="6233780560267770709">3 x 3</translation>
@@ -60,6 +65,7 @@ Irudi edo bideoaren kalitateari buruzko iritzia eman nahi baduzu, erantsi argazk
 <translation id="6965382102122355670">Ados</translation>
 <translation id="698156982839284926">3 segundo</translation>
 <translation id="712848772518857951">Ziur <ph name="COUNT" /> elementu kendu nahi dituzula?</translation>
+<translation id="7134221860976209830">Hamar segundoko tenporizadorea</translation>
 <translation id="7243947652761655814">Bideoaren bereizmena</translation>
 <translation id="7337660886763914220">Errore batzuk gertatu dira fitxategi-sisteman.</translation>
 <translation id="7557677699350329807">Aldatu hurrengo kamerara</translation>
@@ -67,7 +73,6 @@ Irudi edo bideoaren kalitateari buruzko iritzia eman nahi baduzu, erantsi argazk
 <translation id="7649070708921625228">Laguntza</translation>
 <translation id="7658239707568436148">Utzi</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">Tenporizadorea</translation>
 <translation id="8067883171444229417">Erreproduzitu bideoa</translation>
 <translation id="8131740175452115882">Berretsi</translation>
 <translation id="8145038249676204903">Aldatu argazkiak ateratzeko modura</translation>

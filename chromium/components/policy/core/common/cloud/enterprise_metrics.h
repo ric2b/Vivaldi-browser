@@ -140,8 +140,10 @@ enum MetricEnrollment {
   kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted = 61,
   // Too many requests are uploadede within a short time.
   kMetricEnrollmentTooManyRequests = 62,
+  // Enrollment failed: illegal account for packaged EDU license.
+  kMetricEnrollmentIllegalAccountForPackagedEDULicense = 63,
   // Max value for use with enumeration histogram UMA functions.
-  kMaxValue = kMetricEnrollmentTooManyRequests
+  kMaxValue = kMetricEnrollmentIllegalAccountForPackagedEDULicense
 };
 
 // Events related to policy refresh.
@@ -280,6 +282,25 @@ POLICY_EXPORT extern const char kMetricCBCMUnsignedRemoteCommandReceived[];
 POLICY_EXPORT extern const char kMetricCBCMRemoteCommandExecutedTemplate[];
 POLICY_EXPORT extern const char
     kMetricCBCMUnsignedRemoteCommandExecutedTemplate[];
+
+// Private set membership UMA histogram names.
+POLICY_EXPORT extern const char kUMAPrivateSetMembershipHashDanceComparison[];
+POLICY_EXPORT extern const char kUMAPrivateSetMembershipSuccessTime[];
+POLICY_EXPORT extern const char kUMAPrivateSetMembershipRequestStatus[];
+
+// DeviceAutoEnrollmentRequest i.e. hash dance request UMA histogram names.
+POLICY_EXPORT extern const char kUMAHashDanceSuccessTime[];
+// The following histogram names where added before private set membership
+// existed. They are only recorded for hash dance.
+POLICY_EXPORT extern const char kUMAHashDanceProtocolTime[];
+POLICY_EXPORT extern const char kUMAHashDanceBucketDownloadTime[];
+POLICY_EXPORT extern const char kUMAHashDanceExtraTime[];
+POLICY_EXPORT extern const char kUMAHashDanceRequestStatus[];
+POLICY_EXPORT extern const char kUMAHashDanceNetworkErrorCode[];
+// Suffix for initial enrollment.
+POLICY_EXPORT extern const char kUMAHashDanceSuffixInitialEnrollment[];
+// Suffix for Forced Re-Enrollment.
+POLICY_EXPORT extern const char kUMAHashDanceSuffixFRE[];
 
 }  // namespace policy
 

@@ -152,6 +152,7 @@ enum class AppListSearchResultType {
   kOsSettings,             // OS settings results.
   kInternalPrivacyInfo,    // Result used internally by privacy notices.
   kAssistantText,          // Assistant text results.
+  kHelpApp,                // Help App (aka Explore) results.
   // Add new values here.
 };
 
@@ -160,10 +161,10 @@ enum class AppListSearchResultType {
 enum SearchResultDisplayType {
   kNone = 0,
   kList = 1,  // Displays in search list
-  kTile = 2,  // Displays in search tiles and suggestion chips
+  kTile = 2,  // Displays in search tiles
   // kRecommendation = 3  // No longer used, split between kTile and kChip
   kCard = 4,  // Displays in answer cards
-  kChip = 5,  // Displays in suggestion chips only
+  kChip = 5,  // Displays in suggestion chips
   // Add new values here
   kLast,  // Don't use over IPC
 };

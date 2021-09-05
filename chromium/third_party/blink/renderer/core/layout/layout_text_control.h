@@ -49,7 +49,18 @@ class CORE_EXPORT LayoutTextControl : public LayoutBlockFlow {
     return true;
   }
 
+  static void StyleDidChange(HTMLElement* inner_editor,
+                             const ComputedStyle* old_style,
+                             const ComputedStyle& new_style);
+  static int ScrollbarThickness(const LayoutBox& box);
   static float GetAvgCharWidth(const ComputedStyle& style);
+  static bool HasValidAvgCharWidth(const Font& font);
+
+  static void HitInnerEditorElement(const LayoutBox& box,
+                                    HTMLElement& inner_editor,
+                                    HitTestResult&,
+                                    const HitTestLocation&,
+                                    const PhysicalOffset& accumulated_offset);
 
  protected:
   LayoutTextControl(TextControlElement*);
@@ -58,24 +69,8 @@ class CORE_EXPORT LayoutTextControl : public LayoutBlockFlow {
   // innerEditorElement may outlive the layout tree.
   TextControlInnerEditorElement* InnerEditorElement() const;
 
-  int ScrollbarThickness() const;
-
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
-  void HitInnerEditorElement(HitTestResult&,
-                             const HitTestLocation&,
-                             const PhysicalOffset& accumulated_offset);
-
-  static bool HasValidAvgCharWidth(const SimpleFontData*,
-                                   const AtomicString& family);
-  virtual LayoutUnit PreferredContentLogicalWidth(float char_width) const = 0;
-  virtual LayoutUnit ComputeControlLogicalHeight(
-      LayoutUnit line_height,
-      LayoutUnit non_content_height) const = 0;
-
-  void ComputeLogicalHeight(LayoutUnit logical_height,
-                            LayoutUnit logical_top,
-                            LogicalExtentComputedValues&) const override;
   LayoutObject* LayoutSpecialExcludedChild(bool relayout_children,
                                            SubtreeLayoutScope&) override;
 
@@ -87,7 +82,6 @@ class CORE_EXPORT LayoutTextControl : public LayoutBlockFlow {
   }
 
  private:
-  MinMaxSizes ComputeIntrinsicLogicalWidths() const final;
   void RemoveLeftoverAnonymousBlock(LayoutBlock*) final { NOT_DESTROYED(); }
 
   void AddOutlineRects(Vector<PhysicalRect>&,

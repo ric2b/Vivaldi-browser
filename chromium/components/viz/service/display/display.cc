@@ -52,7 +52,7 @@
 #include "ui/gfx/swap_result.h"
 
 #if defined(OS_ANDROID)
-#include "ui/gl/android/android_surface_control_compat.h"
+#include "ui/gfx/android/android_surface_control_compat.h"
 #endif
 namespace viz {
 
@@ -245,7 +245,7 @@ bool ReduceComplexity(const cc::Region& region,
 bool SupportsSetFrameRate(const OutputSurface* output_surface) {
 #if defined(OS_ANDROID)
   return output_surface->capabilities().supports_surfaceless &&
-         gl::SurfaceControl::SupportsSetFrameRate();
+         gfx::SurfaceControl::SupportsSetFrameRate();
 #elif defined(OS_WIN)
   return output_surface->capabilities().supports_dc_layers &&
          features::ShouldUseSetPresentDuration();
@@ -292,6 +292,7 @@ Display::Display(
     const RendererSettings& settings,
     const DebugRendererSettings* debug_settings,
     const FrameSinkId& frame_sink_id,
+    std::unique_ptr<DisplayCompositorMemoryAndTaskController> gpu_dependency,
     std::unique_ptr<OutputSurface> output_surface,
     std::unique_ptr<OverlayProcessorInterface> overlay_processor,
     std::unique_ptr<DisplaySchedulerBase> scheduler,
@@ -300,6 +301,7 @@ Display::Display(
       settings_(settings),
       debug_settings_(debug_settings),
       frame_sink_id_(frame_sink_id),
+      gpu_dependency_(std::move(gpu_dependency)),
       output_surface_(std::move(output_surface)),
       skia_output_surface_(output_surface_->AsSkiaOutputSurface()),
       scheduler_(std::move(scheduler)),
@@ -512,13 +514,16 @@ void Display::SetOutputIsSecure(bool secure) {
 }
 
 void Display::InitializeRenderer(bool enable_shared_images) {
-  auto mode = output_surface_->context_provider() || skia_output_surface_
-                  ? DisplayResourceProvider::kGpu
-                  : DisplayResourceProvider::kSoftware;
+  bool uses_gpu_resources = output_surface_->context_provider() ||
+                            skia_output_surface_ ||
+                            output_surface_->capabilities().skips_draw;
+
   resource_provider_ = std::make_unique<DisplayResourceProvider>(
-      mode, output_surface_->context_provider(), bitmap_manager_,
+      uses_gpu_resources ? DisplayResourceProvider::kGpu
+                         : DisplayResourceProvider::kSoftware,
+      output_surface_->context_provider(), bitmap_manager_,
       enable_shared_images);
-  if (settings_.use_skia_renderer && mode == DisplayResourceProvider::kGpu) {
+  if (skia_output_surface_) {
     renderer_ = std::make_unique<SkiaRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
         resource_provider_.get(), overlay_processor_.get(),
@@ -552,7 +557,7 @@ void Display::InitializeRenderer(bool enable_shared_images) {
 
   aggregator_ = std::make_unique<SurfaceAggregator>(
       surface_manager_, resource_provider_.get(), output_partial_list,
-      overlay_processor_->NeedsSurfaceOccludingDamageRect());
+      overlay_processor_->NeedsSurfaceDamageRectList());
 
   aggregator_->set_output_is_secure(output_is_secure_);
   aggregator_->SetDisplayColorSpaces(display_color_spaces_);
@@ -598,11 +603,6 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
     return false;
   }
 
-  if (output_surface_->capabilities().skips_draw) {
-    TRACE_EVENT_INSTANT0("viz", "Skip draw", TRACE_EVENT_SCOPE_THREAD);
-    return true;
-  }
-
   gfx::OverlayTransform current_display_transform = gfx::OVERLAY_TRANSFORM_NONE;
   Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
   if (surface->HasActiveFrame()) {
@@ -640,6 +640,11 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
     if (output_surface_->capabilities().supports_target_damage)
       target_damage_bounding_rect = renderer_->GetTargetDamageBoundingRect();
 
+    // Ensure that the surfaces that were damaged by any delegated ink trail are
+    // aggregated again so that the trail exists for a single frame.
+    target_damage_bounding_rect.Union(
+        renderer_->GetDelegatedInkTrailDamageRect());
+
     frame = aggregator_->Aggregate(
         current_surface_id_, expected_display_time, current_display_transform,
         target_damage_bounding_rect, ++swapped_trace_id_);
@@ -660,6 +665,9 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
         frame.delegated_ink_metadata->ToString());
     renderer_->SetDelegatedInkMetadata(std::move(frame.delegated_ink_metadata));
   }
+
+  UMA_HISTOGRAM_ENUMERATION("Compositing.ColorGamut",
+                            frame.content_color_usage);
 
 #if defined(OS_ANDROID)
   bool wide_color_enabled =
@@ -685,6 +693,14 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
 
   // Run callbacks early to allow pipelining and collect presented callbacks.
   damage_tracker_->RunDrawCallbacks();
+
+  if (output_surface_->capabilities().skips_draw) {
+    TRACE_EVENT_INSTANT0("viz", "Skip draw", TRACE_EVENT_SCOPE_THREAD);
+    // Aggregation needs to happen before generating hit test for the unified
+    // desktop display. After this point skip drawing anything for real.
+    client_->DisplayWillDrawAndSwap(false, &frame.render_pass_list);
+    return true;
+  }
 
   frame.latency_info.insert(frame.latency_info.end(),
                             stored_latency_info_.begin(),
@@ -713,6 +729,7 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
     // skip the draw and so that the GL swap won't stretch the output.
     last_render_pass.output_rect.set_size(current_surface_size);
     last_render_pass.damage_rect = last_render_pass.output_rect;
+    frame.surface_damage_rect_list_.push_back(last_render_pass.damage_rect);
   }
   surface_size = last_render_pass.output_rect.size();
   have_damage = !last_render_pass.damage_rect.size().IsEmpty();
@@ -754,7 +771,8 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
     draw_timer.emplace();
     renderer_->DecideRenderPassAllocationsForFrame(frame.render_pass_list);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
-                         current_surface_size, display_color_spaces_);
+                         current_surface_size, display_color_spaces_,
+                         &frame.surface_damage_rect_list_);
     switch (output_surface_->type()) {
       case OutputSurface::Type::kSoftware:
         UMA_HISTOGRAM_COUNTS_1M(
@@ -985,10 +1003,10 @@ void Display::DidFinishFrame(const BeginFrameAck& ack) {
   for (auto& observer : observers_)
     observer.OnDisplayDidFinishFrame(ack);
 
-  // Only used with experimental de-jelly effect. Forces us to produce a new
-  // un-skewed frame if the last one had a de-jelly skew applied. This prevents
-  // de-jelly skew from staying on screen for more than one frame.
-  if (aggregator_->last_frame_had_jelly()) {
+  // Prevent de-jelly skew or a delegated ink trail from staying on the screen
+  // for more than one frame by forcing a new frame to be produced.
+  if (aggregator_->last_frame_had_jelly() ||
+      !renderer_->GetDelegatedInkTrailDamageRect().IsEmpty()) {
     scheduler_->SetNeedsOneBeginFrame(true);
   }
 }
@@ -1099,9 +1117,10 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
           // If a rounded corner is being applied then the visible rect for the
           // sqs is actually even smaller. Reduce the rect size to get a
           // rounded corner adjusted occluding region.
-          if (!last_sqs->rounded_corner_bounds.IsEmpty()) {
-            sqs_rect_in_target.Intersect(gfx::ToEnclosedRect(
-                GetOccludingRectForRRectF(last_sqs->rounded_corner_bounds)));
+          if (last_sqs->mask_filter_info.HasRoundedCorners()) {
+            sqs_rect_in_target.Intersect(
+                gfx::ToEnclosedRect(GetOccludingRectForRRectF(
+                    last_sqs->mask_filter_info.rounded_corner_bounds())));
           }
 
           if (last_sqs->is_clipped)

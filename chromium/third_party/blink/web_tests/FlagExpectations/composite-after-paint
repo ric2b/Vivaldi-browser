@@ -19,7 +19,6 @@ virtual/gpu-rasterization/images/* [ Skip ]
 virtual/threaded/printing/* [ Skip ]
 virtual/threaded/http/tests/devtools/tracing/* [ Skip ]
 virtual/controls-refresh-hc/* [ Skip ]
-virtual/web-components-v0-disabled/* [ Skip ]
 
 # They test Layer::ScrollsWithRespectTo() which is for pre-CompositeAfterPaint only.
 compositing/overflow/scrolls-with-respect-to-nested.html [ Skip ]
@@ -39,9 +38,7 @@ crbug.com/802915 css3/blending/isolation-should-include-non-local-background.htm
 crbug.com/918155 virtual/prefer_compositing_to_lcd_text/scrollbars/overlay-scrollbar-over-child-layer-nested-2.html [ Pass ]
 crbug.com/918155 virtual/prefer_compositing_to_lcd_text/scrollbars/overlay-scrollbar-over-child-layer-nested.html [ Pass ]
 paint/invalidation/compositing/subpixel-offset-scaled-transform-composited.html [ Pass ]
-
-# M87 failure
-fast/sub-pixel/transformed-iframe-copy-on-scroll.html [ Failure ]
+crbug.com/1135676 external/wpt/css/css-ui/resize-child-will-change-transform.html [ Pass ]
 
 # Raster invalidation doesn't work for huge layers.
 paint/invalidation/raster-under-invalidation-checking.html [ Failure ]
@@ -56,10 +53,6 @@ crbug.com/1047358 paint/pagination/composited-paginated-outlined-box.html [ Fail
 
 compositing/gestures/gesture-tapHighlight-composited-img.html [ Pass Failure ]
 
-# CompositeAfterPaint positions and scales root scrollbars incorrectly when
-# a page scale factor is applied.
-crbug.com/1106550 virtual/threaded-prefer-compositing/fast/scrolling/scrollbars/mouse-scrolling-on-div-scrollbar-thumb-scaled.html [ Failure ]
-
 # Need to force the video to be composited in this case, or change pre-CAP
 # to match CAP behavior.
 crbug.com/1108972 fullscreen/compositor-touch-hit-rects-fullscreen-video-controls.html [ Failure ]
@@ -69,3 +62,6 @@ crbug.com/1123189 virtual/threaded-composited-iframes/external/wpt/is-input-pend
 crbug.com/1123189 virtual/threaded-composited-iframes/external/wpt/is-input-pending/security/cross-origin-subframe-complex-clip.sub.html [ Failure ]
 
 crbug.com/1124979 compositing/video/video-controls-layer-creation.html [ Pass Failure ]
+
+crbug.com/1157199 external/wpt/css/css-paint-api/column-count-crash.https.html [ Crash ]
+crbug.com/1157199 virtual/off-main-thread-css-paint/external/wpt/css/css-paint-api/column-count-crash.https.html [ Crash ]

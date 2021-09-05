@@ -21,6 +21,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
+#include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/wm/wm_drop_handler.h"
 
@@ -131,6 +132,11 @@ void WaylandToplevelWindow::Show(bool inactive) {
   }
 
   UpdateBufferScale(false);
+
+  if (auto* drag_controller = connection()->window_drag_controller())
+    drag_controller->OnToplevelWindowCreated(this);
+
+  WaylandWindow::Show(inactive);
 }
 
 void WaylandToplevelWindow::Hide() {
@@ -198,6 +204,17 @@ void WaylandToplevelWindow::Minimize() {
 
 void WaylandToplevelWindow::Restore() {
   DCHECK(shell_surface_);
+
+  // Differently from other platforms, under Wayland, unmaximizing the dragged
+  // window before starting the drag loop is not needed as it is assumed to be
+  // handled at compositor side, just like in xdg_toplevel_surface::move. So
+  // skip it if there's a window drag session running.
+  auto* drag_controller = connection()->window_drag_controller();
+  if (drag_controller &&
+      drag_controller->state() != WaylandWindowDragController::State::kIdle) {
+    return;
+  }
+
   SetWindowState(PlatformWindowState::kNormal);
 }
 
@@ -431,10 +448,10 @@ void WaylandToplevelWindow::SetOrResetRestoredBounds() {
 }
 
 void WaylandToplevelWindow::InitializeAuraShell() {
-  if (connection()->aura_shell()) {
+  if (connection()->zaura_shell()) {
     DCHECK(!aura_surface_);
     aura_surface_.reset(zaura_shell_get_aura_surface(
-        connection()->aura_shell(), root_surface()->surface()));
+        connection()->zaura_shell()->wl_object(), root_surface()->surface()));
     zaura_surface_set_fullscreen_mode(aura_surface_.get(),
                                       ZAURA_SURFACE_FULLSCREEN_MODE_IMMERSIVE);
   }

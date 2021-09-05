@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/net/nss_context.h"
@@ -132,6 +133,13 @@ class ArcCertStoreBridgeTest : public MixinBasedInProcessBrowserTest {
         chromeos::switches::kWaitForInitialPolicyFetchForTest, "true");
   }
 
+  void SetUp() override {
+    chromeos::platform_keys::PlatformKeysServiceFactory::GetInstance()
+        ->SetTestingMode(true);
+
+    MixinBasedInProcessBrowserTest::SetUp();
+  }
+
   void SetUpOnMainThread() override {
     MixinBasedInProcessBrowserTest::SetUpOnMainThread();
 
@@ -168,6 +176,13 @@ class ArcCertStoreBridgeTest : public MixinBasedInProcessBrowserTest {
     ArcServiceLauncher::Get()->Shutdown();
     chromeos::ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(false);
     MixinBasedInProcessBrowserTest::TearDownOnMainThread();
+  }
+
+  void TearDown() override {
+    MixinBasedInProcessBrowserTest::TearDown();
+
+    chromeos::platform_keys::PlatformKeysServiceFactory::GetInstance()
+        ->SetTestingMode(false);
   }
 
   ArcBridgeService* arc_bridge() {
@@ -247,8 +262,8 @@ class ArcCertStoreBridgeTest : public MixinBasedInProcessBrowserTest {
     base::RunLoop loop;
     GetNSSCertDatabaseForProfile(
         browser()->profile(),
-        base::Bind(&ArcCertStoreBridgeTest::SetUpTestClientCerts,
-                   base::Unretained(this), loop.QuitClosure()));
+        base::BindOnce(&ArcCertStoreBridgeTest::SetUpTestClientCerts,
+                       base::Unretained(this), loop.QuitClosure()));
     loop.Run();
     // Certificates must be imported.
     ASSERT_NE(nullptr, client_cert1_);

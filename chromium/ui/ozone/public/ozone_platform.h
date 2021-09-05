@@ -12,6 +12,7 @@
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/native_widget_types.h"
@@ -24,14 +25,16 @@ class NativeDisplayDelegate;
 
 namespace ui {
 class CursorFactory;
-class InputController;
 class GpuPlatformSupportHost;
+class InputController;
 class OverlayManagerOzone;
-class PlatformScreen;
-class SurfaceFactoryOzone;
-class SystemInputInjector;
 class PlatformClipboard;
 class PlatformGLEGLUtility;
+class PlatformMenuUtils;
+class PlatformScreen;
+class PlatformUserInputMonitor;
+class SurfaceFactoryOzone;
+class SystemInputInjector;
 
 namespace internal {
 class InputMethodDelegate;
@@ -103,6 +106,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Wayland only: determines if the client must ignore the screen bounds when
     // calculating bounds of menu windows.
     bool ignore_screen_bounds_for_menus = false;
+
+    // Wayland only: determines whether BufferQueue needs a background image to
+    // be stacked below an AcceleratedWidget to make a widget opaque.
+    bool needs_background_image = false;
 
     // If true, the platform shows and updates the drag image.
     bool platform_shows_drag_image = true;
@@ -188,10 +195,7 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
       internal::InputMethodDelegate* delegate,
       gfx::AcceleratedWidget widget) = 0;
   virtual PlatformGLEGLUtility* GetPlatformGLEGLUtility();
-
-  // Returns a bitmask of EventFlags showing the state of Alt, Shift and Ctrl
-  // keys that came with the most recent UI event.
-  virtual int GetKeyModifiers() const;
+  virtual PlatformMenuUtils* GetPlatformMenuUtils();
 
   // Returns true if the specified buffer format is supported.
   virtual bool IsNativePixmapConfigSupported(gfx::BufferFormat format,
@@ -229,6 +233,13 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   // implementations to ignore sandboxing and any associated launch ordering
   // issues.
   virtual void AfterSandboxEntry();
+
+  // Creates a user input monitor.
+  // The user input comes from I/O devices and must be handled on the IO thread.
+  // |io_task_runner| must be bound to the IO thread so the implementation could
+  // ensure that calls happen on the right thread.
+  virtual std::unique_ptr<PlatformUserInputMonitor> GetPlatformUserInputMonitor(
+      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
 
  protected:
   bool has_initialized_ui() const { return initialized_ui_; }

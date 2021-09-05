@@ -72,6 +72,9 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnCrashCollectorInstanceReady(
       mojo::PendingRemote<mojom::CrashCollectorInstance> crash_collector_remote)
       override;
+  void OnDigitalGoodsInstanceReady(
+      mojo::PendingRemote<mojom::DigitalGoodsInstance> digital_goods_remote)
+      override;
   void OnDiskQuotaInstanceReady(
       mojo::PendingRemote<mojom::DiskQuotaInstance> disk_quota_remote) override;
   void OnEnterpriseReportingInstanceReady(
@@ -132,6 +135,8 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
       override;
   void OnSensorInstanceReady(
       mojo::PendingRemote<mojom::SensorInstance> sensor_ptr) override;
+  void OnSharesheetInstanceReady(mojo::PendingRemote<mojom::SharesheetInstance>
+                                     sharesheet_remote) override;
   void OnSmartCardManagerInstanceReady(
       mojo::PendingRemote<mojom::SmartCardManagerInstance>
           smart_card_manager_remote) override;

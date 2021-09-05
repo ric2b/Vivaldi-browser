@@ -17,13 +17,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 group("blink") {
   public_deps = [ ":blink_headers" ]
   deps = [
@@ -120,19 +113,15 @@ source_set("blink_headers") {
   sources = [
     "platform/audio/web_audio_device_source_type.h",
     "platform/blame_context.h",
+    "platform/child_url_loader_factory_bundle.h",
     "platform/cross_variant_mojo_util.h",
     "platform/file_path_conversion.h",
     "platform/input/input_handler_proxy.h",
     "platform/input/input_handler_proxy_client.h",
     "platform/input/predictor_factory.h",
-    "platform/input/synchronous_compositor_registry.h",
     "platform/input/synchronous_input_handler_proxy.h",
-    "platform/input/synchronous_layer_tree_frame_sink.h",
     "platform/interface_registry.h",
     "platform/internet_disconnected_web_url_loader.h",
-    "platform/linux/web_sandbox_support.h",
-    "platform/mac/web_sandbox_support.h",
-    "platform/mac/web_scrollbar_theme.h",
     "platform/media/webmediaplayer_delegate.h",
     "platform/modules/mediastream/media_stream_types.h",
     "platform/modules/mediastream/secure_display_link_tracker.h",
@@ -155,6 +144,8 @@ source_set("blink_headers") {
     "platform/modules/video_capture/web_video_capture_impl_manager.h",
     "platform/modules/webrtc/webrtc_logging.h",
     "platform/platform.h",
+    "platform/resource_load_info_notifier_wrapper.h",
+    "platform/scheduler/web_agent_group_scheduler.h",
     "platform/scheduler/web_rail_mode_observer.h",
     "platform/scheduler/web_render_widget_scheduling_state.h",
     "platform/scheduler/web_renderer_process_type.h",
@@ -162,10 +153,12 @@ source_set("blink_headers") {
     "platform/scheduler/web_scoped_virtual_time_pauser.h",
     "platform/scheduler/web_thread_scheduler.h",
     "platform/scheduler/web_widget_scheduler.h",
+    "platform/sync_load_response.h",
     "platform/task_type.h",
+    "platform/tracked_child_url_loader_factory_bundle.h",
     "platform/url_conversion.h",
     "platform/user_metrics_action.h",
-    "platform/viewport_intersection_state.h",
+    "platform/weak_wrapper_resource_load_info_notifier.h",
     "platform/web_audio_bus.h",
     "platform/web_audio_device.h",
     "platform/web_audio_latency_hint.h",
@@ -206,7 +199,6 @@ source_set("blink_headers") {
     "platform/web_encrypted_media_types.h",
     "platform/web_fetch_client_settings_object.h",
     "platform/web_file_system_type.h",
-    "platform/web_float_rect.h",
     "platform/web_font.h",
     "platform/web_font_description.h",
     "platform/web_font_render_style.h",
@@ -238,6 +230,8 @@ source_set("blink_headers") {
     "platform/web_mixed_content_context_type.h",
     "platform/web_navigation_body_loader.h",
     "platform/web_network_state_notifier.h",
+    "platform/web_policy_container.cc",
+    "platform/web_policy_container.h",
     "platform/web_prescient_networking.h",
     "platform/web_private_ptr.h",
     "platform/web_rect.h",
@@ -270,6 +264,8 @@ source_set("blink_headers") {
     "platform/web_url_loader_mock_factory.h",
     "platform/web_url_loader_test_delegate.h",
     "platform/web_url_request.h",
+    "platform/web_url_request_extra_data.h",
+    "platform/web_url_request_util.h",
     "platform/web_url_response.h",
     "platform/web_vector.h",
     "platform/web_video_frame_submitter.h",
@@ -322,8 +318,6 @@ source_set("blink_headers") {
     "web/web_element_collection.h",
     "web/web_embedded_worker.h",
     "web/web_embedded_worker_start_data.h",
-    "web/web_external_widget.h",
-    "web/web_external_widget_client.h",
     "web/web_form_control_element.h",
     "web/web_form_element.h",
     "web/web_frame.h",
@@ -335,6 +329,7 @@ source_set("blink_headers") {
     "web/web_frame_widget.h",
     "web/web_heap.h",
     "web/web_history_commit_type.h",
+    "web/web_history_entry.h",
     "web/web_history_item.h",
     "web/web_hit_test_result.h",
     "web/web_image.h",
@@ -406,11 +401,25 @@ source_set("blink_headers") {
     "web/web_widget.h",
     "web/web_widget_client.h",
     "web/web_window_features.h",
-    "web/win/web_font_rendering.h",
   ]
 
   if (is_debug || dcheck_always_on) {
     sources += [ "web/web_disallow_transition_scope.h" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "platform/mac/web_sandbox_support.h",
+      "platform/mac/web_scrollbar_theme.h",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "platform/linux/web_sandbox_support.h" ]
+  }
+
+  if (is_win) {
+    sources += [ "web/win/web_font_rendering.h" ]
   }
 
   public_configs = [

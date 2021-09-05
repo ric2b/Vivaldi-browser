@@ -11,7 +11,8 @@ source_set("interstitial") {
   ]
   deps = [
     "../:adblock_filter",
-    "//chrome/browser/engagement:mojo_bindings",
+    "//chrome/common:buildflags",
+    "//components/site_engagement/core/mojom:mojo_bindings",
     "//content/public/browser",
   ]
 }

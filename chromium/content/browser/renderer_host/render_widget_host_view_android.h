@@ -188,6 +188,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
   void OnPhysicalBackingSizeChanged(
       base::Optional<base::TimeDelta> deadline_override) override;
+  void NotifyVirtualKeyboardOverlayRect(
+      const gfx::Rect& keyboard_rect) override;
 
   // ui::ViewAndroidObserver implementation:
   void OnAttachedToWindow() override;
@@ -227,6 +229,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Non-virtual methods
   void UpdateNativeViewTree(gfx::NativeView parent_native_view);
+  // Returns true if the overlaycontent flag is set in the JS, else false.
+  // This determines whether to fire geometrychange event to JS and also not
+  // resize the visual/layout viewports in response to keyboard visibility
+  // changes.
+  bool ShouldVirtualKeyboardOverlayContent();
 
   // Returns the temporary background color of the underlaying document, for
   // example, returns black during screen rotation.
@@ -370,6 +377,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
+  base::Optional<DisplayFeature> GetDisplayFeature() override;
+  void SetDisplayFeatureForTesting(
+      const DisplayFeature* display_feature) override;
 
  private:
   friend class RenderWidgetHostViewAndroidTest;
@@ -445,6 +455,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetTextHandlesHiddenInternal();
 
   void OnUpdateScopedSelectionHandles();
+
+  void HandleSwipeToMoveCursorGestureAck(const blink::WebGestureEvent& event);
 
   bool is_showing_;
 
@@ -547,6 +559,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // into DevTools capture logic.
   // TODO(ericrk): Make this more robust.
   bool in_sync_copy_contents_ = false;
+
+  // Whether swipe-to-move-cursor gesture is activated.
+  bool swipe_to_move_cursor_activated_ = false;
 
   // A cached copy of the most up to date RenderFrameMetadata.
   base::Optional<cc::RenderFrameMetadata> last_render_frame_metadata_;

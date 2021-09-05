@@ -103,7 +103,7 @@ struct SameSizeAsComputedStyleBase {
 
  private:
   void* data_refs[8];
-  unsigned bitfields[5];
+  unsigned bitfields[6];
 };
 
 struct SameSizeAsComputedStyle : public SameSizeAsComputedStyleBase,
@@ -119,7 +119,7 @@ struct SameSizeAsComputedStyle : public SameSizeAsComputedStyleBase,
 };
 
 // If this assert fails, it means that size of ComputedStyle has changed. Please
-// check that you really *do* what to increase the size of ComputedStyle, then
+// check that you really *do* want to increase the size of ComputedStyle, then
 // update the SameSizeAsComputedStyle struct to match the updated storage of
 // ComputedStyle.
 ASSERT_SIZE(ComputedStyle, SameSizeAsComputedStyle);
@@ -928,10 +928,6 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
                                                                         other))
     diff.SetNeedsRecomputeVisualOverflow();
 
-  if (ComputedStyleBase::UpdatePropertySpecificDifferencesBackdropFilter(*this,
-                                                                         other))
-    diff.SetBackdropFilterChanged();
-
   if (!diff.NeedsPaintInvalidation() &&
       ComputedStyleBase::UpdatePropertySpecificDifferencesTextDecorationOrColor(
           *this, other)) {
@@ -961,7 +957,8 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
       ContainsPaint() != other.ContainsPaint() ||
       IsOverflowVisibleAlongBothAxes() !=
           other.IsOverflowVisibleAlongBothAxes() ||
-      WillChangeProperties() != other.WillChangeProperties()) {
+      WillChangeProperties() != other.WillChangeProperties() ||
+      !BackdropFilterDataEquivalent(other)) {
     diff.SetCompositingReasonsChanged();
   }
 }
@@ -1436,9 +1433,11 @@ AtomicString ComputedStyle::LocaleForLineBreakIterator() const {
 }
 
 Hyphenation* ComputedStyle::GetHyphenation() const {
-  return GetHyphens() == Hyphens::kAuto
-             ? GetFontDescription().LocaleOrDefault().GetHyphenation()
-             : nullptr;
+  if (GetHyphens() != Hyphens::kAuto)
+    return nullptr;
+  if (const LayoutLocale* locale = GetFontDescription().Locale())
+    return locale->GetHyphenation();
+  return nullptr;
 }
 
 const AtomicString& ComputedStyle::HyphenString() const {

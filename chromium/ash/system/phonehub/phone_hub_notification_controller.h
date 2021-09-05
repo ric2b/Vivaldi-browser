@@ -8,15 +8,20 @@
 #include <map>
 
 #include "ash/ash_export.h"
+#include "chromeos/components/phonehub/feature_status_provider.h"
 #include "chromeos/components/phonehub/notification_manager.h"
+#include "chromeos/components/phonehub/tether_controller.h"
 
 namespace chromeos {
 namespace phonehub {
 class Notification;
+class PhoneHubManager;
+class PhoneModel;
 }  // namespace phonehub
 }  // namespace chromeos
 
 namespace message_center {
+class MessageView;
 class Notification;
 }  // namespace message_center
 
@@ -25,7 +30,9 @@ namespace ash {
 // This controller creates and manages a message_center::Notification for each
 // PhoneHub corresponding notification.
 class ASH_EXPORT PhoneHubNotificationController
-    : public chromeos::phonehub::NotificationManager::Observer {
+    : public chromeos::phonehub::FeatureStatusProvider::Observer,
+      public chromeos::phonehub::NotificationManager::Observer,
+      public chromeos::phonehub::TetherController::Observer {
  public:
   PhoneHubNotificationController();
   ~PhoneHubNotificationController() override;
@@ -36,10 +43,20 @@ class ASH_EXPORT PhoneHubNotificationController
 
   // Sets the NotifictionManager that provides the underlying PhoneHub
   // notifications.
-  void SetManager(chromeos::phonehub::NotificationManager* manager);
+  void SetManager(chromeos::phonehub::PhoneHubManager* phone_hub_manager);
+
+  const base::string16 GetPhoneName() const;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(PhoneHubNotificationControllerTest,
+                           ReplyBrieflyDisabled);
+  FRIEND_TEST_ALL_PREFIXES(PhoneHubNotificationControllerTest,
+                           NotificationHasPhoneName);
+
   class NotificationDelegate;
+
+  // chromeos::phonehub::FeatureStatusProvider::Observer:
+  void OnFeatureStatusChanged() override;
 
   // chromeos::phonehub::NotificationManager::Observer:
   void OnNotificationsAdded(
@@ -49,11 +66,18 @@ class ASH_EXPORT PhoneHubNotificationController
   void OnNotificationsRemoved(
       const base::flat_set<int64_t>& notification_ids) override;
 
+  // chromeos::phonehub::TetherController::Observer:
+  void OnAttemptConnectionScanFailed() override;
+  void OnTetherStatusChanged() override {}
+
   // Callbacks for user interactions.
   void OpenSettings();
   void DismissNotification(int64_t notification_id);
   void SendInlineReply(int64_t notification_id,
                        const base::string16& inline_reply_text);
+
+  // Logs the number of PhoneHub notifications.
+  void LogNotificationCount();
 
   // Creates or updates a ChromeOS notification for the given PhoneHub
   // notification data.
@@ -66,9 +90,24 @@ class ASH_EXPORT PhoneHubNotificationController
       const std::string& cros_id,
       NotificationDelegate* delegate);
 
+  static std::unique_ptr<message_center::MessageView>
+  CreateCustomNotificationView(
+      base::WeakPtr<PhoneHubNotificationController> notification_controller,
+      const message_center::Notification& notification);
+
   chromeos::phonehub::NotificationManager* manager_ = nullptr;
+  chromeos::phonehub::FeatureStatusProvider* feature_status_provider_ = nullptr;
+  chromeos::phonehub::TetherController* tether_controller_ = nullptr;
+  chromeos::phonehub::PhoneModel* phone_model_ = nullptr;
   std::unordered_map<int64_t, std::unique_ptr<NotificationDelegate>>
       notification_map_;
+
+  // A set of notification ids that have been previously shown, even across
+  // disconnects. This is needed to prevent pop-ups from reappearing due to a
+  // flaky connection. See crbug.com/1150621.
+  std::unordered_set<uint64_t> shown_notification_ids_;
+
+  base::WeakPtrFactory<PhoneHubNotificationController> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

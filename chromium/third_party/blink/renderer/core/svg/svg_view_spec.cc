@@ -40,16 +40,17 @@ void SVGViewSpec::Trace(Visitor* visitor) const {
   visitor->Trace(transform_);
 }
 
-SVGViewSpec* SVGViewSpec::CreateFromFragment(const String& fragment) {
+const SVGViewSpec* SVGViewSpec::CreateFromFragment(const String& fragment) {
   SVGViewSpec* view_spec = MakeGarbageCollected<SVGViewSpec>();
   if (!view_spec->ParseViewSpec(fragment))
     return nullptr;
   return view_spec;
 }
 
-SVGViewSpec* SVGViewSpec::CreateForViewElement(const SVGViewElement& view) {
+const SVGViewSpec* SVGViewSpec::CreateForViewElement(
+    const SVGViewElement& view) {
   SVGViewSpec* view_spec = MakeGarbageCollected<SVGViewSpec>();
-  if (view.HasValidViewBox())
+  if (view.viewBox()->CurrentValue()->IsValid())
     view_spec->view_box_ = view.viewBox()->CurrentValue()->Clone();
   if (view.preserveAspectRatio()->IsSpecified()) {
     view_spec->preserve_aspect_ratio_ =

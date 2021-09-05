@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,6 +20,7 @@
 #include "components/query_tiles/internal/tile_iterator.h"
 #include "components/query_tiles/internal/tile_manager.h"
 #include "components/query_tiles/internal/tile_utils.h"
+#include "components/query_tiles/internal/trending_tile_handler.h"
 #include "components/query_tiles/switches.h"
 
 namespace query_tiles {
@@ -67,14 +68,22 @@ class TileManagerImpl : public TileManager {
       return;
     }
 
-    std::vector<Tile> tiles;
-    for (const auto& tile : tile_group_->tiles)
-      tiles.emplace_back(*tile.get());
+    // First remove the inactive trending tiles.
+    RemoveIdleTrendingTiles();
+    // Now build the tiles to return. Don't filter the subtiles, as they are
+    // only used for UMA purpose now.
+    // TODO(qinmin): remove all subtiles before returning the result, as they
+    // are not used.
+    std::vector<Tile> tiles =
+        trending_tile_handler_.FilterExtraTrendingTiles(tile_group_->tiles);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), std::move(tiles)));
   }
 
   void GetTile(const std::string& tile_id, TileCallback callback) override {
+    // First remove the inactive trending tiles.
+    RemoveIdleTrendingTiles();
+    // Find the tile.
     const Tile* result = nullptr;
     if (tile_group_) {
       TileIterator it(*tile_group_, TileIterator::kAllTiles);
@@ -87,10 +96,24 @@ class TileManagerImpl : public TileManager {
         }
       }
     }
-
     auto result_tile = result ? base::make_optional(*result) : base::nullopt;
+    if (result_tile.has_value()) {
+      // Get the tiles to display, and convert the result vector.
+      // TODO(qinmin): make GetTile() return a vector of sub tiles, rather than
+      // the parent tile so we don't need the conversion below.
+      std::vector<Tile> sub_tiles =
+          trending_tile_handler_.FilterExtraTrendingTiles(
+              result_tile->sub_tiles);
+      if (!sub_tiles.empty()) {
+        std::vector<std::unique_ptr<Tile>> sub_tile_ptrs;
+        for (auto& tile : sub_tiles)
+          sub_tile_ptrs.emplace_back(std::make_unique<Tile>(std::move(tile)));
+        result_tile->sub_tiles = std::move(sub_tile_ptrs);
+      }
+    }
+
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), result_tile));
+        FROM_HERE, base::BindOnce(std::move(callback), std::move(result_tile)));
   }
 
   TileGroupStatus PurgeDb() override {
@@ -168,9 +191,12 @@ class TileManagerImpl : public TileManager {
       tile_stats_group_ = std::move(loaded_groups[kTileStatsGroup]);
       // prevent the stats group from being deleted.
       loaded_groups.erase(kTileStatsGroup);
-      if (tile_group_)
-        SortTiles(&tile_group_->tiles, &tile_stats_group_->tile_stats);
+      if (tile_group_) {
+        SortTilesAndClearUnusedStats(&tile_group_->tiles,
+                                     &tile_stats_group_->tile_stats);
+      }
     }
+    trending_tile_handler_.Reset();
 
     // Deletes other groups.
     for (const auto& group_to_delete : loaded_groups)
@@ -217,8 +243,10 @@ class TileManagerImpl : public TileManager {
     }
 
     // Only swap the in memory tile group when there is no existing tile group.
-    if (!tile_group_)
+    if (!tile_group_) {
       tile_group_ = std::move(group);
+      trending_tile_handler_.Reset();
+    }
 
     std::move(callback).Run(TileGroupStatus::kSuccess);
   }
@@ -243,6 +271,8 @@ class TileManagerImpl : public TileManager {
     // It's fine if |tile_stats_group_| is not saved, so no callback needs to
     // be passed to Update().
     store_->Update(kTileStatsGroup, *tile_stats_group_, base::DoNothing());
+
+    trending_tile_handler_.OnTileClicked(tile_id);
   }
 
   void OnQuerySelected(const base::Optional<std::string>& parent_tile_id,
@@ -253,7 +283,7 @@ class TileManagerImpl : public TileManager {
     // Find the parent tile first. If it cannot be found, that's fine as the
     // old tile score will be used.
     std::vector<std::unique_ptr<Tile>>* tiles = &tile_group_->tiles;
-    if (parent_tile_id.has_value()) {
+    if (parent_tile_id) {
       for (const auto& tile : tile_group_->tiles) {
         if (tile->id == parent_tile_id.value()) {
           tiles = &tile->sub_tiles;
@@ -261,13 +291,24 @@ class TileManagerImpl : public TileManager {
         }
       }
     }
-    // Now check if a tile has the same query text.
+    // Now check if a sub tile has the same query text.
     for (const auto& tile : *tiles) {
       if (query_text == base::UTF8ToUTF16(tile->query_text)) {
         OnTileClicked(tile->id);
         break;
       }
     }
+  }
+
+  void RemoveIdleTrendingTiles() {
+    if (!tile_group_)
+      return;
+    std::vector<std::string> tiles_to_remove =
+        trending_tile_handler_.GetInactiveTrendingTiles();
+    if (tiles_to_remove.empty())
+      return;
+    tile_group_->RemoveTiles(tiles_to_remove);
+    store_->Update(tile_group_->id, *tile_group_, base::DoNothing());
   }
 
   // Indicates if the db is fully initialized, rejects calls if not.
@@ -290,6 +331,9 @@ class TileManagerImpl : public TileManager {
   // Accept languages from the PrefService. Used to check if tiles stored are of
   // the same language.
   std::string accept_languages_;
+
+  // Object for managing trending tiles.
+  TrendingTileHandler trending_tile_handler_;
 
   base::WeakPtrFactory<TileManagerImpl> weak_ptr_factory_{this};
 };

@@ -28,8 +28,7 @@ let RoutineResponse;
  *   name: string,
  *   type: !RoutineType,
  *   running: boolean,
- *   verdict: string,
- *   errorMsg: string,
+ *   resultMsg: string,
  *   result: ?RoutineResponse,
  * }}
  */
@@ -48,6 +47,9 @@ const RoutineType = {
   DNS_RESOLVER: 4,
   DNS_LATENCY: 5,
   DNS_RESOLUTION: 6,
+  HTTP_FIREWALL: 7,
+  HTTPS_FIREWALL: 8,
+  HTTPS_LATENCY: 9,
 };
 
 /**
@@ -61,9 +63,9 @@ function createRoutine(name, type) {
     name: name,
     type: type,
     running: false,
-    verdict: '',
-    errorMsg: '',
-    result: null
+    resultMsg: '',
+    result: null,
+    ariaDescription: '',
   };
 }
 
@@ -98,6 +100,12 @@ Polymer({
             'NetworkDiagnosticsDnsLatency', RoutineType.DNS_LATENCY);
         routines[RoutineType.DNS_RESOLUTION] = createRoutine(
             'NetworkDiagnosticsDnsResolution', RoutineType.DNS_RESOLUTION);
+        routines[RoutineType.HTTP_FIREWALL] = createRoutine(
+            'NetworkDiagnosticsHttpFirewall', RoutineType.HTTP_FIREWALL);
+        routines[RoutineType.HTTPS_FIREWALL] = createRoutine(
+            'NetworkDiagnosticsHttpsFirewall', RoutineType.HTTPS_FIREWALL);
+        routines[RoutineType.HTTPS_LATENCY] = createRoutine(
+            'NetworkDiagnosticsHttpsLatency', RoutineType.HTTPS_LATENCY);
         return routines;
       }
     }
@@ -116,11 +124,39 @@ Polymer({
         diagnosticsMojom.NetworkDiagnosticsRoutines.getRemote();
   },
 
-  /** @private */
-  onRunAllRoutinesClick_() {
+  /**
+   * Runs all supported network diagnostics routines.
+   * @public
+   */
+  runAllRoutines() {
     for (const routine of this.routines_) {
       this.runRoutine_(routine.type);
     }
+  },
+
+  /**
+   * Gets the network diagnostics routine results and organizes them into a
+   * stringified object that is returned.
+   * @return {!string} The network diagnostics routine results
+   * @public
+   */
+  getResults() {
+    const results = {};
+    for (const routine of this.routines_) {
+      if (routine.result) {
+        const name = routine.name.replace('NetworkDiagnostics', '');
+        const result = {};
+        result['verdict'] =
+            this.getRoutineVerdictRawString_(routine.result.verdict);
+        if (routine.result.problems && routine.result.problems.length > 0) {
+          result['problems'] = this.getRoutineProblemsString_(
+              routine.type, routine.result.problems, false);
+        }
+
+        results[name] = result;
+      }
+    }
+    return JSON.stringify(results, undefined, 2);
   },
 
   /**
@@ -131,37 +167,18 @@ Polymer({
     this.runRoutine_(event.model.index);
   },
 
-  /** @private */
-  onSendFeedbackReportClick_() {
-    const results = {};
-    for (const routine of this.routines_) {
-      if (routine.result) {
-        const name = routine.name.replace('NetworkDiagnostics', '');
-        const result = {};
-        result['verdict'] =
-            this.getRoutineVerdictFeedbackString_(routine.result.verdict);
-        if (routine.result.problems && routine.result.problems.length > 0) {
-          result['problems'] = this.getRoutineProblemsString_(
-              routine.type, routine.result.problems, true);
-        }
-
-        results[name] = result;
-      }
-    }
-    this.fire('open-feedback-dialog', JSON.stringify(results, undefined, 2));
-  },
-
   /**
    * @param {!RoutineType} type
    * @private
    */
   runRoutine_(type) {
     this.set(`routines_.${type}.running`, true);
-    this.set(`routines_.${type}.verdict`, '');
+    this.set(`routines_.${type}.resultMsg`, '');
     this.set(`routines_.${type}.result`, null);
-    const element =
-        this.shadowRoot.querySelectorAll('.routine-container')[type];
-    element.classList.remove('result-passed', 'result-error', 'result-not-run');
+    this.set(
+        `routines_.${type}.ariaDescription`,
+        this.i18n('NetworkDiagnosticsRunning'));
+
     switch (type) {
       case RoutineType.LAN_CONNECTIVITY:
         this.networkDiagnostics_.lanConnectivity().then(
@@ -191,6 +208,18 @@ Polymer({
         this.networkDiagnostics_.dnsResolution().then(
             result => this.evaluateRoutine_(type, result));
         break;
+      case RoutineType.HTTP_FIREWALL:
+        this.networkDiagnostics_.httpFirewall().then(
+            result => this.evaluateRoutine_(type, result));
+        break;
+      case RoutineType.HTTPS_FIREWALL:
+        this.networkDiagnostics_.httpsFirewall().then(
+            result => this.evaluateRoutine_(type, result));
+        break;
+      case RoutineType.HTTPS_LATENCY:
+        this.networkDiagnostics_.httpsLatency().then(
+            result => this.evaluateRoutine_(type, result));
+        break;
     }
   },
 
@@ -201,48 +230,80 @@ Polymer({
    */
   evaluateRoutine_(type, result) {
     const routine = `routines_.${type}`;
-    this.set(`${routine}.running`, false);
+    this.set(routine + '.running', false);
+    this.set(routine + '.result', result);
 
-    const element =
-        this.shadowRoot.querySelectorAll('.routine-container')[type];
-    let verdict = '';
-    let errorMsg = '';
+    const resultMsg = this.getRoutineResult_(this.routines_[type]);
+    this.set(routine + '.resultMsg', resultMsg);
+    this.set(routine + '.ariaDescription', resultMsg);
+  },
+
+  /**
+   * Helper function to get the icon for a routine based on the result.
+   * @param {RoutineResponse} result
+   * @return {string}
+   * @private
+   */
+  getRoutineIcon_(result) {
+    if (!result) {
+      return 'test_not_run.png';
+    }
 
     switch (result.verdict) {
       case diagnosticsMojom.RoutineVerdict.kNoProblem:
+        return 'test_passed.png';
+      case diagnosticsMojom.RoutineVerdict.kProblem:
+        return 'test_failed.png';
+      case diagnosticsMojom.RoutineVerdict.kNotRun:
+        return 'test_canceled.png';
+    }
+
+    return '';
+  },
+
+  /**
+   * Helper function to generate the routine result string.
+   * @param {Routine} routine
+   * @return {string}
+   * @private
+   */
+  getRoutineResult_(routine) {
+    let verdict = '';
+    switch (routine.result.verdict) {
+      case diagnosticsMojom.RoutineVerdict.kNoProblem:
         verdict = this.i18n('NetworkDiagnosticsPassed');
-        element.classList.add('result-passed');
         break;
       case diagnosticsMojom.RoutineVerdict.kProblem:
         verdict = this.i18n('NetworkDiagnosticsFailed');
-        element.classList.add('result-error');
         break;
       case diagnosticsMojom.RoutineVerdict.kNotRun:
         verdict = this.i18n('NetworkDiagnosticsNotRun');
-        element.classList.add('result-not-run');
         break;
     }
 
-    if (result.problems && result.problems.length) {
-      errorMsg = this.getRoutineProblemsString_(type, result.problems, false);
+    if (routine.result && routine.result.problems &&
+        routine.result.problems.length) {
+      const problemStrings = this.getRoutineProblemsString_(
+          routine.type, routine.result.problems, true);
+      return this.i18n(
+          'NetworkDiagnosticsResultPlaceholder', verdict, ...problemStrings);
+    } else if (routine.result) {
+      return verdict;
     }
 
-    this.set(routine + '.result', result);
-    this.set(routine + '.verdict', verdict);
-    this.set(routine + '.errorMsg', errorMsg);
+    return '';
   },
 
   /**
    *
    * @param {!RoutineType} type The type of routine
    * @param {!Array<number>} problems The list of problems for the routine
-   * @param {boolean} feedback Flag to return a feedback or user display string
-   * @return {Array<string>} List of network diagnostic problem strings
+   * @param {boolean} translate Flag to return a translated string
+   * @return {!Array<string>} List of network diagnostic problem strings
    * @private
    */
-  getRoutineProblemsString_(type, problems, feedback) {
-    // Do not localize feedback strings.
-    const getString = s => feedback ? s : this.i18n(s);
+  getRoutineProblemsString_(type, problems, translate) {
+    const getString = s => translate ? this.i18n(s) : s;
 
     const problemStrings = [];
     for (const problem of problems) {
@@ -351,6 +412,46 @@ Polymer({
               break;
           }
           break;
+
+        case RoutineType.HTTP_FIREWALL:
+        case RoutineType.HTTPS_FIREWALL:
+          switch (problem) {
+            case diagnosticsMojom.HttpFirewallProblem
+                .kDnsResolutionFailuresAboveThreshold:
+            case diagnosticsMojom.HttpsFirewallProblem.kFailedDnsResolutions:
+              problemStrings.push(
+                  getString('FirewallProblem_DnsResolutionFailureRate'));
+              break;
+            case diagnosticsMojom.HttpFirewallProblem.kFirewallDetected:
+            case diagnosticsMojom.HttpsFirewallProblem.kFirewallDetected:
+              problemStrings.push(
+                  getString('FirewallProblem_FirewallDetected'));
+              break;
+            case diagnosticsMojom.HttpFirewallProblem.kPotentialFirewall:
+            case diagnosticsMojom.HttpsFirewallProblem.kPotentialFirewall:
+              problemStrings.push(
+                  getString('FirewallProblem_FirewallSuspected'));
+              break;
+          }
+
+        case RoutineType.HTTPS_LATENCY:
+          switch (problem) {
+            case diagnosticsMojom.HttpsLatencyProblem.kFailedDnsResolutions:
+              problemStrings.push(
+                  getString('HttpsLatencyProblem_FailedDnsResolution'));
+              break;
+            case diagnosticsMojom.HttpsLatencyProblem.kFailedHttpsRequests:
+              problemStrings.push(
+                  getString('HttpsLatencyProblem_FailedHttpsRequests'));
+              break;
+            case diagnosticsMojom.HttpsLatencyProblem.kHighLatency:
+              problemStrings.push(getString('HttpsLatencyProblem_HighLatency'));
+              break;
+            case diagnosticsMojom.HttpsLatencyProblem.kVeryHighLatency:
+              problemStrings.push(
+                  getString('HttpsLatencyProblem_VeryHighLatency'));
+              break;
+          }
       }
     }
 
@@ -359,10 +460,10 @@ Polymer({
 
   /**
    * @param {!chromeos.networkDiagnostics.mojom.RoutineVerdict} verdict
-   * @return {string} String for a network diagnostic verdict used for feedback
+   * @return {string} Untranslated string for a network diagnostic verdict
    * @private
    */
-  getRoutineVerdictFeedbackString_(verdict) {
+  getRoutineVerdictRawString_(verdict) {
     switch (verdict) {
       case diagnosticsMojom.RoutineVerdict.kNoProblem:
         return 'Passed';

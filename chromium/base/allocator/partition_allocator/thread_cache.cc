@@ -14,6 +14,12 @@ namespace base {
 
 namespace internal {
 
+namespace {
+
+ThreadCacheRegistry g_instance;
+
+}
+
 BASE_EXPORT PartitionTlsKey g_thread_cache_key;
 
 namespace {
@@ -30,14 +36,11 @@ static std::atomic<bool> g_has_instance;
 
 // static
 ThreadCacheRegistry& ThreadCacheRegistry::Instance() {
-  static NoDestructor<ThreadCacheRegistry> instance;
-  return *instance.get();
+  return g_instance;
 }
 
-ThreadCacheRegistry::ThreadCacheRegistry() = default;
-
 void ThreadCacheRegistry::RegisterThreadCache(ThreadCache* cache) {
-  AutoLock scoped_locker(GetLock());
+  PartitionAutoLock scoped_locker(GetLock());
   cache->next_ = nullptr;
   cache->prev_ = nullptr;
 
@@ -49,7 +52,7 @@ void ThreadCacheRegistry::RegisterThreadCache(ThreadCache* cache) {
 }
 
 void ThreadCacheRegistry::UnregisterThreadCache(ThreadCache* cache) {
-  AutoLock scoped_locker(GetLock());
+  PartitionAutoLock scoped_locker(GetLock());
   if (cache->prev_)
     cache->prev_->next_ = cache->next_;
   if (cache->next_)
@@ -62,7 +65,7 @@ void ThreadCacheRegistry::DumpStats(bool my_thread_only,
                                     ThreadCacheStats* stats) {
   memset(reinterpret_cast<void*>(stats), 0, sizeof(ThreadCacheStats));
 
-  AutoLock scoped_locker(GetLock());
+  PartitionAutoLock scoped_locker(GetLock());
   if (my_thread_only) {
     auto* tcache = ThreadCache::Get();
     if (!tcache)
@@ -85,7 +88,7 @@ void ThreadCacheRegistry::PurgeAll() {
   auto* current_thread_tcache = ThreadCache::Get();
 
   {
-    AutoLock scoped_locker(GetLock());
+    PartitionAutoLock scoped_locker(GetLock());
     ThreadCache* tcache = list_head_;
     while (tcache) {
       // Cannot purge directly, need to ask the other thread to purge "at some
@@ -130,7 +133,7 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
   //
   // This also means that deallocation must use RawFreeStatic(), hence the
   // operator delete() implementation below.
-  size_t allocated_size;
+  size_t utilized_slot_size;
   bool already_zeroed;
 
   auto* bucket =
@@ -138,7 +141,7 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
                           sizeof(ThreadCache));
   void* buffer =
       root->RawAlloc(bucket, PartitionAllocZeroFill, sizeof(ThreadCache),
-                     &allocated_size, &already_zeroed);
+                     &utilized_slot_size, &already_zeroed);
   ThreadCache* tcache = new (buffer) ThreadCache(root);
 
   // This may allocate.
@@ -190,7 +193,7 @@ void ThreadCache::Purge() {
 
     while (bucket.freelist_head) {
       auto* entry = bucket.freelist_head;
-      bucket.freelist_head = EncodedPartitionFreelistEntry::Decode(entry->next);
+      bucket.freelist_head = entry->GetNext();
 
       PartitionRoot<ThreadSafe>::RawFreeStatic(entry);
       count--;

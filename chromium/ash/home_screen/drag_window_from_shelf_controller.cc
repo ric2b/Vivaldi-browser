@@ -18,7 +18,7 @@
 #include "ash/shelf/hotseat_widget.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/wallpaper/wallpaper_property.h"
+#include "ash/wallpaper/wallpaper_constants.h"
 #include "ash/wallpaper/wallpaper_view.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -33,7 +33,7 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
 #include "ash/wm/window_util.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
 #include "ui/aura/window_tree_host.h"
@@ -369,7 +369,7 @@ void DragWindowFromShelfController::OnDragStarted(
   // Use the same dim and blur as in overview during dragging.
   RootWindowController::ForWindow(window_->GetRootWindow())
       ->wallpaper_widget_controller()
-      ->SetWallpaperProperty(wallpaper_constants::kOverviewInTabletState);
+      ->SetWallpaperBlur(wallpaper_constants::kOverviewBlur);
 
   // If the dragged window is one of the snapped window in splitview, it needs
   // to be detached from splitview before start dragging.
@@ -397,9 +397,17 @@ void DragWindowFromShelfController::OnDragEnded(
 
     OverviewSession* overview_session = overview_controller->overview_session();
     overview_session->ResetSplitViewDragIndicatorsWindowDraggingStates();
+
+    // No need to reposition overview windows if we are not dropping the dragged
+    // window into overview. Overview will either be exited or unchanged, and
+    // the extra movement from existing window will just add unnecessary
+    // movement which will also slow down our dragged window animation.
+    if (!should_drop_window_in_overview)
+      overview_session->SuspendReposition();
     overview_session->OnWindowDragEnded(
         window_, location_in_screen, should_drop_window_in_overview,
         /*snap=*/snap_position != SplitViewController::NONE);
+    overview_session->ResumeReposition();
   }
 
   SplitViewController* split_view_controller =
@@ -419,7 +427,7 @@ void DragWindowFromShelfController::OnDragEnded(
   if (!overview_controller->InOverviewSession()) {
     RootWindowController::ForWindow(window_->GetRootWindow())
         ->wallpaper_widget_controller()
-        ->SetWallpaperProperty(wallpaper_constants::kClear);
+        ->SetWallpaperBlur(wallpaper_constants::kClear);
   }
 
   DCHECK(window_drag_result_.has_value());

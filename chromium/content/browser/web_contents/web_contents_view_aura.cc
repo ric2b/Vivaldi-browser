@@ -156,7 +156,7 @@ class WebDragSourceAura : public NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(WebDragSourceAura);
 };
 
-#if defined(USE_X11) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 // Fill out the OSExchangeData with a file contents, synthesizing a name if
 // necessary.
 void PrepareDragForFileContents(const DropData& drop_data,
@@ -242,15 +242,11 @@ void PrepareDragData(const DropData& drop_data,
   if (!drop_data.download_metadata.empty())
     PrepareDragForDownload(drop_data, provider, web_contents);
 #endif
-#if defined(USE_X11) || defined(OS_WIN)
-  bool should_check_file_contents = true;
-#if defined(USE_X11)
-  should_check_file_contents = !features::IsUsingOzonePlatform();
-#endif
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
   // We set the file contents before the URL because the URL also sets file
   // contents (to a .URL shortcut).  We want to prefer file content data over
   // a shortcut so we add it first.
-  if (should_check_file_contents && !drop_data.file_contents.empty())
+  if (!drop_data.file_contents.empty())
     PrepareDragForFileContents(drop_data, provider);
 #endif
   // Call SetString() before SetURL() when we actually have a custom string.
@@ -851,10 +847,7 @@ void WebContentsViewAura::Focus() {
   if (delegate_ && delegate_->Focus())
     return;
 
-  RenderWidgetHostView* rwhv =
-      web_contents_->GetFullscreenRenderWidgetHostView();
-  if (!rwhv)
-    rwhv = web_contents_->GetRenderWidgetHostView();
+  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
   if (rwhv)
     rwhv->Focus();
 }
@@ -884,12 +877,6 @@ void WebContentsViewAura::FocusThroughTabTraversal(bool reverse) {
   if (delegate_)
     delegate_->ResetStoredFocus();
 
-  content::RenderWidgetHostView* fullscreen_view =
-      web_contents_->GetFullscreenRenderWidgetHostView();
-  if (fullscreen_view) {
-    fullscreen_view->Focus();
-    return;
-  }
   web_contents_->GetRenderViewHost()->SetInitialFocus(reverse);
 }
 

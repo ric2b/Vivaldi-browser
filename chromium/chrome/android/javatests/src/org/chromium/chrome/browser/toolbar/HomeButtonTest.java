@@ -26,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -83,8 +84,12 @@ public class HomeButtonTest extends DummyUiActivityTestCase {
 
             mIdHomeButton = View.generateViewId();
             mHomeButton = new HomeButton(getActivity(), null);
+            ObservableSupplierImpl<Boolean> homepagePolicySupplier = new ObservableSupplierImpl<>();
+            homepagePolicySupplier.set(false);
+            mHomeButton.init(new ObservableSupplierImpl<Boolean>(),
+                    HomepageManager.getInstance()::onMenuClick, homepagePolicySupplier);
             mHomeButton.setId(mIdHomeButton);
-            mHomeButton.setSettingsLauncherForTests(mSettingsLauncher);
+            HomepageManager.getInstance().setSettingsLauncherForTesting(mSettingsLauncher);
             HomeButton.setSaveContextMenuForTests(true);
 
             content.addView(mHomeButton);

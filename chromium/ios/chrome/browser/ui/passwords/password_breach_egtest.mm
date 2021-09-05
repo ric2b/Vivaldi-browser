@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/strings/sys_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/passwords/password_breach_app_interface.h"
@@ -64,11 +63,6 @@ id<GREYMatcher> CheckPasswordButton() {
 
 // Tests that Check password button redirects to the Passwords List.
 - (void)testPasswordBreachRedirectToPasswords {
-  // TODO(crbug.com/1096986): Remove it once feature is enabled by default.
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(password_manager::features::kPasswordCheck);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
   [PasswordBreachAppInterface showPasswordBreachWithCheckButton:YES];
   [[EarlGrey selectElementWithMatcher:PasswordBreachMatcher()]
       assertWithMatcher:grey_notNil()];

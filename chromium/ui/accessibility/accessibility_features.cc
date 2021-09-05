@@ -21,11 +21,23 @@ bool IsAccessibilityExposeDisplayNoneEnabled() {
 // Enable exposing the <html> element to the browser process AXTree
 // (as an ignored node).
 const base::Feature kEnableAccessibilityExposeHTMLElement{
-    "AccessibilityExposeHTMLElement", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AccessibilityExposeHTMLElement", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsAccessibilityExposeHTMLElementEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kEnableAccessibilityExposeHTMLElement);
+}
+
+// Enable exposing ignored nodes from Blink to the browser process AXTree.
+// This will allow us to simplify logic by eliminating the distiction between
+// "ignored and included in the tree" from "ignored and not included in the
+// tree".
+const base::Feature kEnableAccessibilityExposeIgnoredNodes{
+    "AccessibilityExposeIgnoredNodes", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAccessibilityExposeIgnoredNodesEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kEnableAccessibilityExposeIgnoredNodes);
 }
 
 // Enable language detection to determine language used in page text, exposed
@@ -71,6 +83,13 @@ const base::Feature kAccessibilityCursorColor{"AccessibilityCursorColor",
 bool IsAccessibilityCursorColorEnabled() {
   return base::FeatureList::IsEnabled(::features::kAccessibilityCursorColor);
 }
+
+const base::Feature kMagnifierNewFocusFollowing{
+    "MagnifierNewFocusFollowing", base::FEATURE_ENABLED_BY_DEFAULT};
+
+bool IsMagnifierNewFocusFollowingEnabled() {
+  return base::FeatureList::IsEnabled(::features::kMagnifierNewFocusFollowing);
+}
 #endif  // defined(OS_CHROMEOS)
 
 const base::Feature kAugmentExistingImageLabels{
@@ -87,5 +106,15 @@ bool IsUseAXPositionForDocumentMarkersEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kUseAXPositionForDocumentMarkers);
 }
+
+#if defined(OS_CHROMEOS)
+const base::Feature kSelectToSpeakNavigationControl{
+    "SelectToSpeakNavigationControl", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsSelectToSpeakNavigationControlEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kSelectToSpeakNavigationControl);
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace features

@@ -61,6 +61,11 @@ void TtsService::BindTtsStream(
     mojo::PendingReceiver<mojom::TtsStream> receiver,
     mojo::PendingRemote<audio::mojom::StreamFactory> factory) {
   stream_receiver_.Bind(std::move(receiver));
+  stream_receiver_.set_disconnect_handler(base::BindOnce([] {
+    // The remote which lives in component extension js has been disconnected
+    // due to destruction or error.
+    exit(0);
+  }));
 
   // TODO(accessibility): The sample rate below can change based on the audio
   // data retrieved. Plumb this data through and re-create the output device if
@@ -134,6 +139,15 @@ void TtsService::SetVolume(float volume) {
   output_device_->SetVolume(volume);
 }
 
+void TtsService::Pause() {
+  base::AutoLock al(state_lock_);
+  StopLocked(false /* clear_buffers */);
+}
+
+void TtsService::Resume() {
+  output_device_->Play();
+}
+
 int TtsService::Render(base::TimeDelta delay,
                        base::TimeTicks delay_timestamp,
                        int prior_frames_skipped,
@@ -186,13 +200,16 @@ int TtsService::Render(base::TimeDelta delay,
 
 void TtsService::OnRenderError() {}
 
-void TtsService::StopLocked() {
+void TtsService::StopLocked(bool clear_buffers) {
   if (!is_playing_)
     return;
 
   output_device_->Pause();
-  buffers_.clear();
-  libchrometts_.GoogleTtsFinalizeBuffered();
+  if (clear_buffers) {
+    buffers_.clear();
+    libchrometts_.GoogleTtsFinalizeBuffered();
+  }
+
   is_playing_ = false;
 }
 

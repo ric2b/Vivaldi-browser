@@ -10,13 +10,14 @@
 #include "ash/login/resources/grit/login_resources.h"
 #include "ash/login/ui/horizontal_image_sequence_animation_decoder.h"
 #include "ash/login/ui/login_password_view.h"
+#include "ash/login/ui/login_pin_input_view.h"
 #include "ash/login/ui/login_pin_view.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/in_session_auth_dialog_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -25,6 +26,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
+#include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -33,26 +35,25 @@
 namespace ash {
 namespace {
 
-enum class ButtonId {
-  kCancel,
-};
+constexpr int kContainerPreferredWidth = 340;
 
-// TODO(b/164195709): Move these strings to a grd file.
-const char kTitle[] = "Verify it's you";
-const char kCancelButtonText[] = "Cancel";
+constexpr int kBorderTopDp = 36;
+constexpr int kBorderLeftDp = 24;
+constexpr int kBorderBottomDp = 20;
+constexpr int kBorderRightDp = 24;
+constexpr int kCornerRadius = 12;
 
-const int kContainerPreferredWidth = 512;
-const int kSpacingAfterTitle = 16;
+constexpr int kTitleFontSizeDeltaDp = 4;
+constexpr int kOriginNameLineHeight = 18;
 
-const int kBorderTopDp = 24;
-const int kBorderLeftDp = 24;
-const int kBorderBottomDp = 20;
-const int kBorderRightDp = 24;
+constexpr int kSpacingAfterAvatar = 18;
+constexpr int kSpacingAfterTitle = 8;
+constexpr int kSpacingAfterOriginName = 32;
+constexpr int kSpacingAfterInputField = 16;
 
-const int kTitleFontSizeDeltaDp = 4;
-
+constexpr int kAvatarSizeDp = 36;
 constexpr int kFingerprintIconSizeDp = 28;
-constexpr int kFingerprintIconTopSpacingDp = 20;
+constexpr int kSpacingBetweenPinPadAndFingerprintIcon = 24;
 constexpr int kSpacingBetweenFingerprintIconAndLabelDp = 15;
 constexpr int kFingerprintViewWidthDp = 204;
 constexpr int kFingerprintFailedAnimationNumFrames = 45;
@@ -65,9 +66,15 @@ constexpr base::TimeDelta kFingerprintFailedAnimationDuration =
 
 // 38% opacity.
 constexpr SkColor kDisabledFingerprintIconColor =
-    SkColorSetA(SK_ColorDKGRAY, 97);
+    SkColorSetA(gfx::kGoogleGrey900, 97);
+constexpr SkColor kBackgroundColor = SK_ColorWHITE;
+constexpr SkColor kTextColorSecondary = gfx::kGoogleGrey700;
+constexpr SkColor kTextColorPrimary = gfx::kGoogleGrey900;
+constexpr SkColor kErrorColor = gfx::kGoogleRed600;
 
 constexpr int kSpacingBeforeButtons = 32;
+
+constexpr int kMaxPinAttempts = 5;
 
 }  // namespace
 
@@ -95,8 +102,6 @@ class AuthDialogContentsView::FingerprintView : public views::View {
   };
 
   FingerprintView() {
-    SetBorder(views::CreateEmptyBorder(kFingerprintIconTopSpacingDp, 0, 0, 0));
-
     auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical, gfx::Insets(),
         kSpacingBetweenFingerprintIconAndLabelDp));
@@ -110,7 +115,7 @@ class AuthDialogContentsView::FingerprintView : public views::View {
     label_ = AddChildView(std::make_unique<FingerprintLabel>());
     label_->SetSubpixelRenderingEnabled(false);
     label_->SetAutoColorReadabilityEnabled(false);
-    label_->SetEnabledColor(SK_ColorDKGRAY);
+    label_->SetEnabledColor(kTextColorPrimary);
     label_->SetMultiLine(true);
     label_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
@@ -212,7 +217,7 @@ class AuthDialogContentsView::FingerprintView : public views::View {
     const SkColor color =
         (state == FingerprintState::AVAILABLE_DEFAULT ||
                  state == FingerprintState::AVAILABLE_WITH_TOUCH_SENSOR_WARNING
-             ? SK_ColorDKGRAY
+             ? kTextColorPrimary
              : kDisabledFingerprintIconColor);
     switch (state) {
       case FingerprintState::UNAVAILABLE:
@@ -259,13 +264,82 @@ class AuthDialogContentsView::FingerprintView : public views::View {
   base::OneShotTimer reset_state_;
 };
 
-AuthDialogContentsView::AuthDialogContentsView(uint32_t auth_methods)
-    : auth_methods_(auth_methods) {
+class AuthDialogContentsView::TitleLabel : public views::Label {
+ public:
+  TitleLabel() {
+    SetSubpixelRenderingEnabled(false);
+    SetAutoColorReadabilityEnabled(false);
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+
+    const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
+
+    SetFontList(base_font_list.Derive(kTitleFontSizeDeltaDp,
+                                      gfx::Font::FontStyle::NORMAL,
+                                      gfx::Font::Weight::MEDIUM));
+    SetMaximumWidth(kContainerPreferredWidth);
+    SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
+
+    SetPreferredSize(gfx::Size(kContainerPreferredWidth,
+                               GetHeightForWidth(kContainerPreferredWidth)));
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  }
+
+  bool IsShowingError() const { return is_showing_error_; }
+
+  void ShowTitle() {
+    base::string16 title =
+        l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_TITLE);
+    SetText(title);
+    SetEnabledColor(kTextColorPrimary);
+    is_showing_error_ = false;
+    SetAccessibleName(title);
+  }
+
+  void ShowError(const base::string16& error_text) {
+    SetText(error_text);
+    SetEnabledColor(kErrorColor);
+    is_showing_error_ = true;
+    SetAccessibleName(error_text);
+    NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                             true /*send_native_event*/);
+  }
+
+  // views::View
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ax::mojom::Role::kStaticText;
+    node_data->SetName(accessible_name_);
+  }
+
+ private:
+  void SetAccessibleName(const base::string16& name) {
+    accessible_name_ = name;
+    NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged,
+                             true /*send_native_event*/);
+  }
+
+  bool is_showing_error_ = false;
+  base::string16 accessible_name_;
+};
+
+AuthDialogContentsView::AuthDialogContentsView(
+    uint32_t auth_methods,
+    const std::string& origin_name,
+    const AuthMethodsMetadata& auth_metadata,
+    const UserAvatar& avatar)
+    : auth_methods_(auth_methods),
+      origin_name_(origin_name),
+      auth_metadata_(auth_metadata) {
   DCHECK(auth_methods_ & kAuthPassword);
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
+  auto border = std::make_unique<views::BubbleBorder>(
+      views::BubbleBorder::FLOAT, views::BubbleBorder::BIG_SHADOW,
+      kBackgroundColor);
+  border->SetCornerRadius(kCornerRadius);
+  SetBackground(std::make_unique<views::BubbleBackground>(border.get()));
+  SetBorder(std::move(border));
+
   container_ = AddChildView(std::make_unique<NonAccessibleView>());
-  container_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
   container_->SetBorder(views::CreateEmptyBorder(
       kBorderTopDp, kBorderLeftDp, kBorderBottomDp, kBorderRightDp));
 
@@ -277,12 +351,30 @@ AuthDialogContentsView::AuthDialogContentsView(uint32_t auth_methods)
   main_layout_->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
 
+  AddAvatarView(avatar);
+  AddVerticalSpacing(kSpacingAfterAvatar);
   AddTitleView();
   AddVerticalSpacing(kSpacingAfterTitle);
-  AddPasswordView();
-  AddPinView();
+  AddOriginNameView();
+  AddVerticalSpacing(kSpacingAfterOriginName);
+  if (auth_methods_ & kAuthPin) {
+    if (LoginPinInputView::IsAutosubmitSupported(
+            auth_metadata_.autosubmit_pin_length)) {
+      pin_autosubmit_on_ = true;
+      AddPinDigitInputView();
+    } else {
+      pin_autosubmit_on_ = false;
+      AddPinTextInputView();
+    }
+    AddVerticalSpacing(kSpacingAfterInputField);
+    // PIN pad is always visible regardless of PIN autosubmit status.
+    AddPinPadView();
+  }
 
   if (auth_methods_ & kAuthFingerprint) {
+    if (pin_pad_view_)
+      AddVerticalSpacing(kSpacingBetweenPinPadAndFingerprintIcon);
+
     fingerprint_view_ =
         container_->AddChildView(std::make_unique<FingerprintView>());
     fingerprint_view_->SetCanUsePin(auth_methods_ & kAuthPin);
@@ -290,9 +382,6 @@ AuthDialogContentsView::AuthDialogContentsView(uint32_t auth_methods)
 
   AddVerticalSpacing(kSpacingBeforeButtons);
   AddActionButtonsView();
-
-  // Deferred because it needs the pin_view_ pointer.
-  InitPasswordView();
 }
 
 AuthDialogContentsView::~AuthDialogContentsView() = default;
@@ -307,65 +396,137 @@ void AuthDialogContentsView::AddedToWidget() {
   }
 }
 
+void AuthDialogContentsView::AddAvatarView(const UserAvatar& avatar) {
+  avatar_view_ =
+      container_->AddChildView(std::make_unique<AnimatedRoundedImageView>(
+          gfx::Size(kAvatarSizeDp, kAvatarSizeDp),
+          kAvatarSizeDp / 2 /*corner_radius*/));
+  avatar_view_->SetImage(avatar.image);
+}
+
 void AuthDialogContentsView::AddTitleView() {
-  title_ = container_->AddChildView(std::make_unique<views::Label>());
-  title_->SetEnabledColor(SK_ColorBLACK);
-  title_->SetSubpixelRenderingEnabled(false);
-  title_->SetAutoColorReadabilityEnabled(false);
-  title_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-
-  const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
-
-  title_->SetFontList(base_font_list.Derive(kTitleFontSizeDeltaDp,
-                                            gfx::Font::FontStyle::NORMAL,
-                                            gfx::Font::Weight::NORMAL));
-  title_->SetText(base::UTF8ToUTF16(kTitle));
-  title_->SetMaximumWidth(kContainerPreferredWidth);
-  title_->SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
-
-  title_->SetPreferredSize(
-      gfx::Size(kContainerPreferredWidth, title_->height()));
-  title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title_ = container_->AddChildView(std::make_unique<TitleLabel>());
+  title_->ShowTitle();
 }
 
-void AuthDialogContentsView::AddPasswordView() {
-  password_view_ = container_->AddChildView(
-      std::make_unique<LoginPasswordView>(CreateInSessionAuthPalette()));
+void AuthDialogContentsView::AddOriginNameView() {
+  origin_name_view_ =
+      container_->AddChildView(std::make_unique<views::Label>());
+  origin_name_view_->SetEnabledColor(kTextColorSecondary);
+  origin_name_view_->SetSubpixelRenderingEnabled(false);
+  origin_name_view_->SetAutoColorReadabilityEnabled(false);
+  origin_name_view_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
-  password_view_->SetPaintToLayer();
-  password_view_->layer()->SetFillsBoundsOpaquely(false);
-  password_view_->SetDisplayPasswordButtonVisible(true);
-  password_view_->SetEnabled(true);
-  password_view_->SetEnabledOnEmptyPassword(false);
-  password_view_->SetFocusEnabledForChildViews(true);
-  password_view_->SetVisible(true);
+  origin_name_view_->SetText(
+      l10n_util::GetStringFUTF16(IDS_ASH_IN_SESSION_AUTH_ORIGIN_NAME_PROMPT,
+                                 base::UTF8ToUTF16(origin_name_)));
+  origin_name_view_->SetMaximumWidth(kContainerPreferredWidth);
+  origin_name_view_->SetMultiLine(true);
+  origin_name_view_->SetLineHeight(kOriginNameLineHeight);
 
-  password_view_->SetPlaceholderText(
-      (auth_methods_ & kAuthPin)
-          ? l10n_util::GetStringUTF16(
-                IDS_ASH_LOGIN_POD_PASSWORD_PIN_PLACEHOLDER)
-          : l10n_util::GetStringUTF16(IDS_ASH_LOGIN_POD_PASSWORD_PLACEHOLDER));
+  origin_name_view_->SetPreferredSize(gfx::Size(
+      kContainerPreferredWidth,
+      origin_name_view_->GetHeightForWidth(kContainerPreferredWidth)));
+  origin_name_view_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
 }
 
-void AuthDialogContentsView::AddPinView() {
-  pin_view_ = container_->AddChildView(std::make_unique<LoginPinView>(
-      LoginPinView::Style::kAlphanumeric, CreateInSessionAuthPalette(),
-      base::BindRepeating(&LoginPasswordView::InsertNumber,
-                          base::Unretained(password_view_)),
-      base::BindRepeating(&LoginPasswordView::Backspace,
-                          base::Unretained(password_view_)),
-      base::BindRepeating(&LoginPasswordView::SubmitPassword,
-                          base::Unretained(password_view_))));
-  pin_view_->SetVisible(auth_methods_ & kAuthPin);
+void AuthDialogContentsView::AddPinTextInputView() {
+  pin_text_input_view_ =
+      container_->AddChildView(std::make_unique<LoginPasswordView>(palette_));
+
+  pin_text_input_view_->SetPaintToLayer();
+  pin_text_input_view_->layer()->SetFillsBoundsOpaquely(false);
+  pin_text_input_view_->SetDisplayPasswordButtonVisible(true);
+  pin_text_input_view_->SetEnabled(true);
+  pin_text_input_view_->SetEnabledOnEmptyPassword(false);
+  pin_text_input_view_->SetFocusEnabledForChildViews(true);
+  pin_text_input_view_->SetVisible(true);
+
+  pin_text_input_view_->SetPlaceholderText(
+      l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_PIN_PLACEHOLDER));
 }
 
-void AuthDialogContentsView::InitPasswordView() {
-  password_view_->Init(
-      base::BindRepeating(&AuthDialogContentsView::OnAuthSubmit,
-                          base::Unretained(this)),
-      base::BindRepeating(&LoginPinView::OnPasswordTextChanged,
-                          base::Unretained(pin_view_)),
-      base::DoNothing(), base::DoNothing());
+void AuthDialogContentsView::AddPinDigitInputView() {
+  pin_digit_input_view_ =
+      container_->AddChildView(std::make_unique<LoginPinInputView>(palette_));
+  pin_digit_input_view_->UpdateLength(auth_metadata_.autosubmit_pin_length);
+  pin_digit_input_view_->SetVisible(true);
+}
+
+void AuthDialogContentsView::AddPinPadView() {
+  DCHECK(auth_methods_ & kAuthPin);
+  if (pin_autosubmit_on_) {
+    pin_pad_view_ = container_->AddChildView(std::make_unique<LoginPinView>(
+        LoginPinView::Style::kAlphanumeric, palette_,
+        base::BindRepeating(&AuthDialogContentsView::OnInsertDigitFromPinPad,
+                            base::Unretained(this)),
+        base::BindRepeating(&AuthDialogContentsView::OnBackspaceFromPinPad,
+                            base::Unretained(this))));
+    pin_digit_input_view_->Init(
+        base::BindRepeating(&AuthDialogContentsView::OnAuthSubmit,
+                            base::Unretained(this)),
+        base::BindRepeating(&AuthDialogContentsView::OnPinTextChanged,
+                            base::Unretained(this)));
+  } else {
+    pin_pad_view_ = container_->AddChildView(std::make_unique<LoginPinView>(
+        LoginPinView::Style::kAlphanumeric, palette_,
+        base::BindRepeating(&AuthDialogContentsView::OnInsertDigitFromPinPad,
+                            base::Unretained(this)),
+        base::BindRepeating(&AuthDialogContentsView::OnBackspaceFromPinPad,
+                            base::Unretained(this)),
+        base::BindRepeating(&LoginPasswordView::SubmitPassword,
+                            base::Unretained(pin_text_input_view_))));
+    pin_text_input_view_->Init(
+        base::BindRepeating(&AuthDialogContentsView::OnAuthSubmit,
+                            base::Unretained(this)),
+        base::BindRepeating(&AuthDialogContentsView::OnPinTextChanged,
+                            base::Unretained(this)),
+        base::DoNothing(), views::Button::PressedCallback());
+  }
+  pin_pad_view_->SetVisible(true);
+}
+
+void AuthDialogContentsView::OnInsertDigitFromPinPad(int digit) {
+  // Ignore anything if reached max attempts.
+  if (pin_attempts_ >= kMaxPinAttempts)
+    return;
+
+  if (title_->IsShowingError())
+    title_->ShowTitle();
+
+  if (pin_autosubmit_on_) {
+    pin_digit_input_view_->InsertDigit(digit);
+  } else {
+    pin_text_input_view_->InsertNumber(digit);
+  }
+}
+
+void AuthDialogContentsView::OnBackspaceFromPinPad() {
+  // Ignore anything if reached max attempts.
+  if (pin_attempts_ >= kMaxPinAttempts)
+    return;
+
+  if (title_->IsShowingError())
+    title_->ShowTitle();
+
+  if (pin_autosubmit_on_) {
+    pin_digit_input_view_->Backspace();
+  } else {
+    pin_text_input_view_->Backspace();
+  }
+}
+
+void AuthDialogContentsView::OnPinTextChanged(bool is_empty) {
+  // If the user is interacting with the input field, restore the title (clear
+  // error message).
+  //
+  // If |is_empty| is true, this call may come from resetting
+  // |pin_text_input_view_| or |pin_digit_input_view_|, when the error message
+  // hasn't been shown and read yet. In this case we don't restore the title.
+  if (title_->IsShowingError() && !is_empty)
+    title_->ShowTitle();
+
+  pin_pad_view_->OnPasswordTextChanged(is_empty);
 }
 
 void AuthDialogContentsView::AddVerticalSpacing(int height) {
@@ -381,48 +542,74 @@ void AuthDialogContentsView::AddActionButtonsView() {
       std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal));
   buttons_layout->set_main_axis_alignment(
-      views::BoxLayout::MainAxisAlignment::kEnd);
+      views::BoxLayout::MainAxisAlignment::kStart);
 
-  cancel_button_ =
-      AddButton(kCancelButtonText, static_cast<int>(ButtonId::kCancel),
-                action_view_container_);
+  help_button_ =
+      action_view_container_->AddChildView(std::make_unique<views::LabelButton>(
+          base::BindRepeating(&AuthDialogContentsView::OnNeedHelpButtonPressed,
+                              base::Unretained(this)),
+          l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_HELP),
+          views::style::CONTEXT_BUTTON));
+  help_button_->SetEnabledTextColors(kTextColorPrimary);
+
+  auto* spacing = action_view_container_->AddChildView(
+      std::make_unique<NonAccessibleView>());
+  buttons_layout->SetFlexForView(spacing, 1);
+
+  cancel_button_ = action_view_container_->AddChildView(
+      std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&AuthDialogContentsView::OnCancelButtonPressed,
+                              base::Unretained(this)),
+          l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_CANCEL)));
 
   action_view_container_->SetPreferredSize(
       gfx::Size(kContainerPreferredWidth, cancel_button_->height()));
 }
 
-void AuthDialogContentsView::ButtonPressed(views::Button* sender,
-                                           const ui::Event& event) {
-  if (sender == cancel_button_) {
-    // Cancel() deletes |this|.
-    InSessionAuthDialogController::Get()->Cancel();
+void AuthDialogContentsView::OnCancelButtonPressed(const ui::Event& event) {
+  InSessionAuthDialogController::Get()->Cancel();
+}
+
+void AuthDialogContentsView::OnNeedHelpButtonPressed(const ui::Event& event) {
+  InSessionAuthDialogController::Get()->OpenInSessionAuthHelpPage();
+}
+
+void AuthDialogContentsView::OnAuthSubmit(const base::string16& pin) {
+  if (pin_autosubmit_on_) {
+    pin_digit_input_view_->SetReadOnly(true);
+  } else {
+    pin_text_input_view_->SetReadOnly(true);
   }
-}
-
-views::LabelButton* AuthDialogContentsView::AddButton(const std::string& text,
-                                                      int id,
-                                                      views::View* container) {
-  // Creates a button with |text|.
-  auto button =
-      std::make_unique<views::MdTextButton>(this, base::ASCIIToUTF16(text));
-  button->SetID(id);
-
-  views::LabelButton* view = button.get();
-  container->AddChildView(
-      login_views_utils::WrapViewForPreferredSize(std::move(button)));
-  return view;
-}
-
-void AuthDialogContentsView::OnAuthSubmit(const base::string16& password) {
-  InSessionAuthDialogController::Get()->AuthenticateUserWithPasswordOrPin(
-      base::UTF16ToUTF8(password),
-      base::BindOnce(&AuthDialogContentsView::OnPasswordOrPinAuthComplete,
+  InSessionAuthDialogController::Get()->AuthenticateUserWithPin(
+      base::UTF16ToUTF8(pin),
+      base::BindOnce(&AuthDialogContentsView::OnPinAuthComplete,
                      weak_factory_.GetWeakPtr()));
 }
 
-// TODO(b/156258540): Clear password/PIN if auth failed and retry is allowed.
-void AuthDialogContentsView::OnPasswordOrPinAuthComplete(
-    base::Optional<bool> success) {}
+// TODO(b/156258540): Clear PIN if auth failed and retry is allowed.
+void AuthDialogContentsView::OnPinAuthComplete(base::Optional<bool> success) {
+  // On success, do nothing, and the dialog will dismiss.
+  if (success.has_value() && success.value())
+    return;
+
+  pin_attempts_++;
+  base::string16 error_text =
+      pin_attempts_ >= kMaxPinAttempts
+          ? l10n_util::GetStringUTF16(
+                IDS_ASH_IN_SESSION_AUTH_PIN_TOO_MANY_ATTEMPTS)
+          : l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_PIN_INCORRECT);
+  title_->ShowError(error_text);
+
+  if (pin_attempts_ < kMaxPinAttempts) {
+    if (pin_autosubmit_on_) {
+      pin_digit_input_view_->Reset();
+      pin_digit_input_view_->SetReadOnly(false);
+    } else {
+      pin_text_input_view_->Reset();
+      pin_text_input_view_->SetReadOnly(false);
+    }
+  }
+}
 
 void AuthDialogContentsView::OnFingerprintAuthComplete(
     bool success,
@@ -440,7 +627,21 @@ void AuthDialogContentsView::OnFingerprintAuthComplete(
 void AuthDialogContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   views::View::GetAccessibleNodeData(node_data);
   node_data->role = ax::mojom::Role::kDialog;
-  node_data->SetName(base::UTF8ToUTF16(kTitle));
+  node_data->SetName(
+      l10n_util::GetStringFUTF16(IDS_ASH_IN_SESSION_AUTH_ACCESSIBLE_TITLE,
+                                 base::UTF8ToUTF16(origin_name_)));
+}
+
+void AuthDialogContentsView::RequestFocus() {
+  if (auth_methods_ == kAuthFingerprint) {
+    // There's no PIN input field, so let the focus be on the cancel button
+    // (instead of the help button) because it is more often used.
+    cancel_button_->RequestFocus();
+    return;
+  }
+
+  // For other cases, the base method correctly sets focus to the input field.
+  views::View::RequestFocus();
 }
 
 }  // namespace ash

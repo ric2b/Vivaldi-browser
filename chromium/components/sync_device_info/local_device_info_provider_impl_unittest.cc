@@ -5,7 +5,6 @@
 #include "components/sync_device_info/local_device_info_provider_impl.h"
 
 #include "base/memory/ptr_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_util.h"
 #include "components/sync_device_info/device_info_sync_client.h"
@@ -42,12 +41,14 @@ class MockDeviceInfoSyncClient : public DeviceInfoSyncClient {
   MockDeviceInfoSyncClient() = default;
   ~MockDeviceInfoSyncClient() = default;
 
-  MOCK_CONST_METHOD0(GetSigninScopedDeviceId, std::string());
-  MOCK_CONST_METHOD0(GetSendTabToSelfReceivingEnabled, bool());
-  MOCK_CONST_METHOD0(GetLocalSharingInfo,
-                     base::Optional<DeviceInfo::SharingInfo>());
-  MOCK_CONST_METHOD0(GetFCMRegistrationToken, std::string());
-  MOCK_CONST_METHOD0(GetInterestedDataTypes, ModelTypeSet());
+  MOCK_METHOD(std::string, GetSigninScopedDeviceId, (), (const override));
+  MOCK_METHOD(bool, GetSendTabToSelfReceivingEnabled, (), (const override));
+  MOCK_METHOD(base::Optional<DeviceInfo::SharingInfo>,
+              GetLocalSharingInfo,
+              (),
+              (const override));
+  MOCK_METHOD(std::string, GetFCMRegistrationToken, (), (const override));
+  MOCK_METHOD(ModelTypeSet, GetInterestedDataTypes, (), (const override));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockDeviceInfoSyncClient);

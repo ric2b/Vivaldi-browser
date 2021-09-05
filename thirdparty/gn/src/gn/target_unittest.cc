@@ -142,16 +142,19 @@ TEST_F(TargetTest, DependentConfigs) {
 
   // Normal non-inherited config.
   Config config(setup.settings(), Label(SourceDir("//foo/"), "config"));
+  config.visibility().SetPublic();
   ASSERT_TRUE(config.OnResolved(&err));
   c.configs().push_back(LabelConfigPair(&config));
 
   // All dependent config.
   Config all(setup.settings(), Label(SourceDir("//foo/"), "all"));
+  all.visibility().SetPublic();
   ASSERT_TRUE(all.OnResolved(&err));
   c.all_dependent_configs().push_back(LabelConfigPair(&all));
 
   // Direct dependent config.
   Config direct(setup.settings(), Label(SourceDir("//foo/"), "direct"));
+  direct.visibility().SetPublic();
   ASSERT_TRUE(direct.OnResolved(&err));
   c.public_configs().push_back(LabelConfigPair(&direct));
 
@@ -211,17 +214,20 @@ TEST_F(TargetTest, NoDependentConfigsBetweenToolchains) {
 
   // All dependent config.
   Config all_dependent(setup.settings(), Label(SourceDir("//foo/"), "all"));
+  all_dependent.visibility().SetPublic();
   ASSERT_TRUE(all_dependent.OnResolved(&err));
   c.all_dependent_configs().push_back(LabelConfigPair(&all_dependent));
 
   // Public config.
   Config public_config(setup.settings(), Label(SourceDir("//foo/"), "public"));
+  public_config.visibility().SetPublic();
   ASSERT_TRUE(public_config.OnResolved(&err));
   c.public_configs().push_back(LabelConfigPair(&public_config));
 
   // Another public config.
   Config public_config2(setup.settings(),
                         Label(SourceDir("//foo/"), "public2"));
+  public_config2.visibility().SetPublic();
   ASSERT_TRUE(public_config2.OnResolved(&err));
   b.public_configs().push_back(LabelConfigPair(&public_config2));
 
@@ -267,11 +273,13 @@ TEST_F(TargetTest, DependentConfigsBetweenToolchainsWhenSet) {
 
   // All dependent config.
   Config all_dependent(setup.settings(), Label(SourceDir("//foo/"), "all"));
+  all_dependent.visibility().SetPublic();
   ASSERT_TRUE(all_dependent.OnResolved(&err));
   b.all_dependent_configs().push_back(LabelConfigPair(&all_dependent));
 
   // Public config.
   Config public_config(setup.settings(), Label(SourceDir("//foo/"), "public"));
+  public_config.visibility().SetPublic();
   ASSERT_TRUE(public_config.OnResolved(&err));
   b.public_configs().push_back(LabelConfigPair(&public_config));
 
@@ -578,6 +586,7 @@ TEST_F(TargetTest, PublicConfigs) {
 
   Label pub_config_label(SourceDir("//a/"), "pubconfig");
   Config pub_config(setup.settings(), pub_config_label);
+  pub_config.visibility().SetPublic();
   LibFile lib_name("testlib");
   pub_config.own_values().libs().push_back(lib_name);
   ASSERT_TRUE(pub_config.OnResolved(&err));
@@ -620,11 +629,13 @@ TEST_F(TargetTest, ConfigOrdering) {
   TestTarget dep1(setup, "//:dep1", Target::SOURCE_SET);
   Label dep1_all_config_label(SourceDir("//"), "dep1_all_config");
   Config dep1_all_config(setup.settings(), dep1_all_config_label);
+  dep1_all_config.visibility().SetPublic();
   ASSERT_TRUE(dep1_all_config.OnResolved(&err));
   dep1.all_dependent_configs().push_back(LabelConfigPair(&dep1_all_config));
 
   Label dep1_public_config_label(SourceDir("//"), "dep1_public_config");
   Config dep1_public_config(setup.settings(), dep1_public_config_label);
+  dep1_public_config.visibility().SetPublic();
   ASSERT_TRUE(dep1_public_config.OnResolved(&err));
   dep1.public_configs().push_back(LabelConfigPair(&dep1_public_config));
   ASSERT_TRUE(dep1.OnResolved(&err));
@@ -633,11 +644,13 @@ TEST_F(TargetTest, ConfigOrdering) {
   TestTarget dep2(setup, "//:dep2", Target::SOURCE_SET);
   Label dep2_all_config_label(SourceDir("//"), "dep2_all_config");
   Config dep2_all_config(setup.settings(), dep2_all_config_label);
+  dep2_all_config.visibility().SetPublic();
   ASSERT_TRUE(dep2_all_config.OnResolved(&err));
   dep2.all_dependent_configs().push_back(LabelConfigPair(&dep2_all_config));
 
   Label dep2_public_config_label(SourceDir("//"), "dep2_public_config");
   Config dep2_public_config(setup.settings(), dep2_public_config_label);
+  dep2_public_config.visibility().SetPublic();
   ASSERT_TRUE(dep2_public_config.OnResolved(&err));
   dep2.public_configs().push_back(LabelConfigPair(&dep2_public_config));
   ASSERT_TRUE(dep2.OnResolved(&err));
@@ -650,11 +663,13 @@ TEST_F(TargetTest, ConfigOrdering) {
   // It also has a private and public config.
   Label public_config_label(SourceDir("//"), "public");
   Config public_config(setup.settings(), public_config_label);
+  public_config.visibility().SetPublic();
   ASSERT_TRUE(public_config.OnResolved(&err));
   target.public_configs().push_back(LabelConfigPair(&public_config));
 
   Label private_config_label(SourceDir("//"), "private");
   Config private_config(setup.settings(), private_config_label);
+  private_config.visibility().SetPublic();
   ASSERT_TRUE(private_config.OnResolved(&err));
   target.configs().push_back(LabelConfigPair(&private_config));
 

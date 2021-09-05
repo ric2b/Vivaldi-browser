@@ -6,12 +6,12 @@
 
 #include <utility>
 
-#include "components/sync/model/fake_model_type_sync_bridge.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
 #include "components/sync/model_impl/processor_entity_tracker.h"
 #include "components/sync/test/engine/mock_model_type_processor.h"
 #include "components/sync/test/engine/mock_model_type_worker.h"
+#include "components/sync/test/model/fake_model_type_sync_bridge.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace syncer {

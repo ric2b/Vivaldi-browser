@@ -18,6 +18,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/views/test/button_test_api.h"
 
 using media_router::CastDialogController;
 using media_router::CastDialogModel;
@@ -164,10 +165,9 @@ class MediaNotificationDeviceSelectorViewTest : public ChromeViewsTestBase {
   }
 
   void SimulateButtonClick(views::View* view) {
-    view_->ButtonPressed(
-        static_cast<views::Button*>(view),
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                       ui::EventTimeForNow(), 0, 0));
+    views::test::ButtonTestApi(static_cast<views::Button*>(view))
+        .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
+                                    gfx::Point(), ui::EventTimeForNow(), 0, 0));
   }
 
   std::string EntryLabelText(views::View* entry_view) {
@@ -357,7 +357,7 @@ TEST_F(MediaNotificationDeviceSelectorViewTest, AudioDeviceButtonsChange) {
 
 TEST_F(MediaNotificationDeviceSelectorViewTest, VisibilityChanges) {
   // The device selector view should become hidden when there is only one
-  // unique device.
+  // unique device, unless there exists a cast device.
   MockMediaNotificationDeviceSelectorViewDelegate delegate;
   auto* provider = delegate.GetProvider();
   provider->AddDevice("Speaker", "1");
@@ -373,6 +373,12 @@ TEST_F(MediaNotificationDeviceSelectorViewTest, VisibilityChanges) {
 
   testing::Mock::VerifyAndClearExpectations(&delegate);
 
+  EXPECT_CALL(delegate, OnDeviceSelectorViewSizeChanged);
+  view_->OnModelUpdated(CreateModelWithSinks({CreateMediaSink()}));
+  EXPECT_TRUE(view_->GetVisible());
+
+  testing::Mock::VerifyAndClearExpectations(&delegate);
+  view_->OnModelUpdated(CreateModelWithSinks({}));
   provider->ResetDevices();
   provider->AddDevice("Speaker", "1");
   provider->AddDevice("Headphones",

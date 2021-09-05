@@ -11,19 +11,21 @@
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/bind.h"
 #include "base/unguessable_token.h"
+#include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_browsertest_base.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace ash {
@@ -37,11 +39,30 @@ constexpr char kTextFilePath[] = "text.txt";
 
 // Helpers ---------------------------------------------------------------------
 
-// Returns the file for the `relative_path` in the test data directory.
-base::FilePath TestFile(const std::string& relative_path) {
+// Copies the file for the `relative_path` in the test data directory to
+// downloads directory, and returns the path to the copy.
+base::FilePath TestFile(Profile* profile, const std::string& relative_path) {
   base::FilePath source_root;
   EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root));
-  return source_root.AppendASCII(kTestDataDir).AppendASCII(relative_path);
+  const base::FilePath source_file =
+      source_root.AppendASCII(kTestDataDir).AppendASCII(relative_path);
+
+  base::FilePath target_dir;
+  if (!storage::ExternalMountPoints::GetSystemInstance()->GetRegisteredPath(
+          file_manager::util::GetDownloadsMountPointName(profile),
+          &target_dir)) {
+    ADD_FAILURE() << "Failed to get downloads mount point";
+    return base::FilePath();
+  }
+
+  const base::FilePath target_path = target_dir.Append(source_file.BaseName());
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  if (!base::CopyFile(source_file, target_path)) {
+    ADD_FAILURE() << "Failed to create file.";
+    return base::FilePath();
+  }
+
+  return target_path;
 }
 
 }  // namespace
@@ -61,11 +82,9 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, CopyImageToClipboard) {
 
   {
     // Create a holding space item backed by a non-image file.
-    auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
-        HoldingSpaceItem::Type::kDownload, TestFile(kTextFilePath), GURL(),
-        std::make_unique<HoldingSpaceImage>(
-            /*placeholder=*/gfx::ImageSkia(),
-            /*async_bitmap_resolver=*/base::DoNothing()));
+    auto* holding_space_item =
+        AddItem(GetProfile(), HoldingSpaceItem::Type::kDownload,
+                TestFile(GetProfile(), kTextFilePath));
 
     // We expect `HoldingSpaceClient::CopyImageToClipboard()` to fail when the
     // backing file for `holding_space_item` is not an image file.
@@ -81,11 +100,9 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, CopyImageToClipboard) {
 
   {
     // Create a holding space item backed by an image file.
-    auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
-        HoldingSpaceItem::Type::kDownload, TestFile(kImageFilePath), GURL(),
-        std::make_unique<HoldingSpaceImage>(
-            /*placeholder=*/gfx::ImageSkia(),
-            /*async_bitmap_resolver=*/base::DoNothing()));
+    auto* holding_space_item =
+        AddItem(GetProfile(), HoldingSpaceItem::Type::kDownload,
+                TestFile(GetProfile(), kImageFilePath));
 
     // We expect `HoldingSpaceClient::CopyImageToClipboard()` to succeed when
     // the backing file for `holding_space_item` is an image file.
@@ -101,7 +118,8 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, CopyImageToClipboard) {
 }
 
 // Verifies that `HoldingSpaceClient::OpenDownloads()` works as intended.
-IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, OpenDownloads) {
+// TODO(crbug.com/1139299): Flaky.
+IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, DISABLED_OpenDownloads) {
   ASSERT_TRUE(HoldingSpaceController::Get());
 
   auto* holding_space_client = HoldingSpaceController::Get()->client();
@@ -129,7 +147,8 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, OpenItems) {
   {
     // Create a holding space item backed by a non-existing file.
     auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
-        HoldingSpaceItem::Type::kDownload, base::FilePath("foo"), GURL(),
+        HoldingSpaceItem::Type::kDownload, base::FilePath("foo"),
+        GURL("filesystem:fake"),
         std::make_unique<HoldingSpaceImage>(
             /*placeholder=*/gfx::ImageSkia(),
             /*async_bitmap_resolver=*/base::DoNothing()));
@@ -181,7 +200,8 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, MAYBE_ShowItemInFolder) {
   {
     // Create a holding space item backed by a non-existing file.
     auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
-        HoldingSpaceItem::Type::kDownload, base::FilePath("foo"), GURL(),
+        HoldingSpaceItem::Type::kDownload, base::FilePath("foo"),
+        GURL("filesystem:fake"),
         std::make_unique<HoldingSpaceImage>(
             /*placeholder=*/gfx::ImageSkia(),
             /*async_bitmap_resolver=*/base::DoNothing()));

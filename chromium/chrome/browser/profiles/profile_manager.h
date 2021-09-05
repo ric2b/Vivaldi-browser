@@ -35,6 +35,10 @@ class ProfileAttributesStorage;
 class ProfileInfoCache;
 class ProfileManagerObserver;
 
+// Manages the lifecycle of Profile objects.
+//
+// Note that the Profile objects may be destroyed when their last browser window
+// is closed. The DestroyProfileOnBrowserClose flag controls this behavior.
 class ProfileManager : public content::NotificationObserver,
                        public Profile::Delegate {
  public:
@@ -215,7 +219,14 @@ class ProfileManager : public content::NotificationObserver,
   // that case the callback will be called when profile creation is complete.
   void ScheduleProfileForDeletion(const base::FilePath& profile_dir,
                                   ProfileLoadedCallback callback);
+
+  // Deletes Guest profile's browsing data.
+  static void CleanUpGuestProfile();
 #endif
+
+  // Returns if profile is marked for deletion.
+  static bool IsProfileDirectoryMarkedForDeletion(
+      const base::FilePath& profile_dir);
 
   // Autoloads profiles if they are running background apps.
   void AutoloadProfiles();
@@ -309,6 +320,13 @@ class ProfileManager : public content::NotificationObserver,
   // Returns true if the profile was added, false otherwise.
   bool AddProfile(std::unique_ptr<Profile> profile);
 
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  // Removes the Profile at |profile_dir| from the manager and destroys it. If
+  // it's an ephemeral profile, also nuke the |profile_dir| directory from disk
+  // afterwards.
+  void RemoveProfile(const base::FilePath& profile_dir);
+#endif
+
   // Synchronously creates and returns a profile. This handles both the full
   // creation and adds it to the set managed by this ProfileManager. Returns
   // null if creation fails.
@@ -329,6 +347,12 @@ class ProfileManager : public content::NotificationObserver,
                              const base::FilePath& new_active_profile_dir);
   void OnLoadProfileForProfileDeletion(const base::FilePath& profile_dir,
                                        Profile* profile);
+
+  // Searches for the latest active profile that respects |predicate|, already
+  // loaded preferably. Returns nullopt if no existing profile respects all the
+  // conditions.
+  base::Optional<base::FilePath> FindLastActiveProfile(
+      base::RepeatingCallback<bool(ProfileAttributesEntry*)> predicate);
 #endif
 
   // Registers profile with given info. Returns pointer to created ProfileInfo
@@ -457,6 +481,9 @@ class ProfileManager : public content::NotificationObserver,
 
   // Controls whether to initialize some services. Only disabled for testing.
   bool do_final_services_init_ = true;
+
+  // Path to Guest profile. Can be empty when the profile does not exist.
+  base::FilePath guest_profile_path_;
 
   // TODO(chrome/browser/profiles/OWNERS): Usage of this in profile_manager.cc
   // should likely be turned into DCHECK_CURRENTLY_ON(BrowserThread::UI) for

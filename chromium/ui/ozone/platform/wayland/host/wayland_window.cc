@@ -8,12 +8,14 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/ozone/events_ozone.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
@@ -21,6 +23,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_pointer.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
+#include "ui/ozone/platform/wayland/host/wayland_zcr_cursor_shapes.h"
 #include "ui/ozone/public/mojom/wayland/wayland_overlay_config.mojom.h"
 
 namespace {
@@ -39,6 +42,7 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
                              WaylandConnection* connection)
     : delegate_(delegate),
       connection_(connection),
+      wayland_overlay_delegation_enabled_(IsWaylandOverlayDelegationEnabled()),
       accelerated_widget_(
           connection->wayland_window_manager()->AllocateAcceleratedWidget()) {}
 
@@ -47,6 +51,10 @@ WaylandWindow::~WaylandWindow() {
 
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 
+  if (wayland_overlay_delegation_enabled_) {
+    connection_->wayland_window_manager()->RemoveSubsurface(
+        GetWidget(), primary_subsurface_.get());
+  }
   for (const auto& widget_subsurface : wayland_subsurfaces()) {
     connection_->wayland_window_manager()->RemoveSubsurface(
         GetWidget(), widget_subsurface.get());
@@ -106,12 +114,18 @@ void WaylandWindow::SetPointerFocus(bool focus) {
   // Whenever the window gets the pointer focus back, we must reinitialize the
   // cursor. Otherwise, it is invalidated whenever the pointer leaves the
   // surface and is not restored by the Wayland compositor.
-  if (has_pointer_focus_ && bitmap_)
-    connection_->SetCursorBitmap(bitmap_->bitmaps(), bitmap_->hotspot());
+  if (has_pointer_focus_ && bitmap_) {
+    // Translate physical pixels to DIPs.
+    gfx::Point hotspot_in_dips =
+        gfx::ScaleToRoundedPoint(bitmap_->hotspot(), 1.0f / ui_scale_);
+    connection_->SetCursorBitmap(bitmap_->bitmaps(), hotspot_in_dips,
+                                 buffer_scale());
+  }
 }
 
 void WaylandWindow::Show(bool inactive) {
-  NOTREACHED();
+  if (background_buffer_id_ != 0u)
+    should_attach_background_buffer_ = true;
 }
 
 void WaylandWindow::Hide() {
@@ -138,7 +152,7 @@ void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
-gfx::Rect WaylandWindow::GetBounds() {
+gfx::Rect WaylandWindow::GetBounds() const {
   return bounds_px_;
 }
 
@@ -207,11 +221,33 @@ void WaylandWindow::SetCursor(PlatformCursor cursor) {
 
   bitmap_ = bitmap;
 
-  if (bitmap_) {
-    connection_->SetCursorBitmap(bitmap_->bitmaps(), bitmap_->hotspot());
-  } else {
-    connection_->SetCursorBitmap(std::vector<SkBitmap>(), gfx::Point());
+  if (!bitmap_) {
+    // Hide the cursor.
+    connection_->SetCursorBitmap(std::vector<SkBitmap>(), gfx::Point(),
+                                 buffer_scale());
+    return;
   }
+  // Check for Wayland server-side cursor support (e.g. exo for lacros).
+  if (connection_->zcr_cursor_shapes()) {
+    base::Optional<int32_t> shape =
+        WaylandZcrCursorShapes::ShapeFromType(bitmap->type());
+    // If the server supports this cursor type, use a server-side cursor.
+    if (shape.has_value()) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      // Lacros should not load image assets for default cursors. See
+      // BitmapCursorFactoryOzone::GetDefaultCursor().
+      DCHECK(bitmap_->bitmaps().empty());
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+      connection_->zcr_cursor_shapes()->SetCursorShape(shape.value());
+      return;
+    }
+    // Fall through to client-side bitmap cursors.
+  }
+  // Translate physical pixels to DIPs.
+  gfx::Point hotspot_in_dips =
+      gfx::ScaleToRoundedPoint(bitmap_->hotspot(), 1.0f / ui_scale_);
+  connection_->SetCursorBitmap(bitmap_->bitmaps(), hotspot_in_dips,
+                               buffer_scale());
 }
 
 void WaylandWindow::MoveCursorTo(const gfx::Point& location) {
@@ -350,6 +386,15 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   if (!OnInitialize(std::move(properties)))
     return false;
+
+  if (wayland_overlay_delegation_enabled_) {
+    primary_subsurface_ =
+        std::make_unique<WaylandSubsurface>(connection_, this);
+    if (!primary_subsurface_->surface())
+      return false;
+    connection_->wayland_window_manager()->AddSubsurface(
+        GetWidget(), primary_subsurface_.get());
+  }
 
   connection_->ScheduleFlush();
 
@@ -530,6 +575,10 @@ bool WaylandWindow::CommitOverlays(
 
   size_t above = (overlays.end() - split) - num_primary_planes;
   size_t below = split - overlays.begin();
+
+  if (overlays.front()->z_order == INT32_MIN)
+    --below;
+
   // Re-arrange the list of subsurfaces to fit the |overlays|. Request extra
   // subsurfaces if needed.
   if (!ArrangeSubsurfaceStack(above, below))
@@ -542,12 +591,14 @@ bool WaylandWindow::CommitOverlays(
     auto overlay_iter = split - 1;
     for (auto iter = subsurface_stack_below_.begin();
          iter != subsurface_stack_below_.end(); ++iter, --overlay_iter) {
-      if (overlay_iter >= overlays.begin()) {
+      if (overlays.front()->z_order == INT32_MIN
+              ? overlay_iter >= ++overlays.begin()
+              : overlay_iter >= overlays.begin()) {
         WaylandSurface* reference_above = nullptr;
         if (overlay_iter == split - 1) {
           // It's possible that |overlays| does not contain primary plane, we
           // still want to place relative to the surface with z_order=0.
-          reference_above = root_surface();
+          reference_above = primary_subsurface_->wayland_surface();
         } else {
           reference_above = (*std::next(iter))->wayland_surface();
         }
@@ -576,7 +627,7 @@ bool WaylandWindow::CommitOverlays(
         if (overlay_iter == split + num_primary_planes) {
           // It's possible that |overlays| does not contain primary plane, we
           // still want to place relative to the surface with z_order=0.
-          reference_below = root_surface();
+          reference_below = primary_subsurface_->wayland_surface();
         } else {
           reference_below = (*std::prev(iter))->wayland_surface();
         }
@@ -595,12 +646,36 @@ bool WaylandWindow::CommitOverlays(
     }
   }
 
-  if (num_primary_planes) {
+  if (!wayland_overlay_delegation_enabled_) {
     connection_->buffer_manager_host()->CommitBufferInternal(
         root_surface(), (*split)->buffer_id, (*split)->damage_region,
         /*wait_for_frame_callback=*/true);
+    return true;
+  }
+
+  if (num_primary_planes) {
+    primary_subsurface_->ConfigureAndShowSurface(
+        (*split)->transform, (*split)->crop_rect, (*split)->bounds_rect,
+        (*split)->enable_blend, nullptr, nullptr);
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        primary_subsurface_->wayland_surface(), (*split)->buffer_id,
+        (*split)->damage_region, /*wait_for_frame_callback=*/false);
+  }
+
+  root_surface_->SetViewportDestination(bounds_px_.size());
+
+  if (overlays.front()->z_order == INT32_MIN) {
+    background_buffer_id_ = overlays.front()->buffer_id;
+    should_attach_background_buffer_ = true;
+  }
+
+  if (should_attach_background_buffer_) {
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        root_surface(), background_buffer_id_, /*damage_region=*/gfx::Rect(),
+        /*wait_for_frame_callback=*/true);
+    should_attach_background_buffer_ = false;
   } else {
-    // Subsurfaces are set to sync, above operations will only take effects
+    // Subsurfaces are set to sync, above surface configs will only take effect
     // when root_surface is committed.
     connection_->buffer_manager_host()->CommitWithoutBufferInternal(
         root_surface(), /*wait_for_frame_callback=*/true);

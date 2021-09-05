@@ -30,7 +30,8 @@ bool LayoutNGFlexibleBox::HasLeftOverflow() const {
     return StyleRef().IsLeftToRightDirection() ==
            StyleRef().ResolvedIsRowReverseFlexDirection();
   }
-  return StyleRef().ResolvedIsColumnReverseFlexDirection();
+  return (StyleRef().GetWritingMode() == WritingMode::kVerticalLr) ==
+         StyleRef().ResolvedIsColumnReverseFlexDirection();
 }
 
 void LayoutNGFlexibleBox::UpdateBlockLayout(bool relayout_children) {
@@ -56,7 +57,8 @@ void MergeAnonymousFlexItems(LayoutObject* remove_child) {
   LayoutObject* next = remove_child->NextSibling();
   if (!next || !next->IsAnonymousBlock())
     return;
-  ToLayoutBoxModelObject(next)->MoveAllChildrenTo(ToLayoutBoxModelObject(prev));
+  To<LayoutBoxModelObject>(next)->MoveAllChildrenTo(
+      To<LayoutBoxModelObject>(prev));
   To<LayoutBlockFlow>(next)->DeleteLineBoxTree();
   next->Destroy();
 }

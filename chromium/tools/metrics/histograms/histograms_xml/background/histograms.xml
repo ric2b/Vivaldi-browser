@@ -116,7 +116,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundFetch.MatchCalledFromDocumentScope"
-    enum="ScopeMatchCalledFrom" expires_after="2020-11-30">
+    enum="ScopeMatchCalledFrom" expires_after="2021-11-30">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>peter@chromium.org</owner>
@@ -127,7 +127,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundFetch.MatchCalledWhenFetchIsIncomplete"
-    enum="FetchStatusWhenMatchCalled" expires_after="2020-11-30">
+    enum="FetchStatusWhenMatchCalled" expires_after="2021-11-30">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>peter@chromium.org</owner>
@@ -139,7 +139,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundFetch.PercentOfRequestsForWhichUpdatesAreSent"
-    units="%" expires_after="2020-11-30">
+    units="%" expires_after="2021-11-30">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>peter@chromium.org</owner>
@@ -160,7 +160,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundMode.BackgroundApplicationsCount" units="units"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>atwilson@chromium.org</owner>
   <owner>mvanouwerkerk@chromium.org</owner>
   <summary>
@@ -189,9 +189,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundMode.OnStartup.AutoLaunchState"
-    enum="AutoLaunchState" expires_after="2020-11-01">
-  <owner>gab@chromium.org</owner>
+    enum="AutoLaunchState" expires_after="2021-03-30">
   <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>rdevlin.cronin@chromium.org</owner>
   <summary>
     Logged during BackgroundModeManager's initialization. Indicates the
     AutoLaunchState the current browser process was launched in.
@@ -199,9 +199,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundMode.OnStartup.IsBackgroundModePrefEnabled"
-    enum="BooleanEnabled" expires_after="2020-11-01">
-  <owner>gab@chromium.org</owner>
+    enum="BooleanEnabled" expires_after="2021-03-30">
   <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>rdevlin.cronin@chromium.org</owner>
   <summary>
     Logged during BackgroundModeManager's initialization. Indicates the state of
     the kBackgroundModeEnabled pref on startup.
@@ -232,7 +232,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundSync.Event.FromWakeupTask"
-    enum="BackgroundSyncWakeupTask" expires_after="M86">
+    enum="BackgroundSyncWakeupTask" expires_after="2021-07-31">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <summary>
@@ -340,7 +340,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundSync.Registration.OneShot"
-    enum="BackgroundSyncStatus" expires_after="2021-01-31">
+    enum="BackgroundSyncStatus" expires_after="2021-04-04">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <summary>
@@ -349,7 +349,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackgroundSync.Registration.OneShot.CouldFire"
-    enum="BooleanCouldFireImmediately" expires_after="2021-02-21">
+    enum="BooleanCouldFireImmediately" expires_after="2021-04-25">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <summary>
@@ -360,7 +360,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackgroundSync.Registration.OneShot.EventSucceededAtCompletion"
-    enum="BooleanSuccess" expires_after="2021-03-07">
+    enum="BooleanSuccess" expires_after="2021-05-09">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>peter@chromium.org</owner>
@@ -382,7 +382,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackgroundSync.Registration.OneShot.NumAttemptsForSuccessfulEvent"
-    units="attempts" expires_after="2021-03-07">
+    units="attempts" expires_after="2021-05-09">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <summary>

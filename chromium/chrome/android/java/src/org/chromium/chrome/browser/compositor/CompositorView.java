@@ -27,10 +27,10 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.resources.StaticResourcePreloads;
-import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.tabmodel.TabModelImpl;
+import org.chromium.chrome.browser.tabmodel.TabSwitchMetrics;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -71,7 +71,6 @@ public class CompositorView
     // Lazily populated as it is needed.
     private View mRootActivityView;
     private WindowAndroid mWindowAndroid;
-    private LayerTitleCache mLayerTitleCache;
     private TabContentManager mTabContentManager;
 
     private View mRootView;
@@ -271,21 +270,19 @@ public class CompositorView
      * Initializes the {@link CompositorView}'s native parts (e.g. the rendering parts).
      * @param lowMemDevice         If this is a low memory device.
      * @param windowAndroid        A {@link WindowAndroid} instance.
-     * @param layerTitleCache      A {@link LayerTitleCache} instance.
      * @param tabContentManager    A {@link TabContentManager} instance.
      */
     public void initNativeCompositor(boolean lowMemDevice, WindowAndroid windowAndroid,
-            LayerTitleCache layerTitleCache, TabContentManager tabContentManager) {
+            TabContentManager tabContentManager) {
         // https://crbug.com/802160. We can't call setWindowAndroid here because updating the window
         // visibility here breaks exiting Reader Mode somehow.
         mWindowAndroid = windowAndroid;
         mWindowAndroid.addSelectionHandlesObserver(this);
 
-        mLayerTitleCache = layerTitleCache;
         mTabContentManager = tabContentManager;
 
-        mNativeCompositorView = CompositorViewJni.get().init(CompositorView.this, lowMemDevice,
-                windowAndroid, layerTitleCache, tabContentManager);
+        mNativeCompositorView = CompositorViewJni.get().init(
+                CompositorView.this, lowMemDevice, windowAndroid, tabContentManager);
 
         // compositor_impl_android.cc will use 565 EGL surfaces if and only if we're using a low
         // memory device, and no alpha channel is desired.  Otherwise, it will use 8888.  Since
@@ -449,6 +446,20 @@ public class CompositorView
                 mNativeCompositorView, CompositorView.this, webContents, controlsResizeView);
     }
 
+    /**
+     * Notifies geometrychange event to JS.
+     * @param webContents Active WebContent for which this event needs to be fired.
+     * @param x When the keyboard is shown, it has the left position of the app's rect, else, 0.
+     * @param y When the keyboard is shown, it has the top position of the app's rect, else, 0.
+     * @param width  When the keyboard is shown, it has the width of the view, else, 0.
+     * @param height When the keyboard is shown, it has the height of the keyboard, else, 0.
+     */
+    void notifyVirtualKeyboardOverlayRect(
+            WebContents webContents, int x, int y, int width, int height) {
+        CompositorViewJni.get().notifyVirtualKeyboardOverlayRect(
+                mNativeCompositorView, CompositorView.this, webContents, x, y, width, height);
+    }
+
     @CalledByNative
     private void onCompositorLayout() {
         mRenderHost.onCompositorLayout();
@@ -535,13 +546,13 @@ public class CompositorView
 
         CompositorViewJni.get().setLayoutBounds(mNativeCompositorView, CompositorView.this);
 
-        SceneLayer sceneLayer = provider.getUpdatedActiveSceneLayer(mLayerTitleCache,
-                mTabContentManager, mResourceManager, provider.getBrowserControlsManager());
+        SceneLayer sceneLayer = provider.getUpdatedActiveSceneLayer(mTabContentManager,
+                mResourceManager, provider.getBrowserControlsManager());
 
         CompositorViewJni.get().setSceneLayer(
                 mNativeCompositorView, CompositorView.this, sceneLayer);
 
-        TabModelImpl.flushActualTabSwitchLatencyMetric();
+        TabSwitchMetrics.flushActualTabSwitchLatencyMetric();
         CompositorViewJni.get().finalizeLayers(mNativeCompositorView, CompositorView.this);
         TraceEvent.end("CompositorView:finalizeLayers");
     }
@@ -636,7 +647,7 @@ public class CompositorView
     @NativeMethods
     interface Natives {
         long init(CompositorView caller, boolean lowMemDevice, WindowAndroid windowAndroid,
-                LayerTitleCache layerTitleCache, TabContentManager tabContentManager);
+                TabContentManager tabContentManager);
         void destroy(long nativeCompositorView, CompositorView caller);
         ResourceManager getResourceManager(long nativeCompositorView, CompositorView caller);
         void surfaceCreated(long nativeCompositorView, CompositorView caller);
@@ -647,6 +658,8 @@ public class CompositorView
                 WebContents webContents, int width, int height);
         void onControlsResizeViewChanged(long nativeCompositorView, CompositorView caller,
                 WebContents webContents, boolean controlsResizeView);
+        void notifyVirtualKeyboardOverlayRect(long nativeCompositorView, CompositorView caller,
+                WebContents webContents, int x, int y, int width, int height);
         void finalizeLayers(long nativeCompositorView, CompositorView caller);
         void setNeedsComposite(long nativeCompositorView, CompositorView caller);
         void setLayoutBounds(long nativeCompositorView, CompositorView caller);

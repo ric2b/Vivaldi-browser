@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Gagal mencetak.</translation>
 <translation id="1125564390852150847">Buat tab baru.</translation>
 <translation id="1145536944570833626">Hapus data yang sudah ada.</translation>
+<translation id="1147031633655575115">Login sebagai <ph name="USER" /></translation>
 <translation id="1154690515305205900">Link ke teks yang ditandai tidak dapat dibuat.</translation>
+<translation id="1157749421655780457">Izinkan Lokasi...</translation>
 <translation id="1165039591588034296">Kesalahan</translation>
 <translation id="1172898394251786223">Bidang berikutnya</translation>
 <translation id="1176932207622159128">Gambar Tak Disimpan</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Sembunyikan Sandi</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> item</translation>
 <translation id="1491277525950327607">Ketuk dua kali untuk beralih setelan</translation>
+<translation id="1492417797159476138">Anda telah menyimpan nama pengguna ini untuk situs ini</translation>
 <translation id="1509486075633541495">Login ke situs</translation>
 <translation id="1509960214886564027">Fitur di banyak situs mungkin error</translation>
 <translation id="152234381334907219">Jangan Pernah Disimpan</translation>
@@ -266,6 +269,7 @@ Ikuti langkah di bawah:</translation>
 <translation id="385051799172605136">Kembali</translation>
 <translation id="3892144330757387737">Histori Anda akan ditampilkan di sini</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3913386780052199712">Login ke Chrome</translation>
 <translation id="3915450441834151894">Informasi Situs</translation>
 <translation id="3922310737605261887">Telusuri Teks yang Disalin</translation>
 <translation id="3928666092801078803">Gabungkan data saya</translation>
@@ -340,6 +344,7 @@ Data Anda dienkripsi dengan frasa sandi sinkronisasi. Loginkan frasa sandi untuk
 <translation id="4751645464639803239">Tab Samaran Baru</translation>
 <translation id="4758977202923349869">Posisikan Kartu Kredit dalam bingkai ini</translation>
 <translation id="4775879719735953715">Browser Default</translation>
+<translation id="4778644898150334464">Gunakan sandi lain</translation>
 <translation id="4802417911091824046">Enkripsi frasa sandi tidak mencakup alamat dan metode pembayaran dari Google Pay.
 
 Untuk mengubah setelan ini, <ph name="BEGIN_LINK" />reset sinkronisasi<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Untuk mengubah setelan ini, <ph name="BEGIN_LINK" />reset sinkronisasi<ph name="
 <translation id="5059136629401106827">Oke</translation>
 <translation id="5062321486222145940">Instal Google Drive</translation>
 <translation id="5083464117946352670">Tidak dapat menentukan ukuran file.</translation>
+<translation id="5090832849094901128">Menghapus sandi ini tidak akan menghapus akun Anda di <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Tweet selesai.</translation>
 <translation id="5118764316110575523">Nonaktif</translation>
 <translation id="5127805178023152808">Sinkronisasi nonaktif</translation>
@@ -511,6 +517,9 @@ Situs tidak dapat menggunakan cookie untuk melihat aktivitas penjelajahan Anda d
 <translation id="6476800141292307438">Menerjemahkan halaman ke dalam bahasa <ph name="LANGUAGE" />. Opsi tersedia di dekat bagian bawah layar.</translation>
 <translation id="648164694371393720">Error saat Autentikasi</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> item dihapus</translation>
+<translation id="6497772452874122664">Jika Anda memercayai <ph name="TIME" />, Anda dapat menggunakan sandi yang tersimpan dari situs lainnya.
+
+Coba gunakan sandi yang unik untuk setiap situs.</translation>
 <translation id="651505212789431520">Batalkan Sinkronisasi? Anda dapat mengaktifkan sinkronisasi kapan saja di Setelan.</translation>
 <translation id="6561262006871132942">Perbesar</translation>
 <translation id="6585618849026997638">Anda dapat kembali ke halaman yang penting bagi Anda dengan menambahkan bookmark</translation>
@@ -590,6 +599,7 @@ Situs tidak dapat menggunakan cookie untuk melihat aktivitas penjelajahan Anda d
 <translation id="739941347996872055">Tab Sebelumnya</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> artikel belum dibaca.</translation>
+<translation id="7412027924265291969">Lanjutkan</translation>
 <translation id="7425346204213733349">Perubahan pada bookmark, histori, sandi, dan setelan lainnya tidak akan disinkronkan lagi dengan Akun Google. Namun, data yang sudah ada akan tetap disimpan di Akun Google Anda.</translation>
 <translation id="7435356471928173109">Dinonaktifkan oleh administrator Anda</translation>
 <translation id="7454057999980797137">Prov./County</translation>
@@ -600,6 +610,7 @@ Situs tidak dapat menggunakan cookie untuk melihat aktivitas penjelajahan Anda d
 <translation id="7472734401283673885">Nama Perusahaan</translation>
 <translation id="7473891865547856676">Lain Kali</translation>
 <translation id="7481312909269577407">Maju</translation>
+<translation id="7483467499335917849">Menggunakan Lokasi Saat Ini</translation>
 <translation id="750493650310597496">Tak ada yang dipilih</translation>
 <translation id="7514365320538308">Download</translation>
 <translation id="7537586195939242955">Maaf, Pass Anda tidak dapat dipasang ke Passbook saat ini.</translation>
@@ -733,6 +744,7 @@ Situs dapat menggunakan cookie untuk melihat aktivitas penjelajahan Anda di berb
 <translation id="9094033019050270033">Perbarui sandi</translation>
 <translation id="9100610230175265781">Frasa sandi diwajibkan</translation>
 <translation id="9107664647686727385">Periksa sandi yang telah dibobol</translation>
+<translation id="9137526406337347448">Layanan Google</translation>
 <translation id="9148126808321036104">Login sekali lagi</translation>
 <translation id="9152539721251340337">Buat Kode QR</translation>
 <translation id="9157836665414082580">Sembunyikan Dialog</translation>

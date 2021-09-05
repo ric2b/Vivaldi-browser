@@ -10,7 +10,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -258,13 +258,17 @@ void WebViewPlugin::DidFailLoading(const WebURLError& error) {
 
 WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
                                             const WebPreferences& preferences)
-    : plugin_(plugin) {
+    : plugin_(plugin),
+      agent_group_scheduler_(
+          blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+              ->CreateAgentGroupScheduler()) {
   web_view_ =
       WebView::Create(/*client=*/this,
                       /*is_hidden=*/false,
                       /*is_inside_portal=*/false,
                       /*compositing_enabled=*/false,
-                      /*opener=*/nullptr, mojo::NullAssociatedReceiver());
+                      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
+                      *agent_group_scheduler_);
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   blink::WebView::ApplyWebPreferences(preferences, web_view_);
@@ -278,7 +282,8 @@ WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
       blink::CrossVariantMojoAssociatedReceiver<
           blink::mojom::FrameWidgetInterfaceBase>(),
       blink_widget_host_receiver_.BindNewEndpointAndPassDedicatedRemote(),
-      blink_widget_.BindNewEndpointAndPassDedicatedReceiver());
+      blink_widget_.BindNewEndpointAndPassDedicatedReceiver(),
+      viz::FrameSinkId());
 
   // The WebFrame created here was already attached to the Page as its main
   // frame, and the WebFrameWidget has been initialized, so we can call

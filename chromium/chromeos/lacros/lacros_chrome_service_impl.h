@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
+#include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/feedback.mojom.h"
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
@@ -22,6 +23,8 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/hid.mojom.h"
+
+class GURL;
 
 namespace chromeos {
 
@@ -132,6 +135,27 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
     return feedback_remote_;
   }
 
+  // account_manager_remote() can only be used if this method returns true.
+  bool IsAccountManagerAvailable();
+
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to interact with accounts in Chrome OS Account Manager.
+  mojo::Remote<crosapi::mojom::AccountManager>& account_manager_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsAccountManagerAvailable());
+    return account_manager_remote_;
+  }
+
+  // file_manager_remote() can only be used if this method returns true.
+  bool IsFileManagerAvailable();
+
+  // Must be called on the affine sequence.
+  mojo::Remote<crosapi::mojom::FileManager>& file_manager_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsFileManagerAvailable());
+    return file_manager_remote_;
+  }
+
   // --------------------------------------------------------------------------
   // Some clients will want to use mojo::Remotes on arbitrary sequences (e.g.
   // background threads). The following methods allow the client to construct a
@@ -154,6 +178,12 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
     return init_params_.get();
   }
 
+  // Returns the version for an ash interface with a given UUID. Returns -1 if
+  // the interface is not found. This is a synchronous version of
+  // mojo::Remote::QueryVersion. It relies on Ash M88. Features that need to
+  // work on M87 or older should not use this.
+  int GetInterfaceVersion(base::Token interface_uuid) const;
+
  private:
   // LacrosChromeServiceNeverBlockingState is an implementation detail of this
   // class.
@@ -161,6 +191,19 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
 
   // Creates a new window on the affine sequence.
   void NewWindowAffineSequence();
+
+  using GetFeedbackDataCallback = base::OnceCallback<void(base::Value)>;
+  // Gets feedback data on the affine sequence.
+  void GetFeedbackDataAffineSequence(GetFeedbackDataCallback callback);
+
+  using GetHistogramsCallback = base::OnceCallback<void(const std::string&)>;
+  // Gets histograms on the affine sequence.
+  void GetHistogramsAffineSequence(GetHistogramsCallback callback);
+
+  using GetActiveTabUrlCallback =
+      base::OnceCallback<void(const base::Optional<GURL>&)>;
+  // Gets Url of the active tab on the affine sequence.
+  void GetActiveTabUrlAffineSequence(GetActiveTabUrlCallback callback);
 
   // Returns ash's version of the AshChromeService mojo interface version. This
   // determines which interface methods are available. This is safe to call from
@@ -174,18 +217,15 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // Parameters passed from ash-chrome.
   crosapi::mojom::LacrosInitParamsPtr init_params_;
 
-  // This member allows lacros-chrome to use the SelectFile interface. This
-  // member is affine to the affine sequence. It is initialized in the
-  // constructor and it is immediately available for use.
+  // These members are affine to the affine sequence. They are initialized in
+  // the constructor and are immediately available for use.
   mojo::Remote<crosapi::mojom::MessageCenter> message_center_remote_;
   mojo::Remote<crosapi::mojom::SelectFile> select_file_remote_;
   mojo::Remote<device::mojom::HidManager> hid_manager_remote_;
   mojo::Remote<crosapi::mojom::Feedback> feedback_remote_;
-
-  // This member allows lacros-chrome to use the KeystoreService interface. This
-  // member is affine to the affine sequence. It is initialized in the
-  // constructor and it is immediately available for use.
   mojo::Remote<crosapi::mojom::KeystoreService> keystore_service_remote_;
+  mojo::Remote<crosapi::mojom::AccountManager> account_manager_remote_;
+  mojo::Remote<crosapi::mojom::FileManager> file_manager_remote_;
 
   // This member is instantiated on the affine sequence alongside the
   // constructor. All subsequent invocations of this member, including

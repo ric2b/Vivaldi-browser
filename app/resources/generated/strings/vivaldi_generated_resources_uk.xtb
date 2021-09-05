@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Лише виділене</translation>
 <translation id="1244303850296295656">Помилка розширення</translation>
 <translation id="125220115284141797">За замовчуванням</translation>
-<translation id="1274977772557788323">Налаштування сховища Adobe Flash Player</translation>
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
 <translation id="1380436189840894976">Закрити приватне вікно?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
 <translation id="2249605167705922988">напр., 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Дозволити ідентифікатори захищеного вмісту (може знадобитися перезавантаження комп'ютера)</translation>
-<translation id="2263497240924215535">(Вимкнено)</translation>
 <translation id="2277255602909579701">Усі сookie-файли та дані з сайтів</translation>
 <translation id="2280486287150724112">Праве поле</translation>
 <translation id="2282146716419988068">Процес GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Веб-магазин Chrome</translation>
 <translation id="2678063897982469759">Знову ввімкнути</translation>
 <translation id="2721037002783622288">&amp;Шукати зображення через <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Створити ярлик…</translation>
 <translation id="2785873697295365461">Дескриптори файлу</translation>
 <translation id="2809586584051668049">і ще <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показувати зображення</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Пристрої MIDI</translation>
 <translation id="3021678814754966447">&amp;Переглянути джерело фрейму</translation>
 <translation id="3036546437875325427">Увімкнути Flash</translation>
-<translation id="3038675903128704560">Заборонити сайтам запустити плагін для доступа до комп'ютера</translation>
 <translation id="3046910703532196514">Веб-сторінка, повністю</translation>
 <translation id="3067198360141518313">Запустити цей плагін</translation>
 <translation id="3080207940057008665">Інша програма на вашому комп’ютері додала тему, яка може змінити роботу Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
 <translation id="3387614642886316601">Використовувати покращену перевірку орфографії</translation>
 <translation id="3432227430032737297">Вилучити всі показані</translation>
-<translation id="3440761377721825626">Запитувати, якщо сайт хоче запустити плагін для доступа до комп'ютера</translation>
 <translation id="345693547134384690">Відкрити &amp;зображення в новій вкладці</translation>
 <translation id="3494769164076977169">Запитувати, якщо сайт намагається завантажити файли автоматично після першого файлу (рекомендовано)</translation>
 <translation id="3505030558724226696">Скасувати доступ до пристрою</translation>
 <translation id="3511307672085573050">&amp;Копіювати адресу посилання</translation>
-<translation id="3523642406908660543">Запитувати, якщо сайт хоче запустити плагін для доступа до комп'ютера (рекомендується)</translation>
 <translation id="354068948465830244">Може переглядати й змінювати дані сайту</translation>
 <translation id="3560034655160545939">&amp;Перевірка орфографії</translation>
 <translation id="3574917942258583917">Закрити приватне вікно?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоче надати доступ до принтера &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; вашій групі &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Якщо ви приймете запрошення, то всі учасники групи зможуть користуватися цим принтером.</translation>
 <translation id="3587482841069643663">Всі</translation>
 <translation id="3627588569887975815">Відкрити посилання в &amp;приватному вікні</translation>
+<translation id="3627879631695760395">Установити додаток <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Обробники</translation>
 <translation id="3678156199662914018">Розширення: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запит на спільний доступ до екрана від <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Відновити налаштування</translation>
 <translation id="4434045419905280838">Спливаючі вікна й переадресація</translation>
 <translation id="4478664379124702289">Зберегти &amp;посилання як...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Не вдається транслювати з <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Перейти до <ph name="URL" /></translation>
 <translation id="4595560905247879544">Лише адміністратор (<ph name="CUSTODIAN_NAME" />) може змінювати додатки та розширення.</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Невідомий</translation>
 <translation id="5860491529813859533">Увімкнути</translation>
 <translation id="5867841422488265304">Введіть пошуковий запит чи веб-адресу</translation>
-<translation id="5908769186679515905">Забороняти сайтам запускати Flash</translation>
 <translation id="5910363049092958439">&amp;Зберегти зображення як...</translation>
 <translation id="5956585768868398362">Це сторінка пошуку, яку ви очікували?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (максимум <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показати &amp;елементи керування</translation>
-<translation id="7311079019872751559">Доступ плагіна з неізольованим програмним середовищем</translation>
 <translation id="7385854874724088939">Під час друку виникла помилка. Перевірте свій принтер і спробуйте ще раз.</translation>
 <translation id="7412226954991670867">Пам'ять GPU</translation>
 <translation id="7421925624202799674">&amp;Переглянути джерело сторінки</translation>
@@ -477,6 +471,7 @@
 <translation id="9027459031423301635">Відкрити посилання в новій &amp;вкладці</translation>
 <translation id="9056810968620647706">Нічого не знайдено.</translation>
 <translation id="9137916601698928395">Відкрити посилання як <ph name="USER" /></translation>
+<translation id="91568222606626347">Створити ярлик…</translation>
 <translation id="916607977885256133">Картинка в картинці</translation>
 <translation id="9170848237812810038">&amp;Скасувати</translation>
 <translation id="9215293857209265904">Додано розширення "<ph name="EXTENSION_NAME" />"</translation>

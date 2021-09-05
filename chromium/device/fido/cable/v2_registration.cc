@@ -5,6 +5,7 @@
 #include "device/fido/cable/v2_registration.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "components/cbor/reader.h"
 #include "components/cbor/values.h"
 #include "components/device_event_log/device_event_log.h"
@@ -31,9 +32,30 @@ class FCMHandler : public gcm::GCMAppHandler, public Registration {
       : event_callback_(std::move(event_callback)),
         instance_id_driver_(instance_id_driver),
         instance_id_(instance_id_driver->GetInstanceID(kFCMAppId)) {
+    // Registering with FCM on platforms other than Android could cause large
+    // number of new registrations with the FCM service. Thus this code does not
+    // compile on other platforms. Check with //components/gcm_driver owners
+    // before changing this.
+#if !defined(OS_ANDROID)
+    CHECK(false) << "Do not use outside of Android.";
+#endif
+
     gcm::GCMDriver* const gcm_driver = instance_id_->gcm_driver();
     CHECK(gcm_driver->GetAppHandler(kFCMAppId) == nullptr);
     instance_id_->gcm_driver()->AddAppHandler(kFCMAppId, this);
+  }
+
+  ~FCMHandler() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    instance_id_->gcm_driver()->RemoveAppHandler(kFCMAppId);
+    instance_id_driver_->RemoveInstanceID(kFCMAppId);
+  }
+
+  // Registration:
+
+  void PrepareContactID() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     instance_id_->GetToken(
         kFCMSenderId, instance_id::kGCMScope,
@@ -42,14 +64,18 @@ class FCMHandler : public gcm::GCMAppHandler, public Registration {
         base::BindOnce(&FCMHandler::GetTokenComplete, base::Unretained(this)));
   }
 
-  ~FCMHandler() override {
-    instance_id_->gcm_driver()->RemoveAppHandler(kFCMAppId);
-    instance_id_driver_->RemoveInstanceID(kFCMAppId);
+  void RotateContactID() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    registration_token_.reset();
+    instance_id_->DeleteToken(kFCMSenderId, instance_id::kGCMScope,
+                              base::BindOnce(&FCMHandler::DeleteTokenComplete,
+                                             base::Unretained(this)));
   }
 
-  // Registration:
-
   base::Optional<std::vector<uint8_t>> contact_id() const override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
     if (!registration_token_) {
       return base::nullopt;
     }
@@ -106,6 +132,17 @@ class FCMHandler : public gcm::GCMAppHandler, public Registration {
 
     FIDO_LOG(ERROR) << __func__ << " " << token;
     registration_token_ = token;
+  }
+
+  void DeleteTokenComplete(instance_id::InstanceID::Result result) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    if (result != instance_id::InstanceID::SUCCESS) {
+      FIDO_LOG(ERROR) << "Deleting FCM token failed: "
+                      << static_cast<int>(result);
+    }
+
+    PrepareContactID();
   }
 
   static base::Optional<std::unique_ptr<Registration::Event>> MessageToEvent(

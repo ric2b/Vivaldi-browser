@@ -6,6 +6,7 @@
 
 #include "base/check_op.h"
 #include "base/notreached.h"
+#include "base/scoped_observation.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 
@@ -19,9 +20,11 @@ class ServiceWorkerContextAdapter::RunningServiceWorker
     : content::RenderProcessHostObserver {
  public:
   RunningServiceWorker(int64_t version_id,
-                       content::RenderProcessHost* worker_process_host,
                        ServiceWorkerContextAdapter* adapter);
   ~RunningServiceWorker() override;
+
+  void Subscribe(content::RenderProcessHost* worker_process_host);
+  void Unsubscribe();
 
   void RenderProcessExited(
       content::RenderProcessHost* host,
@@ -30,31 +33,44 @@ class ServiceWorkerContextAdapter::RunningServiceWorker
 
  private:
   // The version ID of the service worker.
-  int version_id_;
+  int const version_id_;
 
   // The adapter that owns |this|. Notified when RenderProcessExited() is
   // called.
   ServiceWorkerContextAdapter* const adapter_;
 
-  ScopedObserver<content::RenderProcessHost, content::RenderProcessHostObserver>
-      scoped_render_process_host_observer_{this};
+  base::ScopedObservation<content::RenderProcessHost,
+                          content::RenderProcessHostObserver>
+      scoped_observation_{this};
 };
 
 ServiceWorkerContextAdapter::RunningServiceWorker::RunningServiceWorker(
     int64_t version_id,
-    content::RenderProcessHost* worker_process_host,
     ServiceWorkerContextAdapter* adapter)
-    : version_id_(version_id), adapter_(adapter) {
-  scoped_render_process_host_observer_.Add(worker_process_host);
+    : version_id_(version_id), adapter_(adapter) {}
+
+ServiceWorkerContextAdapter::RunningServiceWorker::~RunningServiceWorker() {
+  DCHECK(!scoped_observation_.IsObserving());
 }
 
-ServiceWorkerContextAdapter::RunningServiceWorker::~RunningServiceWorker() =
-    default;
+void ServiceWorkerContextAdapter::RunningServiceWorker::Subscribe(
+    content::RenderProcessHost* worker_process_host) {
+  DCHECK(!scoped_observation_.IsObserving());
+  scoped_observation_.Observe(worker_process_host);
+}
+
+void ServiceWorkerContextAdapter::RunningServiceWorker::Unsubscribe() {
+  DCHECK(scoped_observation_.IsObserving());
+
+  scoped_observation_.RemoveObservation();
+}
 
 void ServiceWorkerContextAdapter::RunningServiceWorker::RenderProcessExited(
     content::RenderProcessHost* host,
     const content::ChildProcessTerminationInfo& info) {
   adapter_->OnRenderProcessExited(version_id_);
+
+  /* This object is deleted inside the above, don't touch "this". */
 }
 
 void ServiceWorkerContextAdapter::RunningServiceWorker::
@@ -66,10 +82,15 @@ void ServiceWorkerContextAdapter::RunningServiceWorker::
 
 ServiceWorkerContextAdapter::ServiceWorkerContextAdapter(
     content::ServiceWorkerContext* underlying_context) {
-  scoped_underlying_context_observer_.Add(underlying_context);
+  scoped_underlying_context_observation_.Observe(underlying_context);
 }
 
-ServiceWorkerContextAdapter::~ServiceWorkerContextAdapter() = default;
+ServiceWorkerContextAdapter::~ServiceWorkerContextAdapter() {
+  // Clean up any outstanding running service worker process subscriptions.
+  for (const auto& item : running_service_workers_)
+    item.second->Unsubscribe();
+  running_service_workers_.clear();
+}
 
 void ServiceWorkerContextAdapter::AddObserver(
     content::ServiceWorkerContextObserver* observer) {
@@ -226,7 +247,7 @@ void ServiceWorkerContextAdapter::OnVersionRedundant(int64_t version_id,
 void ServiceWorkerContextAdapter::OnVersionStartedRunning(
     int64_t version_id,
     const content::ServiceWorkerRunningInfo& running_info) {
-  auto* worker_process_host =
+  content::RenderProcessHost* worker_process_host =
       content::RenderProcessHost::FromID(running_info.render_process_id);
 
   // It's possible that the renderer is already gone since the notification
@@ -240,19 +261,13 @@ void ServiceWorkerContextAdapter::OnVersionStartedRunning(
     return;
   }
 
-  bool inserted =
-      running_service_workers_
-          .emplace(version_id, std::make_unique<RunningServiceWorker>(
-                                   version_id, worker_process_host, this))
-          .second;
-  DCHECK(inserted);
-
+  AddRunningServiceWorker(version_id, worker_process_host);
   for (auto& observer : observer_list_)
     observer.OnVersionStartedRunning(version_id, running_info);
 }
 
 void ServiceWorkerContextAdapter::OnVersionStoppedRunning(int64_t version_id) {
-  size_t removed = running_service_workers_.erase(version_id);
+  bool removed = MaybeRemoveRunningServiceWorker(version_id);
   if (!removed) {
 #if DCHECK_IS_ON()
     // If this service worker could not be found, then it must be because its
@@ -352,8 +367,8 @@ void ServiceWorkerContextAdapter::OnDestruct(ServiceWorkerContext* context) {
 }
 
 void ServiceWorkerContextAdapter::OnRenderProcessExited(int64_t version_id) {
-  size_t removed = running_service_workers_.erase(version_id);
-  DCHECK_EQ(removed, 1u);
+  bool removed = MaybeRemoveRunningServiceWorker(version_id);
+  DCHECK(removed);
 
   for (auto& observer : observer_list_)
     observer.OnVersionStoppedRunning(version_id);
@@ -364,6 +379,32 @@ void ServiceWorkerContextAdapter::OnRenderProcessExited(int64_t version_id) {
   bool inserted = stopped_service_workers_.insert(version_id).second;
   DCHECK(inserted);
 #endif  // DCHECK_IS_ON()
+}
+
+void ServiceWorkerContextAdapter::AddRunningServiceWorker(
+    int64_t version_id,
+    content::RenderProcessHost* worker_process_host) {
+  std::unique_ptr<ServiceWorkerContextAdapter::RunningServiceWorker>
+      running_service_worker =
+          std::make_unique<RunningServiceWorker>(version_id, this);
+
+  running_service_worker->Subscribe(worker_process_host);
+  bool inserted = running_service_workers_
+                      .emplace(version_id, std::move(running_service_worker))
+                      .second;
+  DCHECK(inserted);
+}
+
+bool ServiceWorkerContextAdapter::MaybeRemoveRunningServiceWorker(
+    int64_t version_id) {
+  auto it = running_service_workers_.find(version_id);
+  if (it == running_service_workers_.end())
+    return false;
+
+  it->second->Unsubscribe();
+  running_service_workers_.erase(it);
+
+  return true;
 }
 
 }  // namespace performance_manager

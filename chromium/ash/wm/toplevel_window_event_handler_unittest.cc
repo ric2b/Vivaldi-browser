@@ -30,7 +30,6 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
@@ -52,6 +51,8 @@
 namespace ash {
 
 namespace {
+
+using ::chromeos::WindowStateType;
 
 // A simple window delegate that returns the specified hit-test code when
 // requested and applies a minimum size constraint if there is one.

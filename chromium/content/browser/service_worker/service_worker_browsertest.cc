@@ -10,15 +10,15 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -26,7 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -35,6 +35,7 @@
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
+#include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
@@ -78,6 +79,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "storage/browser/blob/blob_handle.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -336,6 +338,13 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
  protected:
   using self = ServiceWorkerBrowserTest;
 
+  ServiceWorkerBrowserTest() {
+    feature_list_.InitWithFeatures(
+        {network::features::kCrossOriginEmbedderPolicy,
+         network::features::kCrossOriginIsolated},
+        {});
+  }
+
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     StoragePartition* partition = BrowserContext::GetDefaultStoragePartition(
@@ -348,8 +357,11 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
   }
 
   void TearDownOnMainThread() override {
-    RunOnCoreThread(
-        base::BindOnce(&self::TearDownOnCoreThread, base::Unretained(this)));
+    base::RunLoop loop;
+    RunOnCoreThread(base::BindOnce(&self::TearDownOnCoreThread,
+                                   base::Unretained(this), loop.QuitClosure()));
+    loop.Run();
+    content::RunAllTasksUntilIdle();
     wrapper_ = nullptr;
   }
 
@@ -368,12 +380,22 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
   }
 
   virtual void SetUpOnCoreThread() {}
-  virtual void TearDownOnCoreThread() {}
+
+  virtual void TearDownOnCoreThread(base::OnceClosure callback) {
+    // Flush remote storage control so that all pending callbacks are executed.
+    wrapper()
+        ->context()
+        ->registry()
+        ->GetRemoteStorageControl()
+        .FlushForTesting();
+    std::move(callback).Run();
+  }
 
   ServiceWorkerContextWrapper* wrapper() { return wrapper_.get(); }
   ServiceWorkerContext* public_context() { return wrapper(); }
 
  private:
+  base::test::ScopedFeatureList feature_list_;
   scoped_refptr<ServiceWorkerContextWrapper> wrapper_;
 };
 
@@ -448,9 +470,8 @@ class MockContentBrowserClient : public TestContentBrowserClient {
 // An observer that waits for the service worker to be running.
 class WorkerRunningStatusObserver : public ServiceWorkerContextObserver {
  public:
-  explicit WorkerRunningStatusObserver(ServiceWorkerContext* context)
-      : scoped_context_observer_(this) {
-    scoped_context_observer_.Add(context);
+  explicit WorkerRunningStatusObserver(ServiceWorkerContext* context) {
+    scoped_context_observation_.Observe(context);
   }
 
   ~WorkerRunningStatusObserver() override = default;
@@ -473,8 +494,8 @@ class WorkerRunningStatusObserver : public ServiceWorkerContextObserver {
 
  private:
   base::RunLoop run_loop_;
-  ScopedObserver<ServiceWorkerContext, ServiceWorkerContextObserver>
-      scoped_context_observer_;
+  base::ScopedObservation<ServiceWorkerContext, ServiceWorkerContextObserver>
+      scoped_context_observation_{this};
   int64_t version_id_ = blink::mojom::kInvalidServiceWorkerVersionId;
 
   DISALLOW_COPY_AND_ASSIGN(WorkerRunningStatusObserver);
@@ -1001,7 +1022,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   request->method = "GET";
   request->is_main_resource_load = true;
   auto dispatcher = std::make_unique<ServiceWorkerFetchDispatcher>(
-      std::move(request), blink::mojom::ResourceType::kMainFrame,
+      std::move(request), network::mojom::RequestDestination::kDocument,
       /*client_id=*/base::GenerateGUID(), version,
       base::BindLambdaForTesting([&]() { is_prepare_callback_called = true; }),
       base::BindLambdaForTesting(
@@ -1080,7 +1101,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   request->method = "GET";
   request->is_main_resource_load = true;
   auto dispatcher = std::make_unique<ServiceWorkerFetchDispatcher>(
-      std::move(request), blink::mojom::ResourceType::kMainFrame,
+      std::move(request), network::mojom::RequestDestination::kDocument,
       /*client_id=*/base::GenerateGUID(), version,
       base::BindLambdaForTesting([&]() { is_prepare_callback_called = true; }),
       base::BindLambdaForTesting(
@@ -2585,7 +2606,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest,
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest, RegisterNoCrash) {
+#if defined(OS_ANDROID)
+// Flaky on Android, http://crbug.com/1141870.
+#define MAYBE_RegisterNoCrash DISABLED_RegisterNoCrash
+#else
+#define MAYBE_RegisterNoCrash RegisterNoCrash
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest,
+                       MAYBE_RegisterNoCrash) {
   StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/disable_web_security_register.html";
   const char kScopeUrl[] = "/service_worker/";
@@ -3081,5 +3109,138 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerThrottlingTest,
   // the first service worker fully activates.
   observer->Wait();
 }
+
+// The following tests verify that different values of cross-origin isolation
+// enforce the expected process assignments. The page starting the ServiceWorker
+// can have COOP+COEP, making it cross-origin isolated, and the ServiceWorker
+// itself can have COEP on its main script making it cross-origin isolated. If
+// cross-origin isolation status of the page and the script are different, the
+// ServiceWorker should be put out of process. It should be put in process
+// otherwise.
+class ServiceWorkerCrossOriginIsolatedBrowserTest
+    : public ServiceWorkerBrowserTest,
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  static bool IsPageCrossOriginIsolated() { return std::get<0>(GetParam()); }
+  static bool IsServiceWorkerCrossOriginIsolated() {
+    return std::get<1>(GetParam());
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerCrossOriginIsolatedBrowserTest,
+                       FreshInstall) {
+  // Setup the server so that the test doesn't crash when tearing down.
+  StartServerAndNavigateToSetup();
+
+  std::string page_url =
+      IsPageCrossOriginIsolated()
+          ? "/service_worker/create_service_worker_from_isolated.html"
+          : "/service_worker/create_service_worker.html";
+  std::string worker_url =
+      IsServiceWorkerCrossOriginIsolated() ? "empty_isolated.js" : "empty.js";
+
+  WorkerRunningStatusObserver observer(public_context());
+  EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL(page_url)));
+  EXPECT_EQ("DONE", EvalJs(shell(), "register('" + worker_url + "');"));
+  observer.WaitUntilRunning();
+
+  scoped_refptr<ServiceWorkerVersion> version =
+      wrapper()->GetLiveVersion(observer.version_id());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+
+  const base::flat_map<int64_t, ServiceWorkerRunningInfo>& infos =
+      public_context()->GetRunningServiceWorkerInfos();
+  ASSERT_EQ(1u, infos.size());
+
+  const ServiceWorkerRunningInfo& running_info = infos.begin()->second;
+  EXPECT_EQ(embedded_test_server()->GetURL("/service_worker/" + worker_url),
+            running_info.script_url);
+
+  // TODO(crbug.com/996511): Process allocation is broken during a fresh
+  // installation. We currently do not have the headers, and end up with a non
+  // isolated service worker script.
+  bool is_in_process =
+      shell()->web_contents()->GetMainFrame()->GetProcess()->GetID() ==
+      running_info.render_process_id;
+  if (!IsPageCrossOriginIsolated() && !IsServiceWorkerCrossOriginIsolated())
+    EXPECT_TRUE(is_in_process);
+  if (!IsPageCrossOriginIsolated() && IsServiceWorkerCrossOriginIsolated()) {
+    // Update to EXPECT_FALSE when the fix mentioned above is done.
+    EXPECT_TRUE(is_in_process);
+  }
+  if (IsPageCrossOriginIsolated() && !IsServiceWorkerCrossOriginIsolated())
+    EXPECT_FALSE(is_in_process);
+  if (IsPageCrossOriginIsolated() && IsServiceWorkerCrossOriginIsolated()) {
+    // Update to EXPECT_TRUE when the fix mentioned above is done.
+    EXPECT_FALSE(is_in_process);
+  }
+
+  ProcessLock process_lock =
+      ChildProcessSecurityPolicyImpl::GetInstance()->GetProcessLock(
+          running_info.render_process_id);
+  // Update to equal IsServiceWorkerCrossOriginIsolated when the fixed mentioned
+  // above is done.
+  EXPECT_FALSE(
+      process_lock.coop_coep_cross_origin_isolated_info().is_isolated());
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerCrossOriginIsolatedBrowserTest,
+                       PostInstallRun) {
+  // Setup the server so that the test doesn't crash when tearing down.
+  StartServerAndNavigateToSetup();
+
+  std::string page_url =
+      IsPageCrossOriginIsolated()
+          ? "/service_worker/create_service_worker_from_isolated.html"
+          : "/service_worker/create_service_worker.html";
+  std::string worker_url =
+      IsServiceWorkerCrossOriginIsolated() ? "empty_isolated.js" : "empty.js";
+
+  WorkerRunningStatusObserver observer(public_context());
+  EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL(page_url)));
+  EXPECT_EQ("DONE", EvalJs(shell(), "register('" + worker_url + "');"));
+  observer.WaitUntilRunning();
+
+  scoped_refptr<ServiceWorkerVersion> version =
+      wrapper()->GetLiveVersion(observer.version_id());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+
+  {
+    // Restart the service worker. The goal is to simulate the launch of an
+    // already installed ServiceWorker.
+    StopServiceWorker(version.get());
+    EXPECT_EQ(StartServiceWorker(version.get()),
+              blink::ServiceWorkerStatusCode::kOk);
+    EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+  }
+
+  // Wait until the running status is updated.
+  base::RunLoop().RunUntilIdle();
+
+  const base::flat_map<int64_t, ServiceWorkerRunningInfo>& infos =
+      public_context()->GetRunningServiceWorkerInfos();
+  ASSERT_EQ(1u, infos.size());
+
+  const ServiceWorkerRunningInfo& running_info = infos.begin()->second;
+  EXPECT_EQ(embedded_test_server()->GetURL("/service_worker/" + worker_url),
+            running_info.script_url);
+
+  bool is_in_process =
+      shell()->web_contents()->GetMainFrame()->GetProcess()->GetID() ==
+      running_info.render_process_id;
+  bool should_be_in_process =
+      IsPageCrossOriginIsolated() == IsServiceWorkerCrossOriginIsolated();
+  EXPECT_EQ(is_in_process, should_be_in_process);
+
+  ProcessLock process_lock =
+      ChildProcessSecurityPolicyImpl::GetInstance()->GetProcessLock(
+          running_info.render_process_id);
+  EXPECT_EQ(IsServiceWorkerCrossOriginIsolated(),
+            process_lock.coop_coep_cross_origin_isolated_info().is_isolated());
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ServiceWorkerCrossOriginIsolatedBrowserTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 }  // namespace content

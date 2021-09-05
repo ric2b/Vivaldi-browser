@@ -54,8 +54,6 @@ const double kLoadingProgressDone = 1.0;
 
 }  // namespace
 
-const int FrameTreeNode::kFrameTreeNodeInvalidId = -1;
-
 // This observer watches the opener of its owner FrameTreeNode and clears the
 // owner's opener if the opener is destroyed.
 class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
@@ -86,6 +84,12 @@ class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
 
   DISALLOW_COPY_AND_ASSIGN(OpenerDestroyedObserver);
 };
+
+const int FrameTreeNode::kFrameTreeNodeInvalidId = -1;
+
+static_assert(FrameTreeNode::kFrameTreeNodeInvalidId ==
+                  RenderFrameHost::kNoFrameTreeNodeId,
+              "Have consistent sentinel values for an invalid FTN id.");
 
 int FrameTreeNode::next_frame_tree_node_id_ = 1;
 
@@ -439,6 +443,23 @@ bool FrameTreeNode::IsLoading() const {
   if (speculative_frame_host && speculative_frame_host->is_loading())
     return true;
   return current_frame_host->is_loading();
+}
+
+bool FrameTreeNode::HasPendingCrossDocumentNavigation() const {
+  // Having a |navigation_request_| on FrameTreeNode implies that there's an
+  // ongoing navigation that hasn't reached the ReadyToCommit state.  If the
+  // navigation is between ReadyToCommit and DidCommitNavigation, the
+  // NavigationRequest will be held by RenderFrameHost, which is checked below.
+  if (navigation_request_ && !navigation_request_->IsSameDocument())
+    return true;
+
+  // Having a speculative RenderFrameHost should imply a cross-document
+  // navigation.
+  if (render_manager_.speculative_frame_host())
+    return true;
+
+  return render_manager_.current_frame_host()
+      ->HasPendingCommitForCrossDocumentNavigation();
 }
 
 bool FrameTreeNode::CommitFramePolicy(

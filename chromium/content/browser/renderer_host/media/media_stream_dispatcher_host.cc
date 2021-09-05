@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
@@ -88,6 +88,16 @@ void MediaStreamDispatcherHost::OnDeviceChanged(
 
   GetMediaStreamDeviceObserver()->OnDeviceChanged(label, old_device,
                                                   new_device);
+}
+
+void MediaStreamDispatcherHost::OnDeviceRequestStateChange(
+    const std::string& label,
+    const blink::MediaStreamDevice& device,
+    const blink::mojom::MediaStreamStateChange new_state) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  GetMediaStreamDeviceObserver()->OnDeviceRequestStateChange(label, device,
+                                                             new_state);
 }
 
 const mojo::Remote<blink::mojom::MediaStreamDeviceObserver>&
@@ -171,7 +181,10 @@ void MediaStreamDispatcherHost::DoGenerateStream(
       base::BindRepeating(&MediaStreamDispatcherHost::OnDeviceStopped,
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&MediaStreamDispatcherHost::OnDeviceChanged,
-                          weak_factory_.GetWeakPtr()));
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          &MediaStreamDispatcherHost::OnDeviceRequestStateChange,
+          weak_factory_.GetWeakPtr()));
 }
 
 void MediaStreamDispatcherHost::CancelRequest(int page_request_id) {

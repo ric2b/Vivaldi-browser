@@ -50,17 +50,56 @@ The API lives in
 The ash-side implementation lives in
 [//chrome/browser/chromeos/crosapi](https://chromium.googlesource.com/chromium/src.git/+/master/chrome/browser/chromeos/crosapi).
 
-Code can be conditionally compiled into lacros via BUILDFLAG(IS_LACROS).
+Code can be conditionally compiled into lacros via
+BUILDFLAG(IS_CHROMEOS_LACROS).
 
 Lacros bugs can be filed under component: OS>LaCrOs.
+
+## GN var and C++ macros for Lacros
+
+### Desired state
+
+- defined(OS_CHROMEOS) is true in C++ for both ash-chrome and lacros-chrome.
+- BUILDFLAG(IS_CHROMEOS_ASH) in C++ is used for ash-chrome specific part.
+- BUILDFLAG(IS_CHROMEOS_LACROS) in C++ is used for lacros-chrome specific part.
+- GN variable is_chromeos is true for both ash-chrome and lacros-chrome.
+- GN variable is_chromeos is equivalent to is_chromeos_ash || is_chromeos_lacros.
+- GN variable is_chormeos_ash is used for ash-chrome specific part.
+- GN variable is_chromeos_lacros is used for lacros-chrome specific part.
+
+### Current state
+
+OS_CHROMEOS is defined and is_chromeos is set only for ash-chrome at the moment.
+We are currently migrating defined(OS_CHROMEOS) to BUILDFLAG(IS_CHROMEOS_ASH),
+see [crbug.com/1052397](https://crbug.com/1052397). Until the migration is
+complete, for parts used by both ash-chrome and lacros-chrome, use
+`BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)` in C++ files and
+`is_chromeos_ash || is_chromeos_lacros` in GN files. After the migration, the
+macros and GN variables should be used according to the above desired state.
+
+Googlers:
+- [go/lacros-porting](http://go/lacros-porting) has tips on which binary the code should live in.
+- [go/lacros-macros](http://go/lacros-macros) describes the steps for the migration.
+- [go/lacros-build-config](http://go/lacros-build-config) is the original design doc.
 
 ## Testing
 
 Most test suites require ash-chrome to be running in order to provide a basic
-Wayland server and the crosapi implementation. This requires a special test
-runner:
+Wayland server. This requires a special test runner:
 
 `./build/lacros/test_runner.py test out/lacros/browser_tests --gtest_filter=BrowserTest.Title`
+
+Some test suites require ash-chrome to provide both a Wayland server and a valid
+mojo crosapi connection. This requires the test target
+`lacros_chrome_browsertests`:
+
+`./build/lacros/test_runner.py test out/lacros/lacros_chrome_browsertests --gtest_filter=ScreenManagerLacrosBrowserTest.*`
+
+By default, the test runner downloads a prebuilt ash-chrome, add the
+`--ash-chrome-path` command line argument to run the test against a locally
+built version of Ash:
+
+`./build/lacros/test_runner.py test --ash-chrome-path=out/ash/chrome out/lacros/lacros_chrome_browsertests --gtest_filter=ScreenManagerLacrosBrowserTest.*`
 
 If you're sshing to your desktop, please prefix the command with
 `./testing/xvfb.py`.

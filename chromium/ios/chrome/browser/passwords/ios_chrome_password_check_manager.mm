@@ -71,10 +71,10 @@ PasswordCheckState ConvertBulkCheckState(State state) {
 }
 
 // Function which returns duplicates of passed form.
-std::vector<autofill::PasswordForm> GetDuplicatesOfForm(
-    const autofill::PasswordForm& form,
+std::vector<password_manager::PasswordForm> GetDuplicatesOfForm(
+    const password_manager::PasswordForm& form,
     SavedPasswordsView passwords) {
-  std::vector<autofill::PasswordForm> duplicates;
+  std::vector<password_manager::PasswordForm> duplicates;
   auto tie = [](const auto& form) {
     return std::tie(form.signon_realm, form.username_value,
                     form.password_value);
@@ -152,26 +152,38 @@ IOSChromePasswordCheckManager::GetCompromisedCredentials() const {
 }
 
 password_manager::SavedPasswordsPresenter::SavedPasswordsView
+IOSChromePasswordCheckManager::GetAllCredentials() const {
+  return saved_passwords_presenter_.GetSavedPasswords();
+}
+
+password_manager::SavedPasswordsPresenter::SavedPasswordsView
 IOSChromePasswordCheckManager::GetSavedPasswordsFor(
     const CredentialWithPassword& credential) const {
   return insecure_credentials_manager_.GetSavedPasswordsFor(credential);
 }
 
-void IOSChromePasswordCheckManager::EditPasswordForm(
-    const autofill::PasswordForm& form,
-    base::StringPiece password) {
-  saved_passwords_presenter_.EditPassword(form, base::UTF8ToUTF16(password));
+bool IOSChromePasswordCheckManager::EditPasswordForm(
+    const password_manager::PasswordForm& form,
+    base::StringPiece new_username,
+    base::StringPiece new_password) {
+  auto duplicates =
+      GetDuplicatesOfForm(form, saved_passwords_presenter_.GetSavedPasswords());
+  if (duplicates.size() == 0)
+    return false;
+  return saved_passwords_presenter_.EditSavedPasswords(
+      duplicates, base::UTF8ToUTF16(new_username),
+      base::UTF8ToUTF16(new_password));
 }
 
 void IOSChromePasswordCheckManager::EditCompromisedPasswordForm(
-    const autofill::PasswordForm& form,
+    const password_manager::PasswordForm& form,
     base::StringPiece password) {
   insecure_credentials_manager_.UpdateCredential(
       password_manager::CredentialView(form), password);
 }
 
 void IOSChromePasswordCheckManager::DeletePasswordForm(
-    const autofill::PasswordForm& form) {
+    const password_manager::PasswordForm& form) {
   auto duplicates =
       GetDuplicatesOfForm(form, saved_passwords_presenter_.GetSavedPasswords());
   for (auto& duplicate : duplicates) {
@@ -180,7 +192,7 @@ void IOSChromePasswordCheckManager::DeletePasswordForm(
 }
 
 void IOSChromePasswordCheckManager::DeleteCompromisedPasswordForm(
-    const autofill::PasswordForm& form) {
+    const password_manager::PasswordForm& form) {
   insecure_credentials_manager_.RemoveCredential(
       password_manager::CredentialView(form));
 }

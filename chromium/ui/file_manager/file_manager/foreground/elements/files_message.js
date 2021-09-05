@@ -74,22 +74,16 @@ const filesMessageTemplate = `
  */
 class FilesMessage extends HTMLElement {
   constructor() {
-    super();
-    this.createElement_();
+    /**
+     * Create element content.
+     */
+    super().attachShadow({mode: 'open'}).innerHTML = filesMessageTemplate;
 
     /**
      * FilesMessage visual signals user callback.
      * @private @type {!function(*)}
      */
     this.signal_ = console.log;
-  }
-
-  /**
-   * Creates FilesMessage element.
-   * @private
-   */
-  createElement_() {
-    this.attachShadow({mode: 'open'}).innerHTML = filesMessageTemplate;
   }
 
   /**
@@ -251,3 +245,5 @@ class FilesMessage extends HTMLElement {
 }
 
 customElements.define('files-message', FilesMessage);
+
+//# sourceURL=//ui/file_manager/file_manager/foreground/elements/files_message.js

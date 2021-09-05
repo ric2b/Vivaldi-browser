@@ -4,11 +4,9 @@
 
 #include "chrome/browser/ui/ash/holding_space/holding_space_downloads_delegate.h"
 
-#include "ash/public/cpp/holding_space/holding_space_constants.h"
-#include "ash/public/cpp/holding_space/holding_space_prefs.h"
-#include "base/barrier_closure.h"
+#include <vector>
+
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "content/public/browser/browser_context.h"
 
 namespace ash {
@@ -17,22 +15,6 @@ namespace {
 
 content::DownloadManager* download_manager_for_testing = nullptr;
 
-// Helpers ---------------------------------------------------------------------
-
-// Returns true if `download` is sufficiently recent, false otherwise.
-bool IsRecentEnough(Profile* profile, const download::DownloadItem* download) {
-  const base::Time end_time = download->GetEndTime();
-
-  // A `download` must be more recent than the time of the holding space feature
-  // first becoming available.
-  PrefService* prefs = profile->GetPrefs();
-  if (end_time < holding_space_prefs::GetTimeOfFirstAvailability(prefs).value())
-    return false;
-
-  // A `download` must be more recent that `kMaxFileAge`.
-  return end_time >= base::Time::Now() - kMaxFileAge;
-}
-
 }  // namespace
 
 // HoldingSpaceDownloadsDelegate -----------------------------------------------
@@ -40,11 +22,9 @@ bool IsRecentEnough(Profile* profile, const download::DownloadItem* download) {
 HoldingSpaceDownloadsDelegate::HoldingSpaceDownloadsDelegate(
     Profile* profile,
     HoldingSpaceModel* model,
-    ItemDownloadedCallback item_downloaded_callback,
-    DownloadsRestoredCallback downloads_restored_callback)
+    ItemDownloadedCallback item_downloaded_callback)
     : HoldingSpaceKeyedServiceDelegate(profile, model),
-      item_downloaded_callback_(item_downloaded_callback),
-      downloads_restored_callback_(std::move(downloads_restored_callback)) {}
+      item_downloaded_callback_(item_downloaded_callback) {}
 
 HoldingSpaceDownloadsDelegate::~HoldingSpaceDownloadsDelegate() = default;
 
@@ -89,38 +69,15 @@ void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
   download::SimpleDownloadManager::DownloadVector downloads;
   download_manager->GetAllDownloads(&downloads);
 
-  base::RepeatingClosure barrier_closure = base::BarrierClosure(
-      downloads.size(), std::move(downloads_restored_callback_));
-
   for (auto* download : downloads) {
     switch (download->GetState()) {
-      case download::DownloadItem::COMPLETE: {
-        if (IsRecentEnough(profile(), download)) {
-          holding_space_util::FilePathValid(
-              profile(), {download->GetFullPath(), /*requirements=*/{}},
-              base::BindOnce(
-                  [](const base::FilePath& path,
-                     base::RepeatingClosure barrier_closure,
-                     ItemDownloadedCallback callback, bool valid) {
-                    if (valid)
-                      callback.Run(path);
-                    barrier_closure.Run();
-                  },
-                  download->GetFullPath(), barrier_closure,
-                  base::BindRepeating(
-                      &HoldingSpaceDownloadsDelegate::OnDownloadCompleted,
-                      weak_factory_.GetWeakPtr())));
-        } else {
-          barrier_closure.Run();
-        }
-      } break;
       case download::DownloadItem::IN_PROGRESS:
         download_item_observer_.Add(download);
-        FALLTHROUGH;
+        break;
+      case download::DownloadItem::COMPLETE:
       case download::DownloadItem::CANCELLED:
       case download::DownloadItem::INTERRUPTED:
       case download::DownloadItem::MAX_DOWNLOAD_STATE:
-        barrier_closure.Run();
         break;
     }
   }

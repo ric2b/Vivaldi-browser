@@ -61,7 +61,7 @@ PasswordProtectionService::PasswordProtectionService(
       url_loader_factory_(url_loader_factory) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (history_service)
-    history_service_observer_.Add(history_service);
+    history_service_observation_.Observe(history_service);
 
   common_spoofed_domains_ = {"login.live.com", "facebook.com", "box.com",
                              "google.com",     "paypal.com",   "apple.com",
@@ -72,17 +72,17 @@ PasswordProtectionService::PasswordProtectionService(
 PasswordProtectionService::~PasswordProtectionService() {
   tracker_.TryCancelAll();
   CancelPendingRequests();
-  history_service_observer_.RemoveAll();
+  if (history_service_observation_.IsObserving())
+    history_service_observation_.RemoveObservation();
   weak_factory_.InvalidateWeakPtrs();
 }
 
 bool PasswordProtectionService::CanGetReputationOfURL(const GURL& url) {
-  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || net::IsLocalhost(url))
+  if (!safe_browsing::CanGetReputationOfUrl(url)) {
     return false;
-
+  }
   const std::string hostname = url.HostNoBrackets();
-  return !net::IsHostnameNonUnique(hostname) &&
-         hostname.find('.') != std::string::npos;
+  return !net::IsHostnameNonUnique(hostname);
 }
 
 #if defined(ON_FOCUS_PING_ENABLED)
@@ -404,7 +404,8 @@ void PasswordProtectionService::OnURLsDeleted(
 
 void PasswordProtectionService::HistoryServiceBeingDeleted(
     history::HistoryService* history_service) {
-  history_service_observer_.RemoveAll();
+  DCHECK(history_service_observation_.IsObservingSource(history_service));
+  history_service_observation_.RemoveObservation();
 }
 
 std::unique_ptr<PasswordProtectionNavigationThrottle>

@@ -25,5 +25,29 @@
   <message name="IDS_UPDATE_NOTIFICATION_TOOLTIP" desc="Text of the tooltip shown when hovering the notification icon in the notification area">
     Click here to update Vivaldi.
   </message>
-
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_TITLE" desc="The title of the error notification dialog for updates">
+    Update Error!
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_CANCEL" desc="Aknowledge download cancellation by a user action">
+    The download was cancelled.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_NETWORK" desc="Text to show on network-related errors">
+    An error occurred while downloading update files. Please check your internet connection and try again later.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_STORAGE" desc="Text to show on storage-related errors">
+    An error occurred while trying to save a downloaded update. Please check that the computer has enough disk space and try again later.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_EXEC" desc="Text to show when failed to launch a downloaded update program">
+    Failed to launch the update installer. Please check that the computer has enough memory or disc space and try again later.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_VERIFY" desc="Text to show when failed to verify the downloaded update files. The user has already seen a system message about it.">
+    Failed to verify the digital signature of the downloaded files.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_ERROR_DETAILS" desc="Extra text to show the error details and ask to report the error.">
+    If the error persists, please report it and include the following details:
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON"
+    desc="Text to show on a close button">
+    Close
+  </message>
 </grit-part>

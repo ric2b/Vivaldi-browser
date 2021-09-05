@@ -20,10 +20,6 @@ constexpr base::TimeDelta kAnimationDuration =
 constexpr base::TimeDelta kTopicFetchInterval =
     base::TimeDelta::FromSeconds(30);
 
-// The default interval to refresh photos.
-constexpr base::TimeDelta kPhotoRefreshInterval =
-    base::TimeDelta::FromSeconds(60);
-
 // The default interval to fetch backup cache photos.
 constexpr base::TimeDelta kBackupPhotoRefreshDelay =
     base::TimeDelta::FromMinutes(5);
@@ -31,9 +27,6 @@ constexpr base::TimeDelta kBackupPhotoRefreshDelay =
 // The default interval to refresh weather.
 constexpr base::TimeDelta kWeatherRefreshInterval =
     base::TimeDelta::FromMinutes(5);
-
-// The delay between ambient mode starts and enabling lock screen.
-constexpr base::TimeDelta kLockScreenDelay = base::TimeDelta::FromSeconds(5);
 
 // The batch size of topics to fetch in one request.
 constexpr int kTopicsBatchSize = 100;
@@ -51,6 +44,7 @@ constexpr int kMaxConsecutiveReadPhotoFailures = 3;
 
 constexpr char kPhotoFileExt[] = ".img";
 constexpr char kPhotoDetailsFileExt[] = ".txt";
+constexpr char kRelatedPhotoSuffix[] = "_r";
 
 // Directory name of ambient mode.
 constexpr char kAmbientModeDirectoryName[] = "ambient-mode";

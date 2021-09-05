@@ -76,8 +76,6 @@ void FakeCrosHealthdService::RunUrandomRoutine(
 }
 
 void FakeCrosHealthdService::RunBatteryCapacityRoutine(
-    uint32_t low_mah,
-    uint32_t high_mah,
     RunBatteryCapacityRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -86,8 +84,6 @@ void FakeCrosHealthdService::RunBatteryCapacityRoutine(
 }
 
 void FakeCrosHealthdService::RunBatteryHealthRoutine(
-    uint32_t maximum_cycle_count,
-    uint32_t percent_battery_wear_allowed,
     RunBatteryHealthRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -217,6 +213,41 @@ void FakeCrosHealthdService::RunSignalStrengthRoutine(
   std::move(callback).Run(run_routine_response_.Clone());
 }
 
+void FakeCrosHealthdService::RunGatewayCanBePingedRoutine(
+    RunGatewayCanBePingedRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunHasSecureWiFiConnectionRoutine(
+    RunHasSecureWiFiConnectionRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunDnsResolverPresentRoutine(
+    RunDnsResolverPresentRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunDnsLatencyRoutine(
+    RunDnsLatencyRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunDnsResolutionRoutine(
+    RunDnsResolutionRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunCaptivePortalRoutine(
+    RunCaptivePortalRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunHttpFirewallRoutine(
+    RunHttpFirewallRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
 void FakeCrosHealthdService::AddBluetoothObserver(
     mojom::CrosHealthdBluetoothObserverPtr observer) {
   bluetooth_observers_.Add(observer.PassInterface());
@@ -283,9 +314,49 @@ void FakeCrosHealthdService::EmitAcInsertedEventForTesting() {
     observer->OnAcInserted();
 }
 
+void FakeCrosHealthdService::EmitAcRemovedEventForTesting() {
+  for (auto& observer : power_observers_)
+    observer->OnAcRemoved();
+}
+
+void FakeCrosHealthdService::EmitOsSuspendEventForTesting() {
+  for (auto& observer : power_observers_)
+    observer->OnOsSuspend();
+}
+
+void FakeCrosHealthdService::EmitOsResumeEventForTesting() {
+  for (auto& observer : power_observers_)
+    observer->OnOsResume();
+}
+
 void FakeCrosHealthdService::EmitAdapterAddedEventForTesting() {
   for (auto& observer : bluetooth_observers_)
     observer->OnAdapterAdded();
+}
+
+void FakeCrosHealthdService::EmitAdapterRemovedEventForTesting() {
+  for (auto& observer : bluetooth_observers_)
+    observer->OnAdapterRemoved();
+}
+
+void FakeCrosHealthdService::EmitAdapterPropertyChangedEventForTesting() {
+  for (auto& observer : bluetooth_observers_)
+    observer->OnAdapterPropertyChanged();
+}
+
+void FakeCrosHealthdService::EmitDeviceAddedEventForTesting() {
+  for (auto& observer : bluetooth_observers_)
+    observer->OnDeviceAdded();
+}
+
+void FakeCrosHealthdService::EmitDeviceRemovedEventForTesting() {
+  for (auto& observer : bluetooth_observers_)
+    observer->OnDeviceRemoved();
+}
+
+void FakeCrosHealthdService::EmitDevicePropertyChangedEventForTesting() {
+  for (auto& observer : bluetooth_observers_)
+    observer->OnDevicePropertyChanged();
 }
 
 void FakeCrosHealthdService::EmitLidClosedEventForTesting() {

@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -236,7 +236,7 @@ TEST_F(ThroughputAnalyzerTest, MAYBE_MaximumRequestsWithNetworkIsolationKey) {
                                 TRAFFIC_ANNOTATION_FOR_TESTS));
       if (use_network_isolation_key)
         request->set_isolation_info(IsolationInfo::CreatePartial(
-            IsolationInfo::RedirectMode::kUpdateNothing, kNetworkIsolationKey));
+            IsolationInfo::RequestType::kOther, kNetworkIsolationKey));
       throughput_analyzer.NotifyStartTransaction(*(request.get()));
       requests.push_back(std::move(request));
     }

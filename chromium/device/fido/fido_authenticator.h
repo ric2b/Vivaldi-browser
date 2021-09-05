@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/authenticator_make_credential_response.h"
 #include "device/fido/authenticator_supported_options.h"
@@ -111,7 +112,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   // |rp_id| binds the token to operations related to a given RP ID. |rp_id|
   // must be set if |permissions| includes MakeCredential or GetAssertion.
   virtual void GetPINToken(std::string pin,
-                           const std::vector<pin::Permissions>& permissions,
+                           std::vector<pin::Permissions> permissions,
                            base::Optional<std::string> rp_id,
                            GetTokenCallback callback);
   // Returns |true| if the authenticator supports GetUvToken.
@@ -121,7 +122,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   // returns true.
   // |rp_id| must be set if the PinUvAuthToken will be used for MakeCredential
   // or GetAssertion.
-  virtual void GetUvToken(base::Optional<std::string> rp_id,
+  virtual void GetUvToken(std::vector<pin::Permissions> permissions,
+                          base::Optional<std::string> rp_id,
                           GetTokenCallback callback);
   // SetPIN sets a new PIN on a device that does not currently have one. The
   // length of |pin| must respect |pin::kMinLength| and |pin::kMaxLength|. It is
@@ -136,28 +138,29 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
                          const std::string& new_pin,
                          SetPINCallback callback);
 
-  // MakeCredentialPINDisposition enumerates the possible interactions between
-  // a user-verification level, the PIN configuration of an authenticator, and
-  // whether the embedder is capable of collecting PINs from the user.
-  enum class MakeCredentialPINDisposition {
-    // kNoPIN means that a PIN will not be needed to make this credential.
-    kNoPIN,
-    // kUsePIN means that a PIN must be gathered and used to make this
+  // MakeCredentialPINUVDisposition enumerates the possible options for
+  // obtaining user verification when making a credential.
+  enum class MakeCredentialPINUVDisposition {
+    // No UV (neither clientPIN nor internal) is needed to make this
     // credential.
-    kUsePIN,
-    // kUsePINForFallback means that a PIN may be used for fallback if internal
-    // user verification fails.
-    kUsePINForFallback,
-    // kSetPIN means that the operation should set and then use a PIN to
-    // make this credential.
-    kSetPIN,
-    // kUnsatisfiable means that the request cannot be satisfied by this
-    // authenticator.
+    kNoUV,
+    // A PIN/UV Auth Token should be used to make this credential. The token
+    // needs to be obtained via clientPIN or internal UV, depending on which
+    // modality the device supports. The modality may need to be set up first.
+    kGetToken,
+    // The request should be sent with the `uv` bit set to true, in order to
+    // perform internal user verification without a PIN/UV Auth Token.
+    kNoTokenInternalUV,
+    // Same as kNoTokenInternalUV, but a PIN can be used as a fallback. (A PIN
+    // may have to be set first.)
+    kNoTokenInternalUVPINFallback,
+    // The request cannot be satisfied by this authenticator.
     kUnsatisfiable,
   };
-  // WillNeedPINToMakeCredential returns what type of PIN intervention will be
-  // needed to serve the given request on this authenticator.
-  virtual MakeCredentialPINDisposition WillNeedPINToMakeCredential(
+  // PINUVDispositionForMakeCredential returns whether and how user verification
+  // should be obtained in order to serve the given request on this
+  // authenticator.
+  virtual MakeCredentialPINUVDisposition PINUVDispositionForMakeCredential(
       const CtapMakeCredentialRequest& request,
       const FidoRequestHandlerBase::Observer* observer);
 
@@ -229,6 +232,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   // they work.
   virtual base::Optional<base::span<const int32_t>> GetAlgorithms();
 
+  // DiscoverableCredentialStorageFull returns true if creation of a
+  // discoverable credential is likely to fail because authenticator storage is
+  // exhausted. Even if this method returns false, credential creation may still
+  // fail with `CTAP2_ERR_KEY_STORE_FULL` on some authenticators.
+  virtual bool DiscoverableCredentialStorageFull() const;
+
   // Reset triggers a reset operation on the authenticator. This erases all
   // stored resident keys and any configured PIN.
   virtual void Reset(ResetCallback callback);
@@ -252,7 +261,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
 #if defined(OS_MAC)
   virtual bool IsTouchIdAuthenticator() const = 0;
 #endif  // defined(OS_MAC)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   virtual bool IsChromeOSAuthenticator() const = 0;
 #endif
   virtual base::WeakPtr<FidoAuthenticator> GetWeakPtr() = 0;

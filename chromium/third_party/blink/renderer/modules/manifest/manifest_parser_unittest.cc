@@ -10,7 +10,10 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -165,6 +168,89 @@ TEST_F(ManifestParserTest, NameParseRules) {
     ASSERT_TRUE(manifest->name.IsNull());
     EXPECT_EQ(1u, GetErrorCount());
     EXPECT_EQ("property 'name' ignored, type string expected.", errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, DescriptionParseRules) {
+  // Smoke test.
+  {
+    auto& manifest =
+        ParseManifest(R"({ "description": "foo is the new black" })");
+    ASSERT_EQ(manifest->description, "foo is the new black");
+    ASSERT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim whitespaces.
+  {
+    auto& manifest = ParseManifest(R"({ "description": "  foo  " })");
+    ASSERT_EQ(manifest->description, "foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse if description isn't a string.
+  {
+    auto& manifest = ParseManifest(R"({ "description": {} })");
+    ASSERT_TRUE(manifest->description.IsNull());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'description' ignored, type string expected.",
+              errors()[0]);
+  }
+
+  // Don't parse if description isn't a string.
+  {
+    auto& manifest = ParseManifest(R"({ "description": 42 })");
+    ASSERT_TRUE(manifest->description.IsNull());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'description' ignored, type string expected.",
+              errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, CategoriesParseRules) {
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(R"({ "categories": ["cats", "memes"] })");
+    ASSERT_EQ(2u, manifest->categories.size());
+    ASSERT_EQ(manifest->categories[0], "cats");
+    ASSERT_EQ(manifest->categories[1], "memes");
+    ASSERT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim whitespaces.
+  {
+    auto& manifest =
+        ParseManifest(R"({ "categories": ["  cats  ", "  memes  "] })");
+    ASSERT_EQ(2u, manifest->categories.size());
+    ASSERT_EQ(manifest->categories[0], "cats");
+    ASSERT_EQ(manifest->categories[1], "memes");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Categories should be lower-cased.
+  {
+    auto& manifest = ParseManifest(R"({ "categories": ["CaTs", "Memes"] })");
+    ASSERT_EQ(2u, manifest->categories.size());
+    ASSERT_EQ(manifest->categories[0], "cats");
+    ASSERT_EQ(manifest->categories[1], "memes");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Empty array.
+  {
+    auto& manifest = ParseManifest(R"({ "categories": [] })");
+    ASSERT_EQ(0u, manifest->categories.size());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Detect error if categories isn't an array.
+  {
+    auto& manifest = ParseManifest(R"({ "categories": {} })");
+    ASSERT_EQ(0u, manifest->categories.size());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'categories' ignored, type array expected.",
+              errors()[0]);
   }
 }
 
@@ -534,6 +620,25 @@ TEST_F(ManifestParserTest, DisplayParseRules) {
     EXPECT_EQ(manifest->display, blink::mojom::DisplayMode::kBrowser);
     EXPECT_EQ(0u, GetErrorCount());
   }
+
+  // Parsing fails for 'window-controls-overlay' when WCO flag is disabled.
+  {
+    auto& manifest =
+        ParseManifest("{ \"display\": \"window-controls-overlay\" }");
+    EXPECT_EQ(manifest->display, blink::mojom::DisplayMode::kUndefined);
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("inapplicable 'display' value ignored.", errors()[0]);
+  }
+
+  // Parsing fails for 'window-controls-overlay' when WCO flag is enabled.
+  {
+    ScopedWebAppWindowControlsOverlayForTest window_controls_overlay(true);
+    auto& manifest =
+        ParseManifest("{ \"display\": \"window-controls-overlay\" }");
+    EXPECT_EQ(manifest->display, blink::mojom::DisplayMode::kUndefined);
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("inapplicable 'display' value ignored.", errors()[0]);
+  }
 }
 
 TEST_F(ManifestParserTest, DisplayOverrideParseRules) {
@@ -660,6 +765,26 @@ TEST_F(ManifestParserTest, DisplayOverrideParseRules) {
               blink::mojom::DisplayMode::kMinimalUi);
     EXPECT_EQ(manifest->display_override[2],
               blink::mojom::DisplayMode::kBrowser);
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Reject 'window-controls-overlay' when WCO flag is disabled.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"display_override\": [ \"window-controls-overlay\" ] }");
+    EXPECT_TRUE(manifest->display_override.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Accept 'window-controls-overlay' when WCO flag is enabled.
+  {
+    ScopedWebAppWindowControlsOverlayForTest window_controls_overlay(true);
+    auto& manifest = ParseManifest(
+        "{ \"display_override\": [ \"window-controls-overlay\" ] }");
+    EXPECT_FALSE(manifest->display_override.IsEmpty());
+    EXPECT_EQ(manifest->display_override[0],
+              blink::mojom::DisplayMode::kWindowControlsOverlay);
     EXPECT_FALSE(IsManifestEmpty(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
@@ -830,6 +955,55 @@ TEST_F(ManifestParserTest, IconsParseRules) {
     auto& icons = manifest->icons;
     EXPECT_EQ(icons.size(), 1u);
     EXPECT_EQ(icons[0]->src.GetString(), "http://foo.com/foo.jpg");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+}
+
+TEST_F(ManifestParserTest, ScreenshotsParseRules) {
+  // Smoke test: if no screenshot, no value.
+  {
+    auto& manifest = ParseManifest(R"({ "screenshots": [] })");
+    EXPECT_TRUE(manifest->screenshots.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if empty screenshot, no value.
+  {
+    auto& manifest = ParseManifest(R"({ "screenshots": [ {} ] })");
+    EXPECT_TRUE(manifest->screenshots.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: screenshot with invalid src, no value.
+  {
+    auto& manifest =
+        ParseManifest(R"({ "screenshots": [ { "screenshots": [] } ] })");
+    EXPECT_TRUE(manifest->screenshots.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if screenshot with empty src, it will be present in the list.
+  {
+    auto& manifest = ParseManifest(R"({ "screenshots": [ { "src": "" } ] })");
+    EXPECT_FALSE(manifest->screenshots.IsEmpty());
+
+    auto& screenshots = manifest->screenshots;
+    EXPECT_EQ(screenshots.size(), 1u);
+    EXPECT_EQ(screenshots[0]->src.GetString(), "http://foo.com/manifest.json");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if one icons has valid src, it will be present in the list.
+  {
+    auto& manifest =
+        ParseManifest(R"({ "screenshots": [{ "src": "foo.jpg" }] })");
+    EXPECT_FALSE(manifest->screenshots.IsEmpty());
+
+    auto& screenshots = manifest->screenshots;
+    EXPECT_EQ(screenshots.size(), 1u);
+    EXPECT_EQ(screenshots[0]->src.GetString(), "http://foo.com/foo.jpg");
     EXPECT_FALSE(IsManifestEmpty(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
@@ -1637,6 +1811,7 @@ TEST_F(ManifestParserTest, ShortcutIconsParseRules) {
     EXPECT_EQ(0u, GetErrorCount());
   }
 }
+
 TEST_F(ManifestParserTest, FileHandlerParseRules) {
   // Does not contain file_handlers field.
   {
@@ -2260,6 +2435,151 @@ TEST_F(ManifestParserTest, ProtocolHandlerParseRules) {
     ASSERT_EQ("http://foo.com/?test=%s", protocol_handlers[1]->url);
     ASSERT_EQ("web+relative", protocol_handlers[2]->protocol);
     ASSERT_EQ("http://foo.com/relativeURL=%s", protocol_handlers[2]->url);
+  }
+}
+
+TEST_F(ManifestParserTest, UrlHandlerParseRules) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(blink::features::kWebAppEnableUrlHandlers);
+
+  // Manifest does not contain a 'url_handlers' field.
+  {
+    auto& manifest = ParseManifest("{ }");
+    ASSERT_EQ(0u, GetErrorCount());
+    EXPECT_EQ(0u, manifest->url_handlers.size());
+  }
+
+  // 'url_handlers' is not an array.
+  {
+    auto& manifest = ParseManifest("{ \"url_handlers\": { } }");
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'url_handlers' ignored, type array expected.",
+              errors()[0]);
+    EXPECT_EQ(0u, manifest->url_handlers.size());
+  }
+
+  // Contains 'url_handlers' field but no URL handler entries.
+  {
+    auto& manifest = ParseManifest("{ \"url_handlers\": [ ] }");
+    ASSERT_EQ(0u, GetErrorCount());
+    EXPECT_EQ(0u, manifest->url_handlers.size());
+  }
+
+  // 'url_handlers' array entries must be objects.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    \"foo.com\""
+        "  ]"
+        "}");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("url_handlers entry ignored, type object expected.", errors()[0]);
+    EXPECT_EQ(0u, manifest->url_handlers.size());
+  }
+
+  // A valid url handler.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    {"
+        "      \"origin\": \"https://foo.com\""
+        "    }"
+        "  ]"
+        "}");
+    auto& url_handlers = manifest->url_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, url_handlers.size());
+    ASSERT_TRUE(blink::SecurityOrigin::CreateFromString("https://foo.com")
+                    ->IsSameOriginWith(url_handlers[0]->origin.get()));
+  }
+
+  // Scheme must be https.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    {"
+        "      \"origin\": \"http://foo.com\""
+        "    }"
+        "  ]"
+        "}");
+    auto& url_handlers = manifest->url_handlers;
+
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "url_handlers entry ignored, required property 'origin' must use the "
+        "https scheme.",
+        errors()[0]);
+    ASSERT_EQ(0u, url_handlers.size());
+  }
+
+  // Origin must be valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    {"
+        "      \"origin\": \"https:///////\""
+        "    }"
+        "  ]"
+        "}");
+    auto& url_handlers = manifest->url_handlers;
+
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "url_handlers entry ignored, required property 'origin' is invalid.",
+        errors()[0]);
+    ASSERT_EQ(0u, url_handlers.size());
+  }
+
+  // Parse multiple valid handlers.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    {"
+        "      \"origin\": \"https://foo.com\""
+        "    },"
+        "    {"
+        "      \"origin\": \"https://bar.com\""
+        "    }"
+        "  ]"
+        "}");
+    auto& url_handlers = manifest->url_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(2u, url_handlers.size());
+    ASSERT_TRUE(blink::SecurityOrigin::CreateFromString("https://foo.com")
+                    ->IsSameOriginWith(url_handlers[0]->origin.get()));
+    ASSERT_TRUE(blink::SecurityOrigin::CreateFromString("https://bar.com")
+                    ->IsSameOriginWith(url_handlers[1]->origin.get()));
+  }
+
+  // Parse both valid and invalid handlers.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"url_handlers\": ["
+        "    {"
+        "      \"origin\": \"https://foo.com\""
+        "    },"
+        "    {"
+        "      \"origin\": \"about:\""
+        "    }"
+        "  ]"
+        "}");
+    auto& url_handlers = manifest->url_handlers;
+
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "url_handlers entry ignored, required property 'origin' is invalid.",
+        errors()[0]);
+    ASSERT_EQ(1u, url_handlers.size());
+    ASSERT_TRUE(blink::SecurityOrigin::CreateFromString("https://foo.com")
+                    ->IsSameOriginWith(url_handlers[0]->origin.get()));
   }
 }
 

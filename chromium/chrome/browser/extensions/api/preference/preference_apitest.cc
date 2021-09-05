@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -165,8 +165,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, Standard) {
   prefs->SetBoolean(password_manager::prefs::kCredentialsEnableService, false);
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, false);
   prefs->SetBoolean(prefs::kSearchSuggestEnabled, false);
-  prefs->SetBoolean(prefs::kWebRTCMultipleRoutesEnabled, false);
-  prefs->SetBoolean(prefs::kWebRTCNonProxiedUdpEnabled, false);
   prefs->SetString(prefs::kWebRTCIPHandlingPolicy,
                    blink::kWebRTCIPHandlingDefaultPublicInterfaceOnly);
 

@@ -135,13 +135,17 @@ bool LayoutReplaced::HasReplacedLogicalHeight() const {
   if (StyleRef().LogicalHeight().IsAuto())
     return false;
 
+  if (RuntimeEnabledFeatures::TableCellNewPercentsEnabled() &&
+      StyleRef().LogicalHeight().IsFixed())
+    return true;
+
   if (StyleRef().LogicalHeight().IsSpecified()) {
     if (HasAutoHeightOrContainingBlockWithAutoHeight())
       return false;
     return true;
   }
 
-  if (StyleRef().LogicalHeight().IsIntrinsic())
+  if (StyleRef().LogicalHeight().IsContentOrIntrinsicOrFillAvailable())
     return true;
 
   return false;
@@ -177,6 +181,14 @@ void LayoutReplaced::ComputeIntrinsicSizingInfoForReplacedContent(
   if (ShouldApplySizeContainment()) {
     // Reset the size in case it was already populated.
     intrinsic_sizing_info.size = FloatSize();
+
+    const StyleAspectRatio& aspect_ratio = StyleRef().AspectRatio();
+    if (!aspect_ratio.IsAuto()) {
+      intrinsic_sizing_info.aspect_ratio.SetWidth(
+          aspect_ratio.GetRatio().Width());
+      intrinsic_sizing_info.aspect_ratio.SetHeight(
+          aspect_ratio.GetRatio().Height());
+    }
 
     // If any of the dimensions are overridden, set those sizes.
     if (HasOverrideIntrinsicContentLogicalWidth()) {
@@ -249,8 +261,7 @@ void LayoutReplaced::ComputePositionedLogicalWidth(
 
   // We don't use containingBlock(), since we may be positioned by an enclosing
   // relative positioned inline.
-  const LayoutBoxModelObject* container_block =
-      ToLayoutBoxModelObject(Container());
+  const auto* container_block = To<LayoutBoxModelObject>(Container());
 
   const LayoutUnit container_logical_width =
       ContainingBlockLogicalWidthForPositioned(container_block);
@@ -439,7 +450,7 @@ void LayoutReplaced::ComputePositionedLogicalWidth(
   // should be removed.
   if (container_block->IsLayoutInline() &&
       !container_block->StyleRef().IsLeftToRightDirection()) {
-    const LayoutInline* flow = ToLayoutInline(container_block);
+    const auto* flow = To<LayoutInline>(container_block);
     InlineFlowBox* first_line = flow->FirstLineBox();
     InlineFlowBox* last_line = flow->LastLineBox();
     if (first_line && last_line && first_line != last_line) {
@@ -469,8 +480,7 @@ void LayoutReplaced::ComputePositionedLogicalHeight(
 
   // We don't use containingBlock(), since we may be positioned by an enclosing
   // relpositioned inline.
-  const LayoutBoxModelObject* container_block =
-      ToLayoutBoxModelObject(Container());
+  const auto* container_block = To<LayoutBoxModelObject>(Container());
 
   const LayoutUnit container_logical_height =
       ContainingBlockLogicalHeightForPositioned(container_block);
@@ -646,9 +656,8 @@ PhysicalRect LayoutReplaced::ComputeObjectFit(
       // Srcset images have an intrinsic size depending on their destination,
       // but with object-fit: scale-down they need to use the underlying image
       // src's size. So revert back to the original size in that case.
-      if (IsLayoutImage()) {
-        scaled_intrinsic_size.Scale(
-            1.0 / ToLayoutImage(this)->ImageDevicePixelRatio());
+      if (auto* image = DynamicTo<LayoutImage>(this)) {
+        scaled_intrinsic_size.Scale(1.0 / image->ImageDevicePixelRatio());
       }
       FALLTHROUGH;
     case EObjectFit::kContain:
@@ -715,24 +724,6 @@ void LayoutReplaced::ComputeIntrinsicSizingInfo(
 
   if (!intrinsic_sizing_info.size.IsEmpty())
     intrinsic_sizing_info.aspect_ratio = intrinsic_sizing_info.size;
-
-  auto* elem = DynamicTo<Element>(GetNode());
-  if (elem && IsA<HTMLImageElement>(elem) &&
-      intrinsic_sizing_info.aspect_ratio.IsEmpty() &&
-      elem->FastHasAttribute(html_names::kWidthAttr) &&
-      elem->FastHasAttribute(html_names::kHeightAttr)) {
-    const AtomicString& width_str =
-        elem->FastGetAttribute(html_names::kWidthAttr);
-    const AtomicString& height_str =
-        elem->FastGetAttribute(html_names::kHeightAttr);
-    HTMLDimension width_dim, height_dim;
-    if (ParseDimensionValue(width_str, width_dim) &&
-        ParseDimensionValue(height_str, height_dim) && width_dim.IsAbsolute() &&
-        height_dim.IsAbsolute()) {
-      intrinsic_sizing_info.aspect_ratio.SetWidth(width_dim.Value());
-      intrinsic_sizing_info.aspect_ratio.SetHeight(height_dim.Value());
-    }
-  }
 }
 
 static inline LayoutUnit ResolveWidthForRatio(LayoutUnit height,
@@ -775,12 +766,12 @@ LayoutUnit LayoutReplaced::ComputeConstrainedLogicalWidth(
 LayoutUnit LayoutReplaced::ComputeReplacedLogicalWidth(
     ShouldComputePreferred should_compute_preferred) const {
   NOT_DESTROYED();
-  if (StyleRef().LogicalWidth().IsSpecified() ||
-      StyleRef().LogicalWidth().IsIntrinsic())
+  if (!StyleRef().LogicalWidth().IsAuto()) {
     return ComputeReplacedLogicalWidthRespectingMinMaxWidth(
         ComputeReplacedLogicalWidthUsing(kMainOrPreferredSize,
                                          StyleRef().LogicalWidth()),
         should_compute_preferred);
+  }
 
   // 10.3.2 Inline, replaced elements:
   // http://www.w3.org/TR/CSS21/visudet.html#inline-replaced-width
@@ -964,10 +955,8 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
   const std::pair<LayoutUnit, LayoutUnit> fallback(
       layout_replaced.LogicalTop(), layout_replaced.LogicalBottom());
 
-  const NGPhysicalBoxFragment* fragmentainer =
-      layout_replaced.IsInline() ? layout_replaced.ContainingBlockFlowFragment()
-                                 : nullptr;
-  if (fragmentainer) {
+  if (layout_replaced.IsInline() &&
+      layout_replaced.IsInLayoutNGInlineFormattingContext()) {
     // Step 1: Find the line box containing |layout_replaced|.
     NGInlineCursor line_box;
     line_box.MoveTo(layout_replaced);
@@ -981,18 +970,12 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
     // TODO(layout-dev): Use selection top & bottom instead of line's, or decide
     // if we still want to distinguish line and selection heights in NG.
     const ComputedStyle& line_style = line_box.Current().Style();
-    const WritingMode writing_mode = line_style.GetWritingMode();
-    const TextDirection text_direction = line_style.Direction();
-    const PhysicalOffset line_box_offset =
-        line_box.Current().OffsetInContainerBlock();
-    const PhysicalSize line_box_size = line_box.Current().Size();
-    const LogicalOffset logical_offset = line_box_offset.ConvertToLogical(
-        writing_mode, text_direction, fragmentainer->Size(),
-        line_box.Current().Size());
-    const LogicalSize logical_size =
-        line_box_size.ConvertToLogical(writing_mode);
-    return {logical_offset.block_offset,
-            logical_offset.block_offset + logical_size.block_size};
+    const auto writing_direction = line_style.GetWritingDirection();
+    const WritingModeConverter converter(writing_direction,
+                                         line_box.BoxFragment().Size());
+    const LogicalRect logical_rect =
+        converter.ToLogical(line_box.Current().RectInContainerBlock());
+    return {logical_rect.offset.block_offset, logical_rect.BlockEndOffset()};
   }
 
   InlineBox* box = layout_replaced.InlineBoxWrapper();

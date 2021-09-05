@@ -120,15 +120,13 @@ class ManagementUIHandler : public content::WebUIMessageHandler,
   void SetAccountManagedForTesting(bool managed) { account_managed_ = managed; }
   void SetDeviceManagedForTesting(bool managed) { device_managed_ = managed; }
 
-  // This will return the domain (ie foo.com) that manages |profile|. If
-  // unmanaged, an empty string is returned.
-  static std::string GetAccountDomain(Profile* profile);
-
   // This returns the entity that manages this |profile|. For standard dasher
   // domains, this will be a domain name (ie foo.com). For FlexOrgs, this will
   // be the email address of the admin of the FlexOrg (ie user@foo.com). If
   // DMServer does not provide this information, this method defaults to
   // |GetAccountDomain|. If unmanaged, an empty string is returned.
+  // TODO(crbug.com/1081272): refactor localization hints for all strings that
+  // depend on this method
   static std::string GetAccountManager(Profile* profile);
 
   void OnJavascriptAllowed() override;
@@ -149,7 +147,7 @@ class ManagementUIHandler : public content::WebUIMessageHandler,
 
 #if defined(OS_CHROMEOS)
   // Protected for testing.
-  virtual const std::string GetDeviceDomain() const;
+  virtual const std::string GetDeviceManager() const;
   virtual const policy::DeviceCloudPolicyManagerChromeOS*
   GetDeviceCloudPolicyManager() const;
   void AddDeviceReportingInfo(base::Value* report_sources,

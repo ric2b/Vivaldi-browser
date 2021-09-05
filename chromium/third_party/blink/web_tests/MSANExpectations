@@ -103,9 +103,6 @@ crbug.com/856601 [ Linux ] http/tests/devtools/elements/elements-save-to-temp-va
 # Sheriff 2018-12-13
 crbug.com/914900 [ Linux ] http/tests/devtools/network/preview-searchable.js [ Pass Timeout ]
 
-# Sheriff 2019-01-28
-crbug.com/925600 [ Linux ] external/wpt/webrtc-quic/RTCQuicStream.https.html [ Pass Timeout ]
-
 # Sheriff 2019-02-13
 crbug.com/931660 [ Linux ] fast/history/replacestate-nocrash.html [ Pass Timeout ]
 
@@ -150,3 +147,6 @@ crbug.com/1066647 [ Linux ] http/tests/devtools/sources/debugger-breakpoints/bre
 
 # Sheriff 2020-06-16
 crbug.com/1095518 [ Linux ] crbug.com/840659 external/wpt/webrtc/simulcast/h264.https.html [ Crash ]
+
+# Sheriff 2020-10-05
+crbug.com/1134580 [ Linux ] virtual/eye-dropper/color-picker-show-eye-dropper.html [ Pass Timeout ]

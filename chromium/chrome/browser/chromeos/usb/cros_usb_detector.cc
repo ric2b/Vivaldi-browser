@@ -10,10 +10,11 @@
 #include <utility>
 
 #include "ash/public/cpp/notification_utils.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
@@ -672,6 +673,7 @@ void CrosUsbDetector::DetachUsbDeviceFromVm(
       // failed.
       // TODO(timloh): Check what happens if attaching to a different VM races
       // with an in progress attach.
+      RelinquishDeviceClaim(guid);
       device.shared_vm_name = base::nullopt;
       std::move(callback).Run(/*success=*/true);
       return;

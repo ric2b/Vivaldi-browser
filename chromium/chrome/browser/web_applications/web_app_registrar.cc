@@ -13,7 +13,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/web_applications/components/os_integration_manager.h"
-#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/web_app.h"
 
 namespace web_app {
@@ -58,7 +57,7 @@ bool WebAppRegistrar::WasInstalledByUser(const AppId& app_id) const {
 
 int WebAppRegistrar::CountUserInstalledApps() const {
   int num_user_installed = 0;
-  for (const WebApp& app : AllApps()) {
+  for (const WebApp& app : GetAppsIncludingStubs()) {
     if (app.is_locally_installed() && app.WasInstalledByUser())
       ++num_user_installed;
   }
@@ -181,12 +180,8 @@ WebAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
 std::vector<AppId> WebAppRegistrar::GetAppIds() const {
   std::vector<AppId> app_ids;
 
-  for (const WebApp& app : AllApps()) {
-    // Apps in sync install are being installed and should be hidden for
-    // most subsystems. OnWebAppInstalled() notification will be send out later.
-    if (!app.is_in_sync_install())
-      app_ids.push_back(app.app_id());
-  }
+  for (const WebApp& app : GetApps())
+    app_ids.push_back(app.app_id());
 
   return app_ids;
 }
@@ -207,11 +202,10 @@ void WebAppRegistrar::OnProfileMarkedForPermanentDeletion(
   if (profile() != profile_to_be_deleted)
     return;
 
-  for (const auto& app : AllApps()) {
+  for (const auto& app : GetAppsIncludingStubs()) {
     NotifyWebAppProfileWillBeDeleted(app.app_id());
-    WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .UninstallAllOsHooks(app.app_id(), base::DoNothing());
+    os_integration_manager().UninstallAllOsHooks(app.app_id(),
+                                                  base::DoNothing());
   }
   // We can't do registry_.clear() here because it makes in-memory registry
   // diverged from the sync server registry and from the on-disk registry
@@ -219,8 +213,9 @@ void WebAppRegistrar::OnProfileMarkedForPermanentDeletion(
   registry_profile_being_deleted_ = true;
 }
 
-WebAppRegistrar::AppSet::AppSet(const WebAppRegistrar* registrar)
-    : registrar_(registrar)
+WebAppRegistrar::AppSet::AppSet(const WebAppRegistrar* registrar, Filter filter)
+    : registrar_(registrar),
+      filter_(filter)
 #if DCHECK_IS_ON()
       ,
       mutations_count_(registrar->mutations_count_)
@@ -235,27 +230,41 @@ WebAppRegistrar::AppSet::~AppSet() {
 }
 
 WebAppRegistrar::AppSet::iterator WebAppRegistrar::AppSet::begin() {
-  return iterator(registrar_->registry_.begin());
+  return iterator(registrar_->registry_.begin(), registrar_->registry_.end(),
+                  filter_);
 }
 
 WebAppRegistrar::AppSet::iterator WebAppRegistrar::AppSet::end() {
-  return iterator(registrar_->registry_.end());
+  return iterator(registrar_->registry_.end(), registrar_->registry_.end(),
+                  filter_);
 }
 
 WebAppRegistrar::AppSet::const_iterator WebAppRegistrar::AppSet::begin() const {
-  return const_iterator(registrar_->registry_.begin());
+  return const_iterator(registrar_->registry_.begin(),
+                        registrar_->registry_.end(), filter_);
 }
 
 WebAppRegistrar::AppSet::const_iterator WebAppRegistrar::AppSet::end() const {
-  return const_iterator(registrar_->registry_.end());
+  return const_iterator(registrar_->registry_.end(),
+                        registrar_->registry_.end(), filter_);
 }
 
-const WebAppRegistrar::AppSet WebAppRegistrar::AllApps() const {
-  return AppSet(this);
+const WebAppRegistrar::AppSet WebAppRegistrar::GetAppsIncludingStubs() const {
+  return AppSet(this, nullptr);
+}
+
+const WebAppRegistrar::AppSet WebAppRegistrar::GetApps() const {
+  return AppSet(this, [](const WebApp& web_app) {
+    return !web_app.is_in_sync_install();
+  });
 }
 
 void WebAppRegistrar::SetRegistry(Registry&& registry) {
   registry_ = std::move(registry);
+}
+
+const WebAppRegistrar::AppSet WebAppRegistrar::FilterApps(Filter filter) const {
+  return AppSet(this, filter);
 }
 
 void WebAppRegistrar::CountMutation() {
@@ -278,8 +287,19 @@ WebApp* WebAppRegistrarMutable::GetAppByIdMutable(const AppId& app_id) {
   return const_cast<WebApp*>(GetAppById(app_id));
 }
 
-WebAppRegistrar::AppSet WebAppRegistrarMutable::AllAppsMutable() {
-  return AppSet(this);
+WebAppRegistrar::AppSet WebAppRegistrarMutable::FilterAppsMutable(
+    Filter filter) {
+  return AppSet(this, filter);
+}
+
+WebAppRegistrar::AppSet WebAppRegistrarMutable::GetAppsIncludingStubsMutable() {
+  return AppSet(this, nullptr);
+}
+
+WebAppRegistrar::AppSet WebAppRegistrarMutable::GetAppsMutable() {
+  return AppSet(this, [](const WebApp& web_app) {
+    return !web_app.is_in_sync_install();
+  });
 }
 
 bool IsRegistryEqual(const Registry& registry, const Registry& registry2) {

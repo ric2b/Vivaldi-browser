@@ -66,6 +66,7 @@ class RequestFilterProxyingWebSocket
   // network::mojom::WebSocketHandshakeClient methods:
   void OnOpeningHandshakeStarted(
       network::mojom::WebSocketHandshakeRequestPtr request) override;
+  void OnFailure(const std::string&, int net_error, int response_code) override;
   void OnConnectionEstablished(
       mojo::PendingRemote<network::mojom::WebSocket> websocket,
       mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver,
@@ -119,6 +120,7 @@ class RequestFilterProxyingWebSocket
   void PauseIncomingMethodCallProcessing();
   void ResumeIncomingMethodCallProcessing();
   void OnError(int result);
+
   // This is used for detecting errors on mojo connection with the network
   // service.
   void OnMojoConnectionErrorWithCustomReason(uint32_t custom_reason,

@@ -48,7 +48,6 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/metadata/metadata_header_macros.h"
-#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/view_targeter.h"
@@ -683,6 +682,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   //       transparent to the View subclasses and therefore you should use the
   //       bounds() accessor instead.
   gfx::Rect GetMirroredBounds() const;
+  gfx::Rect GetMirroredContentsBounds() const;
   gfx::Point GetMirroredPosition() const;
   int GetMirroredX() const;
 
@@ -763,8 +763,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Recursively descends the view tree starting at this view, and returns
   // the first child that it encounters that has the given ID.
   // Returns NULL if no matching child view is found.
-  virtual const View* GetViewByID(int id) const;
-  virtual View* GetViewByID(int id);
+  const View* GetViewByID(int id) const;
+  View* GetViewByID(int id);
 
   // Gets and sets the ID for this view. ID should be unique within the subtree
   // that you intend to search for it. 0 is the default ID for views.
@@ -897,13 +897,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // RTL painting --------------------------------------------------------------
 
-  // This method determines whether the gfx::Canvas object passed to
-  // Paint() needs to be transformed such that anything drawn on the canvas
-  // object during Paint() is flipped horizontally.
-  bool flip_canvas_on_paint_for_rtl_ui() const {
-    return flip_canvas_on_paint_for_rtl_ui_;
-  }
-
+  // Returns whether the gfx::Canvas object passed to Paint() needs to be
+  // transformed such that anything drawn on the canvas object during Paint()
+  // is flipped horizontally.
+  bool GetFlipCanvasOnPaintForRTLUI() const;
   // Enables or disables flipping of the gfx::Canvas during Paint(). Note that
   // if canvas flipping is enabled, the canvas will be flipped only if the UI
   // layout is right-to-left; that is, the canvas will be flipped only if
@@ -914,19 +911,25 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // (views::Button, for example). This method is helpful for such classes
   // because their drawing logic stays the same and they can become agnostic to
   // the UI directionality.
-  virtual void EnableCanvasFlippingForRTLUI(bool enable);
+  void SetFlipCanvasOnPaintForRTLUI(bool enable);
+
+  // Adds a callback subscription associated with the above
+  // FlipCanvasOnPaintForRTLUI property. The callback will be invoked whenever
+  // the FlipCanvasOnPaintForRTLUI property changes.
+  PropertyChangedSubscription AddFlipCanvasOnPaintForRTLUIChangedCallback(
+      PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
   // When set, this view will ignore base::l18n::IsRTL() and instead be drawn
   // according to |is_mirrored|.
   //
   // This is useful for views that should be displayed the same regardless of UI
-  // direction. Unlike EnableCanvasFlippingForRTLUI this setting has an effect
+  // direction. Unlike SetFlipCanvasOnPaintForRTLUI this setting has an effect
   // on the visual order of child views.
   //
   // This setting does not propagate to child views. So while the visual order
   // of this view's children may change, the visual order of this view's
   // grandchildren in relation to their parents are unchanged.
-  void SetMirrored(bool is_mirrored) { is_mirrored_ = is_mirrored; }
+  void SetMirrored(bool is_mirrored);
   bool GetMirrored() const;
 
   // Input ---------------------------------------------------------------------
@@ -2074,6 +2077,7 @@ VIEW_BUILDER_PROPERTY(gfx::Size, PreferredSize)
 VIEW_BUILDER_PROPERTY(SkPath, ClipPath)
 VIEW_BUILDER_PROPERTY_DEFAULT(ui::LayerType, PaintToLayer, ui::LAYER_TEXTURED)
 VIEW_BUILDER_PROPERTY(bool, Enabled)
+VIEW_BUILDER_PROPERTY(bool, FlipCanvasOnPaintForRTLUI)
 VIEW_BUILDER_PROPERTY(views::View::FocusBehavior, FocusBehavior)
 VIEW_BUILDER_PROPERTY(int, Group)
 VIEW_BUILDER_PROPERTY(int, ID)
@@ -2082,8 +2086,10 @@ VIEW_BUILDER_PROPERTY(bool, NotifyEnterExitOnChild)
 VIEW_BUILDER_PROPERTY(gfx::Transform, Transform)
 VIEW_BUILDER_PROPERTY(bool, Visible)
 VIEW_BUILDER_PROPERTY(bool, CanProcessEventsWithinSubtree)
-END_VIEW_BUILDER(VIEWS_EXPORT, View)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, View)
 
 #endif  // UI_VIEWS_VIEW_H_

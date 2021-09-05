@@ -31,12 +31,15 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
 #include "url/gurl.h"
 
 namespace content {
 
 class FrameTreeNode;
 class RenderFrameHost;
+class RenderFrameHostImpl;
+class RenderWidgetHostImpl;
 class Shell;
 class SiteInstance;
 class ToRenderFrameHost;
@@ -101,10 +104,19 @@ class FrameTreeVisualizer {
 };
 
 // Uses window.open to open a popup from the frame |opener| with the specified
-// |url| and |name|.   Waits for the navigation to |url| to finish and then
-// returns the new popup's Shell.  Note that since this navigation to |url| is
-// renderer-initiated, it won't cause a process swap unless used in
-// --site-per-process mode.
+// |url|, |name| and window |features|. |expect_return_from_window_open| is used
+// to indicate if the caller expects window.open() to return a non-null value.
+// Waits for the navigation to |url| to finish and then returns the new popup's
+// Shell.  Note that since this navigation to |url| is renderer-initiated, it
+// won't cause a process swap unless used in --site-per-process mode.
+Shell* OpenPopup(const ToRenderFrameHost& opener,
+                 const GURL& url,
+                 const std::string& name,
+                 const std::string& features,
+                 bool expect_return_from_window_open);
+
+// Same as above, but with an empty |features| and
+// |expect_return_from_window_open| assumed to be true..
 Shell* OpenPopup(const ToRenderFrameHost& opener,
                  const GURL& url,
                  const std::string& name);
@@ -203,37 +215,25 @@ class RenderProcessHostBadIpcMessageWaiter {
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostBadIpcMessageWaiter);
 };
 
-class ShowWidgetMessageFilter : public BrowserMessageFilter,
-                                public WebContentsObserver {
+class ShowPopupWidgetWaiter
+    : public WebContentsObserver,
+      public blink::mojom::PopupWidgetHostInterceptorForTesting {
  public:
-  explicit ShowWidgetMessageFilter(WebContents* web_contents);
-
-  // This must be called on the UI thread when this filter is not required
-  // anymore.
-  // Background: The ShowWidgetMessageFilter observes the |web_contents| passed
-  // to the constructor. It will remove itself as observer in the destructor,
-  // but as BrowserMessageFilter subclasses (such as this one) are ref-counted
-  // and a reference is potentially held by the IPC channel, it is not obvious
-  // when this class will be destroyed, and this may be well after a
-  // browsertest's body (which has instantiated this and called AddFilter with
-  // it) exits.
-  void Shutdown();
-
-  // BrowserMessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override;
+  ShowPopupWidgetWaiter(WebContents* web_contents,
+                        RenderFrameHostImpl* frame_host);
+  ~ShowPopupWidgetWaiter() override;
 
   gfx::Rect last_initial_rect() const { return initial_rect_; }
 
   int last_routing_id() const { return routing_id_; }
 
+  // Waits until a popup request is received.
   void Wait();
 
-  void Reset();
+  // Stops observing new messages.
+  void Stop();
 
  private:
-  ~ShowWidgetMessageFilter() override;
-
-  void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
 
   // WebContentsObserver:
 #if defined(OS_MAC) || defined(OS_ANDROID)
@@ -249,14 +249,21 @@ class ShowWidgetMessageFilter : public BrowserMessageFilter,
       bool allow_multiple_selection) override;
 #endif
 
-  void OnShowWidgetOnUI(int route_id, const gfx::Rect& initial_rect);
+  // Callback bound for creating a popup widget.
+  void DidCreatePopupWidget(RenderWidgetHostImpl* render_widget_host);
 
-  std::unique_ptr<base::RunLoop> run_loop_;
+  // blink::mojom::PopupWidgetHostInterceptorForTesting:
+  blink::mojom::PopupWidgetHost* GetForwardingInterface() override;
+  void ShowPopup(const gfx::Rect& initial_rect,
+                 ShowPopupCallback callback) override;
+
+  base::RunLoop run_loop_;
   gfx::Rect initial_rect_;
-  int routing_id_ = MSG_ROUTING_NONE;
-  bool is_shut_down_ = false;
+  int32_t routing_id_ = MSG_ROUTING_NONE;
+  int32_t process_id_ = 0;
+  RenderFrameHostImpl* frame_host_;
 
-  DISALLOW_COPY_AND_ASSIGN(ShowWidgetMessageFilter);
+  DISALLOW_COPY_AND_ASSIGN(ShowPopupWidgetWaiter);
 };
 
 // A BrowserMessageFilter that drops a blacklisted message.

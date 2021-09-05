@@ -317,7 +317,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutUnit ConstrainLogicalWidthByMinMax(LayoutUnit,
                                            LayoutUnit,
-                                           const LayoutBlock*) const;
+                                           const LayoutBlock*,
+                                           bool allow_intrinsic = true) const;
   LayoutUnit ConstrainLogicalHeightByMinMax(
       LayoutUnit logical_height,
       LayoutUnit intrinsic_content_height) const;
@@ -655,6 +656,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual bool HasTopOverflow() const;
   virtual bool HasLeftOverflow() const;
 
+  // Sets the layout-overflow from the current set of layout-results.
+  void SetLayoutOverflowFromLayoutResults();
+
   void AddLayoutOverflow(const LayoutRect&);
   void AddSelfVisualOverflow(const PhysicalRect& r) {
     NOT_DESTROYED();
@@ -667,7 +671,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   }
   void AddContentsVisualOverflow(const LayoutRect&);
 
-  void AddVisualEffectOverflow();
+  virtual void AddVisualEffectOverflow();
   LayoutRectOutsets ComputeVisualEffectOverflowOutsets();
   void AddVisualOverflowFromChild(const LayoutBox& child) {
     NOT_DESTROYED();
@@ -992,6 +996,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                    const HitTestLocation&,
                    const PhysicalOffset& accumulated_offset,
                    HitTestAction) override;
+  // Fast check if |NodeAtPoint| may find a hit.
+  bool MayIntersect(const HitTestResult& result,
+                    const HitTestLocation& hit_test_location,
+                    const PhysicalOffset& accumulated_offset) const;
 
   // This function calculates the preferred widths for an object.
   //
@@ -1465,7 +1473,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       return NGBoxStrut();
     } else {
       return ComputeScrollbarsInternal().ConvertToLogical(
-          StyleRef().GetWritingMode(), StyleRef().Direction());
+          StyleRef().GetWritingDirection());
     }
   }
 
@@ -1477,6 +1485,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       const FloatPoint& point_in_root_frame) const;
   static LayoutBox* FindAutoscrollable(LayoutObject*,
                                        bool is_middle_click_autoscroll);
+  static bool HasHorizontallyScrollableAncestor(LayoutObject*);
 
   DISABLE_CFI_PERF bool HasAutoVerticalScrollbar() const {
     NOT_DESTROYED();
@@ -1905,6 +1914,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     void SavePreviousSize() {
       GetLayoutBox().previous_size_ = GetLayoutBox().Size();
     }
+    void ClearPreviousSize() { GetLayoutBox().previous_size_ = LayoutSize(); }
     void SavePreviousOverflowData();
     void ClearPreviousOverflowData() {
       DCHECK(!GetLayoutBox().HasVisualOverflow());
@@ -2094,6 +2104,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       const Length& logical_width_length,
       LayoutUnit available_logical_width) const;
   LayoutUnit ComputeIntrinsicLogicalContentHeightUsing(
+      SizeType height_type,
       const Length& logical_height_length,
       LayoutUnit intrinsic_content_height,
       LayoutUnit border_and_padding) const;
@@ -2319,6 +2330,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   MinMaxSizes intrinsic_logical_widths_;
   LayoutUnit intrinsic_logical_widths_percentage_resolution_block_size_;
 
+  scoped_refptr<const NGLayoutResult> measure_result_;
+  NGLayoutResultList layout_results_;
+
   // LayoutBoxUtils is used for the LayoutNG code querying protected methods on
   // this class, e.g. determining the static-position of OOF elements.
   friend class LayoutBoxUtils;
@@ -2330,9 +2344,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     NOT_DESTROYED();
     const auto& style = override_style ? *override_style : StyleRef();
     return LogicalToPhysicalSetter<LayoutUnit, LayoutBox>(
-        style.GetWritingMode(), style.Direction(), *this,
-        &LayoutBox::SetMarginTop, &LayoutBox::SetMarginRight,
-        &LayoutBox::SetMarginBottom, &LayoutBox::SetMarginLeft);
+        style.GetWritingDirection(), *this, &LayoutBox::SetMarginTop,
+        &LayoutBox::SetMarginRight, &LayoutBox::SetMarginBottom,
+        &LayoutBox::SetMarginLeft);
   }
 
   std::unique_ptr<BoxOverflowModel> overflow_;
@@ -2357,8 +2371,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   };
 
   Persistent<LayoutBoxRareData> rare_data_;
-  scoped_refptr<const NGLayoutResult> measure_result_;
-  NGLayoutResultList layout_results_;
 };
 
 template <>
@@ -2366,10 +2378,8 @@ struct DowncastTraits<LayoutBox> {
   static bool AllowFrom(const LayoutObject& object) { return object.IsBox(); }
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBox, IsBox());
-
 inline LayoutBox* LayoutBox::PreviousSiblingBox() const {
-  return ToLayoutBox(PreviousSibling());
+  return To<LayoutBox>(PreviousSibling());
 }
 
 inline LayoutBox* LayoutBox::PreviousInFlowSiblingBox() const {
@@ -2380,7 +2390,7 @@ inline LayoutBox* LayoutBox::PreviousInFlowSiblingBox() const {
 }
 
 inline LayoutBox* LayoutBox::NextSiblingBox() const {
-  return ToLayoutBox(NextSibling());
+  return To<LayoutBox>(NextSibling());
 }
 
 inline LayoutBox* LayoutBox::NextInFlowSiblingBox() const {
@@ -2391,7 +2401,7 @@ inline LayoutBox* LayoutBox::NextInFlowSiblingBox() const {
 }
 
 inline LayoutBox* LayoutBox::ParentBox() const {
-  return ToLayoutBox(Parent());
+  return To<LayoutBox>(Parent());
 }
 
 inline LayoutBox* LayoutBox::FirstInFlowChildBox() const {
@@ -2402,11 +2412,11 @@ inline LayoutBox* LayoutBox::FirstInFlowChildBox() const {
 }
 
 inline LayoutBox* LayoutBox::FirstChildBox() const {
-  return ToLayoutBox(SlowFirstChild());
+  return To<LayoutBox>(SlowFirstChild());
 }
 
 inline LayoutBox* LayoutBox::LastChildBox() const {
-  return ToLayoutBox(SlowLastChild());
+  return To<LayoutBox>(SlowLastChild());
 }
 
 inline LayoutBox* LayoutBox::PreviousSiblingMultiColumnBox() const {

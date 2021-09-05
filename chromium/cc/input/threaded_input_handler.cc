@@ -565,12 +565,6 @@ InputHandlerPointerResult ThreadedInputHandler::MouseMoveAt(
       old_animation_controller->DidMouseLeave();
 
     scroll_element_id_mouse_currently_over_ = scroll_element_id;
-
-    // Experiment: Enables will flash scrollbar when user move mouse enter a
-    // scrollable area.
-    if (compositor_delegate_.GetSettings().scrollbar_flash_when_mouse_enter &&
-        new_animation_controller)
-      new_animation_controller->DidScrollUpdate();
   }
 
   if (!new_animation_controller)
@@ -807,9 +801,9 @@ ThreadedInputHandler::CreateLatencyInfoSwapPromiseMonitor(
 
 std::unique_ptr<EventsMetricsManager::ScopedMonitor>
 ThreadedInputHandler::GetScopedEventMetricsMonitor(
-    std::unique_ptr<EventMetrics> event_metrics) {
+    EventsMetricsManager::ScopedMonitor::DoneCallback done_callback) {
   return compositor_delegate_.GetImplDeprecated().GetScopedEventMetricsMonitor(
-      std::move(event_metrics));
+      std::move(done_callback));
 }
 
 ScrollElasticityHelper* ThreadedInputHandler::CreateScrollElasticityHelper() {
@@ -1070,17 +1064,23 @@ bool ThreadedInputHandler::IsCurrentlyScrolling() const {
   return CurrentlyScrollingNode();
 }
 
-bool ThreadedInputHandler::IsActivelyPrecisionScrolling() const {
+ActivelyScrollingType ThreadedInputHandler::GetActivelyScrollingType() const {
   if (!CurrentlyScrollingNode())
-    return false;
+    return ActivelyScrollingType::kNone;
 
   if (!last_scroll_update_state_)
-    return false;
+    return ActivelyScrollingType::kNone;
 
   bool did_scroll_content =
       did_scroll_x_for_scroll_gesture_ || did_scroll_y_for_scroll_gesture_;
-  return !ShouldAnimateScroll(last_scroll_update_state_.value()) &&
-         did_scroll_content;
+
+  if (!did_scroll_content)
+    return ActivelyScrollingType::kNone;
+
+  if (ShouldAnimateScroll(last_scroll_update_state_.value()))
+    return ActivelyScrollingType::kAnimated;
+
+  return ActivelyScrollingType::kPrecise;
 }
 
 ScrollNode* ThreadedInputHandler::CurrentlyScrollingNode() {

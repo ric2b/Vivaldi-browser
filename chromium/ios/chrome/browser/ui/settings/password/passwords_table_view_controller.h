@@ -27,7 +27,7 @@ class Browser;
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 // Deletes passed password form and updates list accordingly.
-- (void)deletePasswordForm:(const autofill::PasswordForm&)form;
+- (void)deletePasswordForm:(const password_manager::PasswordForm&)form;
 
 @property(nonatomic, weak) id<PasswordsSettingsCommands> handler;
 
@@ -40,13 +40,6 @@ class Browser;
 // Reauthentication module.
 @property(nonatomic, strong) id<ReauthenticationProtocol>
     reauthenticationModule;
-
-@end
-
-@interface PasswordsTableViewController (Testing)
-
-// Returns the password exporter to allow setting fake testing objects on it.
-- (PasswordExporter*)getPasswordExporter;
 
 @end
 

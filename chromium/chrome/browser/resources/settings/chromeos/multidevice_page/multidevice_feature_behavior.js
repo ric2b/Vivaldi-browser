@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData } from './multidevice_constants.m.js';
+// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, PhoneHubNotificationAccessStatus} from './multidevice_constants.m.js';
 // #import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 // clang-format on
 
@@ -72,6 +72,16 @@ const MultiDeviceFeatureBehaviorImpl = {
   },
 
   /**
+   * @return {boolean} Whether or not Phone Hub notification access is
+   *     prohibited (i.e., due to the user having a work profile).
+   */
+  isPhoneHubNotificationAccessProhibited() {
+    return this.pageContentData &&
+        this.pageContentData.notificationAccessStatus ===
+        settings.PhoneHubNotificationAccessStatus.PROHIBITED;
+  },
+
+  /**
    * Whether the user is prevented from attempted to change a given feature. In
    * the UI this corresponds to a disabled toggle.
    * @param {!settings.MultiDeviceFeature} feature
@@ -82,6 +92,13 @@ const MultiDeviceFeatureBehaviorImpl = {
     // (as opposed to the full suite).
     if (feature !== settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE &&
         !this.isSuiteOn()) {
+      return false;
+    }
+
+    // Cannot edit the Phone Hub notification toggle if notification access is
+    // prohibited.
+    if (feature === settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS &&
+        this.isPhoneHubNotificationAccessProhibited()) {
       return false;
     }
 
@@ -110,8 +127,6 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18n('multidevicePhoneHubItemTitle');
       case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
         return this.i18n('multidevicePhoneHubNotificationsItemTitle');
-      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
-        return this.i18n('multidevicePhoneHubNotificationBadgeItemTitle');
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return this.i18n('multidevicePhoneHubTaskContinuationItemTitle');
       case settings.MultiDeviceFeature.WIFI_SYNC:
@@ -138,12 +153,10 @@ const MultiDeviceFeatureBehaviorImpl = {
       // TODO(https://crbug.com/1106937): Use real Phone Hub asset.
       case settings.MultiDeviceFeature.PHONE_HUB:
       case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
-      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return 'os-settings:multidevice-better-together-suite';
-      // TODO(cvandermerwe): Use real Wifi Sync asset.
       case settings.MultiDeviceFeature.WIFI_SYNC:
-        return 'os-settings:multidevice-wifi';
+        return 'os-settings:multidevice-wifi-sync';
       default:
         return '';
     }
@@ -167,9 +180,6 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18nAdvanced('multidevicePhoneHubItemSummary');
       case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
         return this.i18nAdvanced('multidevicePhoneHubNotificationsItemSummary');
-      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
-        return this.i18nAdvanced(
-            'multidevicePhoneHubNotificationBadgeItemSummary');
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return this.i18nAdvanced(
             'multidevicePhoneHubTaskContinuationItemSummary');
@@ -205,8 +215,6 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.pageContentData.phoneHubState;
       case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
         return this.pageContentData.phoneHubNotificationsState;
-      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
-        return this.pageContentData.phoneHubNotificationBadgeState;
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return this.pageContentData.phoneHubTaskContinuationState;
       case settings.MultiDeviceFeature.WIFI_SYNC:

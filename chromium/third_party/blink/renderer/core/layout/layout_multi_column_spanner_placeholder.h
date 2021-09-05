@@ -19,7 +19,7 @@ class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
  public:
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutMultiColumnSpannerPlaceholder ||
+    return type == kLayoutObjectMultiColumnSpannerPlaceholder ||
            LayoutBox::IsOfType(type);
   }
 
@@ -93,8 +93,12 @@ class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
   LayoutBox* layout_object_in_flow_thread_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutMultiColumnSpannerPlaceholder,
-                                IsLayoutMultiColumnSpannerPlaceholder());
+template <>
+struct DowncastTraits<LayoutMultiColumnSpannerPlaceholder> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsLayoutMultiColumnSpannerPlaceholder();
+  }
+};
 
 }  // namespace blink
 

@@ -9,6 +9,10 @@
 #include "ash/public/cpp/in_session_auth_dialog_client.h"
 #include "base/optional.h"
 
+namespace aura {
+class Window;
+}
+
 namespace ash {
 
 // InSessionAuthDialogController manages the in-session auth dialog.
@@ -28,22 +32,26 @@ class ASH_PUBLIC_EXPORT InSessionAuthDialogController {
   // Sets the client that will handle authentication.
   virtual void SetClient(InSessionAuthDialogClient* client) = 0;
 
-  // Displays the authentication dialog.
-  virtual void ShowAuthenticationDialog(FinishCallback finish_callback) = 0;
+  // Displays the authentication dialog for the website/app name in |app_id|.
+  virtual void ShowAuthenticationDialog(aura::Window* source_window,
+                                        const std::string& origin_name,
+                                        FinishCallback finish_callback) = 0;
 
   // Destroys the authentication dialog.
   virtual void DestroyAuthenticationDialog() = 0;
 
-  // Takes a password or PIN and sends it to InSessionAuthDialogClient to
+  // Takes a PIN and sends it to InSessionAuthDialogClient to
   // authenticate. The InSessionAuthDialogClient should already know the current
   // session's active user, so the user account is not provided here.
-  virtual void AuthenticateUserWithPasswordOrPin(
-      const std::string& password,
-      OnAuthenticateCallback callback) = 0;
+  virtual void AuthenticateUserWithPin(const std::string& pin,
+                                       OnAuthenticateCallback callback) = 0;
 
   // Requests ChromeOS to report fingerprint scan result through |callback|.
   virtual void AuthenticateUserWithFingerprint(
       base::OnceCallback<void(bool, FingerprintState)> callback) = 0;
+
+  // Opens a help article in Chrome.
+  virtual void OpenInSessionAuthHelpPage() = 0;
 
   // Cancels all operations and destroys the dialog.
   virtual void Cancel() = 0;

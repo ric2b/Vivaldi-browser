@@ -28,11 +28,14 @@ _LINT_MD_URL = 'https://chromium.googlesource.com/chromium/src/+/master/build/an
 _DISABLED_ALWAYS = [
     "AppCompatResource",  # Lint does not correctly detect our appcompat lib.
     "Assert",  # R8 --force-enable-assertions is used to enable java asserts.
+    "InflateParams",  # Null is ok when inflating views for dialogs.
+    "InlinedApi",  # Constants are copied so they are always available.
     "LintBaseline",  # Don't warn about using baseline.xml files.
     "MissingApplicationIcon",  # False positive for non-production targets.
     "SwitchIntDef",  # Many C++ enums are not used at all in java.
     "UniqueConstants",  # Chromium enums allow aliases.
     "UnusedAttribute",  # Chromium apks have various minSdkVersion values.
+    "ObsoleteLintCustomCheck",  # We have no control over custom lint checks.
 ]
 
 # These checks are not useful for test targets and adds an unnecessary burden
@@ -59,6 +62,7 @@ _DISABLED_FOR_TESTS = [
 
 _RES_ZIP_DIR = 'RESZIPS'
 _SRCJAR_DIR = 'SRCJARS'
+_AAR_DIR = 'AARS'
 
 
 def _SrcRelative(path):
@@ -73,6 +77,8 @@ def _GenerateProjectFile(android_manifest,
                          classpath=None,
                          srcjar_sources=None,
                          resource_sources=None,
+                         custom_lint_jars=None,
+                         custom_annotation_zips=None,
                          android_sdk_version=None):
   project = ElementTree.Element('project')
   root = ElementTree.SubElement(project, 'root')
@@ -107,7 +113,40 @@ def _GenerateProjectFile(android_manifest,
     for resource_file in resource_sources:
       resource = ElementTree.SubElement(main_module, 'resource')
       resource.set('file', resource_file)
+  if custom_lint_jars:
+    for lint_jar in custom_lint_jars:
+      lint = ElementTree.SubElement(main_module, 'lint-checks')
+      lint.set('file', lint_jar)
+  if custom_annotation_zips:
+    for annotation_zip in custom_annotation_zips:
+      annotation = ElementTree.SubElement(main_module, 'annotations')
+      annotation.set('file', annotation_zip)
   return project
+
+
+def _RetrieveBackportedMethods(backported_methods_path):
+  with open(backported_methods_path) as f:
+    methods = f.read().splitlines()
+  # Methods look like:
+  #   java/util/Set#of(Ljava/lang/Object;)Ljava/util/Set;
+  # But error message looks like:
+  #   Call requires API level R (current min is 21): java.util.Set#of [NewApi]
+  methods = (m.replace('/', '\\.') for m in methods)
+  methods = (m[:m.index('(')] for m in methods)
+  return sorted(set(methods))
+
+
+def _GenerateConfigXmlTree(orig_config_path, backported_methods):
+  if orig_config_path:
+    root_node = ElementTree.parse(orig_config_path).getroot()
+  else:
+    root_node = ElementTree.fromstring('<lint/>')
+
+  issue_node = ElementTree.SubElement(root_node, 'issue')
+  issue_node.attrib['id'] = 'NewApi'
+  ignore_node = ElementTree.SubElement(issue_node, 'ignore')
+  ignore_node.attrib['regexp'] = '|'.join(backported_methods)
+  return root_node
 
 
 def _GenerateAndroidManifest(original_manifest_path, extra_manifest_paths,
@@ -141,6 +180,7 @@ def _GenerateAndroidManifest(original_manifest_path, extra_manifest_paths,
 
 
 def _WriteXmlFile(root, path):
+  logging.info('Writing xml file %s', path)
   build_utils.MakeDirectory(os.path.dirname(path))
   with build_utils.AtomicOutput(path) as f:
     # Although we can write it just with ElementTree.tostring, using minidom
@@ -162,6 +202,7 @@ def _CheckLintWarning(expected_warnings, lint_output):
 
 
 def _RunLint(lint_binary_path,
+             backported_methods_path,
              config_path,
              manifest_path,
              extra_manifest_paths,
@@ -169,6 +210,7 @@ def _RunLint(lint_binary_path,
              classpath,
              cache_dir,
              android_sdk_version,
+             aars,
              srcjars,
              min_sdk_version,
              resource_sources,
@@ -189,14 +231,19 @@ def _RunLint(lint_binary_path,
   ]
   if baseline:
     cmd.extend(['--baseline', baseline])
-  if config_path:
-    cmd.extend(['--config', config_path])
   if testonly_target:
     cmd.extend(['--disable', ','.join(_DISABLED_FOR_TESTS)])
 
   if not manifest_path:
     manifest_path = os.path.join(build_utils.DIR_SOURCE_ROOT, 'build',
                                  'android', 'AndroidManifest.xml')
+
+  logging.info('Generating config.xml')
+  backported_methods = _RetrieveBackportedMethods(backported_methods_path)
+  config_xml_node = _GenerateConfigXmlTree(config_path, backported_methods)
+  generated_config_path = os.path.join(lint_gen_dir, 'config.xml')
+  _WriteXmlFile(config_xml_node, generated_config_path)
+  cmd.extend(['--config', generated_config_path])
 
   logging.info('Generating Android manifest file')
   android_manifest_tree = _GenerateAndroidManifest(manifest_path,
@@ -206,7 +253,6 @@ def _RunLint(lint_binary_path,
   # Include the rebased manifest_path in the lint generated path so that it is
   # clear in error messages where the original AndroidManifest.xml came from.
   lint_android_manifest_path = os.path.join(lint_gen_dir, manifest_path)
-  logging.info('Writing xml file %s', lint_android_manifest_path)
   _WriteXmlFile(android_manifest_tree.getroot(), lint_android_manifest_path)
 
   resource_root_dir = os.path.join(lint_gen_dir, _RES_ZIP_DIR)
@@ -220,6 +266,24 @@ def _RunLint(lint_binary_path,
     os.makedirs(resource_dir)
     resource_sources.extend(
         build_utils.ExtractAll(resource_zip, path=resource_dir))
+
+  logging.info('Extracting aars')
+  aar_root_dir = os.path.join(lint_gen_dir, _AAR_DIR)
+  custom_lint_jars = []
+  custom_annotation_zips = []
+  if aars:
+    for aar in aars:
+      # Use relative source for aar files since they are not generated.
+      aar_dir = os.path.join(aar_root_dir,
+                             os.path.splitext(_SrcRelative(aar))[0])
+      shutil.rmtree(aar_dir, True)
+      os.makedirs(aar_dir)
+      aar_files = build_utils.ExtractAll(aar, path=aar_dir)
+      for f in aar_files:
+        if f.endswith('lint.jar'):
+          custom_lint_jars.append(f)
+        elif f.endswith('annotations.zip'):
+          custom_annotation_zips.append(f)
 
   logging.info('Extracting srcjars')
   srcjar_root_dir = os.path.join(lint_gen_dir, _SRCJAR_DIR)
@@ -240,11 +304,11 @@ def _RunLint(lint_binary_path,
   project_file_root = _GenerateProjectFile(lint_android_manifest_path,
                                            android_sdk_root, cache_dir, sources,
                                            classpath, srcjar_sources,
-                                           resource_sources,
+                                           resource_sources, custom_lint_jars,
+                                           custom_annotation_zips,
                                            android_sdk_version)
 
   project_xml_path = os.path.join(lint_gen_dir, 'project.xml')
-  logging.info('Writing xml file %s', project_xml_path)
   _WriteXmlFile(project_file_root, project_xml_path)
   cmd += ['--project', project_xml_path]
 
@@ -295,6 +359,7 @@ def _RunLint(lint_binary_path,
     end = time.time() - start
     logging.info('Lint command took %ss', end)
     if not is_debug:
+      shutil.rmtree(aar_root_dir, ignore_errors=True)
       shutil.rmtree(resource_root_dir, ignore_errors=True)
       shutil.rmtree(srcjar_root_dir, ignore_errors=True)
       os.unlink(project_xml_path)
@@ -308,6 +373,8 @@ def _ParseArgs(argv):
   parser.add_argument('--lint-binary-path',
                       required=True,
                       help='Path to lint executable.')
+  parser.add_argument('--backported-methods',
+                      help='Path to backported methods file created by R8.')
   parser.add_argument('--cache-dir',
                       required=True,
                       help='Path to the directory in which the android cache '
@@ -336,6 +403,7 @@ def _ParseArgs(argv):
                       help='Treat all warnings as errors.')
   parser.add_argument('--java-sources',
                       help='File containing a list of java sources files.')
+  parser.add_argument('--aars', help='GN list of included aars.')
   parser.add_argument('--srcjars', help='GN list of included srcjars.')
   parser.add_argument('--manifest-path',
                       help='Path to original AndroidManifest.xml')
@@ -364,6 +432,7 @@ def _ParseArgs(argv):
 
   args = parser.parse_args(build_utils.ExpandFileArgs(argv))
   args.java_sources = build_utils.ParseGnList(args.java_sources)
+  args.aars = build_utils.ParseGnList(args.aars)
   args.srcjars = build_utils.ParseGnList(args.srcjars)
   args.resource_sources = build_utils.ParseGnList(args.resource_sources)
   args.extra_manifest_paths = build_utils.ParseGnList(args.extra_manifest_paths)
@@ -391,6 +460,7 @@ def main():
   depfile_deps = [p for p in possible_depfile_deps if p]
 
   _RunLint(args.lint_binary_path,
+           args.backported_methods,
            args.config_path,
            args.manifest_path,
            args.extra_manifest_paths,
@@ -398,6 +468,7 @@ def main():
            args.classpath,
            args.cache_dir,
            args.android_sdk_version,
+           args.aars,
            args.srcjars,
            args.min_sdk_version,
            resource_sources,

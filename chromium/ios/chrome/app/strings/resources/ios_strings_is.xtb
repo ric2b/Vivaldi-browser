@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Prentun tókst ekki.</translation>
 <translation id="1125564390852150847">Búa til nýjan flipa.</translation>
 <translation id="1145536944570833626">Eyða fyrirliggjandi gögnum.</translation>
+<translation id="1147031633655575115">Skráð(ur) inn sem <ph name="USER" /></translation>
 <translation id="1154690515305205900">Ekki er hægt að búa til tengil í merkta textann.</translation>
+<translation id="1157749421655780457">Leyfa staðsetningu...</translation>
 <translation id="1165039591588034296">Villa</translation>
 <translation id="1172898394251786223">Næsti reitur</translation>
 <translation id="1176932207622159128">Ekki er hægt að vista mynd</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Fela aðgangsorð</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> atriði</translation>
 <translation id="1491277525950327607">Ýttu tvisvar til að breyta stillingum</translation>
+<translation id="1492417797159476138">Þú varst þegar búin(n) að vista þetta notandanafn fyrir vefsvæðið</translation>
 <translation id="1509486075633541495">Skrá inn á vefsvæði</translation>
 <translation id="1509960214886564027">Eiginleikar gætu bilað á mörgum vefsvæðum</translation>
 <translation id="152234381334907219">Aldrei vistað</translation>
@@ -266,6 +269,7 @@ Fylgdu leiðbeiningunum hér að neðan:</translation>
 <translation id="385051799172605136">Til baka</translation>
 <translation id="3892144330757387737">Þú finnur ferilinn þinn hér</translation>
 <translation id="3897092660631435901">Valmynd</translation>
+<translation id="3913386780052199712">Skráð(ur) inn á Chrome</translation>
 <translation id="3915450441834151894">Upplýsingar um vefsvæði</translation>
 <translation id="3922310737605261887">Leita að afrituðum texta</translation>
 <translation id="3928666092801078803">Sameina gögnin mín</translation>
@@ -340,6 +344,7 @@ Gögnin þín eru dulkóðuð með aðgangsorði samstillingar. Sláðu það in
 <translation id="4751645464639803239">Nýr huliðsflipi</translation>
 <translation id="4758977202923349869">Settu kreditkortið innan þessa ramma</translation>
 <translation id="4775879719735953715">Sjálfgefinn vafri</translation>
+<translation id="4778644898150334464">Nota annað aðgangsorð</translation>
 <translation id="4802417911091824046">Dulkóðun aðgangsorðs inniheldur ekki greiðslumáta og heimilisföng af Google Pay.
 
 Til að breyta þessari stillingu skaltu <ph name="BEGIN_LINK" />endurstilla samstillingu<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Til að breyta þessari stillingu skaltu <ph name="BEGIN_LINK" />endurstilla sam
 <translation id="5059136629401106827">Í lagi</translation>
 <translation id="5062321486222145940">Setja upp Google Drive</translation>
 <translation id="5083464117946352670">Ekki var hægt að ákvarða skráarstærð.</translation>
+<translation id="5090832849094901128">Reikningnum þínum á <ph name="WEBSITE" /> verður ekki eytt þótt þessu aðgangsorði verði eytt.</translation>
 <translation id="5094827893301452931">Tíst birt.</translation>
 <translation id="5118764316110575523">Slökkt</translation>
 <translation id="5127805178023152808">Slökkt er á samstillingu</translation>
@@ -511,6 +517,9 @@ Vefsvæði geta ekki notað fótsporin þín til að sjá vafranotkun þína á 
 <translation id="6476800141292307438">Þýðir síðuna á <ph name="LANGUAGE" />. Valkostir eru í boði neðarlega á skjánum.</translation>
 <translation id="648164694371393720">Auðkenningarvilla</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> atriðum eytt</translation>
+<translation id="6497772452874122664">Ef þú treystir <ph name="TIME" /> geturðu notað vistað aðgangsorð af öðru vefsvæði.
+
+Reyndu að nota einkvæmt aðgangsorð á hverju vefsvæði.</translation>
 <translation id="651505212789431520">Hætta við samstillingu? Hægt er að kveikja á samstillingu hvenær sem er í stillingunum.</translation>
 <translation id="6561262006871132942">Auka aðdrátt</translation>
 <translation id="6585618849026997638">Þú getur komist aftur á mikilvæga síðu á einfaldan hátt með því að setja inn bókamerki</translation>
@@ -590,6 +599,7 @@ Vefsvæði geta ekki notað fótsporin þín til að sjá vafranotkun þína á 
 <translation id="739941347996872055">Fyrri flipi</translation>
 <translation id="7400418766976504921">Vefslóð</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ólesnar greinar.</translation>
+<translation id="7412027924265291969">Halda áfram</translation>
 <translation id="7425346204213733349">Breytingar á bókamerkjunum þínum, ferlinum, aðgangsorðunum og öðrum stillingum verða ekki lengur samstilltar við Google reikninginn þinn. Þau gögn sem fyrir eru verða þó áfram vistuð á Google reikningnum þínum.</translation>
 <translation id="7435356471928173109">Kerfisstjórinn slökkti á þessu</translation>
 <translation id="7454057999980797137">Ríki/sýsla</translation>
@@ -600,6 +610,7 @@ Vefsvæði geta ekki notað fótsporin þín til að sjá vafranotkun þína á 
 <translation id="7472734401283673885">Heiti fyrirtækis</translation>
 <translation id="7473891865547856676">Nei, takk</translation>
 <translation id="7481312909269577407">Áfram</translation>
+<translation id="7483467499335917849">Nota núverandi staðsetningu.</translation>
 <translation id="750493650310597496">Ekkert valið</translation>
 <translation id="7514365320538308">Sækja</translation>
 <translation id="7537586195939242955">Því miður var ekki hægt að vista miðann í Passbook á þessari stundu.</translation>
@@ -733,6 +744,7 @@ Vefsvæði geta notað fótspor til að sjá vafranotkun þína á mismunandi ve
 <translation id="9094033019050270033">Uppfæra aðgangsorð</translation>
 <translation id="9100610230175265781">Aðgangsorðs krafist</translation>
 <translation id="9107664647686727385">Leita að aðgangsorðum í hættu</translation>
+<translation id="9137526406337347448">Google þjónustur</translation>
 <translation id="9148126808321036104">Skrá inn aftur</translation>
 <translation id="9152539721251340337">Búa til QR-kóða</translation>
 <translation id="9157836665414082580">Hindra nýja glugga</translation>

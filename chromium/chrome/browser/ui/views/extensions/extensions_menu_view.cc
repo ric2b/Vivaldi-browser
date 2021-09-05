@@ -87,11 +87,13 @@ ExtensionsMenuView::ExtensionsMenuView(
   SetShowCloseButton(true);
   SetTitle(IDS_EXTENSIONS_MENU_TITLE);
 
-  EnableUpDownKeyboardAccelerators();
+  SetEnableArrowKeyTraversal(true);
 
   // Let anchor view's MenuButtonController handle the highlight.
   set_highlight_button_when_shown(false);
 
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   Populate();
@@ -105,13 +107,6 @@ ExtensionsMenuView::~ExtensionsMenuView() {
 
   // Note: No need to call TabStripModel::RemoveObserver(), because it's handled
   // directly within TabStripModelObserver::~TabStripModelObserver().
-}
-
-gfx::Size ExtensionsMenuView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void ExtensionsMenuView::Populate() {
@@ -132,7 +127,8 @@ void ExtensionsMenuView::Populate() {
   auto scroll_view = std::make_unique<views::ScrollView>();
   scroll_view->ClipHeightTo(0, kMaxExtensionButtonsHeightDp);
   scroll_view->SetDrawOverflowIndicator(false);
-  scroll_view->SetHideHorizontalScrollBar(true);
+  scroll_view->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
   scroll_view->SetContents(std::move(extension_buttons));
   AddChildView(std::move(scroll_view));
 

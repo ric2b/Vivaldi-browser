@@ -22,8 +22,6 @@
 #include "chrome/browser/infobars/mock_infobar_service.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/ssl/tls_deprecation_test_utils.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_delegate.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
@@ -41,6 +39,8 @@
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/security_state/core/features.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/content_switches.h"
@@ -327,13 +327,16 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
 
   // Change some default-ask settings away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
   page_info()->OnSitePermissionChanged(ContentSettingsType::NOTIFICATIONS,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::NOTIFICATIONS);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
@@ -341,14 +344,16 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   expected_visible_permissions.insert(ContentSettingsType::POPUPS);
   // Change a default-block setting to a user-preference block instead.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
-                                       CONTENT_SETTING_BLOCK);
+                                       CONTENT_SETTING_BLOCK,
+                                       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
   expected_visible_permissions.insert(ContentSettingsType::JAVASCRIPT);
   // Change a default-allow setting away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
-                                       CONTENT_SETTING_BLOCK);
+                                       CONTENT_SETTING_BLOCK,
+                                       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
@@ -356,13 +361,15 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // has been recently changed.
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_CAMERA);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
-                                       CONTENT_SETTING_DEFAULT);
+                                       CONTENT_SETTING_DEFAULT,
+                                       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
   // Set the Javascript setting to default should keep it shown.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
-                                       CONTENT_SETTING_DEFAULT);
+                                       CONTENT_SETTING_DEFAULT,
+                                       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
@@ -376,7 +383,8 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // Change it back to ALLOW, which is its factory default, but has a source
   // from the user preference (i.e. it counts as non-factory default).
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 }
@@ -400,10 +408,12 @@ TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
 
   // Add some permissions to regular page info.
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
-                                       CONTENT_SETTING_BLOCK);
+                                       CONTENT_SETTING_BLOCK,
+                                       /*is_one_time=*/false);
   expected_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
   expected_incognito_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
 
@@ -418,14 +428,16 @@ TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
 
   // Changing the permission to BLOCK should show it.
   incognito_page_info()->OnSitePermissionChanged(
-      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_BLOCK);
+      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_BLOCK,
+      /*is_one_time=*/false);
   expected_incognito_permissions.insert(ContentSettingsType::GEOLOCATION);
   ExpectPermissionInfoList(expected_incognito_permissions,
                            last_permission_info_list());
 
   // Switching a permission back to default should not hide the permission.
   incognito_page_info()->OnSitePermissionChanged(
-      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_DEFAULT);
+      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_DEFAULT,
+      /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_incognito_permissions,
                            last_permission_info_list());
 }
@@ -435,24 +447,24 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile());
   ContentSetting setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::POPUPS, std::string());
+      url(), url(), ContentSettingsType::POPUPS);
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
 #if BUILDFLAG(ENABLE_PLUGINS)
-  setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::PLUGINS, std::string());
+  setting = content_settings->GetContentSetting(url(), url(),
+                                                ContentSettingsType::PLUGINS);
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
 #endif
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::GEOLOCATION, std::string());
+      url(), url(), ContentSettingsType::GEOLOCATION);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::NOTIFICATIONS, std::string());
+      url(), url(), ContentSettingsType::NOTIFICATIONS);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::MEDIASTREAM_MIC, std::string());
+      url(), url(), ContentSettingsType::MEDIASTREAM_MIC);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA, std::string());
+      url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
 
   EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
@@ -469,40 +481,46 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
 
   // Execute code under tests.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
 #if BUILDFLAG(ENABLE_PLUGINS)
   page_info()->OnSitePermissionChanged(ContentSettingsType::PLUGINS,
-                                       CONTENT_SETTING_BLOCK);
+                                       CONTENT_SETTING_BLOCK,
+                                       /*is_one_time=*/false);
 #endif
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::NOTIFICATIONS,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
 
   // Verify that the site permissions were changed correctly.
-  setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::POPUPS, std::string());
+  setting = content_settings->GetContentSetting(url(), url(),
+                                                ContentSettingsType::POPUPS);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
 #if BUILDFLAG(ENABLE_PLUGINS)
-  setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::PLUGINS, std::string());
+  setting = content_settings->GetContentSetting(url(), url(),
+                                                ContentSettingsType::PLUGINS);
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
 #endif
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::GEOLOCATION, std::string());
+      url(), url(), ContentSettingsType::GEOLOCATION);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::NOTIFICATIONS, std::string());
+      url(), url(), ContentSettingsType::NOTIFICATIONS);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::MEDIASTREAM_MIC, std::string());
+      url(), url(), ContentSettingsType::MEDIASTREAM_MIC);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
   setting = content_settings->GetContentSetting(
-      url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA, std::string());
+      url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
 }
 
@@ -1018,7 +1036,8 @@ TEST_F(PageInfoTest, ShowInfoBar) {
 
   EXPECT_EQ(0u, infobar_service()->infobar_count());
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
-                                       CONTENT_SETTING_ALLOW);
+                                       CONTENT_SETTING_ALLOW,
+                                       /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
   ASSERT_EQ(1u, infobar_service()->infobar_count());
@@ -1028,8 +1047,8 @@ TEST_F(PageInfoTest, ShowInfoBar) {
 
 TEST_F(PageInfoTest, NoInfoBarWhenSoundSettingChanged) {
   EXPECT_EQ(0u, infobar_service()->infobar_count());
-  page_info()->OnSitePermissionChanged(ContentSettingsType::SOUND,
-                                       CONTENT_SETTING_BLOCK);
+  page_info()->OnSitePermissionChanged(
+      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK, /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
   EXPECT_EQ(0u, infobar_service()->infobar_count());
@@ -1038,9 +1057,10 @@ TEST_F(PageInfoTest, NoInfoBarWhenSoundSettingChanged) {
 TEST_F(PageInfoTest, ShowInfoBarWhenSoundSettingAndAnotherSettingChanged) {
   EXPECT_EQ(0u, infobar_service()->infobar_count());
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
-                                       CONTENT_SETTING_BLOCK);
-  page_info()->OnSitePermissionChanged(ContentSettingsType::SOUND,
-                                       CONTENT_SETTING_BLOCK);
+                                       CONTENT_SETTING_BLOCK,
+                                       /*is_one_time=*/false);
+  page_info()->OnSitePermissionChanged(
+      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK, /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
   EXPECT_EQ(1u, infobar_service()->infobar_count());
@@ -1508,12 +1528,14 @@ TEST_F(PageInfoTest, SubresourceFilterSetting_MatchesActivation) {
   // Now, explicitly set site activation metadata to simulate activation on
   // that origin, which is encoded by the existence of the website setting. The
   // setting should then appear in page_info.
-  SubresourceFilterContentSettingsManager* settings_manager =
-      SubresourceFilterProfileContextFactory::GetForProfile(profile())
-          ->settings_manager();
+  subresource_filter::SubresourceFilterContentSettingsManager*
+      settings_manager =
+          SubresourceFilterProfileContextFactory::GetForProfile(profile())
+              ->settings_manager();
   settings_manager->SetSiteMetadataBasedOnActivation(
       url(), true,
-      SubresourceFilterContentSettingsManager::ActivationSource::kSafeBrowsing);
+      subresource_filter::SubresourceFilterContentSettingsManager::
+          ActivationSource::kSafeBrowsing);
 
   page_info();
   EXPECT_TRUE(showing_setting(last_permission_info_list()));
@@ -1548,14 +1570,16 @@ class UnifiedAutoplaySoundSettingsPageInfoTest
     auto delegate = ChromePageInfoUiDelegate(profile());
     return PageInfoUI::PermissionActionToUIString(
         &delegate, ContentSettingsType::SOUND, CONTENT_SETTING_DEFAULT,
-        default_setting_, content_settings::SettingSource::SETTING_SOURCE_USER);
+        default_setting_, content_settings::SettingSource::SETTING_SOURCE_USER,
+        /*is_one_time=*/false);
   }
 
   base::string16 GetSoundSettingString(ContentSetting setting) {
     auto delegate = ChromePageInfoUiDelegate(profile());
     return PageInfoUI::PermissionActionToUIString(
         &delegate, ContentSettingsType::SOUND, setting, default_setting_,
-        content_settings::SettingSource::SETTING_SOURCE_USER);
+        content_settings::SettingSource::SETTING_SOURCE_USER,
+        /*is_one_time=*/false);
   }
 
  private:
@@ -1648,7 +1672,8 @@ TEST_F(UnifiedAutoplaySoundSettingsPageInfoTest, NotSoundSetting_Noop) {
       PageInfoUI::PermissionActionToUIString(
           &delegate, ContentSettingsType::ADS, CONTENT_SETTING_DEFAULT,
           CONTENT_SETTING_ALLOW,
-          content_settings::SettingSource::SETTING_SOURCE_USER));
+          content_settings::SettingSource::SETTING_SOURCE_USER,
+          /*is_one_time=*/false));
 }
 
 #endif  // !defined(OS_ANDROID)

@@ -127,6 +127,14 @@ class AutoEnrollmentClientImpl
   // network::NetworkConnectionTracker::NetworkConnectionObserver:
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
+  // Sets the private set membership RLWE client for testing through
+  // |private_set_membership_helper_|, if the protocol is enabled. Also, the
+  // |private_set_membership_rlwe_client| has to be non-null.
+  void SetPrivateSetMembershipRlweClientForTesting(
+      std::unique_ptr<private_membership::rlwe::PrivateMembershipRlweClient>
+          private_set_membership_rlwe_client,
+      const private_membership::rlwe::RlwePlaintextId& psm_rlwe_id);
+
  private:
   typedef bool (AutoEnrollmentClientImpl::*RequestCompletionHandler)(
       policy::DeviceManagementService::Job*,
@@ -159,17 +167,9 @@ class AutoEnrollmentClientImpl
 
   // Retries running private set membership protocol, if the protocol
   // is enabled and it is possible to start. Returns true if the protocol is
-  // enabled and progress has been made, false if the protocol is done. Also,
-  // that protocol is being started only one time.
+  // enabled or it's in progress, false if the protocol is done. Note that the
+  // PSM protocol is only performed once per OOBE flow.
   bool PrivateSetMembershipRetryStep();
-
-  // Sets the private set membership RLWE client for testing through
-  // |private_set_membership_helper_|, if the protocol is enabled. Also, the
-  // |private_set_membership_rlwe_client| has to be non-null.
-  void SetPrivateSetMembershipRlweClientForTesting(
-      std::unique_ptr<private_membership::rlwe::PrivateMembershipRlweClient>
-          private_set_membership_rlwe_client,
-      private_membership::rlwe::RlwePlaintextId& psm_rlwe_id);
 
   // Cleans up and invokes |progress_callback_|.
   void ReportProgress(AutoEnrollmentState state);
@@ -258,6 +258,9 @@ class AutoEnrollmentClientImpl
 
   // Used to communicate with the device management service.
   DeviceManagementService* device_management_service_;
+  // Indicates whether Hash dance i.e. DeviceAutoEnrollmentRequest or
+  // DeviceStateRetrievalRequest is in progress. Note that is not affected by
+  // private set membership protocol, whether it's in progress or not.
   std::unique_ptr<DeviceManagementService::Job> request_job_;
 
   // PrefService where the protocol's results are cached.
@@ -279,10 +282,10 @@ class AutoEnrollmentClientImpl
 
   // Times used to determine the duration of the protocol, and the extra time
   // needed to complete after the signin was complete.
-  // If |time_start_| is not null, the protocol is still running.
+  // If |hash_dance_time_start_| is not null, the protocol is still running.
   // If |time_extra_start_| is not null, the protocol is still running but our
   // owner has relinquished ownership.
-  base::TimeTicks time_start_;
+  base::TimeTicks hash_dance_time_start_;
   base::TimeTicks time_extra_start_;
 
   // The time when the bucket download part of the protocol started.

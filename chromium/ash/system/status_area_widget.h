@@ -103,6 +103,9 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   // |overview_button_tray_|.
   TrayBackgroundView* GetSystemTrayAnchor() const;
 
+  // Called by media tray to calculate anchor rect.
+  gfx::Rect GetMediaTrayAnchorRect() const;
+
   StatusAreaWidgetDelegate* status_area_widget_delegate() {
     return status_area_widget_delegate_;
   }
@@ -148,7 +151,6 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   void SchedulePaint();
 
   // Overridden from views::Widget:
-  const ui::NativeTheme* GetNativeTheme() const override;
   bool OnNativeWidgetActivationChanged(bool active) override;
 
   // TODO(jamescook): Introduce a test API instead of these methods.
@@ -167,6 +169,8 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   }
 
  private:
+  friend class MediaTrayTest;
+
   struct LayoutInputs {
     gfx::Rect bounds;
     CollapseState collapse_state = CollapseState::NOT_COLLAPSIBLE;
@@ -202,9 +206,6 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
 
   // Adds a new tray button to the status area.
   void AddTrayButton(TrayBackgroundView* tray_button);
-
-  // Update the colors used for the tray buttons.
-  void UpdateAfterColorModeChange();
 
   // Called when in the collapsed state to calculate and update the visibility
   // of each tray button.

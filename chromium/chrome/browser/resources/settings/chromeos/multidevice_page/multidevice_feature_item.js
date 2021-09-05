@@ -28,11 +28,23 @@ Polymer({
     subpageRoute: Object,
 
     /**
+     * A tooltip to show over an info icon. If unset, no info icon is shown.
+     */
+    infoTooltip: String,
+
+    /**
      * URLSearchParams for subpage route. No param is provided if it is
      * undefined.
      * @type {URLSearchParams|undefined}
      */
     subpageRouteUrlSearchParams: Object,
+
+    /** Whether if the feature is a sub-feature */
+    isSubFeature: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
   },
 
   /** settings.RouteOriginBehavior override */
@@ -56,19 +68,42 @@ Polymer({
    * @return {boolean}
    * @private
    */
+  isRowClickable_() {
+    return this.hasSubpageClickHandler_() ||
+        this.isFeatureStateEditable(this.feature);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
   hasSubpageClickHandler_() {
     return !!this.subpageRoute && this.isFeatureAllowedByPolicy(this.feature);
   },
 
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowSeparator_() {
+    return this.hasSubpageClickHandler_() || !!this.infoTooltip;
+  },
+
   /** @private */
   handleItemClick_(event) {
-    if (!this.hasSubpageClickHandler_()) {
-      return;
-    }
-
     // We do not navigate away if the click was on a link.
     if (event.path[0].tagName === 'A') {
       event.stopPropagation();
+      return;
+    }
+
+    if (!this.hasSubpageClickHandler_()) {
+      if (this.isFeatureStateEditable(this.feature)) {
+        // Toggle the editable feature if the feature is editable and does not
+        // link to a subpage.
+        this.shadowRoot.querySelector('settings-multidevice-feature-toggle')
+            .toggleFeature();
+      }
       return;
     }
 

@@ -248,11 +248,11 @@ class LoginPasswordView::LoginTextfield : public views::Textfield {
   base::RepeatingClosure on_blur_closure_;
 };
 
-class LoginPasswordView::EasyUnlockIcon : public views::Button,
-                                          public views::ButtonListener {
+class LoginPasswordView::EasyUnlockIcon : public views::Button {
  public:
   EasyUnlockIcon(const gfx::Size& size, int corner_radius)
-      : views::Button(this) {
+      : views::Button(PressedCallback()) {
+    SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
     SetPreferredSize(size);
     SetLayoutManager(std::make_unique<views::FillLayout>());
     icon_ = AddChildView(
@@ -261,12 +261,11 @@ class LoginPasswordView::EasyUnlockIcon : public views::Button,
   ~EasyUnlockIcon() override = default;
 
   void Init(const OnEasyUnlockIconHovered& on_hovered,
-            const OnEasyUnlockIconTapped& on_tapped) {
+            views::Button::PressedCallback on_tapped) {
     DCHECK(on_hovered);
-    DCHECK(on_tapped);
 
     on_hovered_ = on_hovered;
-    on_tapped_ = on_tapped;
+    SetCallback(std::move(on_tapped));
 
     hover_notifier_ = std::make_unique<HoverNotifier>(
         this, base::BindRepeating(
@@ -306,11 +305,6 @@ class LoginPasswordView::EasyUnlockIcon : public views::Button,
             on_hovered_);
       }
     }
-  }
-
-  // views::ButtonListener:
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    on_tapped_.Run();
   }
 
  private:
@@ -370,7 +364,6 @@ class LoginPasswordView::EasyUnlockIcon : public views::Button,
 
   // Callbacks run when icon is hovered or tapped.
   OnEasyUnlockIconHovered on_hovered_;
-  OnEasyUnlockIconTapped on_tapped_;
 
   std::unique_ptr<HoverNotifier> hover_notifier_;
 
@@ -388,8 +381,8 @@ class LoginPasswordView::DisplayPasswordButton
     : public views::ToggleImageButton {
  public:
   DisplayPasswordButton(const LoginPalette& palette,
-                        views::ButtonListener* listener)
-      : ToggleImageButton(listener) {
+                        views::Button::PressedCallback callback)
+      : ToggleImageButton(std::move(callback)) {
     const gfx::ImageSkia invisible_icon = gfx::CreateVectorIcon(
         kLockScreenPasswordInvisibleIcon, kDisplayPasswordButtonSizeDp,
         palette.button_enabled_color);
@@ -544,8 +537,14 @@ LoginPasswordView::LoginPasswordView(const LoginPalette& palette)
   capslock_icon_->SetVisible(false);
 
   if (is_display_password_feature_enabled_) {
-    display_password_button_ = password_row_->AddChildView(
-        std::make_unique<DisplayPasswordButton>(palette_, this));
+    display_password_button_ =
+        password_row_->AddChildView(std::make_unique<DisplayPasswordButton>(
+            palette_, base::BindRepeating(
+                          [](LoginPasswordView* view) {
+                            if (view->is_display_password_feature_enabled_)
+                              view->InvertPasswordDisplayingState();
+                          },
+                          this)));
   }
 
   // Separator on bottom.
@@ -553,7 +552,9 @@ LoginPasswordView::LoginPasswordView(const LoginPalette& palette)
       password->AddChildView(std::make_unique<NonAccessibleSeparator>());
 
   submit_button_ = AddChildView(std::make_unique<ArrowButtonView>(
-      /*listener=*/this, kSubmitButtonSizeDp));
+      base::BindRepeating(&LoginPasswordView::SubmitPassword,
+                          base::Unretained(this)),
+      kSubmitButtonSizeDp));
   const AshColorProvider* color_provider = AshColorProvider::Get();
   SkColor color = color_provider->GetControlsLayerColor(
       AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
@@ -585,13 +586,13 @@ void LoginPasswordView::Init(
     const OnPasswordSubmit& on_submit,
     const OnPasswordTextChanged& on_password_text_changed,
     const OnEasyUnlockIconHovered& on_easy_unlock_icon_hovered,
-    const OnEasyUnlockIconTapped& on_easy_unlock_icon_tapped) {
+    views::Button::PressedCallback on_easy_unlock_icon_tapped) {
   DCHECK(on_submit);
   DCHECK(on_password_text_changed);
   on_submit_ = on_submit;
   on_password_text_changed_ = on_password_text_changed;
   easy_unlock_icon_->Init(on_easy_unlock_icon_hovered,
-                          on_easy_unlock_icon_tapped);
+                          std::move(on_easy_unlock_icon_tapped));
 }
 
 void LoginPasswordView::SetEnabledOnEmptyPassword(bool enabled) {
@@ -720,16 +721,6 @@ void LoginPasswordView::InvertPasswordDisplayingState() {
       base::BindRepeating(&LoginPasswordView::HidePassword,
                           base::Unretained(this),
                           true /*chromevox_exception*/));
-}
-
-void LoginPasswordView::ButtonPressed(views::Button* sender,
-                                      const ui::Event& event) {
-  if (sender == submit_button_) {
-    SubmitPassword();
-  } else if (is_display_password_feature_enabled_) {
-    DCHECK_EQ(sender, display_password_button_);
-    InvertPasswordDisplayingState();
-  }
 }
 
 void LoginPasswordView::HidePassword(bool chromevox_exception) {

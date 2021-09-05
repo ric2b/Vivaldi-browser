@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
@@ -32,14 +32,15 @@
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/query_parser/query_parser.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-using autofill::PasswordForm;
 using bookmarks::BookmarkModel;
 using bookmarks::TitledUrlMatch;
 using bookmarks::UrlAndTitle;
+using password_manager::PasswordForm;
 using password_manager::TestPasswordStore;
 
 PasswordForm MakePasswordForm() {
@@ -134,12 +135,11 @@ class ProfileWriterTest : public testing::Test {
   void VerifyBookmarksCount(const std::vector<UrlAndTitle>& bookmarks_record,
                             BookmarkModel* bookmark_model,
                             size_t expected) {
-    std::vector<TitledUrlMatch> matches;
-    for (size_t i = 0; i < bookmarks_record.size(); ++i) {
-      bookmark_model->GetBookmarksMatching(
-          bookmarks_record[i].title, 10, &matches);
+    for (auto bookmark : bookmarks_record) {
+      std::vector<TitledUrlMatch> matches =
+          bookmark_model->GetBookmarksMatching(
+              bookmark.title, 10, query_parser::MatchingAlgorithm::DEFAULT);
       EXPECT_EQ(expected, matches.size());
-      matches.clear();
     }
   }
 

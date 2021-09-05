@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/engagement/site_engagement_details.mojom.h"
+#include "components/site_engagement/core/mojom/site_engagement_details.mojom.h"
 #include "content/public/browser/navigation_throttle.h"
 
 namespace content {

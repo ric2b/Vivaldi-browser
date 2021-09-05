@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_switches.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer.h"
@@ -129,14 +128,21 @@ void LayerTreePixelTest::InitializeSettings(LayerTreeSettings* settings) {
   settings->use_zero_copy = raster_type() == TestRasterType::kZeroCopy;
 }
 
+std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+LayerTreePixelTest::CreateDisplayControllerOnThread() {
+  auto skia_deps = std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
+      viz::TestGpuServiceHolder::GetInstance()->gpu_service(),
+      gpu::kNullSurfaceHandle);
+  return std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+      std::move(skia_deps));
+}
+
 std::unique_ptr<viz::SkiaOutputSurface>
-LayerTreePixelTest::CreateDisplaySkiaOutputSurfaceOnThread() {
+LayerTreePixelTest::CreateDisplaySkiaOutputSurfaceOnThread(
+    viz::DisplayCompositorMemoryAndTaskController* display_controller) {
   // Set up the SkiaOutputSurfaceImpl.
   auto output_surface = viz::SkiaOutputSurfaceImpl::Create(
-      std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
-          viz::TestGpuServiceHolder::GetInstance()->gpu_service(),
-          gpu::kNullSurfaceHandle),
-      viz::RendererSettings(), &debug_settings_);
+      display_controller, viz::RendererSettings(), &debug_settings_);
   return output_surface;
 }
 

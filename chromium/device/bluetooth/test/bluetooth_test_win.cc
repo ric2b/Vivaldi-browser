@@ -15,13 +15,13 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/test_pending_task.h"
 #include "base/time/time.h"
 #include "base/win/vector.h"
@@ -351,7 +351,9 @@ void BluetoothTestWin::SimulateStatusChangeToDisconnect(
 
 void BluetoothTestWin::SimulateGattServicesDiscovered(
     BluetoothDevice* device,
-    const std::vector<std::string>& uuids) {
+    const std::vector<std::string>& uuids,
+    const std::vector<std::string>& blocked_uuids) {
+  DCHECK(blocked_uuids.empty());
   std::string address =
       device ? device->GetAddress() : remembered_device_address_;
 
@@ -988,14 +990,16 @@ void BluetoothTestWinrt::SimulateDeviceBreaksConnection(
 
 void BluetoothTestWinrt::SimulateGattServicesDiscovered(
     BluetoothDevice* device,
-    const std::vector<std::string>& uuids) {
+    const std::vector<std::string>& uuids,
+    const std::vector<std::string>& blocked_uuids) {
   if (!UsesNewBleImplementation() || !PlatformSupportsLowEnergy())
-    return BluetoothTestWin::SimulateGattServicesDiscovered(device, uuids);
+    return BluetoothTestWin::SimulateGattServicesDiscovered(device, uuids,
+                                                            blocked_uuids);
 
   auto* const ble_device =
       static_cast<TestBluetoothDeviceWinrt*>(device)->ble_device();
   DCHECK(ble_device);
-  ble_device->SimulateGattServicesDiscovered(uuids);
+  ble_device->SimulateGattServicesDiscovered(uuids, blocked_uuids);
 }
 
 void BluetoothTestWinrt::SimulateGattServicesChanged(BluetoothDevice* device) {

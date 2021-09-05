@@ -9,15 +9,18 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
+#include "base/util/type_safety/pass_key.h"
 #include "components/performance_manager/graph/node_attached_data.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/graph/properties.h"
 #include "components/performance_manager/public/graph/process_node.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
+#include "components/performance_manager/public/mojom/v8_contexts.mojom.h"
 #include "components/performance_manager/public/render_process_host_proxy.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -43,6 +46,8 @@ class ProcessNodeImpl
       public TypedNodeBase<ProcessNodeImpl, ProcessNode, ProcessNodeObserver>,
       public mojom::ProcessCoordinationUnit {
  public:
+  using PassKey = util::PassKey<ProcessNodeImpl>;
+
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kProcess; }
 
   ProcessNodeImpl(content::ProcessType process_type,
@@ -54,6 +59,13 @@ class ProcessNodeImpl
 
   // mojom::ProcessCoordinationUnit implementation:
   void SetMainThreadTaskLoadIsLow(bool main_thread_task_load_is_low) override;
+  void OnV8ContextCreated(
+      mojom::V8ContextDescriptionPtr description,
+      mojom::IframeAttributionDataPtr iframe_attribution_data) override;
+  void OnV8ContextDetached(
+      const blink::V8ContextToken& v8_context_token) override;
+  void OnV8ContextDestroyed(
+      const blink::V8ContextToken& v8_context_token) override;
 
   void SetProcessExitStatus(int32_t exit_status);
   void SetProcess(base::Process process, base::Time launch_time);
@@ -112,6 +124,12 @@ class ProcessNodeImpl
   void set_priority(base::TaskPriority priority);
 
   void OnAllFramesInProcessFrozenForTesting() { OnAllFramesInProcessFrozen(); }
+
+  base::WeakPtr<ProcessNodeImpl> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
+  static PassKey CreatePassKeyForTesting() { return PassKey(); }
 
  protected:
   void SetProcessImpl(base::Process process,
@@ -183,6 +201,8 @@ class ProcessNodeImpl
 
   // Inline storage for ProcessPriorityAggregator user data.
   std::unique_ptr<NodeAttachedData> process_priority_data_;
+
+  base::WeakPtrFactory<ProcessNodeImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ProcessNodeImpl);
 };

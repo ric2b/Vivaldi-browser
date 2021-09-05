@@ -13,7 +13,7 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "chromeos/dbus/lorgnette/lorgnette_service.pb.h"
-#include "chromeos/dbus/lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette_manager/lorgnette_manager_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 namespace chromeos {
@@ -28,9 +28,13 @@ class LorgnetteScannerManager : public KeyedService {
       base::OnceCallback<void(std::vector<std::string> scanner_names)>;
   using GetScannerCapabilitiesCallback = base::OnceCallback<void(
       const base::Optional<lorgnette::ScannerCapabilities>& capabilities)>;
+  using ProgressCallback =
+      base::RepeatingCallback<void(uint32_t progress_percent,
+                                   uint32_t page_number)>;
   using PageCallback = base::RepeatingCallback<void(std::string scan_data,
                                                     uint32_t page_number)>;
-  using ScanCallback = base::OnceCallback<void(bool success)>;
+  using CompletionCallback = base::OnceCallback<void(bool success)>;
+  using CancelCallback = base::OnceCallback<void(bool success)>;
 
   ~LorgnetteScannerManager() override = default;
 
@@ -48,15 +52,21 @@ class LorgnetteScannerManager : public KeyedService {
       GetScannerCapabilitiesCallback callback) = 0;
 
   // Performs a scan with the scanner specified by |scanner_name| using the
-  // given |scan_properties|. As each scanned page is completed,
-  // |page_callback| is called with the image data for that page. If
-  // |scanner_name| does not correspond to a known scanner, false is returned
-  // in |callback|. After the scan has completed, |callback| will be called
-  // with argument success=true.
+  // given |scan_properties|. As each page is scanned, |progress_callback| is
+  // called with the current progress percent from 0 to 100. As each scanned
+  // page is completed, |page_callback| is called with the image data for that
+  // page. If |scanner_name| does not correspond to a known scanner, false is
+  // returned in |completion_callback|. After the scan has completed,
+  // |completion_callback| will be called with argument success=true.
   virtual void Scan(const std::string& scanner_name,
                     const lorgnette::ScanSettings& settings,
+                    ProgressCallback progress_callback,
                     PageCallback page_callback,
-                    ScanCallback callback) = 0;
+                    CompletionCallback completion_callback) = 0;
+
+  // Request to cancel the currently running scan job. This function makes the
+  // assumption that LorgnetteManagerClient only has one scan running at a time.
+  virtual void CancelScan(CancelCallback cancel_callback) = 0;
 };
 
 }  // namespace chromeos

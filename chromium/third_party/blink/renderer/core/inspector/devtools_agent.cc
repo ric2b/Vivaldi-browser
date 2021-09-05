@@ -7,7 +7,7 @@
 #include <v8-inspector.h>
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -291,9 +291,13 @@ std::unique_ptr<WorkerDevToolsParams> DevToolsAgent::WorkerThreadCreated(
     ExecutionContext* parent_context,
     WorkerThread* worker_thread,
     const KURL& url,
-    const String& global_scope_name) {
+    const String& global_scope_name,
+    const base::Optional<const blink::DedicatedWorkerToken>& token) {
   auto result = std::make_unique<WorkerDevToolsParams>();
-  result->devtools_worker_token = base::UnguessableToken::Create();
+  base::UnguessableToken devtools_worker_token =
+      token.has_value() ? token.value().value()
+                        : base::UnguessableToken::Create();
+  result->devtools_worker_token = devtools_worker_token;
 
   DevToolsAgent* agent = DevToolsAgentFromContext(parent_context);
   if (!agent)

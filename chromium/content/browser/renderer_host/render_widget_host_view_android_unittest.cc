@@ -18,6 +18,7 @@
 #include "content/test/test_view_android_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/android/view_android.h"
+#include "ui/android/window_android.h"
 
 namespace content {
 
@@ -42,11 +43,13 @@ class RenderWidgetHostViewAndroidTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
+  ui::ViewAndroid* parent_view() { return &parent_view_; }
+
   std::unique_ptr<TestViewAndroidDelegate> test_view_android_delegate_;
 
  private:
   std::unique_ptr<TestBrowserContext> browser_context_;
-  MockRenderProcessHost* process_;  // Deleted automatically by the widget.
+  std::unique_ptr<MockRenderProcessHost> process_;
   std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_;
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
   scoped_refptr<cc::Layer> parent_layer_;
@@ -79,7 +82,7 @@ void RenderWidgetHostViewAndroidTest::WasEvicted() {
 void RenderWidgetHostViewAndroidTest::SetUp() {
   browser_context_.reset(new TestBrowserContext());
   delegate_.reset(new MockRenderWidgetHostDelegate());
-  process_ = new MockRenderProcessHost(browser_context_.get());
+  process_ = std::make_unique<MockRenderProcessHost>(browser_context_.get());
   agent_scheduling_group_ =
       std::make_unique<AgentSchedulingGroupHost>(*process_);
   host_.reset(MockRenderWidgetHost::Create(
@@ -99,6 +102,7 @@ void RenderWidgetHostViewAndroidTest::TearDown() {
   render_widget_host_view_android_->Destroy();
   host_.reset();
   delegate_.reset();
+  process_->Cleanup();
   agent_scheduling_group_ = nullptr;
   process_ = nullptr;
   browser_context_.reset();
@@ -160,6 +164,86 @@ TEST_F(RenderWidgetHostViewAndroidTest, InsetVisualViewport) {
   rwhva->OnViewportInsetBottomChanged(env, nullptr);
   EXPECT_EQ(0, GetViewAndroid()->GetViewportInsetBottom());
   EXPECT_TRUE(rwhva->GetLocalSurfaceId().IsNewerThan(inset_surface));
+}
+
+TEST_F(RenderWidgetHostViewAndroidTest, HideWindowRemoveViewAddViewShowWindow) {
+  std::unique_ptr<ui::WindowAndroid> window(
+      ui::WindowAndroid::CreateForTesting());
+  window->AddChild(parent_view());
+  EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
+  // The layer should be visible once attached to a window.
+  EXPECT_FALSE(render_widget_host_view_android()
+                   ->GetNativeView()
+                   ->GetLayer()
+                   ->hide_layer_and_subtree());
+
+  // Hiding the window should and removing the view should hide the layer.
+  window->OnVisibilityChanged(nullptr, nullptr, false);
+  parent_view()->RemoveFromParent();
+  EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
+  EXPECT_TRUE(render_widget_host_view_android()
+                  ->GetNativeView()
+                  ->GetLayer()
+                  ->hide_layer_and_subtree());
+
+  // Adding the view back to a window and notifying the window is visible should
+  // make the layer visible again.
+  window->AddChild(parent_view());
+  window->OnVisibilityChanged(nullptr, nullptr, true);
+  EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
+  EXPECT_FALSE(render_widget_host_view_android()
+                   ->GetNativeView()
+                   ->GetLayer()
+                   ->hide_layer_and_subtree());
+}
+
+TEST_F(RenderWidgetHostViewAndroidTest, DisplayFeature) {
+  // By default there is no display feature so verify we get back null.
+  RenderWidgetHostViewAndroid* rwhva = render_widget_host_view_android();
+  RenderWidgetHostViewBase* rwhv = rwhva;
+  rwhva->GetNativeView()->SetLayoutForTesting(0, 0, 200, 400);
+  test_view_android_delegate_->SetupTestDelegate(GetViewAndroid());
+  EXPECT_EQ(base::nullopt, rwhv->GetDisplayFeature());
+
+  // Set a vertical display feature, and verify this is reflected in the
+  // computed display feature.
+  test_view_android_delegate_->SetDisplayFeatureForTesting(
+      gfx::Rect(95, 0, 10, 400));
+  DisplayFeature expected_display_feature = {
+      DisplayFeature::Orientation::kVertical,
+      /* offset */ 95,
+      /* mask_length */ 10};
+  EXPECT_EQ(expected_display_feature, *rwhv->GetDisplayFeature());
+
+  // Validate that a display feature in the middle of the view results in not
+  // being exposed as a content::DisplayFeature (we currently only consider
+  // display features that completely cover one of the view's dimensions).
+  rwhva->GetNativeView()->SetLayoutForTesting(0, 0, 400, 200);
+  test_view_android_delegate_->SetDisplayFeatureForTesting(
+      gfx::Rect(200, 100, 100, 200));
+  EXPECT_EQ(base::nullopt, rwhv->GetDisplayFeature());
+
+  // Verify that horizontal display feature is correctly validated.
+  test_view_android_delegate_->SetDisplayFeatureForTesting(
+      gfx::Rect(0, 90, 400, 20));
+  expected_display_feature = {DisplayFeature::Orientation::kHorizontal,
+                              /* offset */ 90,
+                              /* mask_length */ 20};
+  EXPECT_EQ(expected_display_feature, *rwhv->GetDisplayFeature());
+
+  test_view_android_delegate_->SetDisplayFeatureForTesting(
+      gfx::Rect(0, 95, 600, 10));
+  expected_display_feature = {DisplayFeature::Orientation::kHorizontal,
+                              /* offset */ 95,
+                              /* mask_length */ 10};
+  EXPECT_EQ(expected_display_feature, *rwhv->GetDisplayFeature());
+
+  test_view_android_delegate_->SetDisplayFeatureForTesting(
+      gfx::Rect(195, 0, 10, 300));
+  expected_display_feature = {DisplayFeature::Orientation::kVertical,
+                              /* offset */ 195,
+                              /* mask_length */ 10};
+  EXPECT_EQ(expected_display_feature, *rwhv->GetDisplayFeature());
 }
 
 }  // namespace content

@@ -136,8 +136,6 @@ Polymer({
         return this.i18n('siteSettingsCamera');
       case ContentSettingsTypes.PROTOCOL_HANDLERS:
         return this.i18n('siteSettingsHandlers');
-      case ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        return this.i18n('siteSettingsUnsandboxedPlugins');
       case ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
         return this.i18n('siteSettingsAutomaticDownloads');
       case ContentSettingsTypes.BACKGROUND_SYNC:
@@ -329,12 +327,12 @@ Polymer({
       /** @type {{hide: Function}} */ (tooltip).hide();
       target.removeEventListener('mouseleave', hide);
       target.removeEventListener('blur', hide);
-      target.removeEventListener('tap', hide);
+      target.removeEventListener('click', hide);
       tooltip.removeEventListener('mouseenter', hide);
     };
     target.addEventListener('mouseleave', hide);
     target.addEventListener('blur', hide);
-    target.addEventListener('tap', hide);
+    target.addEventListener('click', hide);
     tooltip.addEventListener('mouseenter', hide);
 
     tooltip.show();

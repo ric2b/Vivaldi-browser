@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="WebCore.DistillabilityUs" units="microseconds"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>wychen@chromium.org</owner>
   <owner>gilmanmh@google.com</owner>
   <summary>
@@ -39,7 +39,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.Document.execCommand" enum="MappedEditingCommands"
-    expires_after="2020-12-31">
+    expires_after="2021-04-25">
   <owner>yoichio@chromium.org</owner>
   <summary>
     Counts the number of times each document.execCommand is executed. This
@@ -57,7 +57,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="WebCore.FindInPage.NumberOfTasksPerRequest"
-    units="tasks" expires_after="2021-01-31">
+    units="tasks" expires_after="2021-04-04">
   <owner>rakina@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <summary>
@@ -68,7 +68,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="WebCore.FindInPage.RequestDuration" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>rakina@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <summary>
@@ -80,7 +80,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.FindInPage.TaskDuration" units="ms"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>rakina@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <summary>
@@ -90,7 +90,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="WebCore.FindInPage.TotalTaskDuration" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>rakina@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <summary>
@@ -326,7 +326,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDB.OpenTime" units="ms"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>cmumford@chromium.org</owner>
   <summary>
     The time that it takes to open IndexedDB's LevelDB backing store.
@@ -766,35 +766,35 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.Scripts.Async.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2021-02-01">
+    enum="NotStreamingReason" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Reason for not streaming an async script.</summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Async.StartedStreaming" enum="BooleanStreamed"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Whether an async script was streamed or not.</summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Deferred.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2021-02-01">
+    enum="NotStreamingReason" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Reason for not streaming a deferred script.</summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Deferred.StartedStreaming"
-    enum="BooleanStreamed" expires_after="2021-02-01">
+    enum="BooleanStreamed" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Whether a deferred script was streamed or not.</summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Other.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2021-02-01">
+    enum="NotStreamingReason" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>
@@ -804,7 +804,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.Scripts.Other.StartedStreaming" enum="BooleanStreamed"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>
@@ -814,21 +814,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebCore.Scripts.ParsingBlocking.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2021-02-01">
+    enum="NotStreamingReason" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Reason for not streaming a parsing blocking script.</summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.ParsingBlocking.StartedStreaming"
-    enum="BooleanStreamed" expires_after="2021-02-01">
+    enum="BooleanStreamed" expires_after="2021-04-04">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>Whether a parsing blocking script was streamed or not.</summary>
 </histogram>
 
 <histogram name="WebCore.WebSocket.SendType" enum="WebSocketSendType"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>yhirano@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>

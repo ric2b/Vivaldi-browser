@@ -65,9 +65,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
                                          public views::FocusTraversable,
                                          public views::FocusChangeListener {
  public:
-  // Get focus ring color for system tray elements.
-  static SkColor GetFocusRingColor();
-
   UnifiedSystemTrayView(UnifiedSystemTrayController* controller,
                         bool initially_expanded);
   ~UnifiedSystemTrayView() override;
@@ -130,9 +127,8 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   // Settings).
   bool IsDetailedViewShown() const;
 
-  // Show and hide media controls view.
+  // Show media controls view.
   void ShowMediaControls();
-  void HideMediaControls();
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -165,6 +161,9 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   View* detailed_view_for_testing() { return detailed_view_container_; }
   PageIndicatorView* page_indicator_view_for_test() {
     return page_indicator_view_;
+  }
+  UnifiedMediaControlsContainer* media_controls_container_for_testing() {
+    return media_controls_container_;
   }
 
  private:

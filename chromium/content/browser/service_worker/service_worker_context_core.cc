@@ -10,7 +10,6 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -475,9 +474,25 @@ ServiceWorkerContextCore::GetContainerHostByClientID(
   return it->second.get();
 }
 
+ServiceWorkerContainerHost*
+ServiceWorkerContextCore::GetContainerHostByWindowId(
+    const base::UnguessableToken& window_id) {
+  for (auto& it : container_host_by_uuid_) {
+    if (it.second->fetch_request_window_id() == window_id)
+      return it.second.get();
+  }
+
+  return nullptr;
+}
+
 void ServiceWorkerContextCore::OnContainerHostReceiverDisconnected() {
   ServiceWorkerContainerHost* container_host =
       container_host_receivers_->current_context();
+
+  observer_list_->Notify(FROM_HERE,
+                         &ServiceWorkerContextCoreObserver::OnClientDestroyed,
+                         container_host->ukm_source_id(), container_host->url(),
+                         container_host->GetClientType());
 
   size_t removed = container_host_by_uuid_.erase(container_host->client_uuid());
   DCHECK_EQ(removed, 1u);
@@ -550,7 +565,7 @@ void ServiceWorkerContextCore::DeleteForOrigin(const url::Origin& origin,
 void ServiceWorkerContextCore::PerformStorageCleanup(
     base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  GetStorageControl()->PerformStorageCleanup(std::move(callback));
+  registry()->PerformStorageCleanup(std::move(callback));
 }
 
 void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
@@ -609,6 +624,15 @@ void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
 
 int ServiceWorkerContextCore::GetNextEmbeddedWorkerId() {
   return next_embedded_worker_id_++;
+}
+
+void ServiceWorkerContextCore::NotifyClientIsExecutionReady(
+    const ServiceWorkerContainerHost& container_host) {
+  DCHECK(container_host.is_execution_ready());
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnClientIsExecutionReady,
+      container_host.ukm_source_id(), container_host.url(),
+      container_host.GetClientType());
 }
 
 void ServiceWorkerContextCore::RegistrationComplete(
@@ -731,6 +755,9 @@ void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {
                            &ServiceWorkerContextCoreObserver::OnStopped, id);
   }
 
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnLiveVersionDestroyed, id);
+
   live_versions_.erase(it);
 }
 
@@ -821,7 +848,9 @@ void ServiceWorkerContextCore::CheckOfflineCapability(
       base::BindOnce(
           [](std::unique_ptr<ServiceWorkerOfflineCapabilityChecker> checker,
              ServiceWorkerContext::CheckOfflineCapabilityCallback callback,
-             OfflineCapability result) { std::move(callback).Run(result); },
+             OfflineCapability result, int64_t registration_id) {
+            std::move(callback).Run(result, registration_id);
+          },
           std::move(checker), std::move(callback)));
 }
 

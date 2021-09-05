@@ -41,12 +41,13 @@ inline float FlipRtl(float value, TextDirection direction) {
 }
 
 inline bool IsBreakableSpace(UChar ch) {
-  return LazyLineBreakIterator::IsBreakableSpace(ch);
+  return LazyLineBreakIterator::IsBreakableSpace(ch) ||
+         Character::IsOtherSpaceSeparator(ch);
 }
 
 bool IsAllSpaces(const String& text, unsigned start, unsigned end) {
   return StringView(text, start, end - start)
-      .IsAllSpecialCharacters<LazyLineBreakIterator::IsBreakableSpace>();
+      .IsAllSpecialCharacters<IsBreakableSpace>();
 }
 
 bool ShouldHyphenate(const String& text, unsigned start, unsigned end) {
@@ -98,21 +99,21 @@ unsigned ShapingLineBreaker::Hyphenate(unsigned offset,
     return 0;
 
   const String& text = GetText();
+  const StringView word(text, word_start, word_len);
+  const unsigned word_offset = offset - word_start;
   if (backwards) {
-    unsigned before_index = offset - word_start;
-    if (before_index <= Hyphenation::kMinimumPrefixLength)
+    if (word_offset < Hyphenation::kMinimumPrefixLength)
       return 0;
-    unsigned prefix_length = hyphenation_->LastHyphenLocation(
-        StringView(text, word_start, word_len), before_index);
-    DCHECK(!prefix_length || prefix_length < before_index);
+    unsigned prefix_length =
+        hyphenation_->LastHyphenLocation(word, word_offset + 1);
+    DCHECK(!prefix_length || prefix_length <= word_offset);
     return prefix_length;
   } else {
-    unsigned after_index = offset - word_start;
-    if (word_len <= after_index + Hyphenation::kMinimumSuffixLength)
+    if (word_len - word_offset < Hyphenation::kMinimumSuffixLength)
       return 0;
     unsigned prefix_length = hyphenation_->FirstHyphenLocation(
-        StringView(text, word_start, word_len), after_index);
-    DCHECK(!prefix_length || prefix_length > after_index);
+        word, word_offset ? word_offset - 1 : 0);
+    DCHECK(!prefix_length || prefix_length >= word_offset);
     return prefix_length;
   }
 }
@@ -200,6 +201,25 @@ ShapingLineBreaker::BreakOpportunity ShapingLineBreaker::NextBreakOpportunity(
   return {break_offset, false};
 }
 
+inline void ShapingLineBreaker::SetBreakOffset(unsigned break_offset,
+                                               const String& text,
+                                               Result* result) {
+  result->break_offset = break_offset;
+  result->is_hyphenated =
+      text[result->break_offset - 1] == kSoftHyphenCharacter;
+}
+
+inline void ShapingLineBreaker::SetBreakOffset(
+    const BreakOpportunity& break_opportunity,
+    const String& text,
+    Result* result) {
+  result->break_offset = break_opportunity.offset;
+  result->is_hyphenated =
+      break_opportunity.is_hyphenated ||
+      text[result->break_offset - 1] == kSoftHyphenCharacter;
+  result->non_hangable_run_end = break_opportunity.non_hangable_run_end;
+}
+
 // Shapes a line of text by finding a valid and appropriate break opportunity
 // based on the shaping results for the entire paragraph. Re-shapes the start
 // and end of the line as needed.
@@ -268,7 +288,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
     // The |result_| does not have glyphs to fill the available space,
     // and thus unable to compute. Return the result up to range_end.
     DCHECK_EQ(candidate_break, range_end);
-    result_out->break_offset = range_end;
+    SetBreakOffset(range_end, text, result_out);
     return ShapeToEnd(start, first_safe, range_start, range_end);
   }
 
@@ -316,6 +336,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
 #if DCHECK_IS_ON()
       DCHECK(IsAllSpaces(text, start, result_out->break_offset));
 #endif
+      result_out->is_hyphenated = false;
       return ShapeResultView::Create(result_.get(), start,
                                      result_out->break_offset);
     }
@@ -324,8 +345,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
   // |range_end| may not be a break opportunity, but this function cannot
   // measure beyond it.
   if (break_opportunity.offset >= range_end) {
-    result_out->break_offset = range_end;
-    result_out->non_hangable_run_end = break_opportunity.non_hangable_run_end;
+    SetBreakOffset(range_end, text, result_out);
     if (result_out->is_overflow)
       return ShapeToEnd(start, first_safe, range_start, range_end);
     break_opportunity.offset = range_end;
@@ -339,8 +359,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
   if (first_safe != start) {
     if (first_safe >= break_opportunity.offset) {
       // There is no safe-to-break, reshape the whole range.
-      result_out->break_offset = break_opportunity.offset;
-      result_out->non_hangable_run_end = break_opportunity.non_hangable_run_end;
+      SetBreakOffset(break_opportunity, text, result_out);
       CheckBreakOffset(result_out->break_offset, start, range_end);
       return ShapeResultView::Create(
           Shape(start, break_opportunity.offset).get());
@@ -437,9 +456,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
         break_opportunity = NextBreakOpportunity(
             std::max(candidate_break, start + 1), start, range_end);
         if (break_opportunity.offset >= range_end) {
-          result_out->break_offset = range_end;
-          result_out->non_hangable_run_end =
-              break_opportunity.non_hangable_run_end;
+          SetBreakOffset(range_end, text, result_out);
           return ShapeToEnd(start, first_safe, range_start, range_end);
         }
       }
@@ -468,11 +485,7 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
   auto line_result = ShapeResultView::Create(&segments[0], count);
   DCHECK_EQ(break_opportunity.offset - start, line_result->NumCharacters());
 
-  result_out->break_offset = break_opportunity.offset;
-  result_out->non_hangable_run_end = break_opportunity.non_hangable_run_end;
-  result_out->is_hyphenated =
-      break_opportunity.is_hyphenated ||
-      text[break_opportunity.offset - 1] == kSoftHyphenCharacter;
+  SetBreakOffset(break_opportunity, text, result_out);
   return line_result;
 }
 

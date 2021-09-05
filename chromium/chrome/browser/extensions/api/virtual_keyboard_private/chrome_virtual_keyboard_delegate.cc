@@ -252,7 +252,8 @@ bool ChromeVirtualKeyboardDelegate::ShowLanguageSettings() {
   if (keyboard_client->is_keyboard_enabled())
     keyboard_client->HideKeyboard(ash::HideReason::kUser);
 
-  base::RecordAction(base::UserMetricsAction("OpenLanguageOptionsDialog"));
+  base::RecordAction(
+      base::UserMetricsAction("VirtualKeyboard.OpenLanguageSettings"));
   const std::string path =
       base::FeatureList::IsEnabled(
           ::chromeos::features::kLanguageSettingsUpdate)
@@ -260,6 +261,20 @@ bool ChromeVirtualKeyboardDelegate::ShowLanguageSettings() {
           : chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath;
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       ProfileManager::GetActiveUserProfile(), path);
+  return true;
+}
+
+bool ChromeVirtualKeyboardDelegate::ShowSuggestionSettings() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  auto* keyboard_client = ChromeKeyboardControllerClient::Get();
+  if (keyboard_client->is_keyboard_enabled())
+    keyboard_client->HideKeyboard(ash::HideReason::kUser);
+
+  base::RecordAction(
+      base::UserMetricsAction("VirtualKeyboard.OpenSuggestionSettings"));
+  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+      ProfileManager::GetActiveUserProfile(),
+      chromeos::settings::mojom::kSmartInputsSubpagePath);
   return true;
 }
 
@@ -349,7 +364,7 @@ bool ChromeVirtualKeyboardDelegate::SetRequestedKeyboardState(int state_enum) {
   return true;
 }
 
-bool ChromeVirtualKeyboardDelegate::IsLanguageSettingsEnabled() {
+bool ChromeVirtualKeyboardDelegate::IsSettingsEnabled() {
   return (user_manager::UserManager::Get()->IsUserLoggedIn() &&
           !chromeos::UserAddingScreen::Get()->IsRunning() &&
           !(chromeos::ScreenLocker::default_screen_locker() &&
@@ -395,22 +410,21 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "floatingkeyboarddefault",
       base::FeatureList::IsEnabled(
           chromeos::features::kVirtualKeyboardFloatingDefault)));
+
+  // Flag used to enable system built-in IME decoder instead of NaCl.
+  bool mojoDecoder =
+      base::FeatureList::IsEnabled(chromeos::features::kImeMojoDecoder);
+  features->AppendString(GenerateFeatureFlag("usemojodecoder", mojoDecoder));
+  // Enabling MojoDecoder implies the 2 previous flags are auto-enabled.
+  //   * fstinputlogic
+  //   * hmminputlogic
+  // TODO(b/171846787): Remove the 3 flags after they are removed from clients.
+  features->AppendString(GenerateFeatureFlag("fstinputlogic", mojoDecoder));
+  features->AppendString(GenerateFeatureFlag("hmminputlogic", mojoDecoder));
   features->AppendString(GenerateFeatureFlag(
       "imemozcproto",
       base::FeatureList::IsEnabled(chromeos::features::kImeMozcProto)));
-  // 3 flags below are used to enable IME new APIs on each decoder.
-  features->AppendString(GenerateFeatureFlag(
-      "fstinputlogic",
-      base::FeatureList::IsEnabled(chromeos::features::kImeInputLogicFst)));
-  features->AppendString(GenerateFeatureFlag(
-      "hmminputlogic",
-      base::FeatureList::IsEnabled(chromeos::features::kImeInputLogicHmm)));
-  features->AppendString(GenerateFeatureFlag(
-      "mozcinputlogic",
-      base::FeatureList::IsEnabled(chromeos::features::kImeInputLogicMozc)));
-  // Flag used to enable UIL Mojo APIs instead of NaCl APIs.
-  features->AppendString(GenerateFeatureFlag(
-      "usemojodecoder", chromeos::features::IsImeSandboxEnabled()));
+
   features->AppendString(GenerateFeatureFlag(
       "borderedkey", base::FeatureList::IsEnabled(
                          chromeos::features::kVirtualKeyboardBorderedKey)));
@@ -421,6 +435,10 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       GenerateFeatureFlag("systemlatinphysicaltyping",
                           base::FeatureList::IsEnabled(
                               chromeos::features::kSystemLatinPhysicalTyping)));
+  features->AppendString(
+      GenerateFeatureFlag("languagesettingsupdate",
+                          base::FeatureList::IsEnabled(
+                              chromeos::features::kLanguageSettingsUpdate)));
 
   results->Set("features", std::move(features));
 

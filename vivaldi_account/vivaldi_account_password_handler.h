@@ -45,7 +45,8 @@ class VivaldiAccountPasswordHandler
 
   // Implementing password_manager::PasswordStoreConsumer
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   // Implementing password_manager::PasswordStore::Observer
   void OnLoginsChanged(

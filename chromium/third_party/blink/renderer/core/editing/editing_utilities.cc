@@ -556,12 +556,15 @@ static PositionTemplate<Strategy> NextVisuallyDistinctCandidateAlgorithm(
   PositionIteratorAlgorithm<Strategy> p(position);
   const PositionTemplate<Strategy> downstream_start =
       MostForwardCaretPosition(position);
+  const PositionTemplate<Strategy> upstream_start =
+      MostBackwardCaretPosition(position);
 
   p.Increment();
   while (!p.AtEnd()) {
     PositionTemplate<Strategy> candidate = p.ComputePosition();
     if (IsVisuallyEquivalentCandidate(candidate) &&
-        MostForwardCaretPosition(candidate) != downstream_start)
+        MostForwardCaretPosition(candidate) != downstream_start &&
+        MostBackwardCaretPosition(candidate) != upstream_start)
       return candidate;
 
     p.Increment();
@@ -620,12 +623,15 @@ PositionTemplate<Strategy> PreviousVisuallyDistinctCandidateAlgorithm(
   PositionIteratorAlgorithm<Strategy> p(position);
   PositionTemplate<Strategy> downstream_start =
       MostForwardCaretPosition(position);
+  const PositionTemplate<Strategy> upstream_start =
+      MostBackwardCaretPosition(position);
 
   p.Decrement();
   while (!p.AtStart()) {
     PositionTemplate<Strategy> candidate = p.ComputePosition();
     if (IsVisuallyEquivalentCandidate(candidate) &&
-        MostForwardCaretPosition(candidate) != downstream_start)
+        MostForwardCaretPosition(candidate) != downstream_start &&
+        MostBackwardCaretPosition(candidate) != upstream_start)
       return candidate;
 
     p.Decrement();
@@ -1126,6 +1132,18 @@ bool IsListItem(const Node* n) {
          n->GetLayoutObject()->IsListItemIncludingNG();
 }
 
+bool IsListItemTag(const Node* n) {
+  return n && (n->HasTagName(html_names::kLiTag) ||
+               n->HasTagName(html_names::kDdTag) ||
+               n->HasTagName(html_names::kDtTag));
+}
+
+bool IsListElementTag(const Node* n) {
+  return n && (n->HasTagName(html_names::kUlTag) ||
+               n->HasTagName(html_names::kOlTag) ||
+               n->HasTagName(html_names::kDlTag));
+}
+
 bool IsPresentationalHTMLElement(const Node* node) {
   const auto* element = DynamicTo<HTMLElement>(node);
   if (!element)
@@ -1346,6 +1364,25 @@ PositionWithAffinity PositionRespectingEditingBoundary(
   }
 
   return target_object->PositionForPoint(selection_end_point);
+}
+
+PositionWithAffinity AdjustForEditingBoundary(
+    const PositionWithAffinity& position_with_affinity) {
+  if (position_with_affinity.IsNull())
+    return position_with_affinity;
+  const Position& position = position_with_affinity.GetPosition();
+  const Node& node = *position.ComputeContainerNode();
+  if (HasEditableStyle(node))
+    return position_with_affinity;
+  const Position& forward =
+      MostForwardCaretPosition(position, kCanCrossEditingBoundary);
+  if (HasEditableStyle(*forward.ComputeContainerNode()))
+    return PositionWithAffinity(forward);
+  const Position& backward =
+      MostBackwardCaretPosition(position, kCanCrossEditingBoundary);
+  if (HasEditableStyle(*backward.ComputeContainerNode()))
+    return PositionWithAffinity(backward);
+  return position_with_affinity;
 }
 
 Position ComputePositionForNodeRemoval(const Position& position,
@@ -1714,7 +1751,7 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
   if (!layout_object->IsImage())
     return nullptr;
 
-  const LayoutImage& layout_image = ToLayoutImage(*layout_object);
+  const auto& layout_image = To<LayoutImage>(*layout_object);
   const ImageResourceContent* const cached_image = layout_image.CachedImage();
   if (!cached_image || cached_image->ErrorOccurred())
     return nullptr;

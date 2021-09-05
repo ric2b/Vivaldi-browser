@@ -70,9 +70,10 @@ void CapturePage::CaptureImpl(content::WebContents* contents,
 
   WebContentsObserver::Observe(contents);
 
-  contents->GetRenderViewHost()->Send(
+  contents->GetMainFrame()->Send(
       new VivaldiViewMsg_RequestThumbnailForFrame(
-          contents->GetRenderViewHost()->GetRoutingID(), param));
+          contents->GetMainFrame()->GetRoutingID(), param));
+
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -99,7 +100,9 @@ void CapturePage::RenderViewHostChanged(content::RenderViewHost* old_host,
   RespondAndDelete();
 }
 
-bool CapturePage::OnMessageReceived(const IPC::Message& message) {
+bool CapturePage::OnMessageReceived(
+    const IPC::Message& message,
+    content::RenderFrameHost* render_frame_host) {
   DCHECK(WebContentsObserver::web_contents());
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(CapturePage, message)

@@ -24,8 +24,6 @@
 #include "content/common/pepper_renderer_instance_data.h"
 #endif
 
-struct FrameHostMsg_CreateChildFrame_Params;
-struct FrameHostMsg_CreateChildFrame_Params_Reply;
 class GURL;
 
 namespace url {
@@ -72,12 +70,6 @@ class CONTENT_EXPORT RenderFrameMessageFilter : public BrowserMessageFilter {
 
   ~RenderFrameMessageFilter() override;
 
-  // |params_reply| is an out parameter. Browser process defines it for the
-  // renderer process.
-  void OnCreateChildFrame(
-      const FrameHostMsg_CreateChildFrame_Params& params,
-      FrameHostMsg_CreateChildFrame_Params_Reply* params_reply);
-
   void OnRenderProcessGone();
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -102,9 +94,6 @@ class CONTENT_EXPORT RenderFrameMessageFilter : public BrowserMessageFilter {
                                              int32_t pp_instance,
                                              bool is_external);
   void OnOpenChannelToPpapiBroker(int routing_id, const base::FilePath& path);
-  void OnPluginInstanceThrottleStateChange(int plugin_child_id,
-                                           int32_t pp_instance,
-                                           bool is_throttled);
 #endif  // ENABLE_PLUGINS
 
 #if BUILDFLAG(ENABLE_PLUGINS)

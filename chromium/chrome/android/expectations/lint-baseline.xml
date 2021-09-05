@@ -1,5 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<issues format="5" by="lint 4.0.1" client="cli" variant="all" version="4.0.1">
+<issues format="5" by="lint 4.1.0" client="cli" variant="all" version="4.1.0">
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_AUTO, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS"
+        errorLine1="                contentsShowing ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/autofill/CardUnmaskPrompt.java"
+            line="568"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_AUTO, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS"
+        errorLine1="                                : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/autofill/CardUnmaskPrompt.java"
+            line="569"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: ViewCompat.LAYOUT_DIRECTION_LTR, ViewCompat.LAYOUT_DIRECTION_RTL"
+        errorLine1="        if (ViewCompat.getLayoutDirection(this) == LAYOUT_DIRECTION_LTR) {"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../components/browser_ui/widget/android/java/src/org/chromium/components/browser_ui/widget/ClipDrawableProgressBar.java"
+            line="137"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: ViewCompat.ACCESSIBILITY_LIVE_REGION_NONE, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE, ViewCompat.ACCESSIBILITY_LIVE_REGION_ASSERTIVE"
+        errorLine1="        ViewCompat.setAccessibilityLiveRegion(messageView, View.ACCESSIBILITY_LIVE_REGION_POLITE);"
+        errorLine2="                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/infobar/DownloadProgressInfoBar.java"
+            line="132"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: ViewCompat.LAYOUT_DIRECTION_LTR, ViewCompat.LAYOUT_DIRECTION_RTL"
+        errorLine1="        if (ViewCompat.getLayoutDirection(this) == View.LAYOUT_DIRECTION_RTL) {"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../components/browser_ui/widget/android/java/src/org/chromium/components/browser_ui/widget/MaterialProgressBar.java"
+            line="235"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="UnsupportedChromeOsCameraSystemFeature"
+        message="You should look for any camera available on the device, not just the rear"
+        errorLine1="        boolean hasCamera = pm.hasSystemFeature(PackageManager.FEATURE_CAMERA);"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../base/android/java/src/org/chromium/base/SysUtils.java"
+            line="160"
+            column="29"/>
+    </issue>
 
     <issue
         id="VisibleForTests"
@@ -15,7 +81,7 @@
     <issue
         id="VisibleForTests"
         message="This method should only be accessed from tests or within private scope"
-        errorLine1="                IconProvider.getIcon(context, R.drawable.permission_location),"
+        errorLine1="                IconProvider.getIcon(context, R.drawable.ic_permission_location_outline),"
         errorLine2="                             ~~~~~~~">
         <location
             file="../../chrome/android/features/keyboard_accessory/internal/java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/AddressAccessorySheetCoordinator.java"
@@ -30,7 +96,7 @@
         errorLine2="                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/payments/AndroidPaymentAppFinder.java"
-            line="591"
+            line="593"
             column="55"/>
     </issue>
 
@@ -41,7 +107,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/browser/ui/android/appmenu/internal/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenu.java"
-            line="354"
+            line="365"
             column="22"/>
     </issue>
 
@@ -103,22 +169,11 @@
     <issue
         id="VisibleForTests"
         message="This method should only be accessed from tests or within private scope"
-        errorLine1="        return new AutocompleteCoordinatorImpl("
-        errorLine2="               ^">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteCoordinatorFactory.java"
-            line="29"
-            column="16"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
         errorLine1="        return mAutocomplete.getCurrentNativeAutocompleteResult();"
         errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteMediator.java"
-            line="477"
+            line="463"
             column="30"/>
     </issue>
 
@@ -129,7 +184,7 @@
         errorLine2="                                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/java/src/org/chromium/android_webview/AwBrowserProcess.java"
-            line="144"
+            line="145"
             column="63"/>
     </issue>
 
@@ -140,7 +195,7 @@
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/java/src/org/chromium/android_webview/AwContents.java"
-            line="1284"
+            line="1347"
             column="9"/>
     </issue>
 
@@ -151,7 +206,7 @@
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/java/src/org/chromium/android_webview/AwContents.java"
-            line="1285"
+            line="1348"
             column="17"/>
     </issue>
 
@@ -162,7 +217,7 @@
         errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/java/src/org/chromium/android_webview/AwContents.java"
-            line="1781"
+            line="1844"
             column="46"/>
     </issue>
 
@@ -173,7 +228,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/java/src/org/chromium/android_webview/AwContents.java"
-            line="2780"
+            line="2843"
             column="22"/>
     </issue>
 
@@ -257,154 +312,11 @@
     <issue
         id="VisibleForTests"
         message="This method should only be accessed from tests or within private scope"
-        errorLine1="                    toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="113"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                    toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="116"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="123"
-            column="17"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                    toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="130"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                    toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="133"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        cacheEvent(&quot;Android.BackgroundTaskScheduler.TaskExpired&quot;, toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="139"
-            column="67"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                &quot;Android.BackgroundTaskScheduler.TaskCanceled&quot;, toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                                                                ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="145"
-            column="65"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        cacheEvent(&quot;Android.BackgroundTaskScheduler.TaskStarted&quot;, toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="150"
-            column="67"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        cacheEvent(&quot;Android.BackgroundTaskScheduler.TaskStopped&quot;, toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="155"
-            column="67"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="                toUmaEnumValueFromTaskId(taskId));"
-        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="166"
-            column="17"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        int umaEnumValue = toUmaEnumValueFromTaskId(taskId);"
-        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="171"
-            column="28"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        int umaEnumValue = toUmaEnumValueFromTaskId(taskId);"
-        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="184"
-            column="28"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
-        errorLine1="        int umaEnumValue = toUmaEnumValueFromTaskId(taskId);"
-        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../components/background_task_scheduler/internal/android/java/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUma.java"
-            line="195"
-            column="28"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
         errorLine1="                        &amp;&amp; mOverlayPanelManager.get().getActivePanel() != null) {"
         errorLine2="                                                      ~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/ui/BottomSheetManager.java"
-            line="215"
+            line="224"
             column="55"/>
     </issue>
 
@@ -415,7 +327,7 @@
         errorLine2="                                               ~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/ui/BottomSheetManager.java"
-            line="219"
+            line="228"
             column="48"/>
     </issue>
 
@@ -426,7 +338,7 @@
         errorLine2="                                                        ~~~~~~~~~~~~">
         <location
             file="../../weblayer/browser/java/org/chromium/weblayer_private/BrowserImpl.java"
-            line="285"
+            line="305"
             column="57"/>
     </issue>
 
@@ -437,7 +349,7 @@
         errorLine2="                                                                            ~~~~~~~~~~~~">
         <location
             file="../../weblayer/browser/java/org/chromium/weblayer_private/BrowserImpl.java"
-            line="409"
+            line="416"
             column="77"/>
     </issue>
 
@@ -448,7 +360,7 @@
         errorLine2="                                                                                   ~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java"
-            line="362"
+            line="367"
             column="84"/>
     </issue>
 
@@ -459,7 +371,7 @@
         errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java"
-            line="731"
+            line="757"
             column="23"/>
     </issue>
 
@@ -481,7 +393,7 @@
         errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java"
-            line="770"
+            line="791"
             column="67"/>
     </issue>
 
@@ -503,7 +415,7 @@
         errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/customtabs/CustomTabDelegateFactory.java"
-            line="259"
+            line="260"
             column="36"/>
     </issue>
 
@@ -513,8 +425,8 @@
         errorLine1="        mConnection.cleanUpSession(sessionToken);"
         errorLine2="                    ~~~~~~~~~~~~~~">
         <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/customtabs/CustomTabsConnectionService.java"
-            line="107"
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/customtabs/CustomTabsConnectionServiceImpl.java"
+            line="104"
             column="21"/>
     </issue>
 
@@ -524,7 +436,7 @@
         errorLine1="                mDownloadNotificationService.notifyDownloadPaused(entry.id, entry.fileName, true,"
         errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/download/DownloadBroadcastManager.java"
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/download/DownloadBroadcastManagerImpl.java"
             line="137"
             column="46"/>
     </issue>
@@ -535,7 +447,7 @@
         errorLine1="                mDownloadNotificationService.notifyDownloadCanceled(entry.id, true);"
         errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/download/DownloadBroadcastManager.java"
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/download/DownloadBroadcastManagerImpl.java"
             line="143"
             column="46"/>
     </issue>
@@ -576,17 +488,6 @@
     <issue
         id="VisibleForTests"
         message="This method should only be accessed from tests or within private scope"
-        errorLine1="        return FeedConfiguration.getFeedServerEndpoint();"
-        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/FeedDebuggingBridge.java"
-            line="24"
-            column="34"/>
-    </issue>
-
-    <issue
-        id="VisibleForTests"
-        message="This method should only be accessed from tests or within private scope"
         errorLine1="                            ImageFetcher.resizeImage(bitmap, params.width, params.height));"
         errorLine2="                                         ~~~~~~~~~~~">
         <location
@@ -598,12 +499,12 @@
     <issue
         id="VisibleForTests"
         message="This method should only be accessed from tests or within private scope"
-        errorLine1="                                IncognitoNotificationService.getRemoveAllIncognitoTabsIntent("
-        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                                IncognitoNotificationServiceImpl.getRemoveAllIncognitoTabsIntent("
+        errorLine2="                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/incognito/IncognitoNotificationManager.java"
             line="56"
-            column="62"/>
+            column="66"/>
     </issue>
 
     <issue
@@ -646,7 +547,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerChromePhone.java"
-            line="108"
+            line="112"
             column="20"/>
     </issue>
 
@@ -657,7 +558,7 @@
         errorLine2="                                         ~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerChromePhone.java"
-            line="127"
+            line="131"
             column="42"/>
     </issue>
 
@@ -668,7 +569,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerChromePhone.java"
-            line="141"
+            line="145"
             column="20"/>
     </issue>
 
@@ -690,7 +591,7 @@
         errorLine2="                                                                              ~~~~~~~~~~~~">
         <location
             file="../../weblayer/browser/java/org/chromium/weblayer_private/NavigationControllerImpl.java"
-            line="28"
+            line="35"
             column="79"/>
     </issue>
 
@@ -712,7 +613,7 @@
         errorLine2="                                  ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java"
-            line="328"
+            line="313"
             column="35"/>
     </issue>
 
@@ -734,7 +635,7 @@
         errorLine2="                                   ~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/omaha/OmahaBase.java"
-            line="322"
+            line="321"
             column="36"/>
     </issue>
 
@@ -745,7 +646,7 @@
         errorLine2="                                                 ~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/omaha/OmahaBase.java"
-            line="350"
+            line="349"
             column="50"/>
     </issue>
 
@@ -800,7 +701,7 @@
         errorLine2="                     ~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/compositor/bottombar/OverlayPanel.java"
-            line="523"
+            line="515"
             column="22"/>
     </issue>
 
@@ -877,7 +778,7 @@
         errorLine2="                   ~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/searchwidget/SearchActivity.java"
-            line="318"
+            line="327"
             column="20"/>
     </issue>
 
@@ -888,7 +789,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/share/ShareHelper.java"
-            line="63"
+            line="64"
             column="25"/>
     </issue>
 
@@ -899,7 +800,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/browser/share/android/java/src/org/chromium/chrome/browser/share/share_sheet/ShareSheetPropertyModelBuilder.java"
-            line="202"
+            line="212"
             column="25"/>
     </issue>
 
@@ -965,7 +866,7 @@
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/signin/core/browser/android/java/src/org/chromium/components/signin/SystemAccountManagerDelegate.java"
-            line="140"
+            line="141"
             column="29"/>
     </issue>
 
@@ -1053,7 +954,7 @@
         errorLine2="                                                                         ~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java"
-            line="1568"
+            line="1535"
             column="74"/>
     </issue>
 
@@ -1064,7 +965,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/TopToolbarCoordinator.java"
-            line="604"
+            line="626"
             column="31"/>
     </issue>
 
@@ -1086,7 +987,7 @@
         errorLine2="                                                                     ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/webapps/WebApkActivityCoordinator.java"
-            line="54"
+            line="56"
             column="70"/>
     </issue>
 
@@ -1097,7 +998,7 @@
         errorLine2="                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/glue/java/src/com/android/webview/chromium/WebViewChromium.java"
-            line="968"
+            line="972"
             column="58"/>
     </issue>
 
@@ -1108,7 +1009,7 @@
         errorLine2="                            ~~~~~~~~~~~~~~">
         <location
             file="../../android_webview/glue/java/src/com/android/webview/chromium/WebViewChromium.java"
-            line="1824"
+            line="1828"
             column="29"/>
     </issue>
 
@@ -1130,7 +1031,7 @@
         errorLine2="                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/browser_ui/site_settings/android/java/src/org/chromium/components/browser_ui/site_settings/WebsitePreferenceBridge.java"
-            line="164"
+            line="70"
             column="18"/>
     </issue>
 
@@ -1141,7 +1042,7 @@
         errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/browser_ui/site_settings/android/java/src/org/chromium/components/browser_ui/site_settings/WebsitePreferenceBridge.java"
-            line="188"
+            line="88"
             column="30"/>
     </issue>
 
@@ -1152,8 +1053,360 @@
         errorLine2="                 ^">
         <location
             file="../../components/browser_ui/site_settings/android/java/src/org/chromium/components/browser_ui/site_settings/WebsitePreferenceBridge.java"
-            line="243"
+            line="143"
             column="18"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="        android:tint=&quot;@color/default_icon_color_blue&quot;"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../components/messages/android/java/res/layout/message_banner_view.xml"
+            line="27"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="        android:tint=&quot;@color/default_icon_color_secondary&quot;"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../components/messages/android/java/res/layout/message_banner_view.xml"
+            line="56"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;@color/photo_picker_tile_bg_color&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../components/browser_ui/photo_picker/android/java/res/layout/photo_picker_bitmap_view.xml"
+            line="109"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;@color/default_icon_color&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/search_widget_template.xml"
+            line="42"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="                android:tint=&quot;@color/ungroup_bar_shadow_color&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/features/tab_ui/java/res/layout/tab_grid_dialog_layout.xml"
+            line="35"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;@color/default_icon_color&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/tab_switcher_toolbar.xml"
+            line="28"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="                return res.getDrawable(id, null);"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../base/android/java/src/org/chromium/base/ApiCompatibilityUtils.java"
+            line="364"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="                context.getResources().getDrawable(R.drawable.autofill_assistant_actions_gradient);"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/features/autofill_assistant/java/src/org/chromium/chrome/browser/autofill_assistant/carousel/AssistantActionsDecoration.java"
+            line="85"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="            mDefaultImage = (GradientDrawable) context.getResources().getDrawable("
+        errorLine2="                                               ^">
+        <location
+            file="../../chrome/android/features/autofill_assistant/java/src/org/chromium/chrome/browser/autofill_assistant/details/AssistantDetailsViewBinder.java"
+            line="73"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="            cardIssuerImageView.setImageDrawable(view.getContext().getResources().getDrawable("
+        errorLine2="                                                 ^">
+        <location
+            file="../../chrome/android/features/autofill_assistant/java/src/org/chromium/chrome/browser/autofill_assistant/user_data/AssistantPaymentMethodSection.java"
+            line="103"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="            Drawable mInlineTitleIcon = resources.getDrawable(googlePayDrawableId);"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/autofill/CardUnmaskPrompt.java"
+            line="195"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ResourcesCompat.getDrawable()`"
+        errorLine1="        Drawable clearTextIcon = getResources().getDrawable(R.drawable.ic_clear_text);"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../android_webview/nonembedded/java/src/org/chromium/android_webview/devui/FlagsFragment.java"
+            line="152"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ContextCompat.getDrawable()`"
+        errorLine1="            final Drawable statusIcon = mContext.getDrawable(R.drawable.ic_cloud_offline_24dp);"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/offlinepages/indicator/OfflineIndicatorControllerV2.java"
+            line="124"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ContextCompat.getDrawable()`"
+        errorLine1="            final Drawable statusIcon = mContext.getDrawable(R.drawable.ic_globe_24dp);"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/src/org/chromium/chrome/browser/offlinepages/indicator/OfflineIndicatorControllerV2.java"
+            line="150"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UseCompatLoadingForDrawables"
+        message="Use `ContextCompat.getDrawable()`"
+        errorLine1="                view.setForeground(view.getContext().getDrawable(R.drawable.piet_clickable_ripple));"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/library/piet/ViewUtils.java"
+            line="60"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="            android:drawableTop=&quot;@drawable/ic_action_home&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../android_webview/nonembedded/java/res_devui/layout/activity_main.xml"
+            line="50"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="            android:drawableTop=&quot;@drawable/ic_alert_error&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../android_webview/nonembedded/java/res_devui/layout/activity_main.xml"
+            line="60"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="            android:drawableTop=&quot;@drawable/ic_flag&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../android_webview/nonembedded/java/res_devui/layout/activity_main.xml"
+            line="70"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableEndCompat` instead of `android:drawableEnd`"
+        errorLine1="                android:drawableEnd=&quot;@drawable/data_reduction_breakdown_sort_arrow&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/data_usage_breakdown.xml"
+            line="48"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableStartCompat` instead of `android:drawableStart`"
+        errorLine1="                android:drawableStart=&quot;@drawable/data_reduction_breakdown_sort_arrow&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/data_usage_breakdown.xml"
+            line="58"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableStartCompat` instead of `android:drawableStart`"
+        errorLine1="                android:drawableStart=&quot;@drawable/data_reduction_breakdown_sort_arrow&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/data_usage_breakdown.xml"
+            line="69"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableEndCompat` instead of `android:drawableEnd`"
+        errorLine1="    android:drawableEnd=&quot;@drawable/exclamation_triangle&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/android/java/res/layout/os_version_unsupported_text.xml"
+            line="15"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableStartCompat` instead of `android:drawableStart`"
+        errorLine1="        android:drawableStart=&quot;@drawable/ic_alert_error&quot;"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../android_webview/nonembedded/java/res_devui/layout/persistent_error_message.xml"
+            line="26"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableStartCompat` instead of `android:drawableStart`"
+        errorLine1="        android:drawableStart=&quot;@drawable/ic_error&quot;"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/qrcode_camera_error_layout.xml"
+            line="27"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="                    android:drawableTop=&quot;@drawable/edit_icon&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="49"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTint` instead of `android:drawableTint`"
+        errorLine1="                    android:drawableTint=&quot;@color/default_icon_color_tint_list&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="50"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="                    android:drawableTop=&quot;@drawable/delete_icon&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="60"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTint` instead of `android:drawableTint`"
+        errorLine1="                    android:drawableTint=&quot;@color/default_icon_color_tint_list&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="61"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="                    android:drawableTop=&quot;@drawable/save_icon&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="71"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTint` instead of `android:drawableTint`"
+        errorLine1="                    android:drawableTint=&quot;@color/default_icon_color_tint_list&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="72"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTopCompat` instead of `android:drawableTop`"
+        errorLine1="                    android:drawableTop=&quot;@drawable/share_icon&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="82"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseCompatTextViewDrawableXml"
+        message="Use `app:drawableTint` instead of `android:drawableTint`"
+        errorLine1="                    android:drawableTint=&quot;@color/default_icon_color_tint_list&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../../chrome/browser/share/android/java/res/layout/screenshot_share_sheet.xml"
+            line="83"
+            column="21"/>
     </issue>
 
     <issue
@@ -1225,23 +1478,23 @@
     <issue
         id="Autofill"
         message="Missing `autofillHints` attribute"
-        errorLine1="        &lt;EditText"
-        errorLine2="         ~~~~~~~~">
+        errorLine1="            &lt;EditText"
+        errorLine2="             ~~~~~~~~">
         <location
             file="../../chrome/browser/password_check/android/java/res/layout/password_check_edit_fragment.xml"
-            line="27"
-            column="10"/>
+            line="31"
+            column="14"/>
     </issue>
 
     <issue
         id="Autofill"
         message="Missing `autofillHints` attribute"
-        errorLine1="        &lt;EditText"
-        errorLine2="         ~~~~~~~~">
+        errorLine1="            &lt;EditText"
+        errorLine2="             ~~~~~~~~">
         <location
             file="../../chrome/browser/password_check/android/java/res/layout/password_check_edit_fragment.xml"
-            line="47"
-            column="10"/>
+            line="52"
+            column="14"/>
     </issue>
 
     <issue
@@ -1251,29 +1504,7 @@
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/accessibility_tab_switcher/AccessibilityTabModelListItem.java"
-            line="453"
-            column="20"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
-        message="Custom view ``SurfaceView`` has `setOnTouchListener` called on it but does not override `performClick`"
-        errorLine1="            mSurfaceView.setOnTouchListener(ArImmersiveOverlay.this);"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/vr/ArImmersiveOverlay.java"
-            line="176"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
-        message="`ArImmersiveOverlay#onTouch` should call `View#performClick` when a click is detected"
-        errorLine1="    public boolean onTouch(View v, MotionEvent ev) {"
-        errorLine2="                   ~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/vr/ArImmersiveOverlay.java"
-            line="222"
+            line="459"
             column="20"/>
     </issue>
 
@@ -1284,7 +1515,7 @@
         errorLine2="                                             ^">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/bookmarks/BookmarkItemsAdapter.java"
-            line="215"
+            line="193"
             column="46"/>
     </issue>
 
@@ -1361,7 +1592,7 @@
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/compositor/CompositorViewHolder.java"
-            line="639"
+            line="660"
             column="20"/>
     </issue>
 
@@ -1374,17 +1605,6 @@
             file="../../components/embedder_support/android/java/src/org/chromium/components/embedder_support/view/ContentView.java"
             line="333"
             column="20"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
-        message="Custom view `InterceptTouchLayout` overrides `onTouchEvent` but not `performClick`"
-        errorLine1="        public boolean onTouchEvent(MotionEvent event) {"
-        errorLine2="                       ~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/CustomTabToolbar.java"
-            line="126"
-            column="24"/>
     </issue>
 
     <issue
@@ -1493,7 +1713,7 @@
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/omnibox/LocationBarTablet.java"
-            line="112"
+            line="111"
             column="20"/>
     </issue>
 
@@ -1504,7 +1724,7 @@
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/menu_button/MenuButton.java"
-            line="76"
+            line="77"
             column="9"/>
     </issue>
 
@@ -1570,7 +1790,7 @@
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../components/paint_preview/player/android/java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameView.java"
-            line="108"
+            line="107"
             column="20"/>
     </issue>
 
@@ -1587,17 +1807,6 @@
 
     <issue
         id="ClickableViewAccessibility"
-        message="Custom view `ScrollingBottomViewResourceFrameLayout` overrides `onTouchEvent` but not `performClick`"
-        errorLine1="    public boolean onTouchEvent(MotionEvent event) {"
-        errorLine2="                   ~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/bottom/ScrollingBottomViewResourceFrameLayout.java"
-            line="63"
-            column="20"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
         message="`onTouch` lambda should call `View#performClick` when a click is detected"
         errorLine1="        mEmptyViewWrapper.setOnTouchListener((v, event) -> true);"
         errorLine2="                                             ~~~~~~~~~~~~~~~~~~">
@@ -1609,34 +1818,12 @@
 
     <issue
         id="ClickableViewAccessibility"
-        message="Custom view ``ImageButton`` has `setOnTouchListener` called on it but does not override `performClick`"
-        errorLine1="        mMenuButton.getImageButton().setOnTouchListener(appMenuButtonHelper);"
-        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/TabSwitcherModeTTPhone.java"
-            line="188"
-            column="9"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
-        message="Custom view `TextEditorHandleView` overrides `onTouchEvent` but not `performClick`"
-        errorLine1="    public boolean onTouchEvent(MotionEvent event) {"
-        errorLine2="                   ~~~~~~~~~~~~">
-        <location
-            file="../../clank/browser/image_editor/internal/java/src/org/chromium/chrome/browser/image_editor/text/TextEditorHandleView.java"
-            line="151"
-            column="20"/>
-    </issue>
-
-    <issue
-        id="ClickableViewAccessibility"
         message="Custom view `ToolbarControlContainer` overrides `onTouchEvent` but not `performClick`"
         errorLine1="    public boolean onTouchEvent(MotionEvent event) {"
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarControlContainer.java"
-            line="249"
+            line="264"
             column="20"/>
     </issue>
 
@@ -1647,7 +1834,7 @@
         errorLine2="                   ~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java"
-            line="505"
+            line="488"
             column="20"/>
     </issue>
 
@@ -1691,7 +1878,7 @@
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/browser_ui/contacts_picker/android/java/res/layout/contacts_list_item_view.xml"
-            line="48"
+            line="49"
             column="17"/>
     </issue>
 
@@ -1702,7 +1889,7 @@
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/browser_ui/contacts_picker/android/java/res/layout/contacts_list_item_view.xml"
-            line="72"
+            line="73"
             column="17"/>
     </issue>
 
@@ -1713,7 +1900,7 @@
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../components/browser_ui/contacts_picker/android/java/res/layout/contacts_list_item_view.xml"
-            line="96"
+            line="97"
             column="17"/>
     </issue>
 
@@ -1822,19 +2009,8 @@
         errorLine1="        android:clickable=&quot;true&quot;"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="../../clank/browser/image_editor/internal/java/res/layout/line_tool_color_item.xml"
-            line="16"
-            column="9"/>
-    </issue>
-
-    <issue
-        id="KeyboardInaccessibleWidget"
-        message="&apos;clickable&apos; attribute found, please also add &apos;focusable&apos;"
-        errorLine1="        android:clickable=&quot;true&quot;"
-        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
             file="../../components/browser_ui/photo_picker/android/java/res/layout/photo_picker_dialog.xml"
-            line="36"
+            line="38"
             column="9"/>
     </issue>
 
@@ -1856,7 +2032,7 @@
         errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="../../chrome/android/java/res/layout/share_sheet_item.xml"
-            line="10"
+            line="9"
             column="5"/>
     </issue>
 

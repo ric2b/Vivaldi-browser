@@ -21,7 +21,6 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/command_updater_impl.h"
-#include "chrome/browser/reputation/safety_tip_test_utils.h"
 #include "chrome/browser/search_engines/template_url_service_factory_test_util.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
@@ -32,6 +31,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/test_location_bar_model.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/reputation/core/safety_tip_test_utils.h"
 #include "content/public/browser/focused_node_details.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_navigation_handle.h"
@@ -777,6 +777,37 @@ TEST_F(OmniboxViewViewsTest, OnBlur) {
   EXPECT_FALSE(omnibox_view()->IsSelectAll());
 }
 
+// Verifies that https://crbug.com/45260 doesn't regress.
+TEST_F(OmniboxViewViewsTest,
+       RendererInitiatedFocusSelectsAllWhenStartingBlurred) {
+  location_bar_model()->set_url(GURL("about:blank"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  // Simulate a renderer-initated focus event. Expect that everything is
+  // selected now.
+  omnibox_view()->SetFocus(/*is_user_initiated=*/false);
+  EXPECT_TRUE(omnibox_view()->IsSelectAll());
+}
+
+// Verifies that https://crbug.com/924935 doesn't regress.
+TEST_F(OmniboxViewViewsTest,
+       RendererInitiatedFocusPreservesCursorWhenStartingFocused) {
+  // Simulate the user focusing the omnibox and typing something. This is just
+  // the test setup, not the actual focus event we are testing.
+  omnibox_view()->SetFocus(/*is_user_initiated*/ true);
+  omnibox_view()->SetTextAndSelectedRanges(base::ASCIIToUTF16("user text"),
+                                           {gfx::Range(9, 9)});
+  ASSERT_FALSE(omnibox_view()->IsSelectAll());
+  ASSERT_TRUE(omnibox_view()->SelectionAtEnd());
+
+  // Simulate a renderer-initated focus event. Expect the cursor position to be
+  // preserved, and that the omnibox did not select-all the text.
+  omnibox_view()->SetFocus(/*is_user_initiated=*/false);
+  EXPECT_FALSE(omnibox_view()->IsSelectAll());
+  EXPECT_TRUE(omnibox_view()->SelectionAtEnd());
+}
+
 TEST_F(OmniboxViewViewsTest, Emphasis) {
   constexpr struct {
     const char* input;
@@ -1037,21 +1068,21 @@ TEST_F(OmniboxViewViewsTest, SetWindowTextAndCaretPos) {
 TEST_F(OmniboxViewViewsTest, OnInlineAutocompleteTextMaybeChanged) {
   // No selection, google.com|
   omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
-      base::UTF8ToUTF16("google.com"), 0, 10);
+      base::UTF8ToUTF16("google.com"), {{10, 10}}, 10);
   EXPECT_EQ(base::ASCIIToUTF16("google.com"), omnibox_view()->GetText());
   EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
             (std::vector<Range>{{10, 10}}));
 
   // Single selection, gmai[l.com]
   omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
-      base::UTF8ToUTF16("gmail.com"), 0, 4);
+      base::UTF8ToUTF16("gmail.com"), {{9, 4}}, 4);
   EXPECT_EQ(base::ASCIIToUTF16("gmail.com"), omnibox_view()->GetText());
   EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
             (std::vector<Range>{{9, 4}}));
 
   // Multiselection, [go]ogl[e.com]
   omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
-      base::UTF8ToUTF16("google.com"), 2, 3);
+      base::UTF8ToUTF16("google.com"), {{10, 5}, {0, 2}}, 3);
   EXPECT_EQ(base::ASCIIToUTF16("google.com"), omnibox_view()->GetText());
   EXPECT_EQ(omnibox_view()->GetRenderText()->GetAllSelections(),
             (std::vector<Range>{{10, 5}, {0, 2}}));
@@ -1068,7 +1099,7 @@ TEST_F(OmniboxViewViewsTest, OverflowingAutocompleteText) {
   omnibox_view()->OnInlineAutocompleteTextMaybeChanged(
       base::ASCIIToUTF16("user text. Followed by very long autocompleted text "
                          "that is unlikely to fit in |kOmniboxWidth|"),
-      0, 10);
+      {{94, 10}}, 10);
 
   // NOTE: Technically (depending on the font), this expectation could fail if
   // 'user text' doesn't fit in 100px or the entire string fits in 100px.
@@ -1750,7 +1781,7 @@ class OmniboxViewViewsRevealOnHoverTest
             {},
             GetParam().second) {
     // The lookalike allowlist is used by the registrable-domain-elision code.
-    InitializeBlankLookalikeAllowlistForTesting();
+    reputation::InitializeBlankLookalikeAllowlistForTesting();
   }
 
   OmniboxViewViewsRevealOnHoverTest(const OmniboxViewViewsRevealOnHoverTest&) =
@@ -1993,7 +2024,7 @@ class OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest
             {},
             GetParam().second) {
     // The lookalike allowlist is used by the registrable-domain-elision code.
-    InitializeBlankLookalikeAllowlistForTesting();
+    reputation::InitializeBlankLookalikeAllowlistForTesting();
   }
 
   OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest(
@@ -2565,7 +2596,7 @@ class OmniboxViewViewsHideOnInteractionTest
             {},
             GetParam().second) {
     // The lookalike allowlist is used by the registrable-domain-elision code.
-    InitializeBlankLookalikeAllowlistForTesting();
+    reputation::InitializeBlankLookalikeAllowlistForTesting();
   }
 
   OmniboxViewViewsHideOnInteractionTest(

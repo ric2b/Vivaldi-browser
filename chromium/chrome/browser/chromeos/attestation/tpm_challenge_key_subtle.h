@@ -14,7 +14,10 @@
 #include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_result.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chromeos/attestation/attestation_flow.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "chromeos/dbus/constants/attestation_constants.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "components/account_id/account_id.h"
@@ -24,6 +27,8 @@ class Profile;
 
 namespace chromeos {
 namespace attestation {
+
+class MachineCertificateUploader;
 
 //==================== TpmChallengeKeySubtleFactory ============================
 
@@ -44,6 +49,7 @@ class TpmChallengeKeySubtleFactory final {
       AttestationKeyType key_type,
       bool will_register_key,
       const std::string& key_name,
+      const std::string& public_key,
       Profile* profile);
 
   static void SetForTesting(std::unique_ptr<TpmChallengeKeySubtle> next_result);
@@ -107,10 +113,12 @@ class TpmChallengeKeySubtle {
   TpmChallengeKeySubtle() = default;
 
   // Restores internal state of the object as if it would be after
-  // |StartPrepareKeyStep|.
+  // |StartPrepareKeyStep|. |public_key| is required only if |will_register_key|
+  // is true.
   virtual void RestorePreparedKeyState(AttestationKeyType key_type,
                                        bool will_register_key,
                                        const std::string& key_name,
+                                       const std::string& public_key,
                                        Profile* profile) = 0;
 };
 
@@ -121,8 +129,9 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
   // Use TpmChallengeKeySubtleFactory for creation.
   TpmChallengeKeySubtleImpl();
   // Use only for testing.
-  explicit TpmChallengeKeySubtleImpl(
-      AttestationFlow* attestation_flow_for_testing);
+  TpmChallengeKeySubtleImpl(
+      AttestationFlow* attestation_flow_for_testing,
+      MachineCertificateUploader* certificate_uploader_for_testing);
 
   TpmChallengeKeySubtleImpl(const TpmChallengeKeySubtleImpl&) = delete;
   TpmChallengeKeySubtleImpl& operator=(const TpmChallengeKeySubtleImpl&) =
@@ -144,6 +153,7 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
   void RestorePreparedKeyState(AttestationKeyType key_type,
                                bool will_register_key,
                                const std::string& key_name,
+                               const std::string& public_key,
                                Profile* profile) override;
 
   void PrepareUserKey();
@@ -166,17 +176,25 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
   // Returns the AccountId associated with |profile_|. Will return
   // EmptyAccountId() if GetUser() returns nullptr.
   AccountId GetAccountId() const;
+  // Returns `GetAccountId()` if the key type is `KEY_USER`; otherwise, returns
+  // empty `AccountId` for `KEY_DEVICE`.
+  AccountId GetAccountIdForAttestationFlow() const;
+  // Returns the account id in string if the key type is `KEY_USER`; otherwise,
+  // returns empty string for `KEY_DEVICE`.
+  std::string GetUsernameForAttestationClient() const;
 
-  // Actually prepares a key after all checks are passed.
-  void PrepareKey();
-  // Returns a public key (or an error) via |prepare_key_callback_|.
-  void PrepareKeyFinished(
-      base::Optional<CryptohomeClient::TpmAttestationDataResult>
-          prepare_key_result);
+  // Actually prepares a key after all checks are passed and if `can_continue`
+  // is true.
+  void PrepareKey(bool can_continue);
+  // Returns a public key (or an error) via `callback_`.
+  void PrepareKeyFinished(const ::attestation::GetKeyInfoReply& reply);
 
-  void SignChallengeCallback(bool success, const std::string& response);
+  void SignChallengeCallback(
+      const ::attestation::SignEnterpriseChallengeReply& reply);
 
-  void RegisterKeyCallback(bool success, cryptohome::MountError return_code);
+  void RegisterKeyCallback(
+      const ::attestation::RegisterKeyWithChapsTokenReply& reply);
+  void MarkCorporateKeyCallback(platform_keys::Status status);
 
   // Returns a trusted value from CrosSettings indicating if the device
   // attestation is enabled.
@@ -184,9 +202,10 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
       const base::RepeatingCallback<void(bool)>& callback);
   void GetDeviceAttestationEnabledCallback(bool enabled);
 
-  void IsAttestationPreparedCallback(base::Optional<bool> result);
+  void GetEnrollmentPreparationsCallback(
+      const ::attestation::GetEnrollmentPreparationsReply& reply);
   void PrepareKeyErrorHandlerCallback(base::Optional<bool> is_tpm_enabled);
-  void DoesKeyExistCallback(base::Optional<bool> result);
+  void DoesKeyExistCallback(const ::attestation::GetKeyInfoReply& reply);
   void AskForUserConsent(base::OnceCallback<void(bool)> callback) const;
   void AskForUserConsentCallback(bool result);
   void GetCertificateCallback(AttestationStatus status,
@@ -200,6 +219,8 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
 
   std::unique_ptr<AttestationFlow> default_attestation_flow_;
   AttestationFlow* attestation_flow_ = nullptr;
+  // Can be nullptr.
+  MachineCertificateUploader* machine_certificate_uploader_ = nullptr;
 
   TpmChallengeKeyCallback callback_;
   // |profile_| may be nullptr if this is an instance that is used device-wide
@@ -211,6 +232,10 @@ class TpmChallengeKeySubtleImpl final : public TpmChallengeKeySubtle {
   // See the comment for TpmChallengeKey::BuildResponse for more context about
   // different cases of using this variable.
   std::string key_name_;
+  // In case the key is going to be registered, the public key is stored here
+  // (after PrepareKeyFinished method is finished). It is used to mark the key
+  // as corporate.
+  std::string public_key_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

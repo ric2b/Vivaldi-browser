@@ -7,6 +7,7 @@
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/malloc_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -21,33 +22,6 @@ const char kPartitionsDumpName[] = "partitions";
 std::string GetPartitionDumpName(const char* partition_name) {
   return base::StringPrintf("%s/%s/%s", kPartitionAllocDumpName,
                             kPartitionsDumpName, partition_name);
-}
-
-void ThreadCacheDump(base::trace_event::MemoryAllocatorDump* thread_cache_dump,
-                     const base::internal::ThreadCacheStats& stats) {
-  thread_cache_dump->AddScalar("alloc_count", "scalar", stats.alloc_count);
-  thread_cache_dump->AddScalar("alloc_hits", "scalar", stats.alloc_hits);
-  thread_cache_dump->AddScalar("alloc_misses", "scalar", stats.alloc_misses);
-
-  thread_cache_dump->AddScalar("alloc_miss_empty", "scalar",
-                               stats.alloc_miss_empty);
-  thread_cache_dump->AddScalar("alloc_miss_too_large", "scalar",
-                               stats.alloc_miss_too_large);
-
-  thread_cache_dump->AddScalar("cache_fill_count", "scalar",
-                               stats.cache_fill_count);
-  thread_cache_dump->AddScalar("cache_fill_hits", "scalar",
-                               stats.cache_fill_hits);
-  thread_cache_dump->AddScalar("cache_fill_misses", "scalar",
-                               stats.cache_fill_misses);
-  thread_cache_dump->AddScalar("cache_fill_bucket_full", "scalar",
-                               stats.cache_fill_bucket_full);
-  thread_cache_dump->AddScalar("cache_fill_too_large", "scalar",
-                               stats.cache_fill_too_large);
-
-  thread_cache_dump->AddScalar("size", "bytes", stats.bucket_total_memory);
-  thread_cache_dump->AddScalar("metadata_overhead", "bytes",
-                               stats.metadata_overhead);
 }
 
 // This class is used to invert the dependency of PartitionAlloc on the
@@ -102,12 +76,14 @@ void PartitionStatsDumperImpl::PartitionDumpTotals(
     const auto& thread_cache_stats = memory_stats->current_thread_cache_stats;
     auto* thread_cache_dump = memory_dump_->CreateAllocatorDump(
         dump_name + "/thread_cache/main_thread");
-    ThreadCacheDump(thread_cache_dump, thread_cache_stats);
+    base::trace_event::ReportPartitionAllocThreadCacheStats(thread_cache_dump,
+                                                            thread_cache_stats);
 
     const auto& all_thread_caches_stats = memory_stats->all_thread_caches_stats;
-    auto* all_thread_caches_dump = memory_dump_->CreateAllocatorDump(
-        dump_name + "/thread_cache/all_threads");
-    ThreadCacheDump(all_thread_caches_dump, all_thread_caches_stats);
+    auto* all_thread_caches_dump =
+        memory_dump_->CreateAllocatorDump(dump_name + "/thread_cache");
+    base::trace_event::ReportPartitionAllocThreadCacheStats(
+        all_thread_caches_dump, all_thread_caches_stats);
   }
 }
 
@@ -134,16 +110,17 @@ void PartitionStatsDumperImpl::PartitionsDumpBucketStats(
                             memory_stats->decommittable_bytes);
   allocator_dump->AddScalar("discardable_size", "bytes",
                             memory_stats->discardable_bytes);
-  allocator_dump->AddScalar("total_pages_size", "bytes",
-                            memory_stats->allocated_page_size);
-  allocator_dump->AddScalar("active_pages", "objects",
-                            memory_stats->num_active_pages);
-  allocator_dump->AddScalar("full_pages", "objects",
-                            memory_stats->num_full_pages);
-  allocator_dump->AddScalar("empty_pages", "objects",
-                            memory_stats->num_empty_pages);
-  allocator_dump->AddScalar("decommitted_pages", "objects",
-                            memory_stats->num_decommitted_pages);
+  // TODO(bartekn): Rename the scalar names.
+  allocator_dump->AddScalar("total_slot_span_size", "bytes",
+                            memory_stats->allocated_slot_span_size);
+  allocator_dump->AddScalar("active_slot_spans", "objects",
+                            memory_stats->num_active_slot_spans);
+  allocator_dump->AddScalar("full_slot_spans", "objects",
+                            memory_stats->num_full_slot_spans);
+  allocator_dump->AddScalar("empty_slot_spans", "objects",
+                            memory_stats->num_empty_slot_spans);
+  allocator_dump->AddScalar("decommitted_slot_spans", "objects",
+                            memory_stats->num_decommitted_slot_spans);
 }
 
 }  // namespace

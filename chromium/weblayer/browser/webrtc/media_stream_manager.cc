@@ -56,12 +56,21 @@ class MediaStreamManager::StreamUi : public content::MediaStreamUI {
   }
 
   // content::MediaStreamUi:
-  gfx::NativeViewId OnStarted(base::OnceClosure stop,
-                              SourceCallback source) override {
+  gfx::NativeViewId OnStarted(
+      base::OnceClosure stop,
+      SourceCallback source,
+      const std::string& label,
+      std::vector<content::DesktopMediaID> screen_capture_ids,
+      StateChangeCallback state_change) override {
     stop_ = std::move(stop);
     if (manager_)
       manager_->RegisterStream(this);
     return 0;
+  }
+  void OnDeviceStopped(const std::string& label,
+                       const content::DesktopMediaID& media_id) override {}
+  void SetStopCallback(base::OnceClosure stop) override {
+    stop_ = std::move(stop);
   }
 
   bool streaming_audio() const { return streaming_audio_; }

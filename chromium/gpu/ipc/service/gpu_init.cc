@@ -16,6 +16,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/service_utils.h"
@@ -27,7 +28,6 @@
 #include "gpu/config/gpu_switching.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
-#include "gpu/ipc/service/gpu_watchdog_thread_v2.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/buildflags.h"
@@ -55,7 +55,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/android_image_reader_compat.h"
-#include "ui/gl/android/android_surface_control_compat.h"
+#include "ui/gfx/android/android_surface_control_compat.h"
 #endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -103,11 +103,11 @@ void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
   CollectHardwareOverlayInfo(&gpu_info->overlay_info);
 #elif defined(OS_ANDROID)
   if (gpu_info->gpu.vendor_string == "Qualcomm")
-    gl::SurfaceControl::EnableQualcommUBWC();
+    gfx::SurfaceControl::EnableQualcommUBWC();
 #endif
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_LACROS) || (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST))
 bool CanAccessNvidiaDeviceFile() {
   bool res = true;
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
@@ -118,7 +118,8 @@ bool CanAccessNvidiaDeviceFile() {
   }
   return res;
 }
-#endif  // OS_LINUX && !OS_CHROMEOS && !BUILDFLAG(IS_CHROMECAST)
+#endif  // BUILDFLAG(IS_LACROS) || (defined(OS_LINUX)  &&
+        // !BUILDFLAG(IS_CHROMECAST))
 
 class GpuWatchdogInit {
  public:
@@ -136,6 +137,7 @@ class GpuWatchdogInit {
 
 // TODO(https://crbug.com/1095744): We currently do not handle
 // VK_ERROR_DEVICE_LOST in in-process-gpu.
+// Android WebView is allowed for now because it CHECKs on context loss.
 void DisableInProcessGpuVulkan(GpuFeatureInfo* gpu_feature_info,
                                GpuPreferences* gpu_preferences) {
   if (gpu_feature_info->status_values[GPU_FEATURE_TYPE_VULKAN] ==
@@ -203,7 +205,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     device_perf_info_ = device_perf_info;
   }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || BUILDFLAG(IS_LACROS)
   if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
       gpu_info_.gpu.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
     return false;
@@ -249,7 +251,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   bool delayed_watchdog_enable = false;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   // Don't start watchdog immediately, to allow developers to switch to VT2 on
   // startup.
   delayed_watchdog_enable = true;
@@ -262,27 +264,22 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   if (gpu_preferences_.gpu_sandbox_start_early) {
     // The sandbox will be started earlier than usual (i.e. before GL) so
     // execute the pre-sandbox steps now.
-    sandbox_helper_->PreSandboxStartup();
+    sandbox_helper_->PreSandboxStartup(gpu_preferences);
   }
 #else
   // For some reasons MacOSX's VideoToolbox might crash when called after
   // initializing GL, see crbug.com/1047643 and crbug.com/871280. On other
   // operating systems like Windows and Android the pre-sandbox steps have
   // always been executed before initializing GL so keep it this way.
-  sandbox_helper_->PreSandboxStartup();
+  sandbox_helper_->PreSandboxStartup(gpu_preferences);
 #endif
 
   // Start the GPU watchdog only after anything that is expected to be time
   // consuming has completed, otherwise the process is liable to be aborted.
   if (enable_watchdog && !delayed_watchdog_enable) {
-    if (base::FeatureList::IsEnabled(features::kGpuWatchdogV2)) {
-      watchdog_thread_ = GpuWatchdogThreadImplV2::Create(
-          gpu_preferences_.watchdog_starts_backgrounded);
-      watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
-    } else {
-      watchdog_thread_ = GpuWatchdogThreadImplV1::Create(
-          gpu_preferences_.watchdog_starts_backgrounded);
-    }
+    watchdog_thread_ = GpuWatchdogThread::Create(
+        gpu_preferences_.watchdog_starts_backgrounded);
+    watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
 
 #if defined(OS_WIN)
     // This is a workaround for an occasional deadlock between watchdog and
@@ -382,7 +379,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       watchdog_thread_->PauseWatchdog();
 
     // The sandbox is not started yet.
-    sandbox_helper_->PreSandboxStartup();
+    sandbox_helper_->PreSandboxStartup(gpu_preferences);
 
     if (watchdog_thread_)
       watchdog_thread_->ResumeWatchdog();
@@ -569,14 +566,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     watchdog_thread_ = nullptr;
     watchdog_init.SetGpuWatchdogPtr(nullptr);
   } else if (enable_watchdog && delayed_watchdog_enable) {
-    if (base::FeatureList::IsEnabled(features::kGpuWatchdogV2)) {
-      watchdog_thread_ = GpuWatchdogThreadImplV2::Create(
-          gpu_preferences_.watchdog_starts_backgrounded);
-      watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
-    } else {
-      watchdog_thread_ = GpuWatchdogThreadImplV1::Create(
-          gpu_preferences_.watchdog_starts_backgrounded);
-    }
+    watchdog_thread_ = GpuWatchdogThread::Create(
+        gpu_preferences_.watchdog_starts_backgrounded);
+    watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
   }
 
   UMA_HISTOGRAM_ENUMERATION("GPU.GLImplementation", gl::GetGLImplementation());
@@ -620,7 +612,14 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   InitializeGLThreadSafe(command_line, gpu_preferences_, &gpu_info_,
                          &gpu_feature_info_);
 
-  DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
+  if (command_line->HasSwitch(switches::kWebViewDrawFunctorUsesVulkan) &&
+      base::FeatureList::IsEnabled(features::kWebViewVulkan)) {
+    bool result = InitializeVulkan();
+    // There is no fallback for webview.
+    CHECK(result);
+  } else {
+    DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
+  }
   default_offscreen_surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
 
   UMA_HISTOGRAM_ENUMERATION("GPU.GLImplementation", gl::GetGLImplementation());
@@ -775,12 +774,13 @@ bool GpuInit::InitializeVulkan() {
       gpu_preferences_.use_vulkan == VulkanImplementationName::kForcedNative;
   bool use_swiftshader = gl_use_swiftshader_ || vulkan_use_swiftshader;
 
-  const bool enforce_protected_memory =
-      gpu_preferences_.enforce_vulkan_protected_memory;
+  // If |enforce_vulkan_protected_memory| is true, then we expect
+  // |enable_vulkan_protected_memory| to be true.
+  DCHECK(!gpu_preferences_.enforce_vulkan_protected_memory ||
+         gpu_preferences_.enable_vulkan_protected_memory);
   vulkan_implementation_ = CreateVulkanImplementation(
-      vulkan_use_swiftshader,
-      enforce_protected_memory ? true : false /* allow_protected_memory */,
-      enforce_protected_memory);
+      vulkan_use_swiftshader, gpu_preferences_.enable_vulkan_protected_memory,
+      gpu_preferences_.enforce_vulkan_protected_memory);
   if (!vulkan_implementation_ ||
       !vulkan_implementation_->InitializeVulkanInstance(
           !gpu_preferences_.disable_vulkan_surface)) {

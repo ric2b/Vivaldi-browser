@@ -142,6 +142,7 @@ void ColorChooserPopupUIController::WriteColorPickerDocument(
                        data);
   AddLocalizedProperty("axFormatTogglerLabel", IDS_AX_COLOR_FORMAT_TOGGLER,
                        data);
+  AddLocalizedProperty("axEyedropperLabel", IDS_AX_COLOR_EYEDROPPER, data);
 #else
   CHECK(false) << "We should never reach PagePopupClient code on Android";
 #endif
@@ -276,7 +277,10 @@ void ColorChooserPopupUIController::EyeDropperResponseHandler(bool success,
 }
 
 void ColorChooserPopupUIController::OpenEyeDropper() {
-  if (!LocalFrame::HasTransientUserActivation(frame_))
+  // Don't open the eye dropper without user activation or if it is already
+  // opened.
+  if (!LocalFrame::HasTransientUserActivation(frame_) ||
+      eye_dropper_chooser_.is_bound())
     return;
 
   frame_->GetBrowserInterfaceBroker().GetInterface(

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
@@ -22,9 +23,9 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/autofill_regex_constants.h"
+#include "components/autofill/core/browser/autofill_regexes.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/common/autofill_regex_constants.h"
-#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -200,7 +201,7 @@ struct SignificantFields {
   bool is_fallback = false;
 
   // True iff the new password field was found with server hints or autocomplete
-  // attributes.
+  // attributes or the kTreatNewPasswordHeuristicsAsReliable feature is enabled.
   bool is_new_password_reliable = false;
 
   // True if the current form has only username, but no passwords.
@@ -233,11 +234,7 @@ bool IsFieldInSignificantFields(const SignificantFields& significant_fields,
 bool DoesPredictionCorrespondToField(
     const FormFieldData& field,
     const PasswordFieldPrediction& prediction) {
-#if defined(OS_IOS)
-  return field.unique_id == prediction.unique_id;
-#else
   return field.unique_renderer_id == prediction.renderer_id;
-#endif
 }
 
 // Returns the first element of |fields| which corresponds to |prediction|, or
@@ -807,8 +804,8 @@ void SetFields(const SignificantFields& significant_fields,
 // empty values are ignored.
 std::vector<ProcessedField> ProcessFields(
     const std::vector<FormFieldData>& fields,
-    autofill::ValueElementVector* all_possible_passwords,
-    autofill::ValueElementVector* all_possible_usernames,
+    ValueElementVector* all_possible_passwords,
+    ValueElementVector* all_possible_usernames,
     FormDataParser::Mode mode) {
   DCHECK(all_possible_passwords);
   DCHECK(all_possible_passwords->empty());
@@ -836,7 +833,7 @@ std::vector<ProcessedField> ProcessFields(
     if (!field_value.empty()) {
       std::set<base::StringPiece16>& seen_values =
           is_password ? seen_password_values : seen_username_values;
-      autofill::ValueElementVector* all_possible_fields =
+      ValueElementVector* all_possible_fields =
           is_password ? all_possible_passwords : all_possible_usernames;
       // Only the field name of the first occurrence is added.
       auto insertion = seen_values.insert(field_value);
@@ -892,8 +889,8 @@ bool GetMayUsePrefilledPlaceholder(
 std::unique_ptr<PasswordForm> AssemblePasswordForm(
     const FormData& form_data,
     const SignificantFields& significant_fields,
-    autofill::ValueElementVector all_possible_passwords,
-    autofill::ValueElementVector all_possible_usernames,
+    ValueElementVector all_possible_passwords,
+    ValueElementVector all_possible_usernames,
     const base::Optional<FormPredictions>& form_predictions) {
   if (!significant_fields.HasPasswords() &&
       !significant_fields.is_single_username) {
@@ -945,8 +942,8 @@ std::unique_ptr<PasswordForm> FormDataParser::Parse(const FormData& form_data,
     return nullptr;
 
   readonly_status_ = ReadonlyPasswordFields::kNoHeuristics;
-  autofill::ValueElementVector all_possible_passwords;
-  autofill::ValueElementVector all_possible_usernames;
+  ValueElementVector all_possible_passwords;
+  ValueElementVector all_possible_usernames;
   std::vector<ProcessedField> processed_fields = ProcessFields(
       form_data.fields, &all_possible_passwords, &all_possible_usernames, mode);
 
@@ -974,16 +971,10 @@ std::unique_ptr<PasswordForm> FormDataParser::Parse(const FormData& form_data,
     }
   }
 
-  // Pass the "reliability" information to mark the new-password fields as
-  // eligible for automatic password generation. This only makes sense when
-  // forms are analysed for filling, because no passwords are generated when the
-  // user saves the already entered one.
-  if (mode == Mode::kFilling && significant_fields.new_password) {
-    significant_fields.is_new_password_reliable = true;
-  }
-
   // (3) Now try to fill the gaps.
   const bool username_found_before_heuristic = significant_fields.username;
+  const bool new_password_found_before_heuristic =
+      significant_fields.new_password;
 
   // Try to parse with base heuristic.
   if (!significant_fields.is_single_username) {
@@ -1014,6 +1005,16 @@ std::unique_ptr<PasswordForm> FormDataParser::Parse(const FormData& form_data,
       }
     }
   }
+
+  // Pass the "reliability" information to mark the new-password fields as
+  // eligible for automatic password generation. This only makes sense when
+  // forms are analysed for filling, because no passwords are generated when the
+  // user saves the already entered one.
+  significant_fields.is_new_password_reliable =
+      mode == Mode::kFilling && significant_fields.new_password &&
+      (new_password_found_before_heuristic ||
+       base::FeatureList::IsEnabled(
+           features::kTreatNewPasswordHeuristicsAsReliable));
 
   base::UmaHistogramEnumeration("PasswordManager.UsernameDetectionMethod",
                                 method);

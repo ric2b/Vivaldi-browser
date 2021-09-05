@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -18,6 +18,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/test/browser_test.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -102,6 +103,14 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     return controller_ && controller_->IsWidgetVisibleForTesting();
   }
 
+  bool CanWidgetActivate() {
+    return GetCaptionWidget() && GetCaptionWidget()->CanActivate();
+  }
+
+  bool IsWidgetActive() {
+    return GetCaptionWidget() && GetCaptionWidget()->IsActive();
+  }
+
   void DestroyController() { controller_.reset(nullptr); }
 
   void ClickButton(views::Button* button) {
@@ -150,6 +159,19 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
   void OnError(int tab_index = 0) {
     GetController()->OnError(
         browser()->tab_strip_model()->GetWebContentsAt(tab_index));
+  }
+
+  std::vector<std::string> GetVirtualChildrenText() {
+    return GetBubble()->GetVirtualChildrenTextForTesting();
+  }
+
+  void SetTickClockForTesting(const base::TickClock* tick_clock) {
+    GetController()->caption_bubble_->set_tick_clock_for_testing(tick_clock);
+  }
+
+  void UnfocusCaptionWidget() {
+    GetController()->caption_bubble_->AcceleratorPressed(
+        ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
   }
 
  private:
@@ -427,6 +449,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
       "Honeybees have tiny hairs on their eyes to help them collect pollen");
   // Not focused initially.
   EXPECT_FALSE(GetBubble()->HasFocus());
+  // In the tests, the widget must be active for the key presses to be handled.
+  GetCaptionWidget()->Activate();
 
   // Key presses do not change the bounds when it is not focused.
   gfx::Rect bounds = GetCaptionWidget()->GetClientAreaBoundsInScreen();
@@ -480,6 +504,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, FocusableInTabOrder) {
   EXPECT_FALSE(GetBubble()->HasFocus());
   EXPECT_FALSE(GetCloseButton()->HasFocus());
   EXPECT_FALSE(GetBubble()->GetFocusManager()->GetFocusedView());
+  // In the tests, the widget must be active for the key presses to be handled.
+  GetCaptionWidget()->Activate();
 
   // Press tab until we enter the bubble.
   while (!GetBubble()->HasFocus()) {
@@ -869,6 +895,212 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, NonAsciiCharacter) {
 
   OnFinalTranscription("猫も大丈夫");
   EXPECT_EQ("猫も大丈夫", GetLabelText());
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextComputedWhenAccessibilityModeEnabled) {
+  // If accessibility is disabled, virtual children aren't computed.
+  content::BrowserAccessibilityState::GetInstance()->DisableAccessibility();
+  OnFinalTranscription("A dog's nose print");
+  EXPECT_EQ(0u, GetVirtualChildrenText().size());
+
+  // When accessibility is enabled, virtual children are computed.
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription("is unique");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("A dog's nose print is unique", GetVirtualChildrenText()[0]);
+
+  // When accessibility is disabled, virtual children are no longer being
+  // updated.
+  content::BrowserAccessibilityState::GetInstance()->DisableAccessibility();
+  OnFinalTranscription("like a fingerprint");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("A dog's nose print is unique", GetVirtualChildrenText()[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextSplitsIntoNodesByLine) {
+  // Make a line of 500 characters.
+  std::string line(499, 'a');
+  line.push_back(' ');
+
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnPartialTranscription(line);
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ(line, GetVirtualChildrenText()[0]);
+  OnPartialTranscription(line + line);
+  EXPECT_EQ(2u, GetVirtualChildrenText().size());
+  EXPECT_EQ(line, GetVirtualChildrenText()[0]);
+  EXPECT_EQ(line, GetVirtualChildrenText()[1]);
+  OnPartialTranscription(line);
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ(line, GetVirtualChildrenText()[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextClearsWhenBubbleCloses) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription("Dogs' noses are wet to help them smell.");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("Dogs' noses are wet to help them smell.",
+            GetVirtualChildrenText()[0]);
+  ClickButton(GetCloseButton());
+  EXPECT_EQ(0u, GetVirtualChildrenText().size());
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextClearsWhenTabRefreshes) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription("Newfoundlands are amazing lifeguards.");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("Newfoundlands are amazing lifeguards.",
+            GetVirtualChildrenText()[0]);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_EQ(0u, GetVirtualChildrenText().size());
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextChangesWhenTabChanges) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription("3 dogs survived the Titanic sinking.");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("3 dogs survived the Titanic sinking.",
+            GetVirtualChildrenText()[0]);
+
+  InsertNewTab();
+  ActivateTabAt(1);
+  OnFinalTranscription("30% of Dalmations are deaf in one ear.", 1);
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("30% of Dalmations are deaf in one ear.",
+            GetVirtualChildrenText()[0]);
+
+  ActivateTabAt(0);
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("3 dogs survived the Titanic sinking. ",
+            GetVirtualChildrenText()[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextClearsOnError) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription("The Saluki is the oldest dog breed.");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("The Saluki is the oldest dog breed.", GetVirtualChildrenText()[0]);
+  OnError();
+  EXPECT_EQ(0u, GetVirtualChildrenText().size());
+
+  // Clear the error by refreshing.
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+
+  OnFinalTranscription("Chow Chows have black tongues.");
+  EXPECT_EQ(1u, GetVirtualChildrenText().size());
+  EXPECT_EQ("Chow Chows have black tongues.", GetVirtualChildrenText()[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       AccessibleTextTruncates) {
+  // Make a string with 30 lines of 500 characters each.
+  std::string text;
+  std::string line(497, 'a');
+  for (int i = 10; i < 40; i++) {
+    text += base::NumberToString(i) + line + " ";
+  }
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  OnFinalTranscription(text);
+  EXPECT_EQ(9u, GetVirtualChildrenText().size());
+  for (int i = 0; i < 9; i++) {
+    EXPECT_EQ(base::NumberToString(i + 31) + line + " ",
+              GetVirtualChildrenText()[i]);
+  }
+  OnPartialTranscription(text);
+  EXPECT_EQ(39u, GetVirtualChildrenText().size());
+  for (int i = 0; i < 9; i++) {
+    EXPECT_EQ(base::NumberToString(i + 31) + line + " ",
+              GetVirtualChildrenText()[i]);
+  }
+  for (int i = 10; i < 40; i++) {
+    EXPECT_EQ(base::NumberToString(i) + line + " ",
+              GetVirtualChildrenText()[i - 1]);
+  }
+  OnFinalTranscription("a ");
+  EXPECT_EQ(9u, GetVirtualChildrenText().size());
+  for (int i = 0; i < 8; i++) {
+    EXPECT_EQ(base::NumberToString(i + 32) + line + " ",
+              GetVirtualChildrenText()[i]);
+  }
+  EXPECT_EQ("a ", GetVirtualChildrenText()[8]);
+}
+
+#if !defined(OS_MAC)
+// Tests are flaky on Mac: Mac browsertests do not have an activation policy so
+// the widget activation may not work as expected.
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       BubbleDeactivatedWhenHidden) {
+  EXPECT_FALSE(IsWidgetVisible());
+  EXPECT_FALSE(CanWidgetActivate());
+  EXPECT_FALSE(IsWidgetActive());
+  OnPartialTranscription("Cows can detect odors up to 6 miles away.");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_TRUE(CanWidgetActivate());
+  EXPECT_FALSE(IsWidgetActive());
+  GetBubble()->RequestFocus();
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_TRUE(CanWidgetActivate());
+  EXPECT_TRUE(IsWidgetActive());
+  ClickButton(GetCloseButton());
+  EXPECT_FALSE(IsWidgetVisible());
+  EXPECT_FALSE(CanWidgetActivate());
+  EXPECT_FALSE(IsWidgetActive());
+}
+#endif
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, HidesAfterInactivity) {
+  // Use a ScopedMockTimeMessageLoopTaskRunner to test the inactivity timer with
+  // a mock tick clock that replaces the default tick clock with mock time.
+  base::ScopedMockTimeMessageLoopTaskRunner test_task_runner;
+  SetTickClockForTesting(test_task_runner->GetMockTickClock());
+
+  // Caption bubble hides after 5 seconds without receiving a transcription.
+  OnPartialTranscription("Bowhead whales can live for over 200 years.");
+  EXPECT_TRUE(IsWidgetVisible());
+  ASSERT_TRUE(GetBubble()->GetInactivityTimerForTesting()->IsRunning());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  EXPECT_FALSE(IsWidgetVisible());
+
+  // Caption bubble becomes visible when transcription is received, and stays
+  // visible if transcriptions are received before 5 seconds have passed.
+  OnPartialTranscription("Killer whales");
+  EXPECT_TRUE(IsWidgetVisible());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(4));
+  EXPECT_TRUE(IsWidgetVisible());
+  OnPartialTranscription("Killer whales travel in matrifocal groups");
+  EXPECT_TRUE(IsWidgetVisible());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(4));
+  EXPECT_TRUE(IsWidgetVisible());
+  OnFinalTranscription(
+      "Killer whales travel in matrifocal groups--a family unit centered on "
+      "the mother.");
+  EXPECT_TRUE(IsWidgetVisible());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(4));
+  EXPECT_TRUE(IsWidgetVisible());
+
+  // In the tests, the widget must be active.
+  GetCaptionWidget()->Activate();
+  // Caption bubble stays visible while it has focus.
+  GetBubble()->RequestFocus();
+  EXPECT_TRUE(IsWidgetVisible());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  EXPECT_TRUE(IsWidgetVisible());
+
+  UnfocusCaptionWidget();
+  EXPECT_FALSE(GetBubble()->HasFocus());
+  EXPECT_TRUE(IsWidgetVisible());
+  test_task_runner->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  EXPECT_FALSE(IsWidgetVisible());
 }
 
 }  // namespace captions

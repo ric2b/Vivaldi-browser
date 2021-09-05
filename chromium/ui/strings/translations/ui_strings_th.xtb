@@ -18,11 +18,12 @@
 <translation id="1306549533752902673">แอปแนะนำ</translation>
 <translation id="1368832886055348810">ซ้ายไปขวา</translation>
 <translation id="1383876407941801731">ค้นหา</translation>
-<translation id="1398853756734560583">ย่อ</translation>
+<translation id="1398853756734560583">ขยายใหญ่สุด</translation>
 <translation id="1414271762428216854"><ph name="APP_NAME" />, ติดตั้งแอปแล้ว</translation>
 <translation id="1450753235335490080">แชร์<ph name="CONTENT_TYPE" />ไม่สำเร็จ</translation>
 <translation id="1487931858675166540">สลับ <ph name="FIRST_ITEM_TITLE" /> กับ <ph name="SECOND_ITEM_TITLE" /> แล้ว</translation>
 <translation id="1498028757988366001">คุณเคยค้นหารายการนี้ การลบ "<ph name="QUERY" />" ออกจากประวัติการเข้าชมจะนำรายการนี้ออกจากบัญชีของคุณในอุปกรณ์ทุกเครื่องอย่างถาวร</translation>
+<translation id="1510238584712386396">ตัวเรียกใช้งาน</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 นาทีกับอีก }other{# นาทีกับอีก }}</translation>
 <translation id="1643823602425662293">การแจ้งเตือน</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">ไฟล์ <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">ค้นหา “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">ประวัติคลิปบอร์ด</translation>
 <translation id="364720409959344976">เลือกโฟลเดอร์เพื่ออัปโหลด</translation>
 <translation id="3660179305079774227">ลูกศรขึ้น</translation>
 <translation id="3670030362669914947">หมายเลข</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{ใช้งานวันนี้}=1{ใช้งานเมื่อ 1 วันที่ผ่านมา}other{ใช้งานเมื่อ # วันที่ผ่านมา}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 วันกับอีก }other{# วันกับอีก }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">รูปภาพ</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{ใน 1 ปี}other{ใน # ปี}}</translation>
 <translation id="588258955323874662">เต็มหน้าจอ</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{เหลือ 1 วินาที}other{เหลือ # วินาที}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">กด</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{เหลือ 1 ชั่วโมง}other{เหลือ # ชั่วโมง}}</translation>
 <translation id="688711909580084195">หน้าเว็บที่ไม่มีชื่อ</translation>
+<translation id="6902419395050653510">เนื้อหา HTML</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/วินาที</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{เหลือ 1 ปี}other{เหลือ # ปี}}</translation>
 <translation id="6945221475159498467">เลือก</translation>

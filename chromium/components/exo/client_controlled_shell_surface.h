@@ -19,7 +19,6 @@
 
 namespace ash {
 class NonClientFrameViewAsh;
-class ImmersiveFullscreenController;
 class RoundedCornerDecorator;
 class WideFrameView;
 
@@ -27,6 +26,10 @@ namespace mojom {
 enum class WindowPinType;
 }
 }  // namespace ash
+
+namespace chromeos {
+class ImmersiveFullscreenController;
+}  // namespace chromeos
 
 namespace exo {
 class Surface;
@@ -91,8 +94,8 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
 
   // Set the callback to run when the surface state changed.
   using StateChangedCallback =
-      base::RepeatingCallback<void(ash::WindowStateType old_state_type,
-                                   ash::WindowStateType new_state_type)>;
+      base::RepeatingCallback<void(chromeos::WindowStateType old_state_type,
+                                   chromeos::WindowStateType new_state_type)>;
   void set_state_changed_callback(
       const StateChangedCallback& state_changed_callback) {
     state_changed_callback_ = state_changed_callback;
@@ -100,8 +103,8 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
 
   // Set the callback to run when the surface bounds changed.
   using BoundsChangedCallback =
-      base::RepeatingCallback<void(ash::WindowStateType current_state,
-                                   ash::WindowStateType requested_state,
+      base::RepeatingCallback<void(chromeos::WindowStateType current_state,
+                                   chromeos::WindowStateType requested_state,
                                    int64_t display_id,
                                    const gfx::Rect& bounds_in_display,
                                    bool is_resize,
@@ -138,7 +141,7 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
 
   // Pin/unpin the surface. Pinned surface cannot be switched to
   // other windows unless its explicitly unpinned.
-  void SetPinned(ash::WindowPinType type);
+  void SetPinned(chromeos::WindowPinType type);
 
   // Sets the surface to be on top of all other windows.
   void SetAlwaysOnTop(bool always_on_top);
@@ -172,16 +175,16 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
   void ChangeZoomLevel(ZoomChange change);
 
   // Sends the window state change event to client.
-  void OnWindowStateChangeEvent(ash::WindowStateType old_state,
-                                ash::WindowStateType next_state);
+  void OnWindowStateChangeEvent(chromeos::WindowStateType old_state,
+                                chromeos::WindowStateType next_state);
 
   // Sends the window bounds change event to client. |display_id| specifies in
   // which display the surface should live in. |drag_bounds_change| is
   // a masked value of ash::WindowResizer::kBoundsChange_Xxx, and specifies
   // how the bounds was changed. The bounds change event may also come from a
   // snapped window state change |requested_state|.
-  void OnBoundsChangeEvent(ash::WindowStateType current_state,
-                           ash::WindowStateType requested_state,
+  void OnBoundsChangeEvent(chromeos::WindowStateType current_state,
+                           chromeos::WindowStateType requested_state,
                            int64_t display_id,
                            const gfx::Rect& bounds,
                            int drag_bounds_change);
@@ -314,6 +317,10 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
   void EnsurePendingScale();
   float GetClientToDpPendingScale() const;
 
+  gfx::Rect GetClientBoundsForWindowBoundsAndWindowState(
+      const gfx::Rect& window_bounds,
+      chromeos::WindowStateType window_state) const;
+
   GeometryChangedCallback geometry_changed_callback_;
 
   int top_inset_height_ = 0;
@@ -340,17 +347,18 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
 
   ash::ClientControlledState* client_controlled_state_ = nullptr;
 
-  ash::WindowStateType pending_window_state_ = ash::WindowStateType::kNormal;
+  chromeos::WindowStateType pending_window_state_ =
+      chromeos::WindowStateType::kNormal;
 
   bool pending_always_on_top_ = false;
 
   SurfaceFrameType pending_frame_type_ = SurfaceFrameType::NONE;
 
-  ash::WindowPinType current_pin_;
+  chromeos::WindowPinType current_pin_;
 
   bool can_maximize_ = true;
 
-  std::unique_ptr<ash::ImmersiveFullscreenController>
+  std::unique_ptr<chromeos::ImmersiveFullscreenController>
       immersive_fullscreen_controller_;
 
   std::unique_ptr<ash::WideFrameView> wide_frame_;
@@ -363,6 +371,8 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
   // widget is not created yet orientation lock is being set.
   ash::OrientationLockType initial_orientation_lock_ =
       ash::OrientationLockType::kAny;
+  // The extra title to be applied when widget is being created.
+  base::string16 initial_extra_title_ = base::string16();
 
   bool preserve_widget_bounds_ = false;
 

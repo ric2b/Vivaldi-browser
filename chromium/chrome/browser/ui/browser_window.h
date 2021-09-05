@@ -21,8 +21,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
-#include "chrome/browser/ui/in_product_help/in_product_help.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/user_education/in_product_help.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/translate/core/common/translate_errors.h"
@@ -55,11 +55,6 @@ class WebContents;
 struct NativeWebKeyboardEvent;
 enum class KeyboardEventProcessingResult;
 }  // namespace content
-
-namespace extensions {
-class Command;
-class Extension;
-}  // namespace extensions
 
 namespace gfx {
 class Size;
@@ -485,11 +480,11 @@ class BrowserWindow : public ui::BaseWindow {
   // Shows User Happiness Tracking Survey's invitation bubble when possible
   // (such as having the proper anchor view).
   // |site_id| is the site identification of the survey the bubble leads to.
-  virtual void ShowHatsBubble(const std::string& site_id) = 0;
-
-  // Executes |command| registered by |extension|.
-  virtual void ExecuteExtensionCommand(const extensions::Extension* extension,
-                                       const extensions::Command& command) = 0;
+  // Note: |success_callback| and |failure_callback| are discarded for HaTS v1
+  // surveys, which are deprecated (crbug.com/1143176).
+  virtual void ShowHatsBubble(const std::string& site_id,
+                              base::OnceClosure success_callback,
+                              base::OnceClosure failure_callback) = 0;
 
   // Returns object implementing ExclusiveAccessContext interface.
   virtual ExclusiveAccessContext* GetExclusiveAccessContext() = 0;
@@ -515,6 +510,8 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Create and open the tab search bubble.
   virtual void CreateTabSearchBubble() = 0;
+  // Closes the tab search bubble if open for the given browser instance.
+  virtual void CloseTabSearchBubble() = 0;
 
   // Gets the windows's FeaturePromoController which manages display of
   // in-product help.

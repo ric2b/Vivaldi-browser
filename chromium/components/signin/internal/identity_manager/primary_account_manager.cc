@@ -135,7 +135,7 @@ bool PrimaryAccountManager::IsInitialized() const {
 }
 
 CoreAccountInfo PrimaryAccountManager::GetAuthenticatedAccountInfo() const {
-  if (!IsAuthenticated())
+  if (!HasPrimaryAccount(signin::ConsentLevel::kSync))
     return CoreAccountInfo();
   return primary_account_info();
 }
@@ -149,13 +149,9 @@ CoreAccountInfo PrimaryAccountManager::GetUnconsentedPrimaryAccountInfo()
   return primary_account_info();
 }
 
-bool PrimaryAccountManager::HasUnconsentedPrimaryAccount() const {
-  return !primary_account_info().account_id.empty();
-}
-
 void PrimaryAccountManager::SetUnconsentedPrimaryAccountInfo(
     CoreAccountInfo account_info) {
-  if (IsAuthenticated()) {
+  if (HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     DCHECK_EQ(account_info, GetAuthenticatedAccountInfo());
     return;
   }
@@ -172,7 +168,7 @@ void PrimaryAccountManager::SetUnconsentedPrimaryAccountInfo(
 void PrimaryAccountManager::SetAuthenticatedAccountInfo(
     const CoreAccountInfo& account_info) {
   DCHECK(!account_info.account_id.empty());
-  DCHECK(!IsAuthenticated());
+  DCHECK(!HasPrimaryAccount(signin::ConsentLevel::kSync));
 
 #if DCHECK_IS_ON()
   {
@@ -220,11 +216,20 @@ void PrimaryAccountManager::SetPrimaryAccountInternal(
   }
 }
 
-bool PrimaryAccountManager::IsAuthenticated() const {
+bool PrimaryAccountManager::HasPrimaryAccount(
+    signin::ConsentLevel consent_level) const {
   bool consented_pref =
       client_->GetPrefs()->GetBoolean(prefs::kGoogleServicesConsentedToSync);
-  DCHECK(!consented_pref || !primary_account_info().account_id.empty());
-  return consented_pref;
+  if (primary_account_info().account_id.empty()) {
+    DCHECK(!consented_pref);
+    return false;
+  }
+  switch (consent_level) {
+    case signin::ConsentLevel::kNotRequired:
+      return true;
+    case signin::ConsentLevel::kSync:
+      return consented_pref;
+  }
 }
 
 void PrimaryAccountManager::SignIn(const std::string& username) {
@@ -233,7 +238,7 @@ void PrimaryAccountManager::SignIn(const std::string& username) {
   DCHECK(!info.gaia.empty());
   DCHECK(!info.email.empty());
   DCHECK(!info.account_id.empty());
-  if (IsAuthenticated()) {
+  if (HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     DCHECK_EQ(info.account_id, GetAuthenticatedAccountId())
         << "Changing the authenticated account while it is not allowed.";
     return;
@@ -251,7 +256,7 @@ void PrimaryAccountManager::SignIn(const std::string& username) {
 
 void PrimaryAccountManager::UpdateAuthenticatedAccountInfo() {
   DCHECK(!primary_account_info().account_id.empty());
-  DCHECK(IsAuthenticated());
+  DCHECK(HasPrimaryAccount(signin::ConsentLevel::kSync));
   const CoreAccountInfo info = account_tracker_service_->GetAccountInfo(
       primary_account_info().account_id);
   DCHECK_EQ(info.account_id, primary_account_info().account_id);
@@ -294,7 +299,7 @@ void PrimaryAccountManager::SignOutAndKeepAllAccounts(
 
 #if defined(OS_CHROMEOS)
 void PrimaryAccountManager::RevokeSyncConsent() {
-  DCHECK(IsAuthenticated());
+  DCHECK(HasPrimaryAccount(signin::ConsentLevel::kSync));
   // TODO(https://crbug.com/1046746): Don't record metrics here.
   StartSignOut(signin_metrics::ProfileSignout::USER_CLICKED_SIGNOUT_SETTINGS,
                signin_metrics::SignoutDelete::KEEPING,
@@ -311,7 +316,7 @@ void PrimaryAccountManager::StartSignOut(
   VLOG(1) << "StartSignOut: " << static_cast<int>(signout_source_metric) << ", "
           << static_cast<int>(signout_delete_metric) << ", "
           << static_cast<int>(remove_option);
-  if (IsAuthenticated()) {
+  if (HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     client_->PreSignOut(
         base::BindOnce(&PrimaryAccountManager::OnSignoutDecisionReached,
                        base::Unretained(this), signout_source_metric,
@@ -354,7 +359,7 @@ void PrimaryAccountManager::OnSignoutDecisionReached(
   const CoreAccountInfo account_info = primary_account_info();
   client_->GetPrefs()->ClearPref(prefs::kGoogleServicesHostedDomain);
   // Revoke the sync consent.
-  if (IsAuthenticated())
+  if (HasPrimaryAccount(signin::ConsentLevel::kSync))
     SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/false);
 
   // Revoke all tokens before sending signed_out notification, because there

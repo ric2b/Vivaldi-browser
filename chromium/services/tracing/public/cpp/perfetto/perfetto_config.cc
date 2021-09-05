@@ -9,10 +9,12 @@
 
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "services/tracing/public/cpp/perfetto/trace_time.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
 
@@ -49,6 +51,17 @@ void AddDataSourceConfigs(
     perfetto::protos::gen::ChromeConfig::ClientPriority client_priority) {
   const std::string chrome_config_string = stripped_config.ToString();
 
+  if (stripped_config.IsCategoryGroupEnabled(
+          base::trace_event::MemoryDumpManager::kTraceCategory)) {
+    DCHECK(source_names.empty() ||
+           source_names.count(
+               tracing::mojom::kMemoryInstrumentationDataSourceName));
+    AddDataSourceConfig(perfetto_config,
+                        tracing::mojom::kMemoryInstrumentationDataSourceName,
+                        chrome_config_string, privacy_filtering_enabled,
+                        convert_to_legacy_json, client_priority);
+  }
+
   // Capture actual trace events.
   if (source_names.empty() ||
       source_names.count(tracing::mojom::kTraceEventDataSourceName) == 1) {
@@ -76,7 +89,7 @@ void AddDataSourceConfigs(
     }
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     if (source_names.empty() ||
         source_names.count(tracing::mojom::kArcTraceDataSourceName) == 1) {
       AddDataSourceConfig(perfetto_config,

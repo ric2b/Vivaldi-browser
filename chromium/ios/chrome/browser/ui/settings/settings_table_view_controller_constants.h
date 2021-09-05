@@ -7,6 +7,47 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/chrome/browser/ui/list_model/list_model.h"
+
+// Sections used in Settings page.
+typedef NS_ENUM(NSInteger, SettingsSectionIdentifier) {
+  SettingsSectionIdentifierSignIn = kSectionIdentifierEnumZero,
+  SettingsSectionIdentifierAccount,
+  SettingsSectionIdentifierBasics,
+  SettingsSectionIdentifierAdvanced,
+  SettingsSectionIdentifierInfo,
+  SettingsSectionIdentifierDebug,
+  SettingsSectionIdentifierDefaults,
+};
+
+// Item types used per Setting section.
+typedef NS_ENUM(NSInteger, SettingsItemType) {
+  SettingsItemTypeSignInButton = kItemTypeEnumZero,
+  SettingsItemTypeSigninPromo,
+  SettingsItemTypeAccount,
+  SettingsItemTypeSyncAndGoogleServices,
+  SettingsItemTypeGoogleSync,
+  SettingsItemTypeGoogleServices,
+  SettingsItemTypeHeader,
+  SettingsItemTypeSearchEngine,
+  SettingsItemTypeManagedDefaultSearchEngine,
+  SettingsItemTypePasswords,
+  SettingsItemTypeAutofillCreditCard,
+  SettingsItemTypeAutofillProfile,
+  SettingsItemTypeVoiceSearch,
+  SettingsItemTypePrivacy,
+  SettingsItemTypeLanguageSettings,
+  SettingsItemTypeContentSettings,
+  SettingsItemTypeBandwidth,
+  SettingsItemTypeAboutChrome,
+  SettingsItemTypeMemoryDebugging,
+  SettingsItemTypeViewSource,
+  SettingsItemTypeTableCellCatalog,
+  SettingsItemTypeArticlesForYou,
+  SettingsItemTypeSafetyCheck,
+  SettingsItemTypeDefaultBrowser,
+};
+
 // The accessibility identifier of the settings TableView.
 extern NSString* const kSettingsTableViewId;
 
@@ -27,6 +68,9 @@ extern NSString* const kSettingsVoiceSearchCellId;
 
 // The accessibility identifier of the Sync and Google services cell.
 extern NSString* const kSettingsGoogleSyncAndServicesCellId;
+
+// The accessibility identifier of the Google services cell.
+extern NSString* const kSettingsGoogleServicesCellId;
 
 // The accessibility identifier of the Passwords cell.
 extern NSString* const kSettingsPasswordsCellId;

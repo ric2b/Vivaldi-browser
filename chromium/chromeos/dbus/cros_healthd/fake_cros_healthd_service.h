@@ -58,12 +58,8 @@ class FakeCrosHealthdService final
   void RunUrandomRoutine(uint32_t length_seconds,
                          RunUrandomRoutineCallback callback) override;
   void RunBatteryCapacityRoutine(
-      uint32_t low_mah,
-      uint32_t high_mah,
       RunBatteryCapacityRoutineCallback callback) override;
   void RunBatteryHealthRoutine(
-      uint32_t maximum_cycle_count,
-      uint32_t percent_battery_wear_allowed,
       RunBatteryHealthRoutineCallback callback) override;
   void RunSmartctlCheckRoutine(
       RunSmartctlCheckRoutineCallback callback) override;
@@ -102,6 +98,18 @@ class FakeCrosHealthdService final
       RunLanConnectivityRoutineCallback callback) override;
   void RunSignalStrengthRoutine(
       RunSignalStrengthRoutineCallback callback) override;
+  void RunGatewayCanBePingedRoutine(
+      RunGatewayCanBePingedRoutineCallback callback) override;
+  void RunHasSecureWiFiConnectionRoutine(
+      RunHasSecureWiFiConnectionRoutineCallback callback) override;
+  void RunDnsResolverPresentRoutine(
+      RunDnsResolverPresentRoutineCallback callback) override;
+  void RunDnsLatencyRoutine(RunDnsLatencyRoutineCallback callback) override;
+  void RunDnsResolutionRoutine(
+      RunDnsResolutionRoutineCallback callback) override;
+  void RunCaptivePortalRoutine(
+      RunCaptivePortalRoutineCallback callback) override;
+  void RunHttpFirewallRoutine(RunHttpFirewallRoutineCallback callback) override;
 
   // CrosHealthdEventService overrides:
   void AddBluetoothObserver(
@@ -145,9 +153,38 @@ class FakeCrosHealthdService final
   // Calls the power event OnAcInserted for all registered power observers.
   void EmitAcInsertedEventForTesting();
 
+  // Calls the power event OnAcRemoved on all registered power observers.
+  void EmitAcRemovedEventForTesting();
+
+  // Calls the power event OnOsSuspend on all registered power observers.
+  void EmitOsSuspendEventForTesting();
+
+  // Calls the power event OnOsResume on all registered power observers.
+  void EmitOsResumeEventForTesting();
+
   // Calls the Bluetooth event OnAdapterAdded for all registered Bluetooth
   // observers.
   void EmitAdapterAddedEventForTesting();
+
+  // Calls the Bluetooth event OnAdapterRemoved on all registered Bluetooth
+  // observers.
+  void EmitAdapterRemovedEventForTesting();
+
+  // Calls the Bluetooth event OnAdapterPropertyChanged on all registered
+  // Bluetooth observers.
+  void EmitAdapterPropertyChangedEventForTesting();
+
+  // Calls the Bluetooth event OnDeviceAdded on all registered Bluetooth
+  // observers.
+  void EmitDeviceAddedEventForTesting();
+
+  // Calls the Bluetooth event OnDeviceRemoved on all registered Bluetooth
+  // observers.
+  void EmitDeviceRemovedEventForTesting();
+
+  // Calls the Bluetooth event OnDevicePropertyChanged on all registered
+  // Bluetooth observers.
+  void EmitDevicePropertyChangedEventForTesting();
 
   // Calls the lid event OnLidClosed for all registered lid observers.
   void EmitLidClosedEventForTesting();

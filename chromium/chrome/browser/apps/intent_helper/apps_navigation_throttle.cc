@@ -15,7 +15,7 @@
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/intent_helper/intent_picker_auto_display_service.h"
 #include "chrome/browser/apps/intent_helper/page_transition_util.h"
-#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -28,8 +28,8 @@
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_tab_helper_base.h"
 #include "chrome/common/chrome_features.h"
+#include "components/no_state_prefetch/browser/prerender_contents.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
-#include "components/prerender/browser/prerender_contents.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -172,7 +172,7 @@ void AppsNavigationThrottle::OnIntentPickerClosed(
       break;
     case PickerEntryType::kArc:
     case PickerEntryType::kDevice:
-    case PickerEntryType::kMacNative:
+    case PickerEntryType::kMacOs:
       NOTREACHED();
   }
 }
@@ -283,20 +283,23 @@ AppsNavigationThrottle::Platform AppsNavigationThrottle::GetDestinationPlatform(
   switch (picker_action) {
     case PickerAction::ARC_APP_PRESSED:
     case PickerAction::ARC_APP_PREFERRED_PRESSED:
+    case PickerAction::PREFERRED_ARC_ACTIVITY_FOUND:
       return Platform::ARC;
     case PickerAction::PWA_APP_PRESSED:
+    case PickerAction::PWA_APP_PREFERRED_PRESSED:
+    case PickerAction::PREFERRED_PWA_FOUND:
       return Platform::PWA;
-    case PickerAction::MAC_NATIVE_APP_PRESSED:
-      return Platform::MAC_NATIVE;
+    case PickerAction::MAC_OS_APP_PRESSED:
+      return Platform::MAC_OS;
     case PickerAction::ERROR_BEFORE_PICKER:
     case PickerAction::ERROR_AFTER_PICKER:
     case PickerAction::DIALOG_DEACTIVATED:
     case PickerAction::CHROME_PRESSED:
     case PickerAction::CHROME_PREFERRED_PRESSED:
+    case PickerAction::PREFERRED_CHROME_BROWSER_FOUND:
       return Platform::CHROME;
     case PickerAction::DEVICE_PRESSED:
       return Platform::DEVICE;
-    case PickerAction::PREFERRED_ACTIVITY_FOUND:
     case PickerAction::OBSOLETE_ALWAYS_PRESSED:
     case PickerAction::OBSOLETE_JUST_ONCE_PRESSED:
     case PickerAction::INVALID:
@@ -319,7 +322,18 @@ AppsNavigationThrottle::PickerAction AppsNavigationThrottle::GetPickerAction(
     case IntentPickerCloseReason::DIALOG_DEACTIVATED:
       return PickerAction::DIALOG_DEACTIVATED;
     case IntentPickerCloseReason::PREFERRED_APP_FOUND:
-      return PickerAction::PREFERRED_ACTIVITY_FOUND;
+      switch (entry_type) {
+        case PickerEntryType::kUnknown:
+          return PickerAction::PREFERRED_CHROME_BROWSER_FOUND;
+        case PickerEntryType::kArc:
+          return PickerAction::PREFERRED_ARC_ACTIVITY_FOUND;
+        case PickerEntryType::kWeb:
+          return PickerAction::PREFERRED_PWA_FOUND;
+        case PickerEntryType::kDevice:
+        case PickerEntryType::kMacOs:
+          NOTREACHED();
+          return PickerAction::INVALID;
+      }
     case IntentPickerCloseReason::STAY_IN_CHROME:
       return should_persist ? PickerAction::CHROME_PREFERRED_PRESSED
                             : PickerAction::CHROME_PRESSED;
@@ -332,11 +346,12 @@ AppsNavigationThrottle::PickerAction AppsNavigationThrottle::GetPickerAction(
           return should_persist ? PickerAction::ARC_APP_PREFERRED_PRESSED
                                 : PickerAction::ARC_APP_PRESSED;
         case PickerEntryType::kWeb:
-          return PickerAction::PWA_APP_PRESSED;
+          return should_persist ? PickerAction::PWA_APP_PREFERRED_PRESSED
+                                : PickerAction::PWA_APP_PRESSED;
         case PickerEntryType::kDevice:
           return PickerAction::DEVICE_PRESSED;
-        case PickerEntryType::kMacNative:
-          return PickerAction::MAC_NATIVE_APP_PRESSED;
+        case PickerEntryType::kMacOs:
+          return PickerAction::MAC_OS_APP_PRESSED;
       }
   }
 
@@ -394,7 +409,7 @@ bool AppsNavigationThrottle::ContainsOnlyPwasAndMacApps(
   return std::all_of(apps.begin(), apps.end(),
                      [](const apps::IntentPickerAppInfo& app_info) {
                        return app_info.type == PickerEntryType::kWeb ||
-                              app_info.type == PickerEntryType::kMacNative;
+                              app_info.type == PickerEntryType::kMacOs;
                      });
 }
 
@@ -621,7 +636,7 @@ AppsNavigationThrottle::CaptureExperimentalTabStripWebAppScopeNavigations(
   launch_params.override_url = handle->GetURL();
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      ->LaunchAppWithParams(launch_params);
+      ->LaunchAppWithParams(std::move(launch_params));
   return content::NavigationThrottle::CANCEL_AND_IGNORE;
 }
 

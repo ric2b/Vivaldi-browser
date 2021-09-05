@@ -6,16 +6,13 @@
 #define ASH_SYSTEM_PHONEHUB_BLUETOOTH_DISABLED_VIEW_H_
 
 #include "ash/ash_export.h"
-#include "ui/views/controls/button/button.h"
+#include "ash/system/phonehub/phone_hub_content_view.h"
 
 namespace ash {
 
-class PhoneHubInterstitialView;
-
 // An interstitial view representing an error state where the Phone Hub
 // feature is not available because Bluetooth is turned off on this device.
-class ASH_EXPORT BluetoothDisabledView : public views::View,
-                                         public views::ButtonListener {
+class ASH_EXPORT BluetoothDisabledView : public PhoneHubContentView {
  public:
   METADATA_HEADER(BluetoothDisabledView);
 
@@ -24,11 +21,11 @@ class ASH_EXPORT BluetoothDisabledView : public views::View,
   BluetoothDisabledView& operator=(const BluetoothDisabledView&) = delete;
   ~BluetoothDisabledView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  // PhoneHubContentView:
+  phone_hub_metrics::Screen GetScreenForMetrics() const override;
 
  private:
-  PhoneHubInterstitialView* content_view_ = nullptr;
+  void LearnMoreButtonPressed();
 };
 
 }  // namespace ash

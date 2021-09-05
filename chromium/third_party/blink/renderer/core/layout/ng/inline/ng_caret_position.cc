@@ -271,6 +271,8 @@ NGCaretPosition ComputeNGCaretPosition(const LayoutBlockFlow& context,
   NGInlineCursor cursor(context);
 
   NGCaretPosition candidate;
+  if (layout_text && layout_text->HasInlineFragments())
+    cursor.MoveTo(*layout_text);
   for (; cursor; cursor.MoveToNext()) {
     const CaretPositionResolution resolution =
         TryResolveCaretPositionWithFragment(cursor, offset, affinity);
@@ -321,7 +323,8 @@ NGCaretPosition ComputeNGCaretPosition(
 
   const LayoutText* const layout_text =
       position.IsOffsetInAnchor() && IsA<Text>(position.AnchorNode())
-          ? To<Text>(position.AnchorNode())->GetLayoutObject()
+          ? To<LayoutText>(AssociatedLayoutObjectOf(
+                *position.AnchorNode(), position.OffsetInContainerNode()))
           : nullptr;
 
   const unsigned offset = *maybe_offset;
@@ -354,6 +357,13 @@ PositionWithAffinity NGCaretPosition::ToPositionInDOMTreeWithAffinity() const {
       DCHECK(text_offset.has_value());
       const NGOffsetMapping* mapping =
           NGOffsetMapping::GetFor(cursor.Current().GetLayoutObject());
+      if (!mapping) {
+        // TODO(yosin): We're not sure why |mapping| is |nullptr|. It seems
+        // we are attempt to use destroyed/moved |NGFragmentItem|.
+        // See http://crbug.com/1145514
+        NOTREACHED() << cursor << " " << cursor.Current().GetLayoutObject();
+        return PositionWithAffinity();
+      }
       const TextAffinity affinity =
           *text_offset == cursor.Current().TextEndOffset()
               ? TextAffinity::kUpstreamIfPossible

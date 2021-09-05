@@ -8,6 +8,8 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components:content_adverse_adblocking",
     "//vivaldi/components/request_filter",
     "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/content_injection",
+    "//vivaldi/components/page_actions",
   ]
   allow_circular_includes_from += [
     "//vivaldi/components:adverse_adblocking",
@@ -25,6 +27,7 @@ update_target("//chrome/browser:browser") {
 update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/components/request_filter/adblock_filter/renderer",
+    "//vivaldi/components/content_injection/renderer",
   ]
 }
 

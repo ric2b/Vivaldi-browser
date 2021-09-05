@@ -2,11 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
-import("//ui/ozone/ozone.gni")
 
 source_set("wayland") {
   sources = [
@@ -49,8 +49,6 @@ source_set("wayland") {
     "zaura_shell.h",
     "zcr_alpha_compositing.cc",
     "zcr_alpha_compositing.h",
-    "zcr_extended_drag.cc",
-    "zcr_extended_drag.h",
     "zcr_secure_output.cc",
     "zcr_secure_output.h",
     "zcr_stylus.cc",
@@ -124,6 +122,7 @@ source_set("wayland") {
       deps += [
         "//ash",
         "//ash/public/cpp",
+        "//chromeos/ui/base",
       ]
     }
   }
@@ -155,6 +154,8 @@ source_set("wayland") {
       "zcr_color_space.h",
       "zcr_cursor_shapes.cc",
       "zcr_cursor_shapes.h",
+      "zcr_extended_drag.cc",
+      "zcr_extended_drag.h",
       "zcr_gaming_input.cc",
       "zcr_gaming_input.h",
       "zcr_keyboard_configuration.cc",
@@ -469,6 +470,8 @@ test("wayland_client_perftests") {
     "clients/test/run_all_client_perftests.cc",
     "clients/test/wayland_client_test.cc",
     "clients/test/wayland_client_test.h",
+    "clients/test/wayland_client_test_server.cc",
+    "clients/test/wayland_client_test_server.h",
   ]
 
   deps = [
@@ -504,6 +507,43 @@ test("wayland_client_perftests") {
 
     deps += [ "//ash:test_support" ]
   }
+}
+
+test("wayland_client_compatibility_tests") {
+  testonly = true
+
+  sources = [
+    "clients/test/wayland_client_test.cc",
+    "clients/test/wayland_client_test.h",
+    "clients/test/wayland_client_test_server.cc",
+    "clients/test/wayland_client_test_server.h",
+    "compatibility_test/client_compatibility_test.cc",
+    "compatibility_test/client_compatibility_test.h",
+    "compatibility_test/client_compatibility_test_server.cc",
+    "compatibility_test/wayland_client_event_receiver_version_fixtures.h",
+    "compatibility_test/wayland_client_event_recorder.cc",
+    "compatibility_test/wayland_client_event_recorder.h",
+    "compatibility_test/wayland_client_registry.cc",
+    "compatibility_test/wayland_client_registry.h",
+  ]
+
+  deps = [
+    ":wayland",
+    ":wayland_client_test_helper",
+    "//base",
+    "//base/test:test_support",
+    "//components/exo/wayland/compatibility_test",
+    "//components/exo/wayland/compatibility_test:generated_client_helper_headers",
+    "//components/viz/test:test_support",
+    "//mojo/core/embedder:embedder",
+    "//ui/gl:test_support",
+  ]
+
+  if (is_chromeos) {
+    deps += [ "//ash:test_support" ]
+  }
+
+  data_deps = []
 }
 
 if (ozone_platform_drm) {

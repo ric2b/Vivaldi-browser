@@ -269,8 +269,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterPopupBrowserTest,
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->SetContentSettingDefaultScope(
-      a_url, a_url, ContentSettingsType::POPUPS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      a_url, a_url, ContentSettingsType::POPUPS, CONTENT_SETTING_ALLOW);
 
   content::WebContentsConsoleObserver console_observer(web_contents());
 
@@ -303,8 +302,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterPopupBrowserTest,
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->SetContentSettingDefaultScope(
-      a_url, a_url, ContentSettingsType::POPUPS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      a_url, a_url, ContentSettingsType::POPUPS, CONTENT_SETTING_ALLOW);
 
   content::WebContentsConsoleObserver console_observer(web_contents());
 
@@ -317,8 +315,9 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterPopupBrowserTest,
       web_contents(), "openWindow()", &opened_window));
   EXPECT_TRUE(opened_window);
 
-  // On the new window, requests should be allowed.
-  EXPECT_FALSE(AreDisallowedRequestsBlocked());
+  // On the new window, requests should be blocked due to the popup inheriting
+  // the activation state.
+  EXPECT_TRUE(AreDisallowedRequestsBlocked());
 
   RoundTripAndVerifyLogMessages(console_observer, web_contents(),
                                 {kActivationConsoleMessage},

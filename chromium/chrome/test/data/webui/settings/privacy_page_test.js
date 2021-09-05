@@ -6,11 +6,11 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {ClearBrowsingDataBrowserProxyImpl, CookieControlsMode, SafeBrowsingSetting, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {ClearBrowsingDataBrowserProxyImpl, ContentSettingsTypes, CookieControlsMode, SafeBrowsingSetting, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Route, Router, routes, SecureDnsMode, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
-import {flushTasks} from '../test_util.m.js';
+import {flushTasks, isChildVisible, isVisible} from '../test_util.m.js';
 
 import {TestClearBrowsingDataBrowserProxy} from './test_clear_browsing_data_browser_proxy.js';
 import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
@@ -29,17 +29,16 @@ const redesignedPages = [
   routes.SITE_SETTINGS_BACKGROUND_SYNC,
   routes.SITE_SETTINGS_CAMERA,
   routes.SITE_SETTINGS_CLIPBOARD,
-  routes.SITE_SETTINGS_FLASH,
   routes.SITE_SETTINGS_IMAGES,
   routes.SITE_SETTINGS_JAVASCRIPT,
   routes.SITE_SETTINGS_LOCATION,
   routes.SITE_SETTINGS_MICROPHONE,
   routes.SITE_SETTINGS_MIDI_DEVICES,
+  routes.SITE_SETTINGS_NOTIFICATIONS,
   routes.SITE_SETTINGS_POPUPS,
   routes.SITE_SETTINGS_SENSORS,
   routes.SITE_SETTINGS_SERIAL_PORTS,
   routes.SITE_SETTINGS_SOUND,
-  routes.SITE_SETTINGS_UNSANDBOXED_PLUGINS,
   routes.SITE_SETTINGS_USB_DEVICES,
   routes.SITE_SETTINGS_VR,
 
@@ -54,7 +53,6 @@ const redesignedPages = [
 
 /** @type {!Array<!Route>} */
 const notRedesignedPages = [
-  routes.SITE_SETTINGS_NOTIFICATIONS,
   routes.SITE_SETTINGS_HID_DEVICES,
 
   // Content settings that depend on flags being enabled.
@@ -143,6 +141,7 @@ suite('PrivacyPage', function() {
     // Ensure pages are visited so that HTML components are stamped.
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     notRedesignedPages.forEach(route => Router.getInstance().navigateTo(route));
+    await flushTasks();
 
     assertFalse(loadTimeData.getBoolean('enableContentSettingsRedesign'));
     assertEquals(
@@ -152,6 +151,7 @@ suite('PrivacyPage', function() {
         page.root.querySelectorAll('settings-category-default-radio-group')
             .length,
         0);
+    assertFalse(isChildVisible(page, '#notficationRadioGroup'));
   });
 });
 
@@ -183,15 +183,32 @@ suite('ContentSettingsRedesign', function() {
     // Ensure pages are visited so that HTML components are stamped.
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     notRedesignedPages.forEach(route => Router.getInstance().navigateTo(route));
+    await flushTasks();
 
     assertTrue(loadTimeData.getBoolean('enableContentSettingsRedesign'));
     assertEquals(
         page.root.querySelectorAll('category-default-setting').length,
         notRedesignedPages.length);
+    // All redesigned pages, except notifications, will use a
+    // settings-category-default-radio-group.
     assertEquals(
         page.root.querySelectorAll('settings-category-default-radio-group')
             .length,
-        redesignedPages.length);
+        redesignedPages.length - 1);
+  });
+
+  test('NotificationPageRedesign', async function() {
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#notificationRadioGroup'));
+    const categorySettingExceptions =
+        /** @type {!CategorySettingExceptionsElement} */
+        (page.$$('category-setting-exceptions'));
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.NOTIFICATIONS, categorySettingExceptions.category);
+    assertFalse(isChildVisible(page, 'category-default-setting'));
   });
 });
 

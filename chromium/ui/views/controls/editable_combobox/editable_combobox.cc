@@ -52,6 +52,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view.h"
@@ -63,7 +64,7 @@ namespace {
 
 class Arrow : public Button {
  public:
-  explicit Arrow(ButtonListener* listener) : Button(listener) {
+  explicit Arrow(PressedCallback callback) : Button(std::move(callback)) {
     // Similar to Combobox's TransparentButton.
     SetFocusBehavior(FocusBehavior::NEVER);
     button_controller()->set_notify_action(
@@ -332,7 +333,8 @@ EditableCombobox::EditableCombobox(
     textfield_->SetExtraInsets(gfx::Insets(
         /*top=*/0, /*left=*/0, /*bottom=*/0,
         /*right=*/kComboboxArrowContainerWidth - kComboboxArrowPaddingWidth));
-    arrow_ = AddChildView(std::make_unique<Arrow>(this));
+    arrow_ = AddChildView(std::make_unique<Arrow>(base::BindRepeating(
+        &EditableCombobox::ArrowButtonPressed, base::Unretained(this))));
   }
   SetLayoutManager(std::make_unique<views::FillLayout>());
 }
@@ -445,14 +447,6 @@ void EditableCombobox::OnViewBlurred(View* observed_view) {
   CloseMenu();
 }
 
-void EditableCombobox::ButtonPressed(Button* sender, const ui::Event& event) {
-  textfield_->RequestFocus();
-  if (menu_runner_ && menu_runner_->IsRunning())
-    CloseMenu();
-  else
-    ShowDropDownMenu(ui::GetMenuSourceTypeForEvent(event));
-}
-
 void EditableCombobox::OnLayoutIsAnimatingChanged(
     views::AnimatingLayoutManager* source,
     bool is_animating) {
@@ -476,7 +470,7 @@ void EditableCombobox::OnItemSelected(int index) {
   // handling code directly.
   HandleNewContent(selected_item_text);
   NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged,
-                           /*xsend_native_event=*/true);
+                           /*send_native_event=*/true);
 }
 
 void EditableCombobox::HandleNewContent(const base::string16& new_content) {
@@ -493,6 +487,14 @@ void EditableCombobox::HandleNewContent(const base::string16& new_content) {
     menu_model_->EnableUpdateItemsShown();
   }
   menu_model_->UpdateItemsShown();
+}
+
+void EditableCombobox::ArrowButtonPressed(const ui::Event& event) {
+  textfield_->RequestFocus();
+  if (menu_runner_ && menu_runner_->IsRunning())
+    CloseMenu();
+  else
+    ShowDropDownMenu(ui::GetMenuSourceTypeForEvent(event));
 }
 
 void EditableCombobox::ShowDropDownMenu(ui::MenuSourceType source_type) {

@@ -57,6 +57,7 @@
 #include "content/browser/renderer_host/input/synthetic_gesture_target_android.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_manager_android.h"
 #include "content/browser/renderer_host/input/web_input_event_builders_android.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -98,6 +99,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/touch_selection/selection_event_type.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 
 namespace content {
@@ -325,6 +327,23 @@ void RenderWidgetHostViewAndroid::InitAsPopup(
 void RenderWidgetHostViewAndroid::InitAsFullscreen(
     RenderWidgetHostView* reference_host_view) {
   NOTIMPLEMENTED();
+}
+
+void RenderWidgetHostViewAndroid::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  RenderFrameHostImpl* frame_host = static_cast<RenderFrameHostImpl*>(
+      RenderViewHost::From(host())->GetMainFrame());
+  if (frame_host && frame_host->ShouldVirtualKeyboardOverlayContent()) {
+    float scale = IsUseZoomForDSFEnabled() ? 1 / view_.GetDipScale() : 1.f;
+    frame_host->NotifyVirtualKeyboardOverlayRect(
+        ScaleToEnclosedRect(keyboard_rect, scale));
+  }
+}
+
+bool RenderWidgetHostViewAndroid::ShouldVirtualKeyboardOverlayContent() {
+  RenderFrameHostImpl* frame_host = static_cast<RenderFrameHostImpl*>(
+      RenderViewHost::From(host())->GetMainFrame());
+  return frame_host && frame_host->ShouldVirtualKeyboardOverlayContent();
 }
 
 bool RenderWidgetHostViewAndroid::SynchronizeVisualProperties(
@@ -1477,7 +1496,7 @@ void RenderWidgetHostViewAndroid::HideInternal() {
       << "Hide called when the widget should be shown.";
 
   // Only preserve the frontbuffer if the activity was stopped while the
-  // window is still visible. This avoids visual artificts when transitioning
+  // window is still visible. This avoids visual artifacts when transitioning
   // between activities.
   bool hide_frontbuffer = is_window_activity_started_ || !is_window_visible_;
 
@@ -1615,6 +1634,8 @@ void RenderWidgetHostViewAndroid::GestureEventAck(
 
   if (gesture_listener_manager_)
     gesture_listener_manager_->GestureEventAck(event, ack_result);
+
+  HandleSwipeToMoveCursorGestureAck(event);
 }
 
 void RenderWidgetHostViewAndroid::ChildDidAckGestureEvent(
@@ -2095,7 +2116,11 @@ void RenderWidgetHostViewAndroid::OnRootWindowVisibilityChanged(bool visible) {
                "RenderWidgetHostViewAndroid::OnRootWindowVisibilityChanged",
                "visible", visible);
   DCHECK(observing_root_window_);
-  if (is_window_visible_ == visible)
+
+  // Don't early out if visibility hasn't changed and visible. This is necessary
+  // as OnDetachedFromWindow() sets |is_window_visible_| to true, so that this
+  // may be called when ShowInternal() needs to be called.
+  if (is_window_visible_ == visible && !visible)
     return;
 
   is_window_visible_ = visible;
@@ -2360,6 +2385,103 @@ RenderWidgetHostViewAndroid::ExtractAndCancelActiveTouches() {
 void RenderWidgetHostViewAndroid::TransferTouches(
     const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) {
   // Touch transfer for Android is not implemented in content/.
+}
+
+base::Optional<DisplayFeature>
+RenderWidgetHostViewAndroid::GetDisplayFeature() {
+  gfx::Size view_size(view_.GetSize());
+  if (view_size.IsEmpty())
+    return base::nullopt;
+
+  // On Android, the display feature is exposed as a rectangle as a generic
+  // concept. Here in the content layer, we translate that to a more
+  // constrained concept, see content::DisplayFeature.
+  base::Optional<gfx::Rect> display_feature_rect = view_.GetDisplayFeature();
+  if (!display_feature_rect)
+    return base::nullopt;
+
+  // The display feature and view location are both provided in device pixels,
+  // relative to the window. Convert this to DIP and view relative coordinates,
+  // first by applying the scale, converting the display feature to view
+  // relative coordinates, then intersect with the view bounds rect.
+  // the convert to view-relative coordinates.
+  float dip_scale = 1 / view_.GetDipScale();
+  gfx::Point view_location = view_.GetLocationOfContainerViewInWindow();
+  view_location = gfx::ScaleToRoundedPoint(view_location, dip_scale);
+  gfx::Rect transformed_display_feature =
+      gfx::ScaleToRoundedRect(*display_feature_rect, dip_scale);
+
+  transformed_display_feature.Offset(-view_location.x(), -view_location.y());
+  transformed_display_feature.Intersect(gfx::Rect(view_size));
+
+  DisplayFeature display_feature;
+  if (transformed_display_feature.x() == 0 &&
+      transformed_display_feature.width() == view_size.width()) {
+    // A horizontal display feature covers the view's width and starts at
+    // an x-offset of 0.
+    display_feature = {DisplayFeature::Orientation::kHorizontal,
+                       transformed_display_feature.y(),
+                       transformed_display_feature.height()};
+  } else if (transformed_display_feature.y() == 0 &&
+             transformed_display_feature.height() == view_size.height()) {
+    // A vertical display feature covers the view's height and starts at
+    // a y-offset of 0.
+    display_feature = {DisplayFeature::Orientation::kVertical,
+                       transformed_display_feature.x(),
+                       transformed_display_feature.width()};
+  } else {
+    return base::nullopt;
+  }
+
+  return display_feature;
+}
+
+void RenderWidgetHostViewAndroid::SetDisplayFeatureForTesting(
+    const DisplayFeature* display_feature) {
+  // RenderWidgetHostViewAndroid display feature mocking should be done via
+  // TestViewAndroidDelegate instead - see MockDisplayFeature.
+  NOTREACHED();
+}
+
+void RenderWidgetHostViewAndroid::HandleSwipeToMoveCursorGestureAck(
+    const blink::WebGestureEvent& event) {
+  if (!touch_selection_controller_ || !selection_popup_controller_) {
+    swipe_to_move_cursor_activated_ = false;
+    return;
+  }
+
+  switch (event.GetType()) {
+    case blink::WebInputEvent::Type::kGestureScrollBegin: {
+      if (!event.data.scroll_begin.cursor_control)
+        break;
+      swipe_to_move_cursor_activated_ = true;
+      touch_selection_controller_->OnSwipeToMoveCursorBegin();
+      OnSelectionEvent(ui::INSERTION_HANDLE_DRAG_STARTED);
+      break;
+    }
+    case blink::WebInputEvent::Type::kGestureScrollUpdate: {
+      if (!swipe_to_move_cursor_activated_)
+        break;
+      gfx::RectF rect = touch_selection_controller_->GetRectBetweenBounds();
+      // Suppress this when the input is not focused, in which case rect will be
+      // 0x0.
+      if (rect.width() != 0.f || rect.height() != 0.f) {
+        selection_popup_controller_->OnDragUpdate(
+            gfx::PointF(event.PositionInWidget().x(), rect.right_center().y()));
+      }
+      break;
+    }
+    case blink::WebInputEvent::Type::kGestureScrollEnd: {
+      if (!swipe_to_move_cursor_activated_)
+        break;
+      swipe_to_move_cursor_activated_ = false;
+      touch_selection_controller_->OnSwipeToMoveCursorEnd();
+      OnSelectionEvent(ui::INSERTION_HANDLE_DRAG_STOPPED);
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 void RenderWidgetHostViewAndroid::WasEvicted() {

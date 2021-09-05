@@ -39,6 +39,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/policy/core/common/policy_map.h"
@@ -53,6 +54,7 @@
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/features.h"
 #include "net/base/load_flags.h"
+#include "net/disk_cache/cache_util.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -89,6 +91,19 @@ class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
   network::mojom::URLLoaderFactory* loader_factory() const {
     return loader_factory_;
   }
+
+  void CheckDiskCacheSizeHistogramRecorded() {
+    std::string all_metrics;
+    do {
+      content::FetchHistogramsFromChildProcesses();
+      metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+      base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(5));
+      all_metrics = histograms_.GetAllHistogramsRecorded();
+    } while (std::string::npos ==
+             all_metrics.find("HttpCache.MaxFileSizeOnInit"));
+  }
+
+  base::HistogramTester histograms_;
 
  protected:
   // The HttpCache is only created when a request is issued, thus we perform a
@@ -141,6 +156,42 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
       /*in_memory=*/false, empty_relative_partition_path,
       &network_context_params, &cert_verifier_creation_params);
   EXPECT_EQ(0, network_context_params.http_cache_max_size);
+
+  CheckDiskCacheSizeHistogramRecorded();
+}
+
+class DiskCachesizeExperiment : public ProfileNetworkContextServiceBrowsertest {
+ public:
+  DiskCachesizeExperiment() = default;
+  ~DiskCachesizeExperiment() override = default;
+
+  void SetUp() override {
+    std::map<std::string, std::string> field_trial_params;
+    field_trial_params["percent_relative_size"] = "200";
+    feature_list_.InitAndEnableFeatureWithParameters(
+        disk_cache::kChangeDiskCacheSizeExperiment, field_trial_params);
+    ProfileNetworkContextServiceBrowsertest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(DiskCachesizeExperiment, ScaledCacheSize) {
+  // We don't have a great way of directly checking that the disk cache has the
+  // correct max size, but we can make sure that we set up our network context
+  // params correctly and that the histogram is recorded.
+  ProfileNetworkContextService* profile_network_context_service =
+      ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
+  base::FilePath empty_relative_partition_path;
+  network::mojom::NetworkContextParams network_context_params;
+  network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+  profile_network_context_service->ConfigureNetworkContextParams(
+      /*in_memory=*/false, empty_relative_partition_path,
+      &network_context_params, &cert_verifier_creation_params);
+  EXPECT_EQ(0, network_context_params.http_cache_max_size);
+
+  CheckDiskCacheSizeHistogramRecorded();
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, BrotliEnabled) {
@@ -293,12 +344,11 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheChangeBrowsertest,
 
 class AmbientAuthenticationTestWithPolicy
     : public policy::PolicyTest,
-      public testing::WithParamInterface<AmbientAuthenticationFeatureState> {
+      public ::testing::WithParamInterface<bool> {
  public:
   AmbientAuthenticationTestWithPolicy() {
-    feature_state_ = GetParam();
-    AmbientAuthenticationTestHelper::CookTheFeatureList(scoped_feature_list_,
-                                                        feature_state_);
+    TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
+        scoped_feature_list_, GetParam());
     policy::PolicyTest::SetUpInProcessBrowserTestFixture();
   }
 
@@ -318,19 +368,15 @@ class AmbientAuthenticationTestWithPolicy
         non_primary_otr_profile));
     EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
                   incognito_profile),
-              AmbientAuthenticationTestHelper::IsIncognitoAllowedInFeature(
-                  feature_state_) ||
-                  AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
-                      policy_value));
+              AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
+                  policy_value));
 // ChromeOS guest sessions don't have the capability to
 // do ambient authentications.
 #if !defined(OS_CHROMEOS)
-    EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
-                  AmbientAuthenticationTestHelper::GetGuestProfile()),
-              AmbientAuthenticationTestHelper::IsGuestAllowedInFeature(
-                  feature_state_) ||
-                  AmbientAuthenticationTestHelper::IsGuestAllowedInPolicy(
-                      policy_value));
+    EXPECT_EQ(
+        AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+            CreateGuestBrowser()->profile()),
+        AmbientAuthenticationTestHelper::IsGuestAllowedInPolicy(policy_value));
 #endif
   }
 
@@ -342,18 +388,9 @@ class AmbientAuthenticationTestWithPolicy
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-  AmbientAuthenticationFeatureState feature_state_;
   policy::PolicyMap policies_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-INSTANTIATE_TEST_CASE_P(
-    AmbientAuthAllFeatureValuesTest,
-    AmbientAuthenticationTestWithPolicy,
-    testing::Values(AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_OFF,
-                    AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_ON,
-                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_OFF,
-                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_ON));
 
 IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, RegularOnly) {
   EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY);
@@ -376,6 +413,10 @@ IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, All) {
   EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::ALL);
   IsAmbientAuthAllowedForProfilesTest();
 }
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         AmbientAuthenticationTestWithPolicy,
+                         /*ephemeral_guest_profile_enabled=*/testing::Bool());
 
 // Test subclass that adds switches::kDiskCacheDir and switches::kDiskCacheSize
 // to the command line, to make sure they're respected.

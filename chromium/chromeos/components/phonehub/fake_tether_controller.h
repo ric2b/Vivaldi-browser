@@ -15,12 +15,15 @@ class FakeTetherController : public TetherController {
   FakeTetherController();
   ~FakeTetherController() override;
 
+  using TetherController::NotifyAttemptConnectionScanFailed;
+
   void SetStatus(Status status);
 
   // TetherController:
   Status GetStatus() const override;
 
  private:
+  // TetherController:
   void ScanForAvailableConnection() override;
   void AttemptConnection() override;
   void Disconnect() override;

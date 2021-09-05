@@ -10,10 +10,10 @@
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/controls/button/button.h"
 
 namespace views {
 class GridLayout;
+class Separator;
 }
 
 namespace sharesheet {
@@ -26,8 +26,7 @@ class WebContents;
 
 class SharesheetExpandButton;
 
-class SharesheetBubbleView : public views::BubbleDialogDelegateView,
-                             public views::ButtonListener {
+class SharesheetBubbleView : public views::BubbleDialogDelegateView {
  public:
   using TargetInfo = sharesheet::TargetInfo;
 
@@ -48,28 +47,31 @@ class SharesheetBubbleView : public views::BubbleDialogDelegateView,
   void CloseBubble();
 
  private:
-  // views::ButtonListener overrides
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  // ui::EventHandler:
+  void OnKeyEvent(ui::KeyEvent* event) override;
 
-  // views::WidgetDelegate override
+  // views::WidgetDelegate:
+  ax::mojom::Role GetAccessibleWindowRole() override;
   std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override;
 
-  // views::BubbleDialogDelegateView overrides
+  // views::BubbleDialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
   void OnWidgetDestroyed(views::Widget* widget) override;
 
   void CreateBubble();
-  std::unique_ptr<views::View> MakeScrollableTargetView();
-  void PopulateLayoutsWithTargets(views::GridLayout* default_layout,
+  std::unique_ptr<views::View> MakeScrollableTargetView(
+      std::vector<TargetInfo> targets);
+  void PopulateLayoutsWithTargets(std::vector<TargetInfo> targets,
+                                  views::GridLayout* default_layout,
                                   views::GridLayout* expanded_layout);
-  void OnDialogClosed();
+  void ExpandButtonPressed();
+  void TargetButtonPressed(TargetInfo target);
   void UpdateAnchorPosition();
   void SetToDefaultBubbleSizing();
 
   // Owns this class.
   sharesheet::SharesheetServiceDelegate* delegate_;
-  std::vector<TargetInfo> targets_;
   base::string16 active_target_;
   apps::mojom::IntentPtr intent_;
   sharesheet::CloseCallback close_callback_;
@@ -79,10 +81,16 @@ class SharesheetBubbleView : public views::BubbleDialogDelegateView,
   bool user_cancelled_ = true;
   bool show_expanded_view_ = false;
 
-  views::View* root_view_ = nullptr;
+  size_t keyboard_highlighted_target_ = 0;
+
   views::View* main_view_ = nullptr;
+  views::View* default_view_ = nullptr;
   views::View* expanded_view_ = nullptr;
   views::View* share_action_view_ = nullptr;
+  // Separator that appears above the expand button.
+  views::Separator* expand_button_separator_ = nullptr;
+  // Separator between the default_view and the expanded_view.
+  views::Separator* expanded_view_separator_ = nullptr;
   views::View* parent_view_ = nullptr;
   SharesheetExpandButton* expand_button_ = nullptr;
 };

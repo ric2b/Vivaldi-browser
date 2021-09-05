@@ -4,8 +4,6 @@
 
 #include "fuchsia/cast_streaming/public/cast_streaming_session.h"
 
-#include <lib/zx/time.h>
-
 #include "base/bind.h"
 #include "base/notreached.h"
 #include "base/timer/timer.h"
@@ -79,6 +77,9 @@ media::VideoDecoderConfig VideoCaptureConfigToVideoDecoderConfig(
       media::EmptyExtraData(), media::EncryptionScheme::kUnencrypted);
 }
 
+// Timeout to stop the Session when no data is received.
+constexpr base::TimeDelta kNoDataTimeout = base::TimeDelta::FromSeconds(15);
+
 bool CreateDataPipeForStreamType(media::DemuxerStream::Type type,
                                  mojo::ScopedDataPipeProducerHandle* producer,
                                  mojo::ScopedDataPipeConsumerHandle* consumer) {
@@ -109,13 +110,12 @@ void CastStreamingSession::SetNetworkContextGetter(
 class CastStreamingSession::Internal
     : public openscreen::cast::ReceiverSession::Client {
  public:
-  Internal(
-      CastStreamingSession::Client* client,
-      fidl::InterfaceRequest<fuchsia::web::MessagePort> message_port_request,
-      scoped_refptr<base::SequencedTaskRunner> task_runner)
+  Internal(CastStreamingSession::Client* client,
+           std::unique_ptr<cast_api_bindings::MessagePort> message_port,
+           scoped_refptr<base::SequencedTaskRunner> task_runner)
       : task_runner_(task_runner),
         environment_(&openscreen::Clock::now, &task_runner_),
-        cast_message_port_impl_(std::move(message_port_request)),
+        cast_message_port_impl_(std::move(message_port)),
         client_(client) {
     DCHECK(task_runner);
     DCHECK(client_);
@@ -172,8 +172,8 @@ class CastStreamingSession::Internal
         base::BindRepeating(
             &CastStreamingSession::Client::OnAudioBufferReceived,
             base::Unretained(client_)),
-        base::BindOnce(&CastStreamingSession::Internal::OnDataTimeout,
-                       base::Unretained(this)));
+        base::BindRepeating(&base::OneShotTimer::Reset,
+                            base::Unretained(&data_timeout_timer_)));
 
     return AudioStreamInfo{
         AudioCaptureConfigToAudioDecoderConfig(audio_capture_config),
@@ -198,13 +198,15 @@ class CastStreamingSession::Internal
 
     // We can use unretained pointers here because StreamConsumer is owned by
     // this object and |client_| is guaranteed to outlive this object.
+    // |data_timeout_timer_| is also owned by this object and will outlive both
+    // StreamConsumers.
     video_consumer_ = std::make_unique<StreamConsumer>(
         video_receiver, std::move(data_pipe_producer),
         base::BindRepeating(
             &CastStreamingSession::Client::OnVideoBufferReceived,
             base::Unretained(client_)),
-        base::BindOnce(&CastStreamingSession::Internal::OnDataTimeout,
-                       base::Unretained(this)));
+        base::BindRepeating(&base::OneShotTimer::Reset,
+                            base::Unretained(&data_timeout_timer_)));
 
     return VideoStreamInfo{
         VideoCaptureConfigToVideoDecoderConfig(video_capture_config),
@@ -283,6 +285,10 @@ class CastStreamingSession::Internal
     } else {
       client_->OnSessionInitialization(std::move(audio_stream_info),
                                        std::move(video_stream_info));
+      data_timeout_timer_.Start(
+          FROM_HERE, kNoDataTimeout,
+          base::BindOnce(&CastStreamingSession::Internal::OnDataTimeout,
+                         base::Unretained(this)));
     }
   }
 
@@ -324,6 +330,9 @@ class CastStreamingSession::Internal
   std::unique_ptr<openscreen::cast::ReceiverSession> receiver_session_;
   base::OneShotTimer init_timeout_timer_;
 
+  // Timer to trigger connection closure if no data is received for 15 seconds.
+  base::OneShotTimer data_timeout_timer_;
+
   bool is_initialized_ = false;
   CastStreamingSession::Client* const client_;
   std::unique_ptr<StreamConsumer> audio_consumer_;
@@ -336,12 +345,12 @@ CastStreamingSession::~CastStreamingSession() = default;
 
 void CastStreamingSession::Start(
     Client* client,
-    fidl::InterfaceRequest<fuchsia::web::MessagePort> message_port_request,
+    std::unique_ptr<cast_api_bindings::MessagePort> message_port,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   DCHECK(client);
   DCHECK(!internal_);
-  internal_ = std::make_unique<Internal>(
-      client, std::move(message_port_request), task_runner);
+  internal_ =
+      std::make_unique<Internal>(client, std::move(message_port), task_runner);
 }
 
 void CastStreamingSession::Stop() {

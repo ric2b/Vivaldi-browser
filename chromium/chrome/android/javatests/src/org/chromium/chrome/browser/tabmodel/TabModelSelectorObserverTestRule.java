@@ -94,11 +94,6 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
             }
 
             @Override
-            public boolean isCurrentModel(TabModel model) {
-                return false;
-            }
-
-            @Override
             public TabModel getModel(boolean incognito) {
                 return mSelector.getModel(incognito);
             }
@@ -141,7 +136,7 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
                 TabModelOrderController orderController, TabContentManager tabContentManager,
                 TabPersistentStore tabPersistentStore, NextTabPolicySupplier nextTabPolicySupplier,
                 AsyncTabParamsManager asyncTabParamsManager, TabModelDelegate modelDelegate) {
-            super(profile, false, null, null, null, orderController, tabContentManager,
+            super(profile, false, null, null, orderController, tabContentManager,
                     tabPersistentStore, nextTabPolicySupplier, asyncTabParamsManager, modelDelegate,
                     false);
         }

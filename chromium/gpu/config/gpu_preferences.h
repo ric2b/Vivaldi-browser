@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/gpu_export.h"
 #include "media/media_buildflags.h"
 #include "ui/gfx/buffer_types.h"
@@ -214,6 +215,9 @@ struct GPU_EXPORT GpuPreferences {
   // Use Vulkan for rasterization and display compositing.
   VulkanImplementationName use_vulkan = VulkanImplementationName::kNone;
 
+  // Enable using vulkan protected memory.
+  bool enable_vulkan_protected_memory = false;
+
   // Enforce using vulkan protected memory.
   bool enforce_vulkan_protected_memory = false;
 
@@ -223,6 +227,15 @@ struct GPU_EXPORT GpuPreferences {
   // If Vulkan initialization has failed, do not fallback to GL. This is for
   // testing in order to detect regressions which crash Vulkan.
   bool disable_vulkan_fallback_to_gl_for_testing = false;
+
+  // Heap memory limit for Vulkan. Allocations will fail when this limit is
+  // reached for a heap.
+  uint32_t vulkan_heap_memory_limit = 0u;
+
+  // Sync CPU memory limit for Vulkan. Submission of GPU work will be
+  // synchronize with the CPU in order to free released memory immediately
+  // when this limit is reached.
+  uint32_t vulkan_sync_cpu_memory_limit = 0u;
 
   // Use Metal for rasterization and Skia-based display compositing. Note that
   // this is compatible with GL-based display compositing.
@@ -238,6 +251,11 @@ struct GPU_EXPORT GpuPreferences {
 
   // Enable validation layers in Dawn backends.
   bool enable_dawn_backend_validation = false;
+
+  // Enable the toggle Toggle::DisableRobustness when creating Dawn device for
+  // the investigation of the performance issues related to the implementation
+  // of robustness in Dawn.
+  bool disable_dawn_robustness = false;
 
   // Enable measuring blocked time on GPU Main thread
   bool enable_gpu_blocked_time_metric = false;
@@ -260,7 +278,7 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //media/base/media_switches.h
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   // The direct VideoDecoder is disallowed in this particular SoC/platform. This
   // flag is a reflection of whatever ChromeOS command line builder says.
   bool platform_disallows_chromeos_direct_video_decoder = false;

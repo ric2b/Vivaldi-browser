@@ -50,6 +50,10 @@ class CORE_EXPORT PrePaintTreeWalk {
               parent_context.inside_blocking_touch_event_handler),
           effective_allowed_touch_action_changed(
               parent_context.effective_allowed_touch_action_changed),
+          inside_blocking_wheel_event_handler(
+              parent_context.inside_blocking_wheel_event_handler),
+          blocking_wheel_event_handler_changed(
+              parent_context.blocking_wheel_event_handler_changed),
           clip_changed(parent_context.clip_changed),
           paint_invalidation_container(
               parent_context.paint_invalidation_container),
@@ -81,6 +85,13 @@ class CORE_EXPORT PrePaintTreeWalk {
     // entire subtree may need to update.
     bool effective_allowed_touch_action_changed = false;
 
+    // Whether there is a blocking wheel event handler on any ancestor.
+    bool inside_blocking_wheel_event_handler = false;
+
+    // When the blocking wheel event handlers change on an ancestor, the entire
+    // subtree may need to update.
+    bool blocking_wheel_event_handler_changed = false;
+
     // This is set to true once we see tree_builder_context->clip_changed is
     // true. It will be propagated to descendant contexts even if we don't
     // create tree_builder_context.
@@ -111,26 +122,39 @@ class CORE_EXPORT PrePaintTreeWalk {
   // very big stack frames. Splitting the heavy lifting to a separate function
   // makes sure the stack frame is freed prior to making a recursive call.
   // See https://crbug.com/781301 .
+
+  // TODO(https://crbug.com/841364): Remove is_wheel_event_regions_enabled
+  // argument once kWheelEventRegions feature flag is removed.
   NOINLINE void WalkInternal(const LayoutObject&,
                              const NGFragmentChildIterator*,
-                             PrePaintTreeWalkContext&);
-  void WalkNGChildren(const LayoutObject* parent, NGFragmentChildIterator*);
-  void WalkLegacyChildren(const LayoutObject&);
-  void WalkChildren(const LayoutObject*, const NGFragmentChildIterator*);
-  void Walk(const LayoutObject&, const NGFragmentChildIterator*);
+                             PrePaintTreeWalkContext&,
+                             bool is_wheel_event_regions_enabled);
+  void WalkNGChildren(const LayoutObject* parent,
+                      NGFragmentChildIterator*,
+                      bool is_wheel_event_regions_enabled);
+  void WalkLegacyChildren(const LayoutObject&,
+                          bool is_wheel_event_regions_enabled);
+  void WalkChildren(const LayoutObject*,
+                    const NGFragmentChildIterator*,
+                    bool is_wheel_event_regions_enabled);
+  void Walk(const LayoutObject&,
+            const NGFragmentChildIterator*,
+            bool is_wheel_event_regions_enabled);
 
   bool NeedsTreeBuilderContextUpdate(const LocalFrameView&,
                                      const PrePaintTreeWalkContext&);
   void UpdateAuxiliaryObjectProperties(const LayoutObject&,
                                        PrePaintTreeWalkContext&);
-
-  bool NeedsEffectiveAllowedTouchActionUpdate(const LayoutObject&,
-                                              PrePaintTreeWalkContext&) const;
   // Updates |LayoutObject::InsideBlockingTouchEventHandler|. Also ensures
   // |PrePaintTreeWalkContext.effective_allowed_touch_action_changed| is set
   // which will ensure the subtree is updated too.
   void UpdateEffectiveAllowedTouchAction(const LayoutObject&,
                                          PrePaintTreeWalkContext&);
+  // Updates |LayoutObject::InsideBlockingWheelEventHandler|. Also ensures
+  // |PrePaintTreeWalkContext.blocking_wheel_event_handler_changed| is set
+  // which will ensure the subtree is updated too.
+  void UpdateBlockingWheelEventHandler(const LayoutObject&,
+                                       PrePaintTreeWalkContext&);
   void InvalidatePaintForHitTesting(const LayoutObject&,
                                     PrePaintTreeWalkContext&);
 

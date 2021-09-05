@@ -19,7 +19,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/bits.h"
 #include "base/callback_helpers.h"
 #include "base/cpu.h"
@@ -37,11 +36,14 @@
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/ui_base_features.h"
 
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
+#include "media/gpu/macros.h"
+#include "media/media_buildflags.h"
 
 // Auto-generated for dlopen libva libraries
 #include "media/gpu/vaapi/va_stubs.h"
@@ -58,13 +60,13 @@
 #include "ui/gl/gl_implementation.h"
 
 #if defined(USE_X11)
-#include "ui/gfx/x/x11_types.h"  // nogncheck
-
 typedef XID Drawable;
 
 extern "C" {
 #include "media/gpu/vaapi/va_x11.sigs"
 }
+
+#include "ui/gfx/x/connection.h"  // nogncheck
 #endif
 
 #if defined(USE_OZONE)
@@ -342,17 +344,28 @@ const ProfileCodecMap& GetProfileCodecMap() {
   static const base::NoDestructor<ProfileCodecMap> kMediaToVAProfileMap({
       // VAProfileH264Baseline is deprecated in <va/va.h> since libva 2.0.0.
       {H264PROFILE_BASELINE, VAProfileH264ConstrainedBaseline},
-      {H264PROFILE_MAIN, VAProfileH264Main},
-      // TODO(posciak): See if we can/want to support other variants of
-      // H264PROFILE_HIGH*.
-      {H264PROFILE_HIGH, VAProfileH264High},
-      {VP8PROFILE_ANY, VAProfileVP8Version0_3},
-      {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
-      // VaapiWrapper does not support VP9 Profile 1, see b/153680337.
-      // {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
-      {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
+          {H264PROFILE_MAIN, VAProfileH264Main},
+          // TODO(posciak): See if we can/want to support other variants of
+          // H264PROFILE_HIGH*.
+          {H264PROFILE_HIGH, VAProfileH264High},
+          {VP8PROFILE_ANY, VAProfileVP8Version0_3},
+          {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
+          // VaapiWrapper does not support VP9 Profile 1, see b/153680337.
+          // {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
+          {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
       // VaapiWrapper does not support Profile 3.
       //{VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
+#if BUILDFLAG(IS_ASH)
+          // TODO(hiroh): Remove if-macro once libva for linux-chrome is upreved
+          // to 2.9.0 or newer.
+          // https://source.chromium.org/chromium/chromium/src/+/master:build/linux/sysroot_scripts/generated_package_lists/sid.amd64
+          {AV1PROFILE_PROFILE_MAIN, VAProfileAV1Profile0},
+#endif  // BUILDFLAG(IS_ASH)
+        // VaapiWrapper does not support AV1 Profile 1.
+        // {AV1PROFILE_PROFILE_HIGH, VAProfileAV1Profile1},
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+          {HEVCPROFILE_MAIN, VAProfileHEVCMain},
+#endif
   });
   return *kMediaToVAProfileMap;
 }
@@ -378,8 +391,15 @@ bool IsVAProfileSupported(VAProfile va_profile) {
 }
 
 bool IsBlockedDriver(VaapiWrapper::CodecMode mode, VAProfile va_profile) {
-  if (!IsModeEncoding(mode))
+  if (!IsModeEncoding(mode)) {
+#if BUILDFLAG(IS_ASH)
+    if (va_profile == VAProfileAV1Profile0 &&
+        !base::FeatureList::IsEnabled(kVaapiAV1Decoder)) {
+      return true;
+    }
+#endif  // BUILDFLAG(IS_ASH)
     return false;
+  }
 
   // TODO(posciak): Remove once VP8 encoding is to be enabled by default.
   if (va_profile == VAProfileVP8Version0_3 &&
@@ -495,7 +515,7 @@ bool VADisplayState::InitializeVaDisplay_Locked() {
     case gl::kGLImplementationDesktopGL:
 #if defined(USE_X11)
       if (!features::IsUsingOzonePlatform()) {
-        va_display_ = vaGetDisplay(gfx::GetXDisplay());
+        va_display_ = vaGetDisplay(x11::Connection::Get()->GetXlibDisplay());
         if (!vaDisplayIsValid(va_display_))
           va_display_ = vaGetDisplayDRM(drm_fd_.get());
       }
@@ -504,14 +524,14 @@ bool VADisplayState::InitializeVaDisplay_Locked() {
     case gl::kGLImplementationEGLANGLE:
 #if defined(USE_X11)
       if (!features::IsUsingOzonePlatform())
-        va_display_ = vaGetDisplay(gfx::GetXDisplay());
+        va_display_ = vaGetDisplay(x11::Connection::Get()->GetXlibDisplay());
 #endif  // USE_X11
       break;
     // Cannot infer platform from GL, try all available displays
     case gl::kGLImplementationNone:
 #if defined(USE_X11)
       if (!features::IsUsingOzonePlatform()) {
-        va_display_ = vaGetDisplay(gfx::GetXDisplay());
+        va_display_ = vaGetDisplay(x11::Connection::Get()->GetXlibDisplay());
         if (vaDisplayIsValid(va_display_))
           break;
       }
@@ -538,7 +558,7 @@ bool VADisplayState::InitializeVaDriver_Locked() {
   int major_version, minor_version;
   VAStatus va_res = vaInitialize(va_display_, &major_version, &minor_version);
   if (va_res != VA_STATUS_SUCCESS) {
-    LOG(ERROR) << "vaInitialize failed: " << vaErrorStr(va_res);
+    VLOGF(1) << "vaInitialize failed: " << vaErrorStr(va_res);
     return false;
   }
   const std::string va_vendor_string = vaQueryVendorString(va_display_);
@@ -558,9 +578,9 @@ bool VADisplayState::InitializeVaDriver_Locked() {
   // guaranteed to be backward (and not forward) compatible.
   if (VA_MAJOR_VERSION > major_version ||
       (VA_MAJOR_VERSION == major_version && VA_MINOR_VERSION > minor_version)) {
-    LOG(ERROR) << "The system version " << major_version << "." << minor_version
-               << " should be greater than or equal to "
-               << VA_MAJOR_VERSION << "." << VA_MINOR_VERSION;
+    VLOGF(1) << "The system version " << major_version << "." << minor_version
+             << " should be greater than or equal to " << VA_MAJOR_VERSION
+             << "." << VA_MINOR_VERSION;
     return false;
   }
   return true;
@@ -1304,6 +1324,10 @@ VaapiWrapper::GetSupportedDecodeProfiles(
         workarounds.disable_accelerated_vp8_decode) {
       continue;
     }
+    if (media_profile == VP9PROFILE_PROFILE2 &&
+        workarounds.disable_accelerated_vp9_profile2_decode) {
+      continue;
+    }
 
     const VASupportedProfiles::ProfileInfo* profile_info =
         VASupportedProfiles::Get().IsProfileSupported(kDecode, va_profile);
@@ -1882,7 +1906,7 @@ bool VaapiWrapper::MapAndCopyAndExecute(
 
 #if defined(USE_X11)
 bool VaapiWrapper::PutSurfaceIntoPixmap(VASurfaceID va_surface_id,
-                                        Pixmap x_pixmap,
+                                        x11::Pixmap x_pixmap,
                                         gfx::Size dest_size) {
   DCHECK(!features::IsUsingOzonePlatform());
   base::AutoLock auto_lock(*va_lock_);
@@ -1891,12 +1915,10 @@ bool VaapiWrapper::PutSurfaceIntoPixmap(VASurfaceID va_surface_id,
   VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVASyncSurface, false);
 
   // Put the data into an X Pixmap.
-  va_res = vaPutSurface(va_display_,
-                        va_surface_id,
-                        x_pixmap,
-                        0, 0, dest_size.width(), dest_size.height(),
-                        0, 0, dest_size.width(), dest_size.height(),
-                        NULL, 0, 0);
+  va_res =
+      vaPutSurface(va_display_, va_surface_id, static_cast<uint32_t>(x_pixmap),
+                   0, 0, dest_size.width(), dest_size.height(), 0, 0,
+                   dest_size.width(), dest_size.height(), nullptr, 0, 0);
   VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVAPutSurface, false);
   return true;
 }
@@ -1950,7 +1972,7 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
     needs_va_put_image = true;
   }
   base::ScopedClosureRunner vaimage_deleter(
-      base::Bind(&DestroyVAImage, va_display_, image));
+      base::BindOnce(&DestroyVAImage, va_display_, image));
 
   if (image.format.fourcc != VA_FOURCC_NV12) {
     LOG(ERROR) << "Unsupported image format: " << image.format.fourcc;
@@ -2252,7 +2274,7 @@ void VaapiWrapper::PreSandboxInitialization() {
   static bool result = InitializeStubs(paths);
   if (!result) {
     static const char kErrorMsg[] = "Failed to initialize VAAPI libs";
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     // When Chrome runs on Linux with target_os="chromeos", do not log error
     // message without VAAPI libraries.
     LOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS()) << kErrorMsg;

@@ -553,7 +553,7 @@ class NavigationListModel extends cr.EventTarget {
      */
     const createFilteredRecentModelItem = (label, fileType, rootType) => {
       const entry = /** @type {!FakeEntry} */ (Object.assign(
-          Object.create(FakeEntry.prototype), this.recentModelItem_.entry));
+          Object.create(FakeEntryImpl.prototype), this.recentModelItem_.entry));
       entry.recentFileType = fileType;
       entry.rootType = rootType;
       return new NavigationModelFakeItem(
@@ -717,7 +717,8 @@ class NavigationListModel extends cr.EventTarget {
             removableGroup[0].volumeInfo.driveLabel :
             /*default*/ 'External Drive';
         removableEntry = new EntryList(
-            rootLabel, VolumeManagerCommon.RootType.REMOVABLE, devicePath);
+            rootLabel, VolumeManagerCommon.RootType.REMOVABLE,
+            removableGroup[0].volumeInfo.devicePath);
         removableModel = new NavigationModelFakeItem(
             removableEntry.label, NavigationModelItemType.ENTRY_LIST,
             removableEntry);

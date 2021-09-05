@@ -54,9 +54,21 @@ class ASH_EXPORT HoldingSpaceTestApi {
   // If holding space UI is not visible, an empty collection is returned.
   std::vector<views::View*> GetPinnedFileChips();
 
-  // Returns the collection of screenshot views in holding space UI.
+  // Returns the collection of screen capture views in holding space UI.
   // If holding space UI is not visible, an empty collection is returned.
-  std::vector<views::View*> GetScreenshotViews();
+  std::vector<views::View*> GetScreenCaptureViews();
+
+  // Returns the holding space tray in the shelf.
+  views::View* GetTray();
+
+  // Returns the holding space tray icon in the shelf.
+  views::View* GetTrayIcon();
+
+  // Returns whether the pinned files container is shown.
+  bool PinnedFilesContainerShown() const;
+
+  // Returns whether the recent files container is shown.
+  bool RecentFilesContainerShown() const;
 
  private:
   HoldingSpaceTray* holding_space_tray_ = nullptr;

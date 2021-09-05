@@ -167,7 +167,8 @@ class PageInfoUI {
       ContentSettingsType type,
       ContentSetting setting,
       ContentSetting default_setting,
-      content_settings::SettingSource source);
+      content_settings::SettingSource source,
+      bool is_one_time);
 
   // Returns a string indicating whether the permission was blocked via an
   // extension, enterprise policy, or embargo.
@@ -185,6 +186,12 @@ class PageInfoUI {
 
   // Returns the connection icon ID for the given connection |status|.
   static int GetConnectionIconID(PageInfo::SiteConnectionStatus status);
+
+  // Returns the identity icon color ID for the given identity |status|.
+  static int GetIdentityIconColorID(PageInfo::SiteIdentityStatus status);
+
+  // Returns the connection icon color ID for the given connection |status|.
+  static int GetConnectionIconColorID(PageInfo::SiteConnectionStatus status);
 #else  // !defined(OS_ANDROID)
   // Returns icons for the given PageInfo::PermissionInfo |info|. If |info|'s
   // current setting is CONTENT_SETTING_DEFAULT, it will return the icon for

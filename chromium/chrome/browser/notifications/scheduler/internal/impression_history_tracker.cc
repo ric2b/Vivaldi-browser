@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/numerics/ranges.h"
@@ -54,6 +54,8 @@ std::string ToDatabaseKey(SchedulerClientType type) {
       return "ChromeUpdate";
     case SchedulerClientType::kPrefetch:
       return "Prefetch";
+    case SchedulerClientType::kReadingList:
+      return "ReadingList";
   }
 }
 

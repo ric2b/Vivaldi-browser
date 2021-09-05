@@ -27,8 +27,6 @@ NGMathRadicalLayoutAlgorithm::NGMathRadicalLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
 }
 
 void NGMathRadicalLayoutAlgorithm::GatherChildren(
@@ -88,8 +86,8 @@ scoped_refptr<const NGLayoutResult> NGMathRadicalLayoutAlgorithm::Layout() {
         &To<NGPhysicalBoxFragment>(base_layout_result->PhysicalFragment());
     base_margins =
         ComputeMarginsFor(constraint_space, base.Style(), ConstraintSpace());
-    NGBoxFragment fragment(ConstraintSpace().GetWritingMode(),
-                           ConstraintSpace().Direction(), *base_fragment);
+    NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
+                           *base_fragment);
     base_ascent = base_margins.block_start + fragment.BaselineOrSynthesize();
     base_descent = fragment.BlockSize() + base_margins.BlockSum() - base_ascent;
   }
@@ -104,8 +102,8 @@ scoped_refptr<const NGLayoutResult> NGMathRadicalLayoutAlgorithm::Layout() {
         &To<NGPhysicalBoxFragment>(index_layout_result->PhysicalFragment());
     index_margins =
         ComputeMarginsFor(constraint_space, index.Style(), ConstraintSpace());
-    NGBoxFragment fragment(ConstraintSpace().GetWritingMode(),
-                           ConstraintSpace().Direction(), *index_fragment);
+    NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
+                           *index_fragment);
     index_inline_size = fragment.InlineSize() + index_margins.InlineSum();
     index_ascent = index_margins.block_start + fragment.BaselineOrSynthesize();
     index_descent =
@@ -132,10 +130,9 @@ scoped_refptr<const NGLayoutResult> NGMathRadicalLayoutAlgorithm::Layout() {
                                         horizontal.kern_before_degree +
                                         horizontal.kern_after_degree;
     container_builder_.SetMathMLPaintInfo(
-        kSquareRootCharacter, std::move(shape_result_view),
-        LayoutUnit(surd_metrics.advance), LayoutUnit(surd_metrics.ascent),
-        LayoutUnit(surd_metrics.descent), &operator_inline_offset,
-        &base_margins);
+        std::move(shape_result_view), LayoutUnit(surd_metrics.advance),
+        LayoutUnit(surd_metrics.ascent), LayoutUnit(surd_metrics.descent),
+        operator_inline_offset, base_margins);
   }
 
   // Determine the metrics of the radical operator + the base.

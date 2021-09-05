@@ -15,9 +15,11 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_manager.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
 namespace hud_display {
@@ -67,13 +69,15 @@ class SettingsButton : public views::ImageButton {
  public:
   METADATA_HEADER(SettingsButton);
 
-  explicit SettingsButton(views::ButtonListener* listener)
-      : views::ImageButton(listener) {
+  explicit SettingsButton(views::Button::PressedCallback callback)
+      : views::ImageButton(callback) {
     SetImage(views::Button::ButtonState::STATE_NORMAL,
              gfx::CreateVectorIcon(vector_icons::kSettingsIcon,
                                    kHUDSettingsIconSize, kHUDDefaultColor));
     SetBorder(views::CreateEmptyBorder(gfx::Insets(kSettingsIconBorder)));
     SetProperty(kHUDClickHandler, HTCLIENT);
+
+    SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   }
 
   SettingsButton(const SettingsButton&) = delete;
@@ -182,7 +186,9 @@ HUDHeaderView::HUDHeaderView(HUDDisplayView* hud) {
       gfx::Insets(kHUDInset, kHUDInset, 0, kHUDInset)));
 
   // Add buttons and tab strip.
-  header_buttons->AddChildView(std::make_unique<SettingsButton>(hud));
+  header_buttons->AddChildView(
+      std::make_unique<SettingsButton>(base::BindRepeating(
+          &HUDDisplayView::OnSettingsToggle, base::Unretained(hud))));
   tab_strip_ = header_buttons->AddChildView(std::make_unique<HUDTabStrip>(hud));
 
   // Padding will take the rest of the header and draw bottom inner left

@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "chromeos/dbus/arc/arc_data_snapshotd_client.h"
 #include "chromeos/dbus/arc/fake_arc_data_snapshotd_client.h"

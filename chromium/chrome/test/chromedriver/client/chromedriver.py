@@ -665,9 +665,13 @@ class ChromeDriver(object):
   def GenerateTestReport(self, message):
     self.ExecuteCommand(Command.GENERATE_TEST_REPORT, {'message': message})
 
+  def SetTimezone(self, timezone):
+    return self.ExecuteCommand(Command.SET_TIMEZONE, {'timezone': timezone})
+
   def AddVirtualAuthenticator(self, protocol=None, transport=None,
                               hasResidentKey=None, hasUserVerification=None,
-                              isUserConsenting=None, isUserVerified=None):
+                              isUserConsenting=None, isUserVerified=None,
+                              extensions=None):
     options = {}
     if protocol is not None:
       options['protocol'] = protocol
@@ -681,6 +685,8 @@ class ChromeDriver(object):
       options['isUserConsenting'] = isUserConsenting
     if isUserVerified is not None:
       options['isUserVerified'] = isUserVerified
+    if extensions is not None:
+      options['extensions'] = extensions
 
     return self.ExecuteCommand(Command.ADD_VIRTUAL_AUTHENTICATOR, options)
 
@@ -690,7 +696,7 @@ class ChromeDriver(object):
 
   def AddCredential(self, authenticatorId=None, credentialId=None,
                     isResidentCredential=None, rpId=None, privateKey=None,
-                    userHandle=None, signCount=None):
+                    userHandle=None, signCount=None, largeBlob=None):
     options = {}
     if authenticatorId is not None:
       options['authenticatorId'] = authenticatorId
@@ -706,6 +712,8 @@ class ChromeDriver(object):
       options['userHandle'] = userHandle
     if signCount is not None:
       options['signCount'] = signCount
+    if largeBlob is not None:
+      options['largeBlob'] = largeBlob
     return self.ExecuteCommand(Command.ADD_CREDENTIAL, options)
 
   def GetCredentials(self, authenticatorId):

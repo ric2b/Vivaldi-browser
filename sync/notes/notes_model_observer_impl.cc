@@ -10,7 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/engine/non_blocking_sync_common.h"
+#include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"

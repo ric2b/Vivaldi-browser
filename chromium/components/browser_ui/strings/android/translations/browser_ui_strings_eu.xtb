@@ -17,11 +17,11 @@
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> webgunea gehitu da</translation>
 <translation id="1383876407941801731">Bilaketa</translation>
 <translation id="1384959399684842514">Pausatu da deskarga</translation>
+<translation id="1415402041810619267">URLa moztuta dago</translation>
 <translation id="1431402976894535801">Ez utzi webguneei presente noiz zauden jakiten</translation>
 <translation id="1446450296470737166">Onartu MIDI gailuen kontrol osoa</translation>
 <translation id="1509960214886564027">Baliteke webgune askotako eginbideek ez funtzionatzea</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Atzitu kamera</translation>
 <translation id="1660204651932907780">Baimendu webguneei soinua erreproduzitzea (gomendatua)</translation>
 <translation id="1677097821151855053">Cookieak eta webguneko beste datu batzuk zu gogoratzeko erabiltzen dira; adibidez, saioa hasteko edo iragarkiak pertsonalizatzeko. Webgune guztietako cookieak kudeatzeko, ikusi <ph name="BEGIN_LINK" />Ezarpenak<ph name="END_LINK" /> atala.</translation>
 <translation id="1688867105868176567">Webguneko datuak garbitu nahi dituzu?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Webgunearen URLa</translation>
 <translation id="2025115093177348061">Errealitate areagotua</translation>
 <translation id="2030769033451695672">Sakatu hau <ph name="URL_OF_THE_CURRENT_TAB" /> webgunera itzultzeko</translation>
+<translation id="2054665754582400095">Zure presentzia</translation>
 <translation id="2079545284768500474">Desegin</translation>
 <translation id="2091887806945687916">Soinua</translation>
 <translation id="2107397443965016585">Webguneei eduki babestua erreproduzitzeko baimena eman aurretik, eskatu onespena (gomendatua)</translation>
 <translation id="2146738493024040262">Ireki zuzeneko aplikazioa</translation>
 <translation id="2148716181193084225">Gaur</translation>
 <translation id="2182457891543959921">Eskatu zure baimena webguneei inguruaren 3D-ko mapa bat sortu edo kameraren posizioaren jarraipena egiteko baimena eman aurretik (gomendatua)</translation>
-<translation id="2187243482123994665">Erabiltzailearen presentzia</translation>
 <translation id="2212565012507486665">Onartu cookieak</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" /> aplikazioari kamera atzitzeko baimena emateko, kamera atzitzeko baimena aktibatu behar duzu <ph name="BEGIN_LINK" />Android-en ezarpenetan<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Behin soilik</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{Baimena eman zaie hauei: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> eta beste <ph name="NUM_MORE" />}other{Baimena eman zaie hauei: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> eta beste <ph name="NUM_MORE" />}}</translation>
 <translation id="2434158240863470628">Deskargatu da <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Kokapenerako sarbidea</translation>
 <translation id="2482878487686419369">Jakinarazpenak</translation>
 <translation id="2490684707762498678">Kudeatzailea: <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Laguntza eta iritziak</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofonoa</translation>
 <translation id="3277252321222022663">Eman sentsoreak atzitzeko baimena webguneei (gomendatua)</translation>
 <translation id="3295602654194328831">Ezkutatu informazioa</translation>
+<translation id="3328801116991980348">Webgunearen informazioa</translation>
 <translation id="3333961966071413176">Kontaktu guztiak</translation>
 <translation id="3386292677130313581">Webguneei zure kokapena erakusteko baimena eman aurretik, eskatu onespena (gomendatua)</translation>
 <translation id="3538390592868664640">Ez utzi inongo webguneri inguruaren 3D-ko mapa bat sortzen edo kameraren posizioaren jarraipena egiten</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Baimendu webguneei eduki babestua erreproduzitzea</translation>
 <translation id="4468959413250150279">Desaktibatu webgune jakin baten audioa.</translation>
 <translation id="4479647676395637221">Webguneei kamera erabiltzeko baimena eman aurretik, eskatu onespena (gomendatua)</translation>
+<translation id="4505788138578415521">URLa zabalduta dago</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> aplikazioari mikrofonoa atzitzeko baimena emateko, mikrofonoa atzitzeko baimena aktibatu behar duzu <ph name="BEGIN_LINK" />Android-en ezarpenetan<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Xehetasunak</translation>
 <translation id="4645575059429386691">Gurasoek kudeatuta</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth-a</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> eta beste <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> eta beste <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289">Aktibatu <ph name="APP_NAME" /> aplikaziorako baimenak <ph name="BEGIN_LINK" />Android-en ezarpenetan<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Atzitu mikrofonoa</translation>
 <translation id="965817943346481315">Webguneak iragarki oztopatzaileak erakusten baditu, blokea itzazu (gomendatua)</translation>
 <translation id="967624055006145463">Gordetako datuak</translation>
 </translationbundle>

@@ -633,7 +633,7 @@ TEST_F(
         // Return if the iframe hasn't loaded yet.
         const iframe = rootNode.find({role: RoleType.IFRAME});
         const childDoc = iframe.firstChild;
-        if (!childDoc || childDoc.children.length == 0) {
+        if (!childDoc || childDoc.children.length === 0) {
           return;
         }
 
@@ -677,7 +677,7 @@ TEST_F(
         // Return if the iframe hasn't loaded yet.
         const iframe = rootNode.find({role: 'iframe'});
         const childDoc = iframe.firstChild;
-        if (!childDoc || childDoc.children.length == 0) {
+        if (!childDoc || childDoc.children.length === 0) {
           return;
         }
 
@@ -1013,7 +1013,7 @@ TEST_F('ChromeVoxBackgroundTest', 'Selection', function() {
       function(root) {
         // Fakes a toggleSelection command.
         root.addEventListener('textSelectionChanged', function() {
-          if (root.focusOffset == 3) {
+          if (root.focusOffset === 3) {
             CommandHandler.onCommand('toggleSelection');
           }
         }, true);
@@ -2486,7 +2486,7 @@ TEST_F('ChromeVoxBackgroundTest', 'ReadWindowTitle', function() {
         const clickButtonThenReadCurrentTitle = () => {
           const desktop = root.parent.root;
           desktop.addEventListener(EventType.TREE_CHANGED, (evt) => {
-            if (evt.target.role == RoleType.WINDOW &&
+            if (evt.target.role === RoleType.WINDOW &&
                 /bar/.test(evt.target.name)) {
               doCmd('readCurrentTitle')();
             }
@@ -2718,51 +2718,6 @@ TEST_F('ChromeVoxBackgroundTest', 'SwipeToScrollByPage', function() {
             .call(doGesture('swipeDown3'))
             .expectSpeech(/Page 1 of/)
             .replay();
-      });
-});
-
-TEST_F('ChromeVoxBackgroundTest', 'ReadFromHereAccumulatesText', function() {
-  this.runWithLoadedTree(
-      `
-    <p>start</p>
-    <p><span>hi</span><span>there</span></p>
-    <p><span lang="es">hola</span><span>there</span></p>
-    <p>goodbye</p>
-  `,
-      async function(root) {
-        // Flip on language switching and fake out voices needed by the test.
-        localStorage['languageSwitching'] = 'true';
-        LocaleOutputHelper.instance.availableVoices_ =
-            [{lang: 'en-US'}, {lang: 'es'}];
-        const expectedText = [
-          {text: 'hi there'}, {text: 'espa\u00f1ol: hola', lang: 'es'},
-          {text: 'English (United States): there'}, {text: 'goodbye'}
-        ];
-        await new Promise(resolve => {
-          // Due to the way the text accumulates, we can't use MockFeedback here
-          // which only executes the speech end callback when the text is
-          // matched.
-          const keepWaiting = (text, queueMode, props) => {
-            if (text == expectedText[0].text) {
-              if (expectedText[0].lang) {
-                assertEquals(props.lang, expectedText[0].lang);
-              }
-              expectedText.shift();
-            }
-
-            if (expectedText.length == 0) {
-              resolve();
-              return;
-            }
-
-            const callback = props['endCallback'];
-            if (callback) {
-              callback();
-            }
-          };
-          ChromeVox.tts.speak = keepWaiting;
-          doCmd('readFromHere')();
-        });
       });
 });
 
@@ -3102,6 +3057,209 @@ TEST_F('ChromeVoxBackgroundTest', 'VolumeChanges', function() {
               JSON.stringify(bounds),
               JSON.stringify(ChromeVoxState.instance.getFocusBounds()));
         })
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'WrapTextFieldAtEndOfDoc', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `<p>start</p><div role="textbox" contenteditable></div>`;
+  this.runWithLoadedTree(site, function() {
+    mockFeedback.call(doCmd('nextObject'))
+        .expectSpeech('Edit text')
+        .call(doCmd('nextObject'))
+        .expectEarcon(Earcon.WRAP)
+        .expectSpeech('Web Content')
+        .call(doCmd('nextObject'))
+        .expectSpeech('start')
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'ReadFromHereBlankNodes', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `<a tabindex=0></a><p>start</p><a tabindex=0></a><p>end</p>`;
+  this.runWithLoadedTree(site, function(root) {
+    assertEquals(
+        RoleType.ANCHOR, ChromeVoxState.instance.currentRange.start.node.role);
+
+    mockFeedback.call(doCmd('readFromHere'))
+        .expectSpeech('start', 'end')
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'ContainerButtons', function() {
+  const mockFeedback = this.createMockFeedback();
+
+  // This pattern can be found in ARC++/YouTube.
+  const site = `
+    <p>videos</p>
+    <div aria-label="Cat Video" role="button">
+      <div role="group">4 minutes, Cat Video</div>
+    </div>
+  `;
+  this.runWithLoadedTree(site, function(root) {
+    const group = root.find({role: RoleType.GROUP});
+
+    Object.defineProperty(group, 'clickable', {
+      get() {
+        return true;
+      }
+    });
+
+    mockFeedback.call(doCmd('nextObject'))
+        .expectSpeech('Cat Video', 'Button')
+        .call(doCmd('nextObject'))
+        .expectSpeech('4 minutes, Cat Video')
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'FocusOnWebAreaIgnoresEvents', function() {
+  const site = `
+    <div role="application" tabindex=0 aria-label="container">
+      <select>
+        <option>apple</option>
+        <option>grape</option>
+        <option>pear</option>
+      </select>
+    </div>
+    <p>go</p>
+    <script>
+      let counter = 0;
+      document.body.getElementsByTagName('p')[0].addEventListener('click',
+          e => {
+            document.body.getElementsByTagName('select')[0].selectedIndex =
+                ++counter % 3;
+          });
+    </script>
+  `;
+  this.runWithLoadedTree(site, async function(root) {
+    const application = root.find({role: RoleType.APPLICATION});
+    const popUpButton = root.find({role: RoleType.POP_UP_BUTTON});
+    const p = root.find({role: RoleType.PARAGRAPH});
+
+    // Move focus to the select, which honors value changes through
+    // FocusAutomationHandler.
+    popUpButton.focus();
+    await TestUtils.waitForSpeech('apple');
+
+    // Clicking the paragraph programmatically changes the select value.
+    p.doDefault();
+    await TestUtils.waitForSpeech('grape');
+    assertEquals(
+        RoleType.POP_UP_BUTTON,
+        ChromeVoxState.instance.currentRange.start.node.role);
+
+    // Now, move focus to the application which is a parent of the select.
+    application.focus();
+    await TestUtils.waitForSpeech('container');
+
+    // Hook into the speak call, to see what comes next.
+    let nextSpeech;
+    ChromeVox.tts.speak = textString => {
+      nextSpeech = textString;
+    };
+
+    // Trigger another value update for the select.
+    p.doDefault();
+
+    // This comes when the <select>'s value changes.
+    await TestUtils.waitForEvent(application, EventType.SELECTED_VALUE_CHANGED);
+
+    // Nothing should have been spoken.
+    assertEquals(undefined, nextSpeech);
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'AriaLeaves', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <div role="radio"><p>PM</p></div>
+    <div role="switch"><p>Agree</p></div>
+    <div role="checkbox"><p>Agree</p></div>
+    <script>
+      const p = document.getElementsByTagName('p')[0];
+      p.addEventListener('click', () => {});
+    </script>
+  `;
+  this.runWithLoadedTree(site, function(root) {
+    mockFeedback.expectSpeech('PM, radio button unselected')
+        .call(doCmd('nextObject'))
+        .expectSpeech('PM')
+        .call(
+            () => assertEquals(
+                RoleType.STATIC_TEXT,
+                ChromeVoxState.instance.currentRange.start.node.role))
+
+        .call(doCmd('nextObject'))
+        .expectSpeech('Agree, switch off')
+        .call(
+            () => assertEquals(
+                RoleType.SWITCH,
+                ChromeVoxState.instance.currentRange.start.node.role))
+
+        .call(doCmd('nextObject'))
+        .expectSpeech('Agree', 'Check box')
+        .call(
+            () => assertEquals(
+                RoleType.CHECK_BOX,
+                ChromeVoxState.instance.currentRange.start.node.role))
+
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'MarkedContent', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <p>Start</p>
+    <span>This is </span><span role="mark">my</span><span> text.</span>
+    <br>
+    <span>This is </span><span role="mark"
+        aria-roledescription="Comment">your</span><span> text.</span>
+    <br>
+    <span>This is </span><span role="suggestion"><span
+        role="insertion">their</span></span><span> text.</span>
+    <br>
+    <span>This is </span><span role="suggestion"><span
+        role="deletion">everyone's</span></span><span> text.</span>
+  `;
+  this.runWithLoadedTree(site, function(rootNode) {
+    mockFeedback.expectSpeech('Start')
+        .call(doCmd('nextObject'))
+        .expectSpeech('This is ')
+        .call(doCmd('nextObject'))
+        .expectSpeech('my', 'Marked content')
+        .expectBraille('my Marked content')
+        .call(doCmd('nextObject'))
+        .expectSpeech(' text.', 'Exited Marked content.')
+        .expectBraille(' text. Exited Marked content.')
+        .call(doCmd('nextObject'))
+        .expectSpeech('This is ')
+        .call(doCmd('nextObject'))
+        .expectSpeech('your', 'Comment')
+        .expectBraille('your Comment')
+        .call(doCmd('nextObject'))
+        .expectSpeech(' text.', 'Exited Comment.')
+        .expectBraille(' text. Exited Comment.')
+        .call(doCmd('nextObject'))
+        .expectSpeech('This is ')
+        .call(doCmd('nextObject'))
+        .expectSpeech('their', 'Insertion', 'Suggestion')
+        .expectBraille('their Insertion Suggestion')
+        .call(doCmd('nextObject'))
+        .expectSpeech(' text.', 'Exited Suggestion.', 'Exited Insertion.')
+        .expectBraille(' text. Exited Suggestion. Exited Insertion.')
+        .call(doCmd('nextObject'))
+        .expectSpeech('This is ')
+        .call(doCmd('nextObject'))
+        .expectSpeech(`everyone's`, 'Deletion', 'Suggestion')
+        .expectBraille(`everyone's Deletion Suggestion`)
+        .call(doCmd('nextObject'))
+        .expectSpeech(' text.', 'Exited Suggestion.', 'Exited Deletion.')
+        .expectBraille(' text. Exited Suggestion. Exited Deletion.')
         .replay();
   });
 });

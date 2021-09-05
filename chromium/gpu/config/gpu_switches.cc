@@ -10,6 +10,10 @@ namespace switches {
 // Overrides the kEnableGpuRasterization flag.
 const char kDisableGpuRasterization[] = "disable-gpu-rasterization";
 
+// Disables mipmap generation in Skia. Used a workaround for select low memory
+// devices, see https://crbug.com/1138979 for details.
+const char kDisableMipmapGeneration[] = "disable-mipmap-generation";
+
 // Allow heuristics to determine when a layer tile should be drawn with the
 // Skia GPU backend. Only valid with GPU accelerated compositing.
 const char kEnableGpuRasterization[] = "enable-gpu-rasterization";
@@ -46,6 +50,9 @@ const char kEnableUnsafeWebGPU[] = "enable-unsafe-webgpu";
 // Enable validation layers in Dawn backends.
 const char kEnableDawnBackendValidation[] = "enable-dawn-backend-validation";
 
+// Enable the toggle Toggle::DisableRobustness when creating Dawn device.
+const char kDisableDawnRobustness[] = "disable-dawn-robustness";
+
 // Increases the priority (to REALTIME_AUDIO) of gpu process and compositor
 // thread.
 // This is only to be used for perf tests on macOS for more reliable values.
@@ -80,5 +87,28 @@ const char kGpuRevision[] = "gpu-revision";
 // Passes the active graphics driver version from browser process to info
 // collection GPU process.
 const char kGpuDriverVersion[] = "gpu-driver-version";
+
+// Indicate that the this is being used by Android WebView and its draw functor
+// is using vulkan.
+const char kWebViewDrawFunctorUsesVulkan[] = "webview-draw-functor-uses-vulkan";
+
+// Enables using protected memory for vulkan resources.
+const char kEnableVulkanProtectedMemory[] = "enable-vulkan-protected-memory";
+
+// Forces vulkan resources to use protected memory for vulkan compositing.
+const char kEnforceVulkanProtectedMemory[] = "enforce-vulkan-protected-memory";
+
+// Disables falling back to GL based hardware rendering if initializing Vulkan
+// fails. This is to allow tests to catch regressions in Vulkan.
+const char kDisableVulkanFallbackToGLForTesting[] =
+    "disable-vulkan-fallback-to-gl-for-testing";
+
+// Specifies the heap limit for Vulkan memory.
+// TODO(crbug/1158000): Remove this switch.
+const char kVulkanHeapMemoryLimitMb[] = "vulkan-heap-memory-limit-mb";
+
+// Specifies the sync CPU limit for total Vulkan memory.
+// TODO(crbug/1158000): Remove this switch.
+const char kVulkanSyncCpuMemoryLimitMb[] = "vulkan-sync-cpu-memory-limit-mb";
 
 }  // namespace switches

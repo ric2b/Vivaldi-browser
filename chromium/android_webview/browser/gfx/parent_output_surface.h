@@ -50,9 +50,6 @@ class ParentOutputSurface : public viz::OutputSurface {
       viz::UpdateVSyncParametersCallback callback) override;
   void SetDisplayTransformHint(gfx::OverlayTransform transform) override {}
   gfx::OverlayTransform GetDisplayTransform() override;
-  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper()
-      override;
-  gpu::MemoryTracker* GetMemoryTracker() override;
 
  private:
   void OnPresentation(base::TimeTicks swap_start,

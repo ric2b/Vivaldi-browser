@@ -1341,7 +1341,7 @@ class AutofillServerCommunicationTest
     driver_ = std::make_unique<TestAutofillDriver>();
     driver_->SetSharedURLLoaderFactory(shared_url_loader_factory_);
     driver_->SetIsolationInfo(net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateNothing,
+        net::IsolationInfo::RequestType::kOther,
         url::Origin::Create(GURL("https://abc.com")),
         url::Origin::Create(GURL("https://xyz.com")), net::SiteForCookies()));
 
@@ -2062,8 +2062,7 @@ TEST_P(AutofillUploadTest, ThrottlingDisabled) {
       // Enabled.
       {},
       // Disabled
-      {features::kAutofillUploadThrottling,
-       features::kAutofillEnforceMinRequiredFieldsForUpload});
+      {features::kAutofillUploadThrottling});
 
   FormData form;
   FormData small_form;

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/dbus/upstart/fake_upstart_client.h"
@@ -56,7 +56,7 @@ class UpstartClientImpl : public UpstartClient {
   void StopJob(const std::string& job,
                const std::vector<std::string>& upstart_env,
                VoidDBusMethodCallback callback) override {
-    CallJobMethod(job, kStopMethod, {}, std::move(callback));
+    CallJobMethod(job, kStopMethod, upstart_env, std::move(callback));
   }
 
   void StartAuthPolicyService() override {

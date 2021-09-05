@@ -5,14 +5,16 @@
 #include "chrome/updater/app/server/win/com_classes.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/version.h"
 #include "base/win/scoped_bstr.h"
 #include "chrome/updater/app/server/win/server.h"
+#include "chrome/updater/updater_version.h"
 
 namespace updater {
 
@@ -88,6 +90,20 @@ STDMETHODIMP CompleteStatusImpl::get_statusMessage(BSTR* message) {
   return S_OK;
 }
 
+HRESULT UpdaterImpl::GetVersion(BSTR* version) {
+  DCHECK(version);
+
+  // Return the hardcoded version instead of calling the corresponding
+  // non-blocking function of `UpdateServiceImpl`. This results in some
+  // code duplication but it avoids the complexities of making this function
+  // non-blocking.
+  *version =
+      base::win::ScopedBstr(
+          base::UTF8ToWide(base::Version(UPDATER_VERSION_STRING).GetString()))
+          .Release();
+  return S_OK;
+}
+
 HRESULT UpdaterImpl::CheckForUpdate(const base::char16* app_id) {
   return E_NOTIMPL;
 }
@@ -104,7 +120,7 @@ HRESULT UpdaterImpl::Register(const base::char16* app_id,
 // |update_service| on the main sequence. The callbacks received from
 // |update_service| arrive in the main sequence too. Since handling these
 // callbacks involves issuing outgoing COM RPC calls, which block, such COM
-// calls must be done through a task runner, bound to the closures provided]
+// calls must be done through a task runner, bound to the closures provided
 // as parameters for the UpdateService::Update call.
 HRESULT UpdaterImpl::Update(const base::char16* app_id,
                             IUpdaterObserver* observer) {
@@ -211,8 +227,9 @@ HRESULT UpdaterImpl::UpdateAll(IUpdaterObserver* observer) {
 }
 
 // See the comment for the UpdaterImpl::Update.
-HRESULT UpdaterControlImpl::Run(IUpdaterObserver* observer) {
-  using IUpdaterObserverPtr = Microsoft::WRL::ComPtr<IUpdaterObserver>;
+HRESULT UpdaterControlImpl::Run(IUpdaterControlCallback* callback) {
+  using IUpdaterControlCallbackPtr =
+      Microsoft::WRL::ComPtr<IUpdaterControlCallback>;
   scoped_refptr<ComServerApp> com_server = AppServerSingletonInstance();
 
   auto task_runner = base::ThreadPool::CreateSequencedTaskRunner(
@@ -223,33 +240,33 @@ HRESULT UpdaterControlImpl::Run(IUpdaterObserver* observer) {
       base::BindOnce(
           [](scoped_refptr<ControlService> control_service,
              scoped_refptr<base::SequencedTaskRunner> task_runner,
-             IUpdaterObserverPtr observer) {
+             IUpdaterControlCallbackPtr callback) {
             control_service->Run(base::BindOnce(
                 [](scoped_refptr<base::SequencedTaskRunner> task_runner,
-                   IUpdaterObserverPtr observer) {
+                   IUpdaterControlCallbackPtr callback) {
                   task_runner->PostTaskAndReplyWithResult(
                       FROM_HERE,
-                      base::BindOnce(
-                          &IUpdaterObserver::OnComplete, observer,
-                          Microsoft::WRL::Make<CompleteStatusImpl>(0, L"")),
+                      base::BindOnce(&IUpdaterControlCallback::Run, callback,
+                                     0),
                       base::BindOnce([](HRESULT hr) {
                         DVLOG(2) << "UpdaterControlImpl::Run "
                                  << "callback returned " << std::hex << hr;
                       }));
                 },
-                task_runner, observer));
+                task_runner, callback));
           },
           com_server->control_service(), task_runner,
-          IUpdaterObserverPtr(observer)));
+          IUpdaterControlCallbackPtr(callback)));
 
   // Always return S_OK from this function. Errors must be reported using the
-  // observer interface.
+  // callback interface.
   return S_OK;
 }
 
 HRESULT UpdaterControlImpl::InitializeUpdateService(
-    IUpdaterObserver* observer) {
-  using IUpdaterObserverPtr = Microsoft::WRL::ComPtr<IUpdaterObserver>;
+    IUpdaterControlCallback* callback) {
+  using IUpdaterControlCallbackPtr =
+      Microsoft::WRL::ComPtr<IUpdaterControlCallback>;
   scoped_refptr<ComServerApp> com_server = AppServerSingletonInstance();
 
   auto task_runner = base::ThreadPool::CreateSequencedTaskRunner(
@@ -260,28 +277,27 @@ HRESULT UpdaterControlImpl::InitializeUpdateService(
       base::BindOnce(
           [](scoped_refptr<ControlService> control_service,
              scoped_refptr<base::SequencedTaskRunner> task_runner,
-             IUpdaterObserverPtr observer) {
+             IUpdaterControlCallbackPtr callback) {
             control_service->InitializeUpdateService(base::BindOnce(
                 [](scoped_refptr<base::SequencedTaskRunner> task_runner,
-                   IUpdaterObserverPtr observer) {
+                   IUpdaterControlCallbackPtr callback) {
                   task_runner->PostTaskAndReplyWithResult(
                       FROM_HERE,
-                      base::BindOnce(
-                          &IUpdaterObserver::OnComplete, observer,
-                          Microsoft::WRL::Make<CompleteStatusImpl>(0, L"")),
+                      base::BindOnce(&IUpdaterControlCallback::Run, callback,
+                                     0),
                       base::BindOnce([](HRESULT hr) {
                         DVLOG(2)
                             << "UpdaterControlImpl::InitializeUpdateService "
                             << "callback returned " << std::hex << hr;
                       }));
                 },
-                task_runner, observer));
+                task_runner, callback));
           },
           com_server->control_service(), task_runner,
-          IUpdaterObserverPtr(observer)));
+          IUpdaterControlCallbackPtr(callback)));
 
   // Always return S_OK from this function. Errors must be reported using the
-  // observer interface.
+  // callback interface.
   return S_OK;
 }
 

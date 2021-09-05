@@ -32,7 +32,7 @@
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/notifications/notification_handler.h"
-#include "chrome/browser/notifications/win/notification_image_retainer.h"
+#include "chrome/browser/notifications/notification_image_retainer.h"
 #include "chrome/browser/notifications/win/notification_metrics.h"
 #include "chrome/browser/notifications/win/notification_template_builder.h"
 #include "chrome/browser/notifications/win/notification_util.h"
@@ -431,6 +431,9 @@ class NotificationPlatformBridgeWinImpl
       DLOG(ERROR) << "Failed to remove notification with id "
                   << notification_id.c_str() << " " << std::hex << hr;
     } else {
+      // We expect the notification to be removed from the action center now.
+      displayed_notifications_.erase({profile_id, notification_id});
+
       LogCloseHistogram(CloseStatus::SUCCESS);
     }
   }

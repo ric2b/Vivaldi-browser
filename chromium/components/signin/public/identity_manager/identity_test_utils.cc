@@ -23,6 +23,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/components/account_manager/account_manager.h"
+#include "components/account_manager_core/account.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -84,9 +85,8 @@ void UpdateRefreshTokenForAccount(
 
   DCHECK(account_manager);
   account_manager->UpsertAccount(
-      chromeos::AccountManager::AccountKey{
-          account_info.gaia,
-          chromeos::account_manager::AccountType::ACCOUNT_TYPE_GAIA},
+      account_manager::AccountKey{account_info.gaia,
+                                  account_manager::AccountType::kGaia},
       account_info.email, new_token);
 #else
   token_service->UpdateCredentials(account_id, new_token);
@@ -117,7 +117,7 @@ CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
   DCHECK(!identity_manager->HasPrimaryAccount());
   PrimaryAccountManager* primary_account_manager =
       identity_manager->GetPrimaryAccountManager();
-  DCHECK(!primary_account_manager->IsAuthenticated());
+  DCHECK(!primary_account_manager->HasPrimaryAccount(ConsentLevel::kSync));
 
   AccountInfo account_info =
       EnsureAccountExists(identity_manager->GetAccountTrackerService(), email);
@@ -125,7 +125,7 @@ CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
 
   primary_account_manager->SignIn(email);
 
-  DCHECK(primary_account_manager->IsAuthenticated());
+  DCHECK(primary_account_manager->HasPrimaryAccount(ConsentLevel::kSync));
   DCHECK(identity_manager->HasPrimaryAccount());
   return identity_manager->GetPrimaryAccountInfo();
 }
@@ -336,9 +336,8 @@ void RemoveRefreshTokenForAccount(IdentityManager* identity_manager,
       identity_manager->GetAccountTrackerService()->GetAccountInfo(account_id);
 
   identity_manager->GetChromeOSAccountManager()->RemoveAccount(
-      chromeos::AccountManager::AccountKey{
-          account_info.gaia,
-          chromeos::account_manager::AccountType::ACCOUNT_TYPE_GAIA});
+      account_manager::AccountKey{account_info.gaia,
+                                  account_manager::AccountType::kGaia});
 #else
   identity_manager->GetTokenService()->RevokeCredentials(account_id);
 #endif

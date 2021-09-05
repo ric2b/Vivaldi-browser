@@ -12,6 +12,8 @@ import android.view.ViewGroup;
 import org.chromium.base.SysUtils;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -19,6 +21,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.TasksSurface;
 import org.chromium.chrome.browser.tasks.TasksSurfaceCoordinator;
@@ -40,9 +43,10 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
     @Override
     public TasksSurface createTasksSurface(ChromeActivity activity,
             ScrimCoordinator scrimCoordinator, PropertyModel propertyModel,
-            @TabSwitcherType int tabSwitcherType, boolean hasMVTiles, boolean hasTrendyTerms) {
+            @TabSwitcherType int tabSwitcherType, Supplier<Tab> parentTabSupplier,
+            boolean hasMVTiles, boolean hasTrendyTerms) {
         return new TasksSurfaceCoordinator(activity, scrimCoordinator, propertyModel,
-                tabSwitcherType, hasMVTiles, hasTrendyTerms);
+                tabSwitcherType, parentTabSupplier, hasMVTiles, hasTrendyTerms);
     }
 
     @Override
@@ -95,8 +99,11 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
 
     @Override
     public StartSurface createStartSurface(ChromeActivity activity,
-            ScrimCoordinator scrimCoordinator, BottomSheetController sheetController) {
-        return StartSurfaceDelegate.createStartSurface(activity, scrimCoordinator, sheetController);
+            ScrimCoordinator scrimCoordinator, BottomSheetController sheetController,
+            OneshotSupplierImpl<StartSurface> startSurfaceOneshotSupplier,
+            Supplier<Tab> parentTabSupplier, boolean hadWarmStart) {
+        return StartSurfaceDelegate.createStartSurface(activity, scrimCoordinator, sheetController,
+                startSurfaceOneshotSupplier, parentTabSupplier, hadWarmStart);
     }
 
     @Override

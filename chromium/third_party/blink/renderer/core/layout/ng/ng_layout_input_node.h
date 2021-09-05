@@ -121,7 +121,7 @@ class CORE_EXPORT NGLayoutInputNode {
   }
   bool ListMarkerOccupiesWholeLine() const {
     DCHECK(IsListMarker());
-    return ToLayoutNGOutsideListMarker(box_)->NeedsOccupyWholeLine();
+    return To<LayoutNGOutsideListMarker>(box_)->NeedsOccupyWholeLine();
   }
   bool IsButton() const { return IsBlock() && box_->IsLayoutNGButton(); }
   bool IsFieldsetContainer() const {
@@ -140,6 +140,7 @@ class CORE_EXPORT NGLayoutInputNode {
   // Return true if this node is for a slider thumb in <input type=range>.
   bool IsSliderThumb() const;
   bool IsTable() const { return IsBlock() && box_->IsTable(); }
+  bool IsNGTable() const { return IsTable() && box_->IsLayoutNGMixin(); }
 
   bool IsTableCaption() const { return IsBlock() && box_->IsTableCaption(); }
 
@@ -159,6 +160,11 @@ class CORE_EXPORT NGLayoutInputNode {
   wtf_size_t TableCellColspan() const;
 
   wtf_size_t TableCellRowspan() const;
+
+  bool IsTextArea() const { return box_->IsTextAreaIncludingNG(); }
+  bool IsTextControl() const { return box_->IsTextControlIncludingNG(); }
+  bool IsTextControlPlaceholder() const;
+  bool IsTextField() const { return box_->IsTextFieldIncludingNG(); }
 
   bool IsMathRoot() const { return box_->IsMathMLRoot(); }
   bool IsMathML() const { return box_->IsMathML(); }

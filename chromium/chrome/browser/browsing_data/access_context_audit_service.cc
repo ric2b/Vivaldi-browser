@@ -54,7 +54,11 @@ void AccessContextAuditService::CookieAccessHelper::FlushCookieRecords() {
 
 AccessContextAuditService::AccessContextAuditService(Profile* profile)
     : clock_(base::DefaultClock::GetInstance()), profile_(profile) {}
-AccessContextAuditService::~AccessContextAuditService() = default;
+
+AccessContextAuditService::~AccessContextAuditService() {
+  // This destructor may do I/O, so destroy it on the database task runner.
+  database_task_runner_->ReleaseSoon(FROM_HERE, std::move(database_));
+}
 
 bool AccessContextAuditService::Init(
     const base::FilePath& database_dir,
@@ -316,7 +320,7 @@ void AccessContextAuditService::SetTaskRunnerForTesting(
 void AccessContextAuditService::ClearSessionOnlyRecords() {
   ContentSettingsForOneType settings;
   HostContentSettingsMapFactory::GetForProfile(profile_)->GetSettingsForOneType(
-      ContentSettingsType::COOKIES, std::string(), &settings);
+      ContentSettingsType::COOKIES, &settings);
 
   database_task_runner_->PostTask(
       FROM_HERE,

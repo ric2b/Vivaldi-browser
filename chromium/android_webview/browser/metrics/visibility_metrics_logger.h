@@ -26,6 +26,10 @@ class VisibilityMetricsLogger {
     bool view_visible = false;
     bool window_visible = false;
     bool scheme_http_or_https = false;
+
+    bool IsVisible() const;
+    bool ContainsOpenWebContent() const;
+    bool IsDisplayingOpenWebContent() const;
   };
 
   // These values are persisted to logs. Entries should not be renumbered and
@@ -34,6 +38,23 @@ class VisibilityMetricsLogger {
     kVisible = 0,
     kNotVisible = 1,
     kMaxValue = kNotVisible
+  };
+
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class WebViewOpenWebScreenPortion {
+    kZeroPercent = 0,
+    kTenPercent = 1,
+    kTwentyPercent = 2,
+    kThirtyPercent = 3,
+    kFortyPercent = 4,
+    kFiftyPercent = 5,
+    kSixtyPercent = 6,
+    kSeventyPercent = 7,
+    kEightyPercent = 8,
+    kNinetyPercent = 9,
+    kOneHundredPercent = 10,
+    kMaxValue = kOneHundredPercent
   };
 
   // These values are persisted to logs. Entries should not be renumbered and
@@ -58,6 +79,7 @@ class VisibilityMetricsLogger {
   void AddClient(Client* client);
   void RemoveClient(Client* client);
   void ClientVisibilityChanged(Client* client);
+  void UpdateOpenWebScreenArea(int pixels, int percentage);
 
   void RecordMetrics();
 
@@ -73,6 +95,7 @@ class VisibilityMetricsLogger {
   static base::HistogramBase* GetPerWebViewVisibilityHistogram();
   static base::HistogramBase* GetGlobalOpenWebVisibilityHistogram();
   static base::HistogramBase* GetPerWebViewOpenWebVisibilityHistogram();
+  static base::HistogramBase* GetOpenWebVisibileScreenPortionHistogram();
   static base::HistogramBase* CreateHistogramForDurationTracking(
       const char* name,
       int max_value);
@@ -83,6 +106,7 @@ class VisibilityMetricsLogger {
   bool IsDisplayingOpenWebContent(const VisibilityInfo& info);
   void RecordVisibilityMetrics();
   void RecordOpenWebDisplayMetrics();
+  void RecordScreenPortionMetrics();
 
   // Counter for visible clients
   size_t visible_client_count_ = 0;
@@ -97,7 +121,7 @@ class VisibilityMetricsLogger {
     base::TimeDelta no_webview_tracked_duration_ =
         base::TimeDelta::FromSeconds(0);
     // Total duration that WebViews meet the tracking criteria (i.e. if
-    // 2x WebViews meet the criteria for 1 second then increment by 2 sections)
+    // 2x WebViews meet the criteria for 1 second then increment by 2 seconds)
     base::TimeDelta per_webview_duration_ = base::TimeDelta::FromSeconds(0);
     // Total duration that WebViews exist but do not meet the tracking criteria
     base::TimeDelta per_webview_untracked_duration_ =
@@ -109,6 +133,13 @@ class VisibilityMetricsLogger {
 
   base::TimeTicks last_update_time_;
   std::map<Client*, VisibilityInfo> client_visibility_;
+
+  int open_web_screen_area_pixels_ = 0;
+  int open_web_screen_area_percentage_ = 0;
+  WebViewOpenWebScreenPortion current_open_web_screen_portion_ =
+      WebViewOpenWebScreenPortion::kZeroPercent;
+  base::TimeDelta open_web_screen_portion_tracked_duration_
+      [static_cast<size_t>(WebViewOpenWebScreenPortion::kMaxValue) + 1] = {};
 
   OnVisibilityChangedCallback on_visibility_changed_callback_;
 };

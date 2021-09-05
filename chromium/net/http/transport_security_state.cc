@@ -21,6 +21,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -90,21 +91,20 @@ void RecordUMAForHPKPReportFailure(const GURL& report_uri,
   base::UmaHistogramSparse("Net.PublicKeyPinReportSendingFailure2", -net_error);
 }
 
-std::unique_ptr<base::ListValue> GetPEMEncodedChainAsList(
-    const net::X509Certificate* cert_chain) {
+base::Value GetPEMEncodedChainAsList(const net::X509Certificate* cert_chain) {
   if (!cert_chain)
-    return std::make_unique<base::ListValue>();
+    return base::Value(base::Value::Type::LIST);
 
-  std::unique_ptr<base::ListValue> result(new base::ListValue());
+  base::Value result(base::Value::Type::LIST);
   std::vector<std::string> pem_encoded_chain;
   cert_chain->GetPEMEncodedChain(&pem_encoded_chain);
   for (const std::string& cert : pem_encoded_chain)
-    result->Append(std::make_unique<base::Value>(cert));
+    result.Append(cert);
 
   return result;
 }
 
-bool HashReportForCache(const base::DictionaryValue& report,
+bool HashReportForCache(const base::Value& report,
                         const GURL& report_uri,
                         std::string* cache_key) {
   char hashed[crypto::kSHA256Length];
@@ -128,23 +128,23 @@ bool GetHPKPReport(const HostPortPair& host_port_pair,
   if (pkp_state.report_uri.is_empty())
     return false;
 
-  base::DictionaryValue report;
+  base::Value report(base::Value::Type::DICTIONARY);
   base::Time now = base::Time::Now();
-  report.SetString("hostname", host_port_pair.host());
-  report.SetInteger("port", host_port_pair.port());
-  report.SetBoolean("include-subdomains", pkp_state.include_subdomains);
-  report.SetString("noted-hostname", pkp_state.domain);
+  report.SetStringKey("hostname", host_port_pair.host());
+  report.SetIntKey("port", host_port_pair.port());
+  report.SetBoolKey("include-subdomains", pkp_state.include_subdomains);
+  report.SetStringKey("noted-hostname", pkp_state.domain);
 
-  std::unique_ptr<base::ListValue> served_certificate_chain_list =
+  auto served_certificate_chain_list =
       GetPEMEncodedChainAsList(served_certificate_chain);
-  std::unique_ptr<base::ListValue> validated_certificate_chain_list =
+  auto validated_certificate_chain_list =
       GetPEMEncodedChainAsList(validated_certificate_chain);
-  report.Set("served-certificate-chain",
-             std::move(served_certificate_chain_list));
-  report.Set("validated-certificate-chain",
-             std::move(validated_certificate_chain_list));
+  report.SetKey("served-certificate-chain",
+                std::move(served_certificate_chain_list));
+  report.SetKey("validated-certificate-chain",
+                std::move(validated_certificate_chain_list));
 
-  std::unique_ptr<base::ListValue> known_pin_list(new base::ListValue());
+  base::Value known_pin_list(base::Value::Type::LIST);
   for (const auto& hash_value : pkp_state.spki_hashes) {
     std::string known_pin;
 
@@ -165,11 +165,10 @@ bool GetHPKPReport(const HostPortPair& host_port_pair,
         &base64_value);
     known_pin += "\"" + base64_value + "\"";
 
-    known_pin_list->Append(
-        std::unique_ptr<base::Value>(new base::Value(known_pin)));
+    known_pin_list.Append(known_pin);
   }
 
-  report.Set("known-pins", std::move(known_pin_list));
+  report.SetKey("known-pins", std::move(known_pin_list));
 
   // For the sent reports cache, do not include the effective expiration
   // date. The expiration date will likely change every time the user
@@ -180,9 +179,9 @@ bool GetHPKPReport(const HostPortPair& host_port_pair,
     return false;
   }
 
-  report.SetString("date-time", base::TimeToISO8601(now));
-  report.SetString("effective-expiration-date",
-                   base::TimeToISO8601(pkp_state.expiry));
+  report.SetStringKey("date-time", base::TimeToISO8601(now));
+  report.SetStringKey("effective-expiration-date",
+                      base::TimeToISO8601(pkp_state.expiry));
   if (!base::JSONWriter::Write(report, serialized_report)) {
     LOG(ERROR) << "Failed to serialize HPKP violation report.";
     return false;
@@ -455,6 +454,7 @@ TransportSecurityState::PKPStatus TransportSecurityState::CheckPublicKeyPins(
     const X509Certificate* served_certificate_chain,
     const X509Certificate* validated_certificate_chain,
     const PublicKeyPinReportStatus report_status,
+    const NetworkIsolationKey& network_isolation_key,
     std::string* pinning_failure_log) {
   // Perform pin validation only if the server actually has public key pins.
   if (!HasPublicKeyPins(host_port_pair.host())) {
@@ -464,7 +464,7 @@ TransportSecurityState::PKPStatus TransportSecurityState::CheckPublicKeyPins(
   PKPStatus pin_validity = CheckPublicKeyPinsImpl(
       host_port_pair, is_issued_by_known_root, public_key_hashes,
       served_certificate_chain, validated_certificate_chain, report_status,
-      pinning_failure_log);
+      network_isolation_key, pinning_failure_log);
 
   // Don't track statistics when a local trust anchor would override the pinning
   // anyway.
@@ -746,6 +746,7 @@ TransportSecurityState::CheckPinsAndMaybeSendReport(
     const X509Certificate* served_certificate_chain,
     const X509Certificate* validated_certificate_chain,
     const TransportSecurityState::PublicKeyPinReportStatus report_status,
+    const net::NetworkIsolationKey& network_isolation_key,
     std::string* failure_log) {
   if (pkp_state.CheckPublicKeyPins(hashes, failure_log))
     return PKPStatus::OK;
@@ -787,7 +788,8 @@ TransportSecurityState::CheckPinsAndMaybeSendReport(
           base::TimeDelta::FromMinutes(kTimeToRememberReportsMins));
 
   report_sender_->Send(pkp_state.report_uri, "application/json; charset=utf-8",
-                       serialized_report, base::OnceCallback<void()>(),
+                       serialized_report, network_isolation_key,
+                       base::OnceCallback<void()>(),
                        base::BindOnce(RecordUMAForHPKPReportFailure));
   return PKPStatus::VIOLATED;
 }
@@ -1115,6 +1117,7 @@ TransportSecurityState::CheckPublicKeyPinsImpl(
     const X509Certificate* served_certificate_chain,
     const X509Certificate* validated_certificate_chain,
     const PublicKeyPinReportStatus report_status,
+    const NetworkIsolationKey& network_isolation_key,
     std::string* failure_log) {
   PKPState pkp_state;
   bool found_state = GetPKPState(host_port_pair.host(), &pkp_state);
@@ -1125,7 +1128,7 @@ TransportSecurityState::CheckPublicKeyPinsImpl(
   return CheckPinsAndMaybeSendReport(
       host_port_pair, is_issued_by_known_root, pkp_state, hashes,
       served_certificate_chain, validated_certificate_chain, report_status,
-      failure_log);
+      network_isolation_key, failure_log);
 }
 
 bool TransportSecurityState::GetStaticDomainState(const std::string& host,
@@ -1221,8 +1224,13 @@ bool TransportSecurityState::GetDynamicSTSState(const std::string& host,
     // An entry matches if it is either an exact match, or if it is a prefix
     // match and the includeSubDomains directive was included.
     if (i == 0 || j->second.include_subdomains) {
+      base::Optional<std::string> dotted_name =
+          DnsDomainToString(host_sub_chunk);
+      if (!dotted_name)
+        return false;
+
       *result = j->second;
-      result->domain = DNSDomainToString(host_sub_chunk);
+      result->domain = std::move(dotted_name).value();
       return true;
     }
   }
@@ -1262,8 +1270,13 @@ bool TransportSecurityState::GetDynamicPKPState(const std::string& host,
     // implement HPKP, so this logic is only used via AddHPKP(), reachable from
     // Cronet.
     if (i == 0 || j->second.include_subdomains) {
+      base::Optional<std::string> dotted_name =
+          DnsDomainToString(host_sub_chunk);
+      if (!dotted_name)
+        return false;
+
       *result = j->second;
-      result->domain = DNSDomainToString(host_sub_chunk);
+      result->domain = std::move(dotted_name).value();
       return true;
     }
 

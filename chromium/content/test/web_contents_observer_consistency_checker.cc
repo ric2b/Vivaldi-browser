@@ -114,11 +114,6 @@ void WebContentsObserverConsistencyChecker::RenderFrameDeleted(
     CHECK_NE(id.render_frame_host, render_frame_host);
 }
 
-void WebContentsObserverConsistencyChecker::
-    RenderFrameForInterstitialPageCreated(RenderFrameHost* render_frame_host) {
-  // TODO(nick): Record this.
-}
-
 void WebContentsObserverConsistencyChecker::RenderFrameHostChanged(
     RenderFrameHost* old_host,
     RenderFrameHost* new_host) {
@@ -396,7 +391,7 @@ void WebContentsObserverConsistencyChecker::EnsureStableParentValue(
     parent_ids_.insert(std::make_pair(routing_pair, parent_routing_pair));
   } else {
     GlobalRoutingID former_parent_routing_pair = it->second;
-    CHECK(former_parent_routing_pair == parent_routing_pair)
+    CHECK_EQ(former_parent_routing_pair, parent_routing_pair)
         << "RFH's parent value changed over time! That is really not good!";
   }
 }

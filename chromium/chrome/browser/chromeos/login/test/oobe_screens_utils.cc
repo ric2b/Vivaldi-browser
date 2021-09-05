@@ -13,12 +13,12 @@
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/test/test_condition_waiter.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/pin_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
@@ -72,8 +72,8 @@ void ExitUpdateScreenNoUpdate() {
   update_engine::StatusResult status;
   status.set_current_operation(update_engine::Operation::ERROR);
 
-  UpdateScreen* screen = UpdateScreen::Get(
-      WizardController::default_controller()->screen_manager());
+  UpdateScreen* screen =
+      WizardController::default_controller()->GetScreen<UpdateScreen>();
   screen->GetVersionUpdaterForTesting()->UpdateStatusChangedForTesting(status);
 }
 
@@ -91,18 +91,18 @@ void WaitForFingerprintScreen() {
 }
 
 void ExitFingerprintPinSetupScreen() {
-  test::OobeJS().ExpectVisiblePath({"fingerprint-setup", "placeFinger"});
+  test::OobeJS().ExpectVisiblePath({"fingerprint-setup", "setupFingerprint"});
   // This might be the last step in flow. Synchronous execute gets stuck as
   // WebContents may be destroyed in the process. So it may never return.
   // So we use ExecuteAsync() here.
-  test::OobeJS().ExecuteAsync("$('fingerprint-setup').$.setupLater.click()");
+  test::OobeJS().ExecuteAsync("$('fingerprint-setup').$.skipStart.click()");
   LOG(INFO) << "OobeInteractiveUITest: Waiting for fingerprint setup screen "
                "to close.";
   WaitForExit(FingerprintSetupScreenView::kScreenId);
 }
 
-void WaitForDiscoverScreen() {
-  WaitFor(DiscoverScreenView::kScreenId);
+void WaitForPinSetupScreen() {
+  WaitFor(PinSetupScreenView::kScreenId);
 }
 
 void ExitDiscoverPinSetupScreen() {
@@ -112,7 +112,7 @@ void ExitDiscoverPinSetupScreen() {
   test::OobeJS().ExecuteAsync(
       "$('discover-impl').root.querySelector('discover-pin-setup-module')."
       "$.setupSkipButton.click()");
-  WaitForExit(DiscoverScreenView::kScreenId);
+  WaitForExit(PinSetupScreenView::kScreenId);
 }
 
 void SkipToEnrollmentOnRecovery() {

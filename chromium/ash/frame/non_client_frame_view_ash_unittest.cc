@@ -10,11 +10,6 @@
 #include "ash/frame/header_view.h"
 #include "ash/frame/wide_frame_view.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/public/cpp/default_frame_header.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
-#include "ash/public/cpp/window_properties.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -27,6 +22,11 @@
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "chromeos/ui/frame/default_frame_header.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller_test_api.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -48,6 +48,14 @@
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
+
+using ::chromeos::DefaultFrameHeader;
+using ::chromeos::FrameCaptionButtonContainerView;
+using ::chromeos::ImmersiveFullscreenController;
+using ::chromeos::ImmersiveFullscreenControllerDelegate;
+using ::chromeos::ImmersiveFullscreenControllerTestApi;
+using ::chromeos::kFrameActiveColorKey;
+using ::chromeos::kFrameInactiveColorKey;
 
 // A views::WidgetDelegate which uses a NonClientFrameViewAsh.
 class NonClientFrameViewAshTestWidgetDelegate
@@ -417,7 +425,7 @@ TEST_F(NonClientFrameViewAshTest, HeaderVisibilityInFullscreen) {
 
 namespace {
 
-class TestButtonModel : public CaptionButtonModel {
+class TestButtonModel : public chromeos::CaptionButtonModel {
  public:
   TestButtonModel() = default;
   ~TestButtonModel() override = default;

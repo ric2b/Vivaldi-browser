@@ -43,6 +43,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Windows.ComputeNativeWindowOcclusionTime" units="microseconds"
     expires_after="M83">
+  <obsolete>
+    Removed 11/2020. As of June 15, 2020, data indicates that computing
+    occlusion is fast enough at all percentiles.
+  </obsolete>
   <owner>fdoray@chromium.org</owner>
   <summary>
     The amount of CPU time a call to ComputeNativeWindowOcclusionStatus() takes.
@@ -60,6 +64,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Windows.GetVersionExVersion" enum="WindowsVersion"
     expires_after="never">
+  <obsolete>
+    Removed 10/2020 as this histogram has been replaced by the synthetic
+    histogram Windows.WindowsVersion generated from Windows.PatchLevel.
+  </obsolete>
 <!-- expires-never: Needed to measure Windows ecosystem. -->
 
   <owner>wfh@chromium.org</owner>
@@ -91,7 +99,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Windows.HypervPresent" enum="BooleanEnabled"
-    expires_after="2020-12-31">
+    expires_after="2021-05-02">
   <owner>rkc@chromium.org</owner>
   <owner>rockot@chromium.org</owner>
   <summary>
@@ -149,12 +157,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Windows.Kernel32Version" enum="WindowsVersion"
     expires_after="never">
+  <obsolete>
+    Removed 10/2020 as this histogram has been replaced by the synthetic
+    histogram Windows.WindowsVersionKernel32 generated from
+    Windows.PatchLevelKernel32.
+  </obsolete>
 <!-- expires-never: Needed to measure Windows ecosystem. -->
 
   <owner>wfh@chromium.org</owner>
   <owner>brucedawson@chromium.org</owner>
   <summary>
-    The Windows version (base::win::Version) as reported by VeryQueryValue() on
+    The Windows version (base::win::Version) as reported by VerQueryValue() on
     kernel32.dll. This is queried shortly after startup.
   </summary>
 </histogram>
@@ -179,15 +192,25 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Windows.NativeWindowVisibility" units="windows"
-    expires_after="2021-02-01">
+<histogram name="Windows.NativeWindowVisibility{NativeWindowVisibility}"
+    units="windows" expires_after="2021-02-01">
   <owner>davidbienvenu@chromium.org</owner>
   <owner>fdoray@chromium.org</owner>
   <summary>
     The number of Chrome browser windows in a given visibility state. This is
     computed using ComputeNativeWindowOcclusionStatus() and is recorded every 10
-    minutes.
+    minutes. {NativeWindowVisibility}
   </summary>
+  <token key="NativeWindowVisibility">
+    <variant name=""/>
+    <variant name=".Hidden"
+        summary="The native window is not visible because it is in a
+                 minimized window"/>
+    <variant name=".Occluded"
+        summary="The native window is fully covered by other windows"/>
+    <variant name=".Visible"
+        summary="The native window is visible or partially visible."/>
+  </token>
 </histogram>
 
 <histogram name="Windows.OOPSelectFileDialog.ProcessError" enum="BooleanError"
@@ -222,11 +245,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>brucedawson@chromium.org</owner>
   <summary>
     A 32-bit value formed from combining the minor and patch level of the
-    currently running Windows operating system. E.g. &quot;Windows 10 OS Version
-    1809 (Build 17763.503)&quot; would be 17763 (0x4563), combined with 503
-    (0x1F7) = 0x456301F7. If either minor or patch level exceeds the value that
-    can fit in a 16-bit unsigned integer, then this histogram will report 0.
-    Reported once, shortly after browser startup.
+    currently running Windows operating system as reported by GetVersionEx().
+    E.g. &quot;Windows 10 OS Version 1809 (Build 17763.503)&quot; would be 17763
+    (0x4563), combined with 503 (0x1F7) = 0x456301F7. If either minor or patch
+    level exceeds the value that can fit in a 16-bit unsigned integer, then this
+    histogram will report 0. Reported once, shortly after browser startup.
+  </summary>
+</histogram>
+
+<histogram name="Windows.PatchLevelKernel32" enum="WindowsPatchLevel"
+    expires_after="never">
+<!-- expires-never: Needed to measure Windows ecosystem. -->
+
+  <owner>wfh@chromium.org</owner>
+  <owner>brucedawson@chromium.org</owner>
+  <summary>
+    A 32-bit value formed from combining the minor and patch level of the
+    currently running Windows operating system as reported by VerQueryValue() of
+    kernel32.dll. E.g. &quot;Windows 10 OS Version 1809 (Build 17763.503)&quot;
+    would be 17763 (0x4563), combined with 503 (0x1F7) = 0x456301F7. If either
+    minor or patch level exceeds the value that can fit in a 16-bit unsigned
+    integer, then this histogram will report 0. Reported once, shortly after
+    browser startup.
   </summary>
 </histogram>
 
@@ -239,7 +279,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Windows.ProcessorFamily" enum="ProcessorFamily"
-    expires_after="2020-12-31">
+    expires_after="2021-05-02">
   <owner>rkc@chromium.org</owner>
   <owner>rockot@chromium.org</owner>
   <summary>
@@ -251,7 +291,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Windows.ProcessorVirtualizationFirmwareEnabled"
-    enum="BooleanEnabled" expires_after="2020-12-31">
+    enum="BooleanEnabled" expires_after="2021-05-02">
   <owner>rkc@chromium.org</owner>
   <owner>rockot@chromium.org</owner>
   <summary>
@@ -266,7 +306,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Windows.TmpFileDeleter.FailCount" units="files"
-    expires_after="2021-01-19">
+    expires_after="2021-05-02">
   <owner>grt@chromium.org</owner>
   <owner>etiennep@chromium.org</owner>
   <summary>
@@ -280,7 +320,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Windows.TmpFileDeleter.SuccessCount" units="files"
-    expires_after="2021-01-19">
+    expires_after="2021-05-02">
   <owner>grt@chromium.org</owner>
   <owner>etiennep@chromium.org</owner>
   <summary>

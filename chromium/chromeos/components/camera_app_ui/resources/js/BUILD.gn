@@ -22,6 +22,7 @@ js_type_check("closure_compile") {
 
 js_library("compile_resources") {
   sources = [
+    "app_window.js",
     "async_job_queue.js",
     "background.js",
     "background_ops.js",
@@ -47,10 +48,11 @@ js_library("compile_resources") {
     "models/file_system.js",
     "models/file_system_entry.js",
     "models/file_util.js",
+    "models/lazy_directory_entry.js",
     "models/mp4_video_processor.js",
     "models/native_file_system_entry.js",
-    "models/nop_video_processor.js",
     "models/result_saver.js",
+    "models/video_processor_interface.js",
     "models/video_saver.js",
     "mojo/chrome_helper.js",
     "mojo/device_operator.js",
@@ -59,9 +61,14 @@ js_library("compile_resources") {
     "perf.js",
     "sound.js",
     "state.js",
+    "test_bridge.js",
     "toast.js",
     "tooltip.js",
     "type.js",
+    "untrusted_ga_helper.js",
+    "untrusted_helper_interfaces.js",
+    "untrusted_script_loader.js",
+    "untrusted_video_processor_helper.js",
     "util.js",
     "views/camera.js",
     "views/camera/layout.js",
@@ -82,6 +89,9 @@ js_library("compile_resources") {
     "views/view.js",
     "views/warning.js",
     "waitable_event.js",
+    "window_controller/mojo_window_controller.js",
+    "window_controller/window_controller.js",
+    "window_controller/window_controller_interface.js",
   ]
   deps = [
     "//chromeos/components/camera_app_ui:mojo_bindings_js_library_for_compile",

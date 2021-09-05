@@ -17,6 +17,7 @@
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/install_bounce_metric.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_data_retriever.h"
@@ -25,8 +26,8 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -71,11 +72,13 @@ WebAppInstallTask::WebAppInstallTask(
     Profile* profile,
     OsIntegrationManager* os_integration_manager,
     InstallFinalizer* install_finalizer,
-    std::unique_ptr<WebAppDataRetriever> data_retriever)
+    std::unique_ptr<WebAppDataRetriever> data_retriever,
+    AppRegistrar* registrar)
     : data_retriever_(std::move(data_retriever)),
       os_integration_manager_(os_integration_manager),
       install_finalizer_(install_finalizer),
-      profile_(profile) {}
+      profile_(profile),
+      registrar_(registrar) {}
 
 WebAppInstallTask::~WebAppInstallTask() = default;
 
@@ -186,7 +189,7 @@ void WebAppInstallTask::LoadAndInstallWebAppFromManifestWithFallback(
       launch_url, contents,
       WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
       base::BindOnce(&WebAppInstallTask::OnWebAppUrlLoadedGetWebApplicationInfo,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     GetWeakPtr()));
 }
 
 void WebAppInstallTask::InstallWebAppFromInfo(
@@ -254,7 +257,7 @@ void WebAppInstallTask::UpdateWebAppFromInfo(
 
   data_retriever_->GetIcons(
       web_contents, std::move(icon_urls),
-      /*skip_page_fav_icons=*/true, WebAppIconDownloader::Histogram::kForUpdate,
+      /*skip_page_favicons=*/true, WebAppIconDownloader::Histogram::kForUpdate,
       base::BindOnce(&WebAppInstallTask::OnIconsRetrievedFinalizeUpdate,
                      base::Unretained(this), std::move(web_application_info)));
 }
@@ -277,7 +280,7 @@ void WebAppInstallTask::LoadAndRetrieveWebApplicationInfoWithIcons(
       start_url, web_contents(),
       WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
       base::BindOnce(&WebAppInstallTask::OnWebAppUrlLoadedGetWebApplicationInfo,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     GetWeakPtr()));
 }
 
 // static
@@ -291,6 +294,10 @@ std::unique_ptr<content::WebContents> WebAppInstallTask::CreateWebContents(
   favicon::CreateContentFaviconDriverForWebContents(web_contents.get());
 
   return web_contents;
+}
+
+base::WeakPtr<WebAppInstallTask> WebAppInstallTask::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 void WebAppInstallTask::WebContentsDestroyed() {
@@ -555,9 +562,9 @@ void WebAppInstallTask::CheckForPlayStoreIntentOrGetIcons(
           instance->IsInstallable(
               id,
               base::BindOnce(&WebAppInstallTask::OnDidCheckForIntentToPlayStore,
-                             weak_ptr_factory_.GetWeakPtr(),
-                             std::move(web_app_info), std::move(icon_urls),
-                             for_installable_site, skip_page_favicons, intent));
+                             GetWeakPtr(), std::move(web_app_info),
+                             std::move(icon_urls), for_installable_site,
+                             skip_page_favicons, intent));
           return;
         }
       }
@@ -646,8 +653,7 @@ void WebAppInstallTask::OnIconsRetrieved(
 
   install_finalizer_->FinalizeInstall(
       *web_app_info, finalize_options,
-      base::BindOnce(&WebAppInstallTask::OnInstallFinalized,
-                     weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&WebAppInstallTask::OnInstallFinalized, GetWeakPtr()));
 }
 
 void WebAppInstallTask::OnIconsRetrievedShowDialog(
@@ -672,8 +678,7 @@ void WebAppInstallTask::OnIconsRetrievedShowDialog(
     DCHECK(dialog_callback_);
     std::move(dialog_callback_)
         .Run(web_contents(), std::move(web_app_info), for_installable_site,
-             base::BindOnce(&WebAppInstallTask::OnDialogCompleted,
-                            weak_ptr_factory_.GetWeakPtr(),
+             base::BindOnce(&WebAppInstallTask::OnDialogCompleted, GetWeakPtr(),
                             for_installable_site));
   }
 }
@@ -690,8 +695,8 @@ void WebAppInstallTask::OnIconsRetrievedFinalizeUpdate(
   FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map);
 
   install_finalizer_->FinalizeUpdate(
-      *web_app_info, base::BindOnce(&WebAppInstallTask::CallInstallCallback,
-                                    weak_ptr_factory_.GetWeakPtr()));
+      *web_app_info,
+      base::BindOnce(&WebAppInstallTask::CallInstallCallback, GetWeakPtr()));
 }
 
 void WebAppInstallTask::OnDialogCompleted(
@@ -744,7 +749,7 @@ void WebAppInstallTask::OnDialogCompleted(
   install_finalizer_->FinalizeInstall(
       web_app_info_copy, finalize_options,
       base::BindOnce(&WebAppInstallTask::OnInstallFinalizedCreateShortcuts,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(web_app_info)));
+                     GetWeakPtr(), std::move(web_app_info)));
 
   // Check that the finalizer hasn't called OnInstallFinalizedCreateShortcuts
   // synchronously:
@@ -771,9 +776,22 @@ void WebAppInstallTask::OnInstallFinalizedCreateShortcuts(
     return;
   }
 
-  RecordAppBanner(web_contents(), web_app_info->start_url);
   RecordWebAppInstallationTimestamp(profile_->GetPrefs(), app_id,
                                     install_source_);
+
+  if (install_params_ && !install_params_->locally_installed) {
+    DCHECK(background_installation_);
+    DCHECK(!(install_params_->add_to_applications_menu ||
+             install_params_->add_to_desktop ||
+             install_params_->add_to_quick_launch_bar ||
+             install_params_->run_on_os_login))
+        << "Cannot create os hooks for a non-locally installed ";
+    CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
+    return;
+  }
+
+  // Only record the AppBanner stats for locally installed apps.
+  RecordAppBanner(web_contents(), web_app_info->start_url);
 
   InstallOsHooksOptions options;
 
@@ -781,27 +799,28 @@ void WebAppInstallTask::OnInstallFinalizedCreateShortcuts(
   options.add_to_desktop = true;
   options.add_to_quick_launch_bar = kAddAppsToQuickLaunchBarByDefault;
   options.os_hooks[OsHookType::kRunOnOsLogin] = web_app_info->run_on_os_login;
+  // TODO(crbug.com/1087219): Determine if file handlers should be
+  // configured from somewhere else rather than always true.
+  options.os_hooks[OsHookType::kFileHandlers] = true;
 
   if (install_source_ == WebappInstallSource::SYNC)
     options.add_to_quick_launch_bar = false;
 
   if (install_params_) {
+    DCHECK(install_params_->locally_installed);
     options.os_hooks[OsHookType::kShortcuts] =
         install_params_->add_to_applications_menu;
     options.add_to_desktop = install_params_->add_to_desktop;
     options.add_to_quick_launch_bar = install_params_->add_to_quick_launch_bar;
     options.os_hooks[OsHookType::kRunOnOsLogin] =
         install_params_->run_on_os_login;
+    options.os_hooks[OsHookType::kShortcutsMenu] =
+        install_params_->add_to_applications_menu;
   }
 
-  // TODO(crbug.com/1087219): Determine if file handlers should be
-  // configured from somewhere else rather than always true.
-  options.os_hooks[OsHookType::kFileHandlers] = true;
-  options.os_hooks[OsHookType::kShortcutsMenu] = true;
-
-  auto hooks_created_callback = base::BindOnce(
-      &WebAppInstallTask::OnOsHooksCreated, weak_ptr_factory_.GetWeakPtr(),
-      web_app_info->open_as_window, app_id);
+  auto hooks_created_callback =
+      base::BindOnce(&WebAppInstallTask::OnOsHooksCreated, GetWeakPtr(),
+                     web_app_info->open_as_window, app_id);
 
   os_integration_manager_->InstallOsHooks(app_id,
                                           std::move(hooks_created_callback),
@@ -815,6 +834,8 @@ void WebAppInstallTask::OnOsHooksCreated(
   if (ShouldStopInstall())
     return;
 
+  DCHECK(registrar_);
+  registrar_->NotifyWebAppInstalledWithOsHooks(app_id);
   if (!background_installation_) {
     const bool can_reparent_tab = install_finalizer_->CanReparentTab(
         app_id, os_hooks_results[OsHookType::kShortcuts]);

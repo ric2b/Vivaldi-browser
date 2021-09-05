@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/i18n/case_conversion.h"
@@ -82,9 +82,8 @@
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/nix/xdg_util.h"
-#include "ui/base/ui_base_features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -222,7 +221,7 @@ class DownloadItemFactoryImpl : public download::DownloadItemFactory {
   }
 };
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 base::FilePath GetTemporaryDownloadDirectory() {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   return base::nix::GetXDGDirectory(env.get(), "XDG_DATA_HOME", ".local/share");
@@ -257,7 +256,7 @@ CreatePendingSharedURLLoaderFactory(StoragePartitionImpl* storage_partition,
         rfh->GetSiteInstance()->GetBrowserContext(), rfh,
         rfh->GetProcess()->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kDownload, url::Origin(),
-        base::nullopt /* navigation_id */, base::kInvalidUkmSourceId,
+        base::nullopt /* navigation_id */, ukm::kInvalidSourceIdObj,
         &maybe_proxy_factory_receiver, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
         nullptr /* factory_override */);
@@ -273,17 +272,6 @@ CreatePendingSharedURLLoaderFactory(StoragePartitionImpl* storage_partition,
   return std::make_unique<NetworkDownloadPendingURLLoaderFactory>(
       storage_partition->url_loader_factory_getter(),
       std::move(proxy_factory_remote), std::move(proxy_factory_receiver));
-}
-
-std::unique_ptr<network::PendingSharedURLLoaderFactory>
-CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
-    std::unique_ptr<network::mojom::URLLoaderFactory> factory) {
-  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
-  mojo::MakeSelfOwnedReceiver(std::move(factory),
-                              factory_remote.InitWithNewPipeAndPassReceiver());
-
-  return std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
-      std::move(factory_remote));
 }
 
 void RecordDownloadOpenerType(RenderFrameHost* current,
@@ -574,13 +562,12 @@ bool DownloadManagerImpl::InterceptDownload(
 
 base::FilePath DownloadManagerImpl::GetDefaultDownloadDirectory() {
   base::FilePath default_download_directory;
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // TODO(thomasanderson,crbug.com/784010): Remove this when all Linux
   // distros with versions of GTK lower than 3.14.7 are no longer
   // supported.  This should happen when support for Ubuntu Trusty and
   // Debian Jessie are removed.
-  if (!features::IsUsingOzonePlatform())
-    default_download_directory = GetTemporaryDownloadDirectory();
+  default_download_directory = GetTemporaryDownloadDirectory();
 #endif
 
   if (delegate_ && default_download_directory.empty()) {
@@ -977,8 +964,6 @@ void DownloadManagerImpl::DownloadUrl(
       params->download_source());
   auto* rfh = RenderFrameHost::FromID(params->render_process_host_id(),
                                       params->render_frame_host_routing_id());
-  if (rfh)
-    params->set_frame_tree_node_id(rfh->GetFrameTreeNodeId());
 
   if (vivaldi::IsVivaldiRunning() && rfh) {
     WebContents* web_contents = WebContentsImpl::FromRenderFrameHost(rfh);
@@ -1375,34 +1360,22 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
             DataURLLoaderFactory::CreateForOneSpecificUrl(params->url()));
   } else if (rfh && !blink::network_utils::IsURLHandledByNetworkService(
                         params->url())) {
-    ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
-        non_network_uniquely_owned_factories;
     ContentBrowserClient::NonNetworkURLLoaderFactoryMap
         non_network_url_loader_factories;
-
     GetContentClient()
         ->browser()
         ->RegisterNonNetworkSubresourceURLLoaderFactories(
             params->render_process_host_id(),
             params->render_frame_host_routing_id(),
-            &non_network_uniquely_owned_factories,
             &non_network_url_loader_factories);
-    auto it = non_network_uniquely_owned_factories.find(params->url().scheme());
-    if (it != non_network_uniquely_owned_factories.end()) {
+    auto it = non_network_url_loader_factories.find(params->url().scheme());
+    if (it != non_network_url_loader_factories.end()) {
       pending_url_loader_factory =
-          CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
+          std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
               std::move(it->second));
     } else {
-      auto it2 = non_network_url_loader_factories.find(params->url().scheme());
-      if (it2 != non_network_url_loader_factories.end()) {
-        pending_url_loader_factory =
-            std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
-                std::move(it2->second));
-      } else {
-        DLOG(ERROR) << "No URLLoaderFactory found to download "
-                    << params->url();
-        return;
-      }
+      DLOG(ERROR) << "No URLLoaderFactory found to download " << params->url();
+      return;
     }
   } else {
     StoragePartitionImpl* storage_partition =

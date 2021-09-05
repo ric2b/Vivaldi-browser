@@ -54,6 +54,7 @@ source_set("test_support") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
     "//ios/chrome/browser/content_settings",
+    "//ios/chrome/browser/policy:policy",
     "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/safe_browsing:test_support",
     "//ios/chrome/browser/ui/util:multiwindow_util",
@@ -177,7 +178,6 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/complex_tasks:unit_tests",
     "//ios/chrome/browser/crash_report:unit_tests",
     "//ios/chrome/browser/crash_report/breadcrumbs:unit_tests",
-    "//ios/chrome/browser/credential_provider:unit_tests",
     "//ios/chrome/browser/device_sharing:unit_tests",
     "//ios/chrome/browser/download:unit_tests",
     "//ios/chrome/browser/drag_and_drop:unit_tests",
@@ -304,6 +304,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/settings/clear_browsing_data:unit_tests",
     "//ios/chrome/browser/ui/settings/credit_card_scanner:unit_tests",
     "//ios/chrome/browser/ui/settings/default_browser:unit_tests",
+    "//ios/chrome/browser/ui/settings/google_services:unit_tests",
     "//ios/chrome/browser/ui/settings/language:unit_tests",
     "//ios/chrome/browser/ui/settings/password:unit_tests",
     "//ios/chrome/browser/ui/settings/password/password_details:unit_tests",
@@ -313,8 +314,8 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/settings/utils:unit_tests",
     "//ios/chrome/browser/ui/sharing:unit_tests",
     "//ios/chrome/browser/ui/side_swipe:unit_tests",
-    "//ios/chrome/browser/ui/tab_grid:unit_tests",
-    "//ios/chrome/browser/ui/tab_grid/grid:unit_tests",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid:unit_tests",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:unit_tests",
     "//ios/chrome/browser/ui/table_view:unit_tests",
     "//ios/chrome/browser/ui/table_view/cells:unit_tests",
     "//ios/chrome/browser/ui/tabs:unit_tests",
@@ -337,11 +338,24 @@ test("ios_chrome_unittests") {
     "//ios/chrome/common/credential_provider:unit_tests",
     "//ios/chrome/common/ui/reauthentication:unit_tests",
     "//ios/chrome/common/ui/util:unit_tests",
-    "//ios/chrome/content_widget_extension:unit_tests",
-    "//ios/chrome/credential_provider_extension:unit_tests",
-    "//ios/chrome/search_widget_extension:unit_tests",
+    "//ios/public/provider/chrome/browser/signin:unit_tests",
     "//ios/testing:http_server_bundle_data",
   ]
+
+  if (ios_enable_search_widget_extension) {
+    deps += [ "//ios/chrome/search_widget_extension:unit_tests" ]
+  }
+
+  if (ios_enable_content_widget_extension) {
+    deps += [ "//ios/chrome/content_widget_extension:unit_tests" ]
+  }
+
+  if (ios_enable_credential_provider_extension) {
+    deps += [
+      "//ios/chrome/browser/credential_provider:unit_tests",
+      "//ios/chrome/credential_provider_extension:unit_tests",
+    ]
+  }
 
   assert_no_deps = ios_assert_no_deps
 }

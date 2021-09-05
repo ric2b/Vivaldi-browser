@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_observer.h"
@@ -22,12 +23,18 @@
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "components/metrics/daily_event.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/ukm/content/source_url_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
@@ -104,28 +111,9 @@ const char
     TabStatsTracker::UmaStatsReportingDelegate::kWindowCountHistogramName[] =
         "Tabs.WindowCount";
 
-// Tab discard and reload histogram names in the same order as in discard reason
-// enum.
-const char* kTabDiscardCountHistogramNames[] = {
-    "Discarding.DiscardsPer10Minutes.Extension",
-    "Discarding.DiscardsPer10Minutes.Urgent",
-};
-
-const char* kTabReloadCountHistogramNames[] = {
-    "Discarding.ReloadsPer10Minutes.Extension",
-    "Discarding.ReloadsPer10Minutes.Urgent",
-};
-
-static_assert(base::size(kTabDiscardCountHistogramNames) ==
-                  static_cast<size_t>(LifecycleUnitDiscardReason::kMaxValue) +
-                      1,
-              "There must be an entry in kTabDiscardCountHistogramNames for "
-              "each discard reason.");
-static_assert(base::size(kTabReloadCountHistogramNames) ==
-                  static_cast<size_t>(LifecycleUnitDiscardReason::kMaxValue) +
-                      1,
-              "There must be an entry in kTabReloadCountHistogramNames for "
-              "each discard reason.");
+const char
+    TabStatsTracker::UmaStatsReportingDelegate::kWindowWidthHistogramName[] =
+        "Tabs.WindowWidth";
 
 const TabStatsDataStore::TabsStats& TabStatsTracker::tab_stats() const {
   return tab_stats_data_store_->tab_stats();
@@ -189,21 +177,11 @@ TabStatsTracker::TabStatsTracker(PrefService* pref_service)
   heartbeat_timer_.Start(FROM_HERE, kTabsHeartbeatReportingInterval,
                          base::BindRepeating(&TabStatsTracker::OnHeartbeatEvent,
                                              base::Unretained(this)));
-
-  // Report discarding stats every 10 minutes.
-  tab_discard_reload_stats_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromMinutes(10),
-      base::BindRepeating(&TabStatsTracker::OnTabDiscardCountReportInterval,
-                          base::Unretained(this)));
-
-  g_browser_process->GetTabManager()->AddObserver(this);
 }
 
 TabStatsTracker::~TabStatsTracker() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BrowserList::GetInstance()->RemoveObserver(this);
-
-  base::PowerMonitor::RemoveObserver(this);
 }
 
 // static
@@ -240,7 +218,8 @@ class TabStatsTracker::WebContentsUsageObserver
   WebContentsUsageObserver(content::WebContents* web_contents,
                            TabStatsTracker* tab_stats_tracker)
       : content::WebContentsObserver(web_contents),
-        tab_stats_tracker_(tab_stats_tracker) {}
+        tab_stats_tracker_(tab_stats_tracker),
+        ukm_source_id_(ukm::GetSourceIdForWebContentsDocument(web_contents)) {}
 
   // content::WebContentsObserver:
   void DidStartNavigation(
@@ -250,6 +229,19 @@ class TabStatsTracker::WebContentsUsageObserver
       tab_stats_tracker_->tab_stats_data_store()->OnTabInteraction(
           web_contents());
     }
+  }
+
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted() ||
+        !navigation_handle->IsInMainFrame() ||
+        navigation_handle->IsSameDocument()) {
+      return;
+    }
+    // Update navigation time for UKM reporting.
+    navigation_time_ = navigation_handle->NavigationStart();
+    ukm_source_id_ = ukm::ConvertToSourceId(
+        navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
   }
 
   void DidGetUserInteraction(const blink::WebInputEvent& event) override {
@@ -263,14 +255,24 @@ class TabStatsTracker::WebContentsUsageObserver
   }
 
   void WebContentsDestroyed() override {
-    tab_stats_tracker_->OnWebContentsDestroyed(web_contents());
+    if (ukm_source_id_) {
+      ukm::builders::TabManager_TabLifetime(ukm_source_id_)
+          .SetTimeSinceNavigation(
+              (base::TimeTicks::Now() - navigation_time_).InMilliseconds())
+          .Record(ukm::UkmRecorder::Get());
+    }
 
+    tab_stats_tracker_->OnWebContentsDestroyed(web_contents());
     // The call above will free |this| and so nothing should be done on this
     // object starting from here.
   }
 
  private:
   TabStatsTracker* tab_stats_tracker_;
+  // The last navigation time associated with this tab.
+  base::TimeTicks navigation_time_ = base::TimeTicks::Now();
+  // Updated when a navigation is finished.
+  ukm::SourceId ukm_source_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsUsageObserver);
 };
@@ -330,19 +332,6 @@ void TabStatsTracker::OnResume() {
       tab_stats_data_store_->tab_stats().total_tab_count);
 }
 
-// resource_coordinator::TabLifecycleObserver:
-void TabStatsTracker::OnDiscardedStateChange(
-    content::WebContents* contents,
-    ::mojom::LifecycleUnitDiscardReason reason,
-    bool is_discarded) {
-  // Increment the count in the data store for tabs metrics reporting.
-  tab_stats_data_store_->OnTabDiscardStateChange(reason, is_discarded);
-}
-
-void TabStatsTracker::OnAutoDiscardableStateChange(
-    content::WebContents* contents,
-    bool is_auto_discardable) {}
-
 void TabStatsTracker::OnInterval(
     base::TimeDelta interval,
     TabStatsDataStore::TabsStateDuringIntervalMap* interval_map) {
@@ -351,20 +340,6 @@ void TabStatsTracker::OnInterval(
   reporting_delegate_->ReportUsageDuringInterval(*interval_map, interval);
   // Reset the interval data.
   tab_stats_data_store_->ResetIntervalData(interval_map);
-}
-
-void TabStatsTracker::OnTabDiscardCountReportInterval() {
-  for (size_t reason = 0;
-       reason < static_cast<size_t>(LifecycleUnitDiscardReason::kMaxValue) + 1;
-       reason++) {
-    base::UmaHistogramCounts100(
-        kTabDiscardCountHistogramNames[reason],
-        tab_stats_data_store_->tab_stats().tab_discard_counts[reason]);
-    base::UmaHistogramCounts100(
-        kTabReloadCountHistogramNames[reason],
-        tab_stats_data_store_->tab_stats().tab_reload_counts[reason]);
-  }
-  tab_stats_data_store_->ClearTabDiscardAndReloadCounts();
 }
 
 void TabStatsTracker::OnInitialOrInsertedTab(
@@ -428,6 +403,33 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportHeartbeatMetrics(
 
   UMA_HISTOGRAM_COUNTS_10000(kTabCountHistogramName, tab_stats.total_tab_count);
   UMA_HISTOGRAM_COUNTS_10000(kWindowCountHistogramName, tab_stats.window_count);
+
+  // Record the width of all open browser windows with tabs.
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->type() != Browser::TYPE_NORMAL)
+      continue;
+
+    const BrowserWindow* window = browser->window();
+
+    // Only consider visible windows.
+    if (!window->IsVisible() || window->IsMinimized())
+      continue;
+
+    // Get the window's size (in DIPs).
+    const gfx::Size window_size = browser->window()->GetBounds().size();
+
+    // If the size is for some reason 0 in either dimension, skip it.
+    if (window_size.IsEmpty())
+      continue;
+
+    // A 4K screen is 4096 pixels wide. Doubling this and rounding up to
+    // 10000 should give a reasonable upper bound on DIPs. For the
+    // minimum width, pick an arbitrary value of 100. Most screens are
+    // unlikely to be this small, and likewise a browser window's min
+    // width is around this size.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(kWindowWidthHistogramName, window_size.width(),
+                                100, 10000, 50);
+  }
 }
 
 void TabStatsTracker::UmaStatsReportingDelegate::ReportUsageDuringInterval(

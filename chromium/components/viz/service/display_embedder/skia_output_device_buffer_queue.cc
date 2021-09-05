@@ -102,28 +102,20 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
     SkiaOutputSurfaceDependency* deps,
     gpu::SharedImageRepresentationFactory* representation_factory,
     gpu::MemoryTracker* memory_tracker,
-    const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback)
+    const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback,
+    bool needs_background_image)
     : SkiaOutputDevice(deps->GetSharedContextState()->gr_context(),
                        memory_tracker,
                        did_swap_buffer_complete_callback),
       presenter_(std::move(presenter)),
       dependency_(deps),
-      representation_factory_(representation_factory) {
+      representation_factory_(representation_factory),
+      needs_background_image_(needs_background_image) {
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.preserve_buffer_content = true;
   capabilities_.only_invalidates_damage_rect = false;
   capabilities_.number_of_buffers = 3;
   capabilities_.orientation_mode = OutputSurface::OrientationMode::kHardware;
-#if defined(OS_ANDROID)
-  // With vulkan, if the chrome is launched in landscape mode, the chrome is
-  // always blank until chrome window is rotated once. Workaround this problem
-  // by using logic rotation mode.
-  // TODO(https://crbug.com/1115065): use hardware orientation mode for vulkan,
-  if (dependency_->GetSharedContextState()->GrContextIsVulkan() &&
-      base::FeatureList::GetFieldTrial(features::kVulkan)) {
-    capabilities_.orientation_mode = OutputSurface::OrientationMode::kLogic;
-  }
-#endif
 
   // Force the number of max pending frames to one when the switch
   // "double-buffer-compositing" is passed.
@@ -193,6 +185,12 @@ bool SkiaOutputDeviceBufferQueue::IsPrimaryPlaneOverlay() const {
 void SkiaOutputDeviceBufferQueue::SchedulePrimaryPlane(
     const base::Optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>&
         plane) {
+  if (background_image_ && !background_image_is_scheduled_) {
+    background_image_->BeginPresent();
+    presenter_->ScheduleBackground(background_image_.get());
+    background_image_is_scheduled_ = true;
+  }
+
   if (plane) {
     // If the current_image_ is nullptr, it means there is no change on the
     // primary plane. So we just need to schedule the last submitted image.
@@ -236,16 +234,24 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
       continue;
     }
 
+    // Fuchsia does not provide a GLImage overlay.
+#if defined(OS_FUCHSIA)
+    const bool needs_gl_image = false;
+#else
+    const bool needs_gl_image = true;
+#endif  // defined(OS_FUCHSIA)
+
     // TODO(penghuang): do not depend on GLImage.
     auto shared_image_access =
-        shared_image->BeginScopedReadAccess(true /* needs_gl_image */);
+        shared_image->BeginScopedReadAccess(needs_gl_image);
     if (!shared_image_access) {
       LOG(ERROR) << "Could not access SharedImage for read.";
       continue;
     }
 
     // TODO(penghuang): do not depend on GLImage.
-    DLOG_IF(FATAL, !shared_image_access->gl_image()) << "Cannot get GLImage.";
+    DLOG_IF(FATAL, needs_gl_image && !shared_image_access->gl_image())
+        << "Cannot get GLImage.";
 
     bool result;
     std::tie(it, result) = overlays_.emplace(std::move(shared_image),
@@ -263,10 +269,13 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
   presenter_->ScheduleOverlays(std::move(overlays), std::move(accesses));
 }
 
-void SkiaOutputDeviceBufferQueue::PreGrContextSubmit() {
+void SkiaOutputDeviceBufferQueue::Submit(bool sync_cpu,
+                                         base::OnceClosure callback) {
   // The current image may be missing, for example during WebXR presentation.
   if (current_image_)
     current_image_->PreGrContextSubmit();
+
+  SkiaOutputDevice::Submit(sync_cpu, std::move(callback));
 }
 
 void SkiaOutputDeviceBufferQueue::SwapBuffers(
@@ -437,6 +446,12 @@ bool SkiaOutputDeviceBufferQueue::Reshape(const gfx::Size& size,
   image_size_ = size;
   overlay_transform_ = transform;
   FreeAllSurfaces();
+
+  if (needs_background_image_ && !background_image_) {
+    background_image_ =
+        presenter_->AllocateBackgroundImage(color_space_, gfx::Size(4, 4));
+    background_image_is_scheduled_ = false;
+  }
 
   images_ = presenter_->AllocateImages(color_space_, image_size_,
                                        capabilities_.number_of_buffers);

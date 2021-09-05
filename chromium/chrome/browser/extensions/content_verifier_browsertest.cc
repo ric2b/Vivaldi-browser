@@ -7,8 +7,8 @@
 #include <set>
 #include <string>
 
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
+#include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/test/scoped_feature_list.h"
@@ -54,7 +54,6 @@ class MockUpdateService : public UpdateService {
  public:
   MockUpdateService() : UpdateService(nullptr, nullptr) {}
   MOCK_CONST_METHOD0(IsBusy, bool());
-  MOCK_CONST_METHOD1(CanUpdate, bool(const std::string& id));
   MOCK_METHOD3(SendUninstallPing,
                void(const std::string& id,
                     const base::Version& version,
@@ -84,10 +83,9 @@ class ContentVerifierTest : public ExtensionBrowserTest {
     // ChromeContentVerifierDelegate.
     ChromeContentVerifierDelegate::SetDefaultModeForTesting(
         ChromeContentVerifierDelegate::VerifyInfo::Mode::ENFORCE);
-
     ON_CALL(update_service_, StartUpdateCheck)
         .WillByDefault(Invoke(this, &ContentVerifierTest::OnUpdateCheck));
-    ON_CALL(update_service_, CanUpdate).WillByDefault(testing::Return(true));
+
     UpdateService::SupplyUpdateServiceForTest(&update_service_);
 
     ExtensionBrowserTest::SetUp();
@@ -188,6 +186,8 @@ class ContentVerifierTest : public ExtensionBrowserTest {
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
+  base::AutoReset<bool> scoped_use_update_service_ =
+      ExtensionUpdater::GetScopedUseUpdateServiceForTesting();
   MockUpdateService update_service_;
 };
 

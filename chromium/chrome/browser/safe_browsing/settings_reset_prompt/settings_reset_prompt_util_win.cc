@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/location.h"
 #include "base/time/time.h"
@@ -79,7 +79,7 @@ void MaybeShowSettingsResetPrompt(
     return;
 
   DefaultSettingsFetcher::FetchDefaultSettings(
-      base::Bind(&TryToShowSettingsResetPrompt, base::Passed(&model)));
+      base::BindOnce(&TryToShowSettingsResetPrompt, base::Passed(&model)));
 }
 
 class SettingsResetPromptDelegateImpl : public SettingsResetPromptDelegate {

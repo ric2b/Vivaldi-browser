@@ -5,9 +5,13 @@
 package org.chromium.android_webview.common;
 
 import org.chromium.base.BaseSwitches;
+import org.chromium.blink_public.common.BlinkFeatures;
 import org.chromium.cc.base.CcSwitches;
 import org.chromium.components.metrics.MetricsSwitches;
+import org.chromium.components.viz.common.VizFeatures;
+import org.chromium.gpu.config.GpuFeatures;
 import org.chromium.gpu.config.GpuSwitches;
+import org.chromium.ui.base.UiFeatures;
 
 /**
  * List of experimental features/flags supported for user devices. Add features/flags to this list
@@ -64,15 +68,21 @@ public final class ProductionSupportedFlagList {
             Flag.commandLine(GpuSwitches.IGNORE_GPU_BLOCKLIST,
                     "Overrides the built-in software rendering list and enables "
                             + "GPU acceleration on unsupported device configurations."),
-            Flag.baseFeature("EnableSharedImageForWebview", "Enables shared images for WebView."),
-            Flag.baseFeature("VizForWebView", "Enables Viz for WebView."),
+            Flag.baseFeature(GpuFeatures.ENABLE_SHARED_IMAGE_FOR_WEBVIEW,
+                    "Enables shared images for WebView."),
+            Flag.baseFeature(GpuFeatures.WEBVIEW_VULKAN,
+                    "Use Vulkan for composite. Requires VizForWebView and Android device and "
+                            + "OS support. May crash if enabled on unsupported device."),
+            Flag.baseFeature(VizFeatures.VIZ_FOR_WEBVIEW, "Enables Viz for WebView."),
+            Flag.baseFeature(
+                    GpuFeatures.USE_GLES2_FOR_OOP_R, "Force Skia context to use es2 only."),
             Flag.baseFeature(AwFeatures.WEBVIEW_CONNECTIONLESS_SAFE_BROWSING,
                     "Uses GooglePlayService's 'connectionless' APIs for Safe Browsing "
                             + "security checks."),
-            Flag.baseFeature(
-                    "WebViewBrotliSupport", "Enables brotli compression support in WebView."),
-            Flag.baseFeature(
-                    "AppCache", "Controls AppCache to facilitate testing against future removal."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_BROTLI_SUPPORT,
+                    "Enables brotli compression support in WebView."),
+            Flag.baseFeature(BlinkFeatures.APP_CACHE,
+                    "Controls AppCache to facilitate testing against future removal."),
             Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                     "Only allow extra headers added via loadUrl() to be sent to the same origin "
                             + "as the original request."),
@@ -80,12 +90,22 @@ public final class ProductionSupportedFlagList {
                     "Only allow extra headers added via loadUrl() to be sent to the same domain "
                             + "(eTLD+1) as the original request. Has no effect when the "
                             + "stricter same-origin feature is enabled."),
-            Flag.baseFeature("WebComponentsV0",
-                    "Re-enables the deprecated Web Components v0 features (Shadow DOM v0, Custom "
-                            + "Elements v0, and HTML Imports)."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MEASURE_SCREEN_COVERAGE,
+                    "Measure the number of pixels occupied by one or more WebViews as a proportion "
+                            + "of the total screen size. Depending on the number of WebViews and "
+                            + "the size of the screen this might be expensive so hidden behind a "
+                            + "feature flag until the true runtime cost can be measured."),
             Flag.baseFeature(AwFeatures.WEBVIEW_DISPLAY_CUTOUT,
                     "Enables display cutout (notch) support in WebView for Android P and above."),
             Flag.baseFeature(AwFeatures.WEBVIEW_CPU_AFFINITY_RESTRICT_TO_LITTLE_CORES,
                     "Forces WebView to do rendering work in little cores"),
+            Flag.baseFeature(BlinkFeatures.WEBVIEW_ACCELERATE_SMALL_CANVASES,
+                    "Accelerate all canvases in webview."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES,
+                    "Enables autoupgrades for audio/video/image mixed content when mixed content "
+                            + "mode is set to MIXED_CONTENT_COMPATIBILITY_MODE"),
+            Flag.baseFeature(UiFeatures.SWIPE_TO_MOVE_CURSOR,
+                    "Enables swipe to move cursor feature."
+                            + "This flag will only take effect on Android 11 and above."),
     };
 }

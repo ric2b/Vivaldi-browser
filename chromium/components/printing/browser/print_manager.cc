@@ -112,6 +112,14 @@ void PrintManager::SetAccessibilityTree(
     const ui::AXTreeUpdate& accessibility_tree) {}
 #endif
 
+void PrintManager::UpdatePrintSettings(int32_t cookie,
+                                       base::Value job_settings,
+                                       UpdatePrintSettingsCallback callback) {
+  auto params = mojom::PrintPagesParams::New();
+  params->params = mojom::PrintParams::New();
+  std::move(callback).Run(std::move(params), false);
+}
+
 void PrintManager::DidShowPrintDialog() {}
 
 void PrintManager::ShowInvalidPrinterSettingsError() {}
@@ -124,6 +132,14 @@ void PrintManager::PrintingFailed(int32_t cookie) {
 #if defined(OS_ANDROID)
   PdfWritingDone(0);
 #endif
+}
+
+bool PrintManager::IsPrintRenderFrameConnected(content::RenderFrameHost* rfh) {
+  auto it = print_render_frames_.find(rfh);
+  if (it == print_render_frames_.end())
+    return false;
+
+  return it->second.is_bound() && it->second.is_connected();
 }
 
 const mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>&

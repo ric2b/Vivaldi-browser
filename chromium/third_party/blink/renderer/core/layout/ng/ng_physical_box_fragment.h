@@ -30,7 +30,9 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   // Creates a copy of |other| but uses the "post-layout" fragments to ensure
   // fragment-tree consistency.
   static scoped_refptr<const NGPhysicalBoxFragment>
-  CloneWithPostLayoutFragments(const NGPhysicalBoxFragment& other);
+  CloneWithPostLayoutFragments(const NGPhysicalBoxFragment& other,
+                               const base::Optional<PhysicalRect>
+                                   updated_layout_overflow = base::nullopt);
 
   using PassKey = util::PassKey<NGPhysicalBoxFragment>;
   NGPhysicalBoxFragment(PassKey,
@@ -45,7 +47,11 @@ class CORE_EXPORT NGPhysicalBoxFragment final
                         bool has_rare_data,
                         WritingMode block_or_line_writing_mode);
 
-  NGPhysicalBoxFragment(PassKey, const NGPhysicalBoxFragment& other);
+  NGPhysicalBoxFragment(PassKey,
+                        const NGPhysicalBoxFragment& other,
+                        bool has_layout_overflow,
+                        const PhysicalRect& layout_overflow,
+                        bool recalculate_layout_overflow);
 
   scoped_refptr<const NGLayoutResult> CloneAsHiddenForPaint() const;
 
@@ -106,7 +112,7 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   // Returns the layout-overflow for this fragment.
   const PhysicalRect LayoutOverflow() const {
     if (is_legacy_layout_root_)
-      return ToLayoutBox(GetLayoutObject())->PhysicalLayoutOverflowRect();
+      return To<LayoutBox>(GetLayoutObject())->PhysicalLayoutOverflowRect();
     if (!has_layout_overflow_)
       return {{}, Size()};
     return *ComputeLayoutOverflowAddress();
@@ -204,19 +210,27 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   // Compute visual overflow of this box in the local coordinate.
   PhysicalRect ComputeSelfInkOverflow() const;
 
+  // |InkOverflow| includes self and contents ink overflow, unless it has
+  // clipping, in that case it includes self ink overflow only.
+  PhysicalRect InkOverflow() const;
+
   // Contents ink overflow includes anything that would bleed out of the box and
   // would be clipped by the overflow clip ('overflow' != visible). This
   // corresponds to children that overflows their parent.
-  PhysicalRect ContentsInkOverflow() const {
-    // TODO(layout-dev): Implement box fragment overflow.
-    return LocalRect();
-  }
+  PhysicalRect ContentsInkOverflow() const;
+
+  // Fast check if |NodeAtPoint| may find a hit.
+  bool MayIntersect(const HitTestResult& result,
+                    const HitTestLocation& hit_test_location,
+                    const PhysicalOffset& accumulated_offset) const;
 
   // Fragment offset is this fragment's offset from parent.
   // Needed to compensate for LayoutInline Legacy code offsets.
   void AddSelfOutlineRects(const PhysicalOffset& additional_offset,
                            NGOutlineType include_block_overflows,
                            Vector<PhysicalRect>* outline_rects) const;
+
+  PositionWithAffinity PositionForPoint(PhysicalOffset) const;
 
   UBiDiLevel BidiLevel() const;
 
@@ -251,6 +265,12 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   }
   const NGMathMLPaintInfo& GetMathMLPaintInfo() const {
     return *ComputeRareDataAddress()->mathml_paint_info;
+  }
+
+  // Temporary while stabilizing PositionForPoint support in
+  // NGPhysicalBoxFragment.
+  static bool SupportsPositionForPoint() {
+    return RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled();
   }
 
  private:

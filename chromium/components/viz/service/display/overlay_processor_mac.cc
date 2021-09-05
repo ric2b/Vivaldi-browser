@@ -15,17 +15,14 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace viz {
-OverlayProcessorMac::OverlayProcessorMac(bool could_overlay,
-                                         bool enable_ca_overlay)
-    : could_overlay_(could_overlay),
-      enable_ca_overlay_(enable_ca_overlay),
+OverlayProcessorMac::OverlayProcessorMac(bool enable_ca_overlay)
+    : enable_ca_overlay_(enable_ca_overlay),
       ca_layer_overlay_processor_(std::make_unique<CALayerOverlayProcessor>()) {
 }
 
 OverlayProcessorMac::OverlayProcessorMac(
     std::unique_ptr<CALayerOverlayProcessor> ca_layer_overlay_processor)
-    : could_overlay_(true),
-      enable_ca_overlay_(true),
+    : enable_ca_overlay_(true),
       ca_layer_overlay_processor_(std::move(ca_layer_overlay_processor)) {}
 
 OverlayProcessorMac::~OverlayProcessorMac() = default;
@@ -35,7 +32,7 @@ bool OverlayProcessorMac::DisableSplittingQuads() const {
 }
 
 bool OverlayProcessorMac::IsOverlaySupported() const {
-  return could_overlay_;
+  return true;
 }
 
 gfx::Rect OverlayProcessorMac::GetPreviousFrameOverlaysBoundingRect() const {
@@ -59,6 +56,7 @@ void OverlayProcessorMac::ProcessForOverlays(
     const OverlayProcessorInterface::FilterOperationsMap& render_pass_filters,
     const OverlayProcessorInterface::FilterOperationsMap&
         render_pass_backdrop_filters,
+    SurfaceDamageRectList* surface_damage_rect_list,
     OutputSurfaceOverlayPlane* output_surface_plane,
     CandidateList* candidates,
     gfx::Rect* damage_rect,
@@ -103,7 +101,7 @@ void OverlayProcessorMac::AdjustOutputSurfaceOverlay(
     output_surface_plane->reset();
 }
 
-bool OverlayProcessorMac::NeedsSurfaceOccludingDamageRect() const {
+bool OverlayProcessorMac::NeedsSurfaceDamageRectList() const {
   return false;
 }
 

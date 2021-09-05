@@ -27,6 +27,7 @@
 #include "contact/contact_service_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
 #include "ui/lazy_load_service_factory.h"
@@ -92,10 +93,6 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
     base::PathService::Override(chrome::FILE_COMPONENT_FLASH_HINT, cur);
   }
-  base::FilePath pepper(
-      FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
-  base::PathService::Override(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
-                              pepper);
 #endif
 }
 
@@ -109,6 +106,7 @@ void VivaldiBrowserMainExtraParts::
 #endif
   VivaldiDataSourcesAPI::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  vivaldi_runtime_feature::Init();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
@@ -120,14 +118,14 @@ void VivaldiBrowserMainExtraParts::
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
   extensions::MenuContentAPI::GetFactoryInstance();
-  extensions::TabsPrivateAPI::GetFactoryInstance();
+  extensions::TabsPrivateAPI::Init();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
-  extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
+  extensions::RuntimeAPI::Init();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
-  extensions::VivaldiWindowsAPI::GetFactoryInstance();
+  extensions::VivaldiWindowsAPI::Init();
   extensions::ZoomAPI::GetFactoryInstance();
   extensions::HistoryPrivateAPI::GetFactoryInstance();
 #endif

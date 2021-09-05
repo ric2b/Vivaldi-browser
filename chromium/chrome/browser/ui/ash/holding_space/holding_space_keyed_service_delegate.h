@@ -29,10 +29,6 @@ class HoldingSpaceKeyedServiceDelegate : public HoldingSpaceModelObserver {
   // Delegates should perform any necessary clean up.
   virtual void Shutdown();
 
-  // Invoked by `HoldingSpaceKeyedService` to notify delegates when all
-  // downloads have been restored to holding space.
-  void NotifyDownloadsRestored();
-
   // Invoked by `HoldingSpaceKeyedService` to notify delegates when holding
   // space persistence has been restored.
   void NotifyPersistenceRestored();
@@ -44,10 +40,7 @@ class HoldingSpaceKeyedServiceDelegate : public HoldingSpaceModelObserver {
   Profile* profile() { return profile_; }
 
   // Returns the holding space model owned by `HoldingSpaceKeyedService`.
-  const HoldingSpaceModel* model() const { return model_; }
-
-  // Returns if downloads are being restored.
-  bool is_restoring_downloads() const { return is_restoring_downloads_; }
+  HoldingSpaceModel* model() { return model_; }
 
   // Returns if persistence is being restored.
   bool is_restoring_persistence() const { return is_restoring_persistence_; }
@@ -56,18 +49,13 @@ class HoldingSpaceKeyedServiceDelegate : public HoldingSpaceModelObserver {
   // HoldingSpaceModelObserver:
   void OnHoldingSpaceItemAdded(const HoldingSpaceItem* item) override;
   void OnHoldingSpaceItemRemoved(const HoldingSpaceItem* item) override;
-
-  // Invoked when all downloads have been restored to holding space.
-  virtual void OnDownloadsRestored();
+  void OnHoldingSpaceItemFinalized(const HoldingSpaceItem* item) override;
 
   // Invoked when holding space persistence has been restored.
   virtual void OnPersistenceRestored();
 
   Profile* const profile_;
-  const HoldingSpaceModel* const model_;
-
-  // If downloads are being restored.
-  bool is_restoring_downloads_ = true;
+  HoldingSpaceModel* const model_;
 
   // If persistence is being restored.
   bool is_restoring_persistence_ = true;

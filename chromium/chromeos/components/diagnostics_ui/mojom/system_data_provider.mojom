@@ -19,6 +19,7 @@ struct VersionInfo {
 // Contains a snapshot of static system information.
 struct SystemInfo {
   string board_name;
+  string marketing_name;
   string cpu_model_name;
   uint32 total_memory_kib;
   uint16 cpu_threads_count;
@@ -63,6 +64,20 @@ struct BatteryHealth {
   int8 battery_wear_percentage;
 };
 
+// Contains information about the usage of memory on the device.
+struct MemoryUsage {
+  uint32 total_memory_kib;
+  uint32 available_memory_kib;
+  uint32 free_memory_kib;
+};
+
+struct CpuUsage {
+  uint8 percent_usage_user;
+  uint8 percent_usage_system;
+  uint8 percent_usage_free;
+  uint16 average_cpu_temp_celsius;
+};
+
 // Implemented by clients that wish to be updated periodically about changes to
 // the battery charge status.
 interface BatteryChargeStatusObserver {
@@ -82,6 +97,24 @@ interface BatteryHealthObserver {
   OnBatteryHealthUpdated(BatteryHealth battery_health);
 };
 
+// Implemented by clients that wish to be updated periodically about the
+// memory usage of the device.
+interface MemoryUsageObserver {
+  // OnMemoryUsageUpdated calls can be triggered by either of 2 conditions:
+  // 1) A MemoryUsageObserver is registered with SystemDataProvider
+  // 2) A periodic update is sent by SystemDataProvider
+  OnMemoryUsageUpdated(MemoryUsage memory_usage);
+};
+
+// Implemented by clients that wish to be updated periodically about the
+// cpu usage of the device.
+interface CpuUsageObserver {
+  // OnCpuUsageUpdated calls can be triggered by either of 2 conditions:
+  // 1) A CpuUsageObserver is registered with SystemDataProvider
+  // 2) A periodic update is sent by SystemDataProvider
+  OnCpuUsageUpdated(CpuUsage cpu_usage);
+};
+
 // Provides telemetric information about the system. This API is exposed to the
 // Diagnostics SWA.
 interface SystemDataProvider {
@@ -98,6 +131,12 @@ interface SystemDataProvider {
   ObserveBatteryChargeStatus(
       pending_remote<BatteryChargeStatusObserver> observer);
 
-  // Registers an observer of BatteryHealth inforamation.
+  // Registers an observer of BatteryHealth information.
   ObserveBatteryHealth(pending_remote<BatteryHealthObserver> observer);
+
+  // Registers an observer of MemoryUsage information.
+  ObserveMemoryUsage(pending_remote<MemoryUsageObserver> observer);
+
+  // Registers an observer of CpuUsage information.
+  ObserveCpuUsage(pending_remote<CpuUsageObserver> observer);
 };

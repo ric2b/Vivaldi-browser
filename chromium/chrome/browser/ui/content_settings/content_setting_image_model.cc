@@ -32,9 +32,10 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/features.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "services/device/public/cpp/device_features.h"
@@ -217,8 +218,8 @@ namespace {
 bool ShouldShowPluginExplanation(content::WebContents* web_contents,
                                  HostContentSettingsMap* map) {
   const GURL& url = web_contents->GetURL();
-  ContentSetting setting = map->GetContentSetting(
-      url, url, ContentSettingsType::PLUGINS, std::string());
+  ContentSetting setting =
+      map->GetContentSetting(url, url, ContentSettingsType::PLUGINS);
 
   // For plugins, show the animated explanation in these cases:
   //  - The plugin is blocked despite the user having content setting ALLOW.

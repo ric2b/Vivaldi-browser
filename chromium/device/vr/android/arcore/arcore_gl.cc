@@ -11,10 +11,11 @@
 #include "base/android/android_hardware_buffer_compat.h"
 #include "base/android/jni_android.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -37,30 +38,45 @@
 #include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_fence_android_native_fence_sync.h"
 #include "ui/gl/gl_fence_egl.h"
 #include "ui/gl/gl_image_ahardwarebuffer.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/init/gl_factory.h"
 
 namespace {
-// When scheduling the next ARCore update task, aim to have that run this much
-// time ahead of when the next camera image is expected to be ready. In case
-// the overall system is running slower than ideal, i.e. if the device switches
-// from 30fps to 60fps, it'll catch up by this amount every frame until it
-// reaches a new steady state.
-constexpr base::TimeDelta kUpdateTargetDelta =
-    base::TimeDelta::FromMilliseconds(2);
-
-// Maximum delay for scheduling the next ARCore update. This helps ensure
-// that there isn't an unreasonable delay due to a bogus estimate if the device
-// is paused or unresponsive.
-constexpr base::TimeDelta kUpdateMaxDelay =
-    base::TimeDelta::FromMilliseconds(30);
-
 const char kInputSourceProfileName[] = "generic-touchscreen";
 
 const gfx::Size kDefaultFrameSize = {1, 1};
 const display::Display::Rotation kDefaultRotation = display::Display::ROTATE_0;
+
+// When scheduling calls to GetFrameData, leave some safety margin to run a bit
+// early. For the ARCore Update calculation, need to leave time for the update
+// itself to finish, not counting time blocked waiting for a frame to be
+// available. For the render completion calculation, the margin compensates for
+// variations in rendering time. Express this as a fraction of the frame time,
+// on the theory that devices capable of 60fps would tend to be faster than
+// ones running at 30fps.
+const float kScheduleFrametimeMarginForUpdate = 0.2f;
+const float kScheduleFrametimeMarginForRender = 0.2f;
+
+const int kSampleWindowSize = 3;
+
+gfx::Transform GetContentTransform(const gfx::RectF& bounds) {
+  // Calculate the transform matrix from quad coordinates (range 0..1 with
+  // origin at bottom left of the quad) to texture lookup UV coordinates (also
+  // range 0..1 with origin at bottom left), where the active viewport uses a
+  // subset of the texture range that needs to be magnified to fill the quad.
+  // The bounds as used by the UpdateLayerBounds mojo messages appear to use an
+  // old WebVR convention with origin at top left, so the Y range needs to be
+  // mirrored.
+  gfx::Transform transform;
+  transform.matrix().set(0, 0, bounds.width());
+  transform.matrix().set(1, 1, bounds.height());
+  transform.matrix().set(0, 3, bounds.x());
+  transform.matrix().set(1, 3, 1.f - bounds.y() - bounds.height());
+  return transform;
+}
 
 }  // namespace
 
@@ -69,7 +85,11 @@ namespace device {
 ArCoreGl::ArCoreGl(std::unique_ptr<ArImageTransport> ar_image_transport)
     : gl_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       ar_image_transport_(std::move(ar_image_transport)),
-      webxr_(std::make_unique<vr::WebXrPresentationState>()) {
+      webxr_(std::make_unique<vr::WebXrPresentationState>()),
+      average_camera_frametime_(kSampleWindowSize),
+      average_animate_time_(kSampleWindowSize),
+      average_process_time_(kSampleWindowSize),
+      average_render_time_(kSampleWindowSize) {
   DVLOG(1) << __func__;
 }
 
@@ -81,8 +101,8 @@ ArCoreGl::~ArCoreGl() {
 
   // Make sure mojo bindings are closed before proceeding with member
   // destruction. Specifically, destroying pending_getframedata_
-  // must happen after closing bindings, see RunNextGetFrameData()
-  // comments.
+  // must happen after closing bindings, see pending_getframedata_
+  // comments in the header file.
   CloseBindingsIfOpen();
 }
 
@@ -92,8 +112,12 @@ void ArCoreGl::Initialize(
     gfx::AcceleratedWidget drawing_widget,
     const gfx::Size& frame_size,
     display::Display::Rotation display_rotation,
-    const std::vector<device::mojom::XRSessionFeature>& enabled_features,
-    base::OnceCallback<void(bool)> callback) {
+    const std::unordered_set<device::mojom::XRSessionFeature>&
+        required_features,
+    const std::unordered_set<device::mojom::XRSessionFeature>&
+        optional_features,
+    const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images,
+    ArCoreGlInitializeCallback callback) {
   DVLOG(3) << __func__;
 
   DCHECK(IsOnGlThread());
@@ -102,14 +126,10 @@ void ArCoreGl::Initialize(
   transfer_size_ = frame_size;
   camera_image_size_ = frame_size;
   display_rotation_ = display_rotation;
-  // TODO(https://crbug.com/953503): start using the list to control the
-  // behavior of local and unbounded spaces & send appropriate data back in
-  // GetFrameData().
-  enabled_features_.insert(enabled_features.begin(), enabled_features.end());
   should_update_display_geometry_ = true;
 
   if (!InitializeGl(drawing_widget)) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(base::nullopt);
     return;
   }
 
@@ -118,16 +138,24 @@ void ArCoreGl::Initialize(
       session_utils->GetApplicationContext();
   if (!application_context.obj()) {
     DLOG(ERROR) << "Unable to retrieve the Java context/activity!";
-    std::move(callback).Run(false);
+    std::move(callback).Run(base::nullopt);
     return;
   }
 
   arcore_ = arcore_factory->Create();
-  if (!arcore_->Initialize(application_context, enabled_features_)) {
+  base::Optional<ArCore::InitializeResult> maybe_initialize_result =
+      arcore_->Initialize(application_context, required_features,
+                          optional_features, tracked_images);
+  if (!maybe_initialize_result) {
     DLOG(ERROR) << "ARCore failed to initialize";
-    std::move(callback).Run(false);
+    std::move(callback).Run(base::nullopt);
     return;
   }
+
+  // TODO(https://crbug.com/953503): start using the list to control the
+  // behavior of local and unbounded spaces & send appropriate data back in
+  // GetFrameData().
+  enabled_features_ = maybe_initialize_result->enabled_features;
 
   DVLOG(3) << "ar_image_transport_->Initialize()...";
   ar_image_transport_->Initialize(
@@ -142,12 +170,11 @@ void ArCoreGl::Initialize(
   arcore_->SetDisplayGeometry(kDefaultFrameSize, kDefaultRotation);
 }
 
-void ArCoreGl::OnArImageTransportReady(
-    base::OnceCallback<void(bool)> callback) {
+void ArCoreGl::OnArImageTransportReady(ArCoreGlInitializeCallback callback) {
   DVLOG(3) << __func__;
   is_initialized_ = true;
   webxr_->NotifyMailboxBridgeReady();
-  std::move(callback).Run(true);
+  std::move(callback).Run(enabled_features_);
 }
 
 void ArCoreGl::CreateSession(mojom::VRDisplayInfoPtr display_info,
@@ -257,7 +284,7 @@ bool ArCoreGl::InitializeGl(gfx::AcceleratedWidget drawing_widget) {
 void ArCoreGl::GetFrameData(
     mojom::XRFrameDataRequestOptionsPtr options,
     mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
-  TRACE_EVENT0("gpu", __func__);
+  TRACE_EVENT1("gpu", __func__, "frame", webxr_->PeekNextFrameIndex());
 
   if (webxr_->HaveAnimatingFrame()) {
     DVLOG(3) << __func__ << ": deferring, HaveAnimatingFrame";
@@ -265,6 +292,26 @@ void ArCoreGl::GetFrameData(
         base::BindOnce(&ArCoreGl::GetFrameData, GetWeakPtr(),
                        std::move(options), std::move(callback));
     return;
+  }
+
+  if (webxr_->HaveProcessingFrame() && webxr_->HaveRenderingFrame()) {
+    // If there are already two frames in flight, ensure that the rendering
+    // frame completes first before starting a new animating frame. It may be
+    // complete already, in that case just collect its statistics. (Don't wait
+    // if there's a rendering frame but no processing frame.)
+    DVLOG(2) << __func__ << ": wait, have processing&rendering frames";
+    FinishRenderingFrame();
+  }
+
+  // If there is still a rendering frame (we didn't wait for it), check
+  // if it's complete. If yes, collect its statistics now so that the GPU
+  // time estimate for the upcoming frame is up to date.
+  if (webxr_->HaveRenderingFrame()) {
+    auto* frame = webxr_->GetRenderingFrame();
+    if (frame->render_completion_fence &&
+        frame->render_completion_fence->HasCompleted()) {
+      FinishRenderingFrame();
+    }
   }
 
   DVLOG(3) << __func__ << ": should_update_display_geometry_="
@@ -349,15 +396,21 @@ void ArCoreGl::GetFrameData(
   base::TimeTicks arcore_update_started = base::TimeTicks::Now();
   mojom::VRPosePtr pose = arcore_->Update(&camera_updated);
   base::TimeTicks now = base::TimeTicks::Now();
+  last_arcore_update_time_ = now;
+
+  // Track the camera frame timestamp interval in preparation for handling with
+  // frame rate variations within ARCore's configured frame rate range. Not yet
+  // used for timing purposes since we currently only request 30fps. (Note that
+  // the frame timestamp has an unspecified and camera-specific time base.)
   base::TimeDelta frame_timestamp = arcore_->GetFrameTimestamp();
-
-  DVLOG(3) << __func__ << ": frame_timestamp=" << frame_timestamp;
-
-  if (!arcore_last_frame_timestamp_.is_zero()) {
-    arcore_frame_interval_ = frame_timestamp - arcore_last_frame_timestamp_;
-    arcore_update_next_expected_ = now + arcore_frame_interval_;
+  if (!last_arcore_frame_timestamp_.is_zero()) {
+    base::TimeDelta delta = frame_timestamp - last_arcore_frame_timestamp_;
+    average_camera_frametime_.AddSample(delta);
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                   "ARCore camera frame interval (ms)", delta.InMilliseconds());
   }
-  arcore_last_frame_timestamp_ = frame_timestamp;
+  last_arcore_frame_timestamp_ = frame_timestamp;
+
   base::TimeDelta arcore_update_elapsed = now - arcore_update_started;
   TRACE_COUNTER1("gpu", "ARCore update elapsed (ms)",
                  arcore_update_elapsed.InMilliseconds());
@@ -387,11 +440,21 @@ void ArCoreGl::GetFrameData(
       *floor_height_estimate_ != new_floor_height_estimate) {
     floor_height_estimate_ = new_floor_height_estimate;
 
-    frame_data->stage_parameters_updated = true;
-    frame_data->stage_parameters = mojom::VRStageParameters::New();
-    frame_data->stage_parameters->mojo_from_floor = gfx::Transform();
-    frame_data->stage_parameters->mojo_from_floor.Translate3d(
+    if (!stage_parameters_) {
+      stage_parameters_ = mojom::VRStageParameters::New();
+    }
+    stage_parameters_->mojo_from_floor = gfx::Transform();
+    stage_parameters_->mojo_from_floor.Translate3d(
         0, (-1 * *floor_height_estimate_), 0);
+
+    stage_parameters_id_++;
+  }
+
+  // Only send updates to the stage parameters if the session's stage parameters
+  // id is different.
+  frame_data->stage_parameters_id = stage_parameters_id_;
+  if (!options || options->stage_parameters_id != stage_parameters_id_) {
+    frame_data->stage_parameters = stage_parameters_.Clone();
   }
 
   frame_data->frame_id = webxr_->StartFrameAnimating();
@@ -400,6 +463,7 @@ void ArCoreGl::GetFrameData(
 
   vr::WebXrFrame* xrframe = webxr_->GetAnimatingFrame();
   xrframe->time_pose = now;
+  xrframe->bounds_left = viewport_bounds_;
 
   if (display_info_changed_) {
     frame_data->left_eye = display_info_->left_eye.Clone();
@@ -428,6 +492,9 @@ void ArCoreGl::GetFrameData(
 
   frame_data->pose = std::move(pose);
   frame_data->time_delta = now - base::TimeTicks();
+  if (rendering_time_ratio_ > 0) {
+    frame_data->rendering_time_ratio = rendering_time_ratio_;
+  }
 
   fps_meter_.AddFrame(now);
   TRACE_COUNTER1("gpu", "WebXR FPS", fps_meter_.GetFPS());
@@ -453,6 +520,8 @@ bool ArCoreGl::IsSubmitFrameExpected(int16_t frame_index) {
 
   vr::WebXrFrame* animating_frame = webxr_->GetAnimatingFrame();
   animating_frame->time_js_submit = base::TimeTicks::Now();
+  average_animate_time_.AddSample(animating_frame->time_js_submit -
+                                  animating_frame->time_pose);
 
   if (animating_frame->index != frame_index) {
     DVLOG(1) << __func__ << ": wrong frame index, got " << frame_index
@@ -479,41 +548,146 @@ void ArCoreGl::CopyCameraImageToFramebuffer() {
   }
 
   // We're done with the camera image for this frame, post a task to start the
-  // next ARCore update if we had deferred it. This will get the next frame's
-  // camera image and pose in parallel while we're waiting for this frame's
-  // rendered image.
+  // next animating frame and its ARCore update if we had deferred it.
   if (pending_getframedata_) {
-    base::TimeDelta delay = base::TimeDelta();
-    if (!arcore_update_next_expected_.is_null()) {
-      // Try to schedule the next ARCore update to happen a short time before
-      // the camera image is expected to be ready..
-      delay = arcore_update_next_expected_ - base::TimeTicks::Now() -
-              kUpdateTargetDelta;
-      if (delay < base::TimeDelta()) {
-        // Negative sleep means we're behind schedule, run immediately.
-        delay = base::TimeDelta();
-      } else {
-        if (delay > kUpdateMaxDelay) {
-          DVLOG(1) << __func__ << ": delay " << delay << " too long, clamp to "
-                   << kUpdateMaxDelay;
-          delay = kUpdateMaxDelay;
-        }
+    ScheduleGetFrameData();
+  }
+}
+
+base::TimeDelta ArCoreGl::EstimatedArCoreFrameTime() {
+  // ARCore may be operating in a variable frame rate mode where it adjusts
+  // the frame rate during the session, for example to increase exposure time
+  // in low light conditions.
+  //
+  // We need an estimated frame time for scheduling purposes. We have an average
+  // camera frame time delta from ARCore updates, but this may be a multiple of
+  // the nominal frame time. For example, if ARCore has the camera configured to
+  // use 60fps, but the application is only submitting frames at 30fps and only
+  // using every second camera frame, we don't have a reliable way of detecting
+  // that. However, this still seems OK as long as the frame rate is stable.
+  ArCore::MinMaxRange range = arcore_->GetTargetFramerateRange();
+  DCHECK_GT(range.min, 0.f);
+  DCHECK_GT(range.max, 0.f);
+  DCHECK_GE(range.max, range.min);
+
+  // The min frame time corresponds to the max frame rate and vice versa.
+  base::TimeDelta min_frametime =
+      base::TimeDelta::FromSecondsD(1.0f / range.max);
+  base::TimeDelta max_frametime =
+      base::TimeDelta::FromSecondsD(1.0f / range.min);
+
+  base::TimeDelta frametime =
+      average_camera_frametime_.GetAverageOrDefault(min_frametime);
+
+  // Ensure that the returned value is within ARCore's nominal frame time range.
+  // This helps avoid underestimating the frame rate if the app is too slow
+  // to reach the minimum target FPS value.
+  return base::ClampToRange(frametime, min_frametime, max_frametime);
+}
+
+base::TimeDelta ArCoreGl::WaitTimeForArCoreUpdate() {
+  // ARCore update will block if called before a new camera frame is available.
+  // Estimate when this is.
+  base::TimeDelta frametime = EstimatedArCoreFrameTime();
+  base::TimeTicks next_update = last_arcore_update_time_ + frametime;
+  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeDelta wait =
+      next_update - now - kScheduleFrametimeMarginForUpdate * frametime;
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "GetFrameData update wait (ms)", wait.InMilliseconds());
+  return wait;
+}
+
+base::TimeDelta ArCoreGl::WaitTimeForRenderCompletion() {
+  DCHECK(webxr_->HaveRenderingFrame());
+
+  // If there's a current rendering frame, estimate when it's going to finish
+  // rendering, then try to schedule the next update to match.
+  auto* rendering_frame = webxr_->GetRenderingFrame();
+  base::TimeDelta avg_animate = average_animate_time_.GetAverage();
+  base::TimeDelta avg_render = average_render_time_.GetAverage();
+
+  // The time averages may not have any samples yet, in that case they return
+  // zero. That's OK, it just means we expect them to finish immediately and
+  // don't delay.
+  base::TimeTicks expected_render_complete =
+      rendering_frame->time_copied + avg_render;
+  base::TimeDelta render_margin =
+      kScheduleFrametimeMarginForRender * EstimatedArCoreFrameTime();
+  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeDelta render_wait = expected_render_complete - now - render_margin;
+
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "GetFrameData render wait (ms)", render_wait.InMilliseconds());
+  // Once the next frame starts animating, we won't be able to finish processing
+  // it until the current frame finishes rendering. If rendering is slower than
+  // the animating (JS processing) time, increase the delay to compensate.
+  if (avg_animate < avg_render) {
+    render_wait += avg_render - avg_animate;
+  }
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "GetFrameData adjusted render wait (ms)",
+                 render_wait.InMilliseconds());
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "Avg animating time (ms)", avg_animate.InMilliseconds());
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "Avg processing time (ms)",
+                 average_process_time_.GetAverage().InMilliseconds());
+  TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("xr.debug"),
+                 "Avg rendering time (ms)", avg_render.InMilliseconds());
+  return render_wait;
+}
+
+void ArCoreGl::ScheduleGetFrameData() {
+  DCHECK(pending_getframedata_);
+
+  base::TimeDelta delay = base::TimeDelta();
+  if (!last_arcore_update_time_.is_null()) {
+    base::TimeDelta update_wait = WaitTimeForArCoreUpdate();
+    if (update_wait > delay) {
+      delay = update_wait;
+    }
+
+    if (webxr_->HaveRenderingFrame()) {
+      base::TimeDelta render_wait = WaitTimeForRenderCompletion();
+      if (render_wait > delay) {
+        delay = render_wait;
       }
     }
-    TRACE_COUNTER1("gpu", "ARCore update schedule (ms)",
-                   delay.InMilliseconds());
-    // RunNextGetFrameData is needed since we must retain ownership of the mojo
-    // callback inside the pending_getframedata_ closure.
+  }
+  TRACE_COUNTER1("xr", "ARCore schedule delay (ms)", delay.InMilliseconds());
+  if (delay.is_zero()) {
+    // If there's no wait time, run immediately, not as posted task, to minimize
+    // delay. There shouldn't be any pending work we'd need to yield for.
+    RunPendingGetFrameData();
+  } else {
+    // Run the next frame update as a posted task. This uses a helper method
+    // since it's not safe to have a closure owned by the task runner, see
+    // comments on pending_getframedata_ in the header file.
     gl_thread_task_runner_->PostDelayedTask(
-        FROM_HERE, base::BindOnce(&ArCoreGl::RunNextGetFrameData, GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&ArCoreGl::RunPendingGetFrameData,
+                       weak_ptr_factory_.GetWeakPtr()),
         delay);
   }
 }
 
-void ArCoreGl::RunNextGetFrameData() {
-  DVLOG(3) << __func__;
-  DCHECK(pending_getframedata_);
+void ArCoreGl::RunPendingGetFrameData() {
   std::move(pending_getframedata_).Run();
+}
+
+void ArCoreGl::FinishRenderingFrame() {
+  DCHECK(webxr_->HaveRenderingFrame());
+  vr::WebXrFrame* frame = webxr_->GetRenderingFrame();
+
+  TRACE_EVENT1("gpu", __func__, "frame", frame->index);
+
+  DVLOG(3) << __func__ << ": client wait start";
+  frame->render_completion_fence->ClientWait();
+  DVLOG(3) << __func__ << ": client wait done";
+
+  GetRenderedFrameStats();
+  webxr_->EndFrameRendering();
 }
 
 void ArCoreGl::FinishFrame(int16_t frame_index) {
@@ -526,12 +700,76 @@ void ArCoreGl::FinishFrame(int16_t frame_index) {
   if (!webxr_->HaveRenderingFrame())
     return;
   vr::WebXrFrame* frame = webxr_->GetRenderingFrame();
+
+  frame->render_completion_fence = gl::GLFence::CreateForGpuFence();
+}
+
+void ArCoreGl::GetRenderedFrameStats() {
+  DVLOG(2) << __func__;
+  DCHECK(webxr_->HaveRenderingFrame());
+  vr::WebXrFrame* frame = webxr_->GetRenderingFrame();
+
+  DCHECK(frame->render_completion_fence);
+  base::TimeTicks completion_time =
+      static_cast<gl::GLFenceAndroidNativeFenceSync*>(
+          frame->render_completion_fence.get())
+          ->GetStatusChangeTime();
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (completion_time.is_null()) {
+    // The fence status change time is best effort and may be unavailable.
+    // In that case, use wallclock time.
+    DVLOG(3) << __func__ << ": got null completion time, using wallclock";
+    completion_time = now;
+  }
+
   base::TimeDelta pose_to_submit = frame->time_js_submit - frame->time_pose;
-  base::TimeDelta submit_to_swap =
-      base::TimeTicks::Now() - frame->time_js_submit;
+  base::TimeDelta submit_to_swap = completion_time - frame->time_js_submit;
   TRACE_COUNTER2("gpu", "WebXR frame time (ms)", "javascript",
-                 pose_to_submit.InMilliseconds(), "processing",
+                 pose_to_submit.InMilliseconds(), "post-submit",
                  submit_to_swap.InMilliseconds());
+
+  average_render_time_.AddSample(completion_time - frame->time_copied);
+
+  // Save a GPU load estimate for use in GetFrameData. This is somewhat
+  // arbitrary, use the most recent rendering time divided by the nominal frame
+  // time. If this is greater than 1.0, it's not possible to hit the target
+  // framerate and the application should reduce its workload.
+  // (Intentionally not using averages here since the blink side is expected
+  // to do its own smoothing when using this data.)
+  base::TimeDelta copied_to_completion = completion_time - frame->time_copied;
+  base::TimeDelta arcore_frametime = EstimatedArCoreFrameTime();
+  DCHECK(!arcore_frametime.is_zero());
+  rendering_time_ratio_ = copied_to_completion / arcore_frametime;
+  DVLOG(3) << __func__
+           << ": rendering time ratio (%)=" << rendering_time_ratio_ * 100;
+  TRACE_COUNTER1("xr", "WebXR rendering time ratio (%)",
+                 rendering_time_ratio_ * 100);
+
+  // Add Animating/Processing/Rendering async annotations to event traces.
+
+  // Trace IDs need to be unique. Since frame->index is an 8-bit wrapping value,
+  // use a separate arbitrary value. This is the only place we create this kind
+  // of trace, so there's no need to keep the ID in sync with other code
+  // locations. Use a static value so that IDs don't get reused across sessions.
+  static uint32_t frame_id_for_tracing = 0;
+  uint32_t trace_id = ++frame_id_for_tracing;
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+      "xr", "Animating", trace_id, frame->time_pose, "frame", frame->index);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1("xr", "Animating", trace_id,
+                                                 frame->time_js_submit, "frame",
+                                                 frame->index);
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1("xr", "Processing", trace_id,
+                                                   frame->time_js_submit,
+                                                   "frame", frame->index);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1(
+      "xr", "Processing", trace_id, frame->time_copied, "frame", frame->index);
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+      "xr", "Rendering", trace_id, frame->time_copied, "frame", frame->index);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1(
+      "xr", "Rendering", trace_id, completion_time, "frame", frame->index);
 }
 
 void ArCoreGl::SubmitFrameMissing(int16_t frame_index,
@@ -573,7 +811,13 @@ void ArCoreGl::ProcessFrameFromMailbox(int16_t frame_index,
   DCHECK(webxr_->HaveProcessingFrame());
   DCHECK(!ar_image_transport_->UseSharedBuffer());
 
-  ar_image_transport_->CopyMailboxToSurfaceAndSwap(transfer_size_, mailbox);
+  // Use only the active bounds of the viewport, converting the
+  // bounds UV boundaries to a transform. See also OnWebXrTokenSignaled().
+  gfx::Transform transform =
+      GetContentTransform(webxr_->GetProcessingFrame()->bounds_left);
+  ar_image_transport_->CopyMailboxToSurfaceAndSwap(transfer_size_, mailbox,
+                                                   transform);
+
   // Notify the client that we're done with the mailbox so that the underlying
   // image is eligible for destruction.
   submit_client_->OnSubmitFrameTransferred(true);
@@ -585,22 +829,49 @@ void ArCoreGl::ProcessFrameFromMailbox(int16_t frame_index,
   // from the SurfaceTexture.
 }
 
+void ArCoreGl::TransitionProcessingFrameToRendering() {
+  if (webxr_->HaveRenderingFrame()) {
+    // It's possible, though unlikely, that the previous rendering frame hasn't
+    // finished yet, for example if an unusually slow frame is followed by an
+    // unusually quick one. In that case, wait for that frame to finish
+    // rendering first before proceeding with this one. The state machine
+    // doesn't permit two frames to be in rendering state at once. (Also, adding
+    // even more GPU work in that condition would be counterproductive.)
+    DVLOG(3) << __func__ << ": wait for previous rendering frame to complete";
+    FinishRenderingFrame();
+  }
+
+  DCHECK(!webxr_->HaveRenderingFrame());
+  DCHECK(webxr_->HaveProcessingFrame());
+  auto* frame = webxr_->GetProcessingFrame();
+  frame->time_copied = base::TimeTicks::Now();
+  average_process_time_.AddSample(frame->time_copied - frame->time_js_submit);
+
+  frame->render_completion_fence = nullptr;
+  webxr_->TransitionFrameProcessingToRendering();
+
+  // We finished processing a frame, unblock a potentially waiting next frame.
+  webxr_->TryDeferredProcessing();
+}
+
 void ArCoreGl::OnTransportFrameAvailable(const gfx::Transform& uv_transform) {
   DVLOG(2) << __func__;
   DCHECK(!ar_image_transport_->UseSharedBuffer());
   DCHECK(webxr_->HaveProcessingFrame());
   int16_t frame_index = webxr_->GetProcessingFrame()->index;
   TRACE_EVENT1("gpu", __func__, "frame", frame_index);
-  webxr_->GetProcessingFrame()->time_copied = base::TimeTicks::Now();
-  webxr_->TransitionFrameProcessingToRendering();
 
+  TransitionProcessingFrameToRendering();
+
+  // Now copy the received SurfaceTexture image to the framebuffer.
+  // Don't use the viewport bounds here, those already got applied
+  // when copying the mailbox image to the transfer Surface
+  // in ProcessFrameFromMailbox.
   glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
   ar_image_transport_->CopyDrawnImageToFramebuffer(
       webxr_.get(), camera_image_size_, uv_transform);
 
   FinishFrame(frame_index);
-
-  webxr_->EndFrameRendering();
 
   if (submit_client_) {
     // Create a local GpuFence and pass it to the Renderer via IPC.
@@ -609,8 +880,6 @@ void ArCoreGl::OnTransportFrameAvailable(const gfx::Transform& uv_transform) {
     submit_client_->OnSubmitFrameGpuFence(
         gpu_fence2->GetGpuFenceHandle().Clone());
   }
-  // We finished processing a frame, unblock a potentially waiting next frame.
-  webxr_->TryDeferredProcessing();
 }
 
 void ArCoreGl::SubmitFrameWithTextureHandle(
@@ -658,16 +927,18 @@ void ArCoreGl::OnWebXrTokenSignaled(int16_t frame_index,
 
   DCHECK(webxr_->HaveProcessingFrame());
   DCHECK(ar_image_transport_->UseSharedBuffer());
-  webxr_->GetProcessingFrame()->time_copied = base::TimeTicks::Now();
-  webxr_->TransitionFrameProcessingToRendering();
 
+  TransitionProcessingFrameToRendering();
+
+  // Use only the active bounds of the viewport, converting the
+  // bounds UV boundaries to a transform. See also ProcessFrameFromMailbox().
+  gfx::Transform transform =
+      GetContentTransform(webxr_->GetRenderingFrame()->bounds_left);
   glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
   ar_image_transport_->CopyDrawnImageToFramebuffer(
-      webxr_.get(), camera_image_size_, shared_buffer_transform_);
+      webxr_.get(), camera_image_size_, transform);
 
   FinishFrame(frame_index);
-
-  webxr_->EndFrameRendering();
 
   if (submit_client_) {
     // Create a local GpuFence and pass it to the Renderer via IPC.
@@ -676,16 +947,28 @@ void ArCoreGl::OnWebXrTokenSignaled(int16_t frame_index,
     submit_client_->OnSubmitFrameGpuFence(
         gpu_fence2->GetGpuFenceHandle().Clone());
   }
-  // We finished processing a frame, unblock a potentially waiting next frame.
-  webxr_->TryDeferredProcessing();
 }
 
 void ArCoreGl::UpdateLayerBounds(int16_t frame_index,
                                  const gfx::RectF& left_bounds,
                                  const gfx::RectF& right_bounds,
                                  const gfx::Size& source_size) {
-  DVLOG(2) << __func__ << " source_size=" << source_size.ToString();
+  DVLOG(2) << __func__ << " source_size=" << source_size.ToString()
+           << " left_bounds=" << left_bounds.ToString();
 
+  // The first UpdateLayerBounds may arrive early, when there's
+  // no animating frame yet. In that case, just save it in viewport_bounds_
+  // so that it's applied to the next animating frame.
+  if (webxr_->HaveAnimatingFrame()) {
+    // Handheld AR mode is monoscopic and only uses the left bounds.
+    webxr_->GetAnimatingFrame()->bounds_left = left_bounds;
+    (void)right_bounds;
+  }
+  viewport_bounds_ = left_bounds;
+
+  // Early setting of transfer_size_ is OK since that's only used by the
+  // animating frame. Processing/rendering frames use the bounds from
+  // WebXRPresentationState.
   transfer_size_ = source_size;
 }
 
@@ -865,6 +1148,10 @@ void ArCoreGl::ProcessFrame(
 
   if (IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH)) {
     frame_data->depth_data = arcore_->GetDepthData();
+  }
+
+  if (IsFeatureEnabled(device::mojom::XRSessionFeature::IMAGE_TRACKING)) {
+    frame_data->tracked_images = arcore_->GetTrackedImages();
   }
 
   // Running this callback after resolving all the hit-test requests ensures

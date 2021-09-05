@@ -184,6 +184,32 @@ class IdentifiableSurface {
     // will key this type on a digest of both the enums' values.
     kWebGLShaderPrecisionFormat = 16,
 
+    // A type for recording reads of the offsetWidth and offsetHeight properties
+    // when we believe it may be trying to detect the size of the scrollbar.
+    // The input for this surface should be a member of ScrollbarSurfaces.
+    kScrollbarSize = 17,
+
+    // WebGL2RenderingContext.getInternal
+    kWebGLInternalFormatParameter = 18,
+
+    // Represents a call to GPU.requestAdapter. Input is the options filter.
+    kGPU_RequestAdapter = 20,
+
+    // For instrumenting HTMLCanvas.getContext() fingerprinting. Some scripts
+    // will iterate through the different possible arguments and record whether
+    // each type of context is supported.
+    // The input should be an instance of CanvasRenderingContext::ContextType.
+    kCanvasRenderingContext = 21,
+
+    // Represents a call to MediaDevices.getUserMedia. Input is the set of
+    // constraints.
+    kMediaDevices_GetUserMedia = 22,
+
+    // NavigatorUAData.getHighEntropyValues() is, shockingly, a high entropy
+    // API to provide more detailed User-Agent data. The output is keyed on
+    // the hint parameter.
+    kNavigatorUAData_GetHighEntropyValues = 24,
+
     // MediaCapabilities.decodingInfo() reveals information about whether
     // media decoding will be supported, smooth and/or power efficient,
     // according to its codec, size, and other parameters. It can further reveal
@@ -199,11 +225,34 @@ class IdentifiableSurface {
     // obtained. Input is the lookup name. Output is a bool.
     kLocalFontExistenceByUniqueNameOnly = 26,
 
+    // Represents a call to Navigator.getUserMedia. Input is the set of
+    // constraints.
+    kNavigator_GetUserMedia = 27,
+
+    // Represents a media query being tested. Input is combination of property
+    // name and the target value. Output is the result --- true or false.
+    kMediaQuery = 28,
+
     // Represents loading a font locally. Input is the PostScript name.
     kLocalFontLoadPostScriptName = 29,
 
+    // Getting supported codecs, etc. for WebRTC sender -- key is hash of kind
+    // (audio or video).
+    kRtcRtpSenderGetCapabilities = 31,
+
+    // Getting supported codecs, etc. for WebRTC receiver -- key is hash of kind
+    // (audio or video).
+    kRtcRtpReceiverGetCapabilities = 32,
+
     // We can use values up to and including |kMax|.
     kMax = (1 << kTypeBits) - 1
+  };
+
+  enum class ScrollbarSurface : uint64_t {
+    kScrollingElementWidth = 0,
+    kScrollingElementHeight = 1,
+    kElemScrollbarWidth = 2,
+    kElemScrollbarHeight = 3,
   };
 
   // Default constructor is invalid.

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/page_load_metrics/browser/page_load_metrics_update_dispatcher.h"
+#include "components/page_load_metrics/browser/layout_shift_normalization.h"
 
 #include <ostream>
 #include <utility>
@@ -340,10 +341,14 @@ class PageLoadTimingMerger {
                          navigation_start_offset,
                          new_paint_timing.first_contentful_paint);
     if (is_main_frame) {
-      // FMP and FCP++ are only tracked in the main frame.
+      // FMP is only tracked in the main frame.
       target_paint_timing->first_meaningful_paint =
           new_paint_timing.first_meaningful_paint;
 
+      // LCP and the first input/scroll timestamp are not merged by us; instead,
+      // PLMUD passes the per-frame data to its client (PageLoadTracker) via
+      // OnTimingChanged and OnSubFrameTimingChanged, and merged results are
+      // calculated and held by the LargestContentfulPaintHandler.
       target_paint_timing->largest_contentful_paint =
           new_paint_timing.largest_contentful_paint->Clone();
       target_paint_timing->experimental_largest_contentful_paint =
@@ -435,7 +440,8 @@ PageLoadMetricsUpdateDispatcher::PageLoadMetricsUpdateDispatcher(
       pending_merged_page_timing_(CreatePageLoadTiming()),
       main_frame_metadata_(mojom::FrameMetadata::New()),
       subframe_metadata_(mojom::FrameMetadata::New()),
-      page_input_timing_(mojom::InputTiming()) {}
+      page_input_timing_(mojom::InputTiming()),
+      mobile_friendliness_(blink::MobileFriendliness()) {}
 
 PageLoadMetricsUpdateDispatcher::~PageLoadMetricsUpdateDispatcher() {
   ShutDown();
@@ -463,7 +469,8 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr new_cpu_timing,
     mojom::DeferredResourceCountsPtr new_deferred_resource_data,
-    mojom::InputTimingPtr input_timing_delta) {
+    mojom::InputTimingPtr input_timing_delta,
+    const blink::MobileFriendliness& mobile_friendliness) {
   if (embedder_interface_->IsExtensionUrl(
           render_frame_host->GetLastCommittedURL())) {
     // Extensions can inject child frames into a page. We don't want to track
@@ -480,6 +487,8 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
   // Report new deferral info.
   client_->OnNewDeferredResourceCounts(*new_deferred_resource_data);
 
+  UpdateHasSeenInputOrScroll(*new_timing);
+
   bool is_main_frame = IsMainFrame(render_frame_host);
   if (is_main_frame) {
     UpdateMainFrameMetadata(render_frame_host, std::move(new_metadata));
@@ -490,6 +499,7 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     UpdateSubFrameTiming(render_frame_host, std::move(new_timing));
   }
   UpdatePageInputTiming(*input_timing_delta);
+  UpdateMobileFriendliness(mobile_friendliness);
   UpdatePageRenderData(*render_data);
   if (!is_main_frame) {
     // This path is just for the AMP metrics.
@@ -497,6 +507,20 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
   }
 
   client_->UpdateFeaturesUsage(render_frame_host, *new_features);
+}
+
+void PageLoadMetricsUpdateDispatcher::UpdateHasSeenInputOrScroll(
+    const mojom::PageLoadTiming& new_timing) {
+  const mojom::PaintTiming* paint_timing = new_timing.paint_timing.get();
+  if (!paint_timing)
+    return;
+
+  // NOTE: we cannot use the first input/scroll in current_merged_page_timing_,
+  // because PageLoadTimingMerger ignores this field.  We could reach into the
+  // LargestContentfulPaintHandler, but it is simpler to just watch the
+  // per-frame timing updates and remember a boolean.
+  if (paint_timing->first_input_or_scroll_notified_timestamp.has_value())
+    has_seen_input_or_scroll_ = true;
 }
 
 void PageLoadMetricsUpdateDispatcher::UpdateFeatures(
@@ -703,9 +727,26 @@ void PageLoadMetricsUpdateDispatcher::UpdatePageInputTiming(
       input_timing_delta.total_adjusted_input_delay;
 }
 
+void PageLoadMetricsUpdateDispatcher::UpdateMobileFriendliness(
+    const blink::MobileFriendliness& mobile_friendliness) {
+  mobile_friendliness_ = mobile_friendliness;
+}
+
 void PageLoadMetricsUpdateDispatcher::UpdatePageRenderData(
     const mojom::FrameRenderDataUpdate& render_data) {
   page_render_data_.layout_shift_score += render_data.layout_shift_delta;
+  layout_shift_normalization_.AddNewLayoutShifts(
+      render_data.new_layout_shifts, base::TimeTicks::Now(),
+      page_render_data_.layout_shift_score);
+
+  // Stop accumulating page-wide layout_shift_score_before_input_or_scroll after
+  // input or scroll in any frame. Note that we can't unconditionally accumulate
+  // layout_shift_delta_before_input_or_scroll, because that field only reflects
+  // input/scroll in the same frame as the shift.
+  if (!has_seen_input_or_scroll_) {
+    page_render_data_.layout_shift_score_before_input_or_scroll +=
+        render_data.layout_shift_delta_before_input_or_scroll;
+  }
 
   page_render_data_.all_layout_block_count +=
       render_data.all_layout_block_count_delta;
@@ -720,6 +761,10 @@ void PageLoadMetricsUpdateDispatcher::UpdatePageRenderData(
 void PageLoadMetricsUpdateDispatcher::UpdateMainFrameRenderData(
     const mojom::FrameRenderDataUpdate& render_data) {
   main_frame_render_data_.layout_shift_score += render_data.layout_shift_delta;
+
+  // Track main frame cumulative score up to the first input or scroll in the
+  // main frame. For this we do not care about inputs sent to subframes, so we
+  // should not check has_seen_input_or_scroll_ (but see crbug.com/1136207).
   main_frame_render_data_.layout_shift_score_before_input_or_scroll +=
       render_data.layout_shift_delta_before_input_or_scroll;
 
@@ -737,6 +782,14 @@ void PageLoadMetricsUpdateDispatcher::OnSubFrameRenderDataChanged(
     content::RenderFrameHost* render_frame_host,
     const mojom::FrameRenderDataUpdate& render_data) {
   client_->OnSubFrameRenderDataChanged(render_frame_host, render_data);
+}
+
+void PageLoadMetricsUpdateDispatcher::FlushPendingTimingUpdates() {
+  // If there's a pending update, dispatch the update now.
+  if (timer_->IsRunning()) {
+    timer_->Stop();
+    DispatchTimingUpdates();
+  }
 }
 
 void PageLoadMetricsUpdateDispatcher::MaybeDispatchTimingUpdates(

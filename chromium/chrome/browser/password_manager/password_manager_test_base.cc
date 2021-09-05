@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,6 +29,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/driver/test_sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
@@ -78,20 +80,22 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
       bool is_update) override;
   void OnHideManualFallbackForSaving() override;
   bool OnChooseCredentials(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+      std::vector<std::unique_ptr<password_manager::PasswordForm>>
+          local_credentials,
       const url::Origin& origin,
       ManagePasswordsState::CredentialsCallback callback) override;
   void OnPasswordAutofilled(
-      const std::vector<const autofill::PasswordForm*>& password_forms,
+      const std::vector<const password_manager::PasswordForm*>& password_forms,
       const url::Origin& origin,
-      const std::vector<const autofill::PasswordForm*>* federated_matches)
-      override;
+      const std::vector<const password_manager::PasswordForm*>*
+          federated_matches) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
   // ManagePasswordsUIController:
   void NotifyUnsyncedCredentialsWillBeDeleted(
-      std::vector<autofill::PasswordForm> unsynced_credentials) override;
+      std::vector<password_manager::PasswordForm> unsynced_credentials)
+      override;
 
   // Should not be used for manual fallback events.
   bool IsTargetStateObserved(
@@ -206,7 +210,8 @@ void CustomManagePasswordsUIController::OnHideManualFallbackForSaving() {
 }
 
 bool CustomManagePasswordsUIController::OnChooseCredentials(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        local_credentials,
     const url::Origin& origin,
     ManagePasswordsState::CredentialsCallback callback) {
   ProcessStateExpectations(password_manager::ui::CREDENTIAL_REQUEST_STATE);
@@ -215,9 +220,10 @@ bool CustomManagePasswordsUIController::OnChooseCredentials(
 }
 
 void CustomManagePasswordsUIController::OnPasswordAutofilled(
-    const std::vector<const autofill::PasswordForm*>& password_forms,
+    const std::vector<const password_manager::PasswordForm*>& password_forms,
     const url::Origin& origin,
-    const std::vector<const autofill::PasswordForm*>* federated_matches) {
+    const std::vector<const password_manager::PasswordForm*>*
+        federated_matches) {
   ProcessStateExpectations(password_manager::ui::MANAGE_STATE);
   return ManagePasswordsUIController::OnPasswordAutofilled(
       password_forms, origin, federated_matches);
@@ -235,7 +241,7 @@ void CustomManagePasswordsUIController::DidFinishNavigation(
 }
 
 void CustomManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
-    std::vector<autofill::PasswordForm> unsynced_credentials) {
+    std::vector<password_manager::PasswordForm> unsynced_credentials) {
   ManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
       std::move(unsynced_credentials));
   was_prompt_automatically_shown_ = true;
@@ -408,12 +414,12 @@ PasswordStoreResultsObserver::PasswordStoreResultsObserver() = default;
 PasswordStoreResultsObserver::~PasswordStoreResultsObserver() = default;
 
 void PasswordStoreResultsObserver::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> results) {
   results_ = std::move(results);
   run_loop_.Quit();
 }
 
-std::vector<std::unique_ptr<autofill::PasswordForm>>
+std::vector<std::unique_ptr<password_manager::PasswordForm>>
 PasswordStoreResultsObserver::WaitForResults() {
   run_loop_.Run();
   return std::move(results_);
@@ -425,6 +431,11 @@ PasswordManagerBrowserTestBase::PasswordManagerBrowserTestBase()
 
 PasswordManagerBrowserTestBase::~PasswordManagerBrowserTestBase() = default;
 
+void PasswordManagerBrowserTestBase::SetUp() {
+  ASSERT_TRUE(https_test_server().InitializeAndListen());
+  CertVerifierBrowserTest::SetUp();
+}
+
 void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -432,7 +443,7 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
   static constexpr base::FilePath::CharType kDocRoot[] =
       FILE_PATH_LITERAL("chrome/test/data");
   https_test_server().ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
-  ASSERT_TRUE(https_test_server().Start());
+  https_test_server().StartAcceptingConnections();
 
   // Setup the mock host resolver
   host_resolver()->AddRule("*", "127.0.0.1");
@@ -487,12 +498,23 @@ void PasswordManagerBrowserTestBase::GetNewTab(
 
 // static
 void PasswordManagerBrowserTestBase::WaitForPasswordStore(Browser* browser) {
-  scoped_refptr<password_manager::PasswordStore> password_store =
+  scoped_refptr<password_manager::PasswordStore> profile_password_store =
       PasswordStoreFactory::GetForProfile(browser->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  PasswordStoreResultsObserver syncer;
-  password_store->GetAllLoginsWithAffiliationAndBrandingInformation(&syncer);
-  syncer.WaitForResults();
+  PasswordStoreResultsObserver profile_syncer;
+  profile_password_store->GetAllLoginsWithAffiliationAndBrandingInformation(
+      &profile_syncer);
+  profile_syncer.WaitForResults();
+
+  scoped_refptr<password_manager::PasswordStore> account_password_store =
+      AccountPasswordStoreFactory::GetForProfile(
+          browser->profile(), ServiceAccessType::IMPLICIT_ACCESS);
+  if (account_password_store) {
+    PasswordStoreResultsObserver account_syncer;
+    account_password_store->GetAllLoginsWithAffiliationAndBrandingInformation(
+        &account_syncer);
+    account_syncer.WaitForResults();
+  }
 }
 
 content::WebContents* PasswordManagerBrowserTestBase::WebContents() const {
@@ -669,11 +691,33 @@ void PasswordManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
                 // considered enabled.
                 ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
                     context, base::BindRepeating(&BuildTestSyncService));
+
                 PasswordStoreFactory::GetInstance()->SetTestingFactory(
                     context,
                     base::BindRepeating(&password_manager::BuildPasswordStore<
                                         content::BrowserContext,
                                         password_manager::TestPasswordStore>));
+
+                if (base::FeatureList::IsEnabled(
+                        password_manager::features::
+                            kEnablePasswordsAccountStorage)) {
+                  AccountPasswordStoreFactory::GetInstance()->SetTestingFactory(
+                      context,
+                      base::BindRepeating(
+                          &password_manager::BuildPasswordStoreWithArgs<
+                              content::BrowserContext,
+                              password_manager::TestPasswordStore,
+                              password_manager::IsAccountStore>,
+                          password_manager::IsAccountStore(true)));
+                } else {
+                  AccountPasswordStoreFactory::GetInstance()->SetTestingFactory(
+                      context,
+                      base::BindRepeating(
+                          [](content::BrowserContext* context)
+                              -> scoped_refptr<RefcountedKeyedService> {
+                            return nullptr;
+                          }));
+                }
               }));
 }
 
@@ -702,7 +746,7 @@ void PasswordManagerBrowserTestBase::CheckThatCredentialsStored(
   ASSERT_EQ(1u, passwords_map.size());
   auto& passwords_vector = passwords_map.begin()->second;
   ASSERT_EQ(1u, passwords_vector.size());
-  const autofill::PasswordForm& form = passwords_vector[0];
+  const password_manager::PasswordForm& form = passwords_vector[0];
   EXPECT_EQ(base::ASCIIToUTF16(username), form.username_value);
   EXPECT_EQ(base::ASCIIToUTF16(password), form.password_value);
 }

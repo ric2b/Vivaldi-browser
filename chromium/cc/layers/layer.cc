@@ -17,6 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/features.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/picture_layer.h"
@@ -51,6 +52,7 @@ struct SameSizeAsLayer : public base::RefCounted<SameSizeAsLayer> {
     SkColor background_color;
     Region non_fast_scrollable_region;
     TouchActionRegion touch_action_region;
+    Region wheel_event_region;
     ElementId element_id;
   } inputs;
   void* layer_tree_inputs;
@@ -549,8 +551,8 @@ void Layer::SetClipRect(const gfx::Rect& clip_rect) {
         effect_tree_index() != EffectTree::kInvalidNodeId) {
       if (EffectNode* node =
               property_trees->effect_tree.Node(effect_tree_index())) {
-        node->rounded_corner_bounds =
-            gfx::RRectF(effective_clip_rect, corner_radii());
+        node->mask_filter_info =
+            gfx::MaskFilterInfo(effective_clip_rect, corner_radii());
         node->effect_changed = true;
         property_trees->effect_tree.set_needs_update(true);
       }
@@ -656,8 +658,8 @@ void Layer::SetRoundedCorner(const gfx::RoundedCornersF& corner_radii) {
   EffectNode* node = nullptr;
   if (property_trees && effect_tree_index() != EffectTree::kInvalidNodeId &&
       (node = property_trees->effect_tree.Node(effect_tree_index()))) {
-    node->rounded_corner_bounds =
-        gfx::RRectF(EffectiveClipRect(), corner_radii);
+    node->mask_filter_info =
+        gfx::MaskFilterInfo(EffectiveClipRect(), corner_radii);
     node->effect_changed = true;
     property_trees->effect_tree.set_needs_update(true);
   } else {
@@ -1076,6 +1078,15 @@ void Layer::SetTouchActionRegion(TouchActionRegion touch_action_region) {
   SetNeedsCommit();
 }
 
+void Layer::SetWheelEventRegion(Region wheel_event_region) {
+  DCHECK(IsPropertyChangeAllowed());
+  if (inputs_.wheel_event_region == wheel_event_region)
+    return;
+
+  inputs_.wheel_event_region = std::move(wheel_event_region);
+  SetNeedsCommit();
+}
+
 void Layer::SetCacheRenderSurface(bool cache) {
   DCHECK(IsPropertyChangeAllowed());
   if (cache_render_surface_ == cache)
@@ -1313,17 +1324,20 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->set_may_contain_video(may_contain_video_);
   layer->SetNonFastScrollableRegion(inputs_.non_fast_scrollable_region);
   layer->SetTouchActionRegion(inputs_.touch_action_region);
-  // TODO(sunxd): Pass the correct region for wheel event handlers, see
-  // https://crbug.com/841364.
+
+  // TODO(https://crbug.com/841364): This block is optimized to avoid checks
+  // for kWheelEventRegions. It will be simplified once kWheelEventRegions
+  // feature flag is removed.
   EventListenerProperties mouse_wheel_props =
       layer_tree_host()->event_listener_properties(
           EventListenerClass::kMouseWheel);
-  if (mouse_wheel_props == EventListenerProperties::kBlocking ||
-      mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) {
+  if ((mouse_wheel_props == EventListenerProperties::kBlocking ||
+       mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) &&
+      !base::FeatureList::IsEnabled(::features::kWheelEventRegions))
     layer->SetWheelEventHandlerRegion(Region(gfx::Rect(bounds())));
-  } else {
-    layer->SetWheelEventHandlerRegion(Region());
-  }
+  else
+    layer->SetWheelEventHandlerRegion(inputs_.wheel_event_region);
+
   layer->SetContentsOpaque(inputs_.contents_opaque);
   layer->SetContentsOpaqueForText(inputs_.contents_opaque_for_text);
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {assert} from '../chrome_util.js';
-import {NotImplementedError} from '../error.js';
+import {NotImplementedError} from '../type.js';
 
 import {AsyncWriter} from './async_writer.js';
 import {
@@ -78,9 +78,10 @@ export class NativeFileEntry extends NativeFileSystemEntry {
     // TODO(crbug.com/980846): We should write files in-place so that even the
     // app is accidentally closed or hit any unexpected exceptions, the captured
     // video will not be dropped entirely.
-    const doWrite = (blob) => writer.write(blob);
-    return new AsyncWriter(doWrite, {
-      onClosed: () => writer.close(),
+    return new AsyncWriter({
+      write: (blob) => writer.write(blob),
+      seek: (offset) => writer.seek(offset),
+      close: () => writer.close(),
     });
   }
 
@@ -166,11 +167,18 @@ export class NativeDirectoryEntry extends NativeFileSystemEntry {
    * @override
    */
   async getDirectory({name, createIfNotExist}) {
-    const handle =
-        await this.handle_.getDirectoryHandle(name, {create: createIfNotExist});
-    assert(handle !== null);
-    return new NativeDirectoryEntry(
-        /** @type {!FileSystemDirectoryHandle} */ (handle));
+    try {
+      const handle = await this.handle_.getDirectoryHandle(
+          name, {create: createIfNotExist});
+      assert(handle !== null);
+      return new NativeDirectoryEntry(
+          /** @type {!FileSystemDirectoryHandle} */ (handle));
+    } catch (error) {
+      if (!createIfNotExist && error.name === 'NotFoundError') {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**

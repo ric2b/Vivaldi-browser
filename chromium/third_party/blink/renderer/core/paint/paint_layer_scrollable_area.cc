@@ -429,17 +429,12 @@ void PaintLayerScrollableArea::SetScrollbarNeedsPaintInvalidation(
   if (auto* graphics_layer = orientation == kHorizontalScrollbar
                                  ? GraphicsLayerForHorizontalScrollbar()
                                  : GraphicsLayerForVerticalScrollbar()) {
-    graphics_layer->SetNeedsDisplay();
-    graphics_layer->SetContentsNeedsDisplay();
+    graphics_layer->InvalidateContents();
   }
   ScrollableArea::SetScrollbarNeedsPaintInvalidation(orientation);
 }
 
 void PaintLayerScrollableArea::SetScrollCornerNeedsPaintInvalidation() {
-  if (GraphicsLayer* graphics_layer = GraphicsLayerForScrollCorner()) {
-    graphics_layer->SetNeedsDisplay();
-    return;
-  }
   ScrollableArea::SetScrollCornerNeedsPaintInvalidation();
 }
 
@@ -1254,7 +1249,7 @@ mojom::blink::ScrollBehavior PaintLayerScrollableArea::ScrollBehaviorStyle()
   return GetLayoutBox()->StyleRef().GetScrollBehavior();
 }
 
-ColorScheme PaintLayerScrollableArea::UsedColorScheme() const {
+mojom::blink::ColorScheme PaintLayerScrollableArea::UsedColorScheme() const {
   return GetLayoutBox()->StyleRef().UsedColorScheme();
 }
 
@@ -1883,6 +1878,19 @@ bool PaintLayerScrollableArea::NeedsScrollCorner() const {
   return HasScrollbar() && !HasOverlayScrollbars();
 }
 
+bool PaintLayerScrollableArea::ShouldOverflowControlsPaintAsOverlay() const {
+  if (HasOverlayOverflowControls())
+    return true;
+
+  // In CAP the global root scrollbars and corner also paint as overlay so that
+  // they appear on top of all content within the viewport. This is important
+  // since these scrollbar's transform parent is the 'overscroll elasticity'
+  // transform node of the visual viewport, i.e. they don't move during elastic
+  // overscroll or on pinch zoom.
+  return (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
+          GetLayoutBox() && GetLayoutBox()->IsGlobalRootScroller());
+}
+
 void PaintLayerScrollableArea::PositionOverflowControls() {
   if (!HasOverflowControls())
     return;
@@ -2073,14 +2081,6 @@ bool PaintLayerScrollableArea::HitTestResizerInFragments(
 
 void PaintLayerScrollableArea::UpdateResizerStyle(
     const ComputedStyle* old_style) {
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() && old_style &&
-      old_style->UnresolvedResize() !=
-          GetLayoutBox()->StyleRef().UnresolvedResize()) {
-    // Invalidate the composited scroll corner layer on resize style change.
-    if (auto* graphics_layer = GraphicsLayerForScrollCorner())
-      graphics_layer->SetNeedsDisplay();
-  }
-
   if (!resizer_ && !GetLayoutBox()->CanResize())
     return;
 
@@ -2984,16 +2984,6 @@ static IntRect InvalidatePaintOfScrollbarIfNeeded(
         RoundedIntPoint(context.fragment_data->PaintOffset()));
   }
 
-  if (needs_paint_invalidation && graphics_layer) {
-    // If the scrollbar needs paint invalidation but didn't change location/size
-    // or the scrollbar is an overlay scrollbar (visual rect is empty),
-    // invalidating the graphics layer is enough (which has been done in
-    // ScrollableArea::setScrollbarNeedsPaintInvalidation()).
-    needs_paint_invalidation = false;
-    DCHECK(!graphics_layer->PaintsContentOrHitTest() ||
-           graphics_layer->GetPaintController().GetPaintArtifact().IsEmpty());
-  }
-
   // Invalidate the box's display item client if the box's padding box size is
   // affected by change of the non-overlay scrollbar width. We detect change of
   // visual rect size instead of change of scrollbar width, which may have some
@@ -3021,24 +3011,27 @@ static IntRect InvalidatePaintOfScrollbarIfNeeded(
 
   previously_was_overlay = is_overlay;
 
-  if (!scrollbar || graphics_layer ||
+  if (!scrollbar ||
       !ScrollControlNeedsPaintInvalidation(
           new_visual_rect, previous_visual_rect, needs_paint_invalidation))
     return new_visual_rect;
 
-  context.painting_layer->SetNeedsRepaint();
-  ObjectPaintInvalidator(box).InvalidateDisplayItemClient(
-      *scrollbar, PaintInvalidationReason::kScrollControl);
-  if (scrollbar->IsCustomScrollbar()) {
-    To<CustomScrollbar>(scrollbar)
-        ->InvalidateDisplayItemClientsOfScrollbarParts();
-  }
+  if (graphics_layer)
+    graphics_layer->Invalidate(PaintInvalidationReason::kScrollControl);
+  else
+    context.painting_layer->SetNeedsRepaint();
+  scrollbar->Invalidate(PaintInvalidationReason::kScrollControl);
+  if (auto* custom_scrollbar = DynamicTo<CustomScrollbar>(scrollbar))
+    custom_scrollbar->InvalidateDisplayItemClientsOfScrollbarParts();
 
   return new_visual_rect;
 }
 
 void PaintLayerScrollableArea::InvalidatePaintOfScrollControlsIfNeeded(
     const PaintInvalidatorContext& context) {
+  if (context.subtree_flags & PaintInvalidatorContext::kSubtreeFullInvalidation)
+    SetScrollControlsNeedFullPaintInvalidation();
+
   LayoutBox& box = *GetLayoutBox();
   bool box_geometry_has_been_invalidated = false;
   horizontal_scrollbar_visual_rect_ = InvalidatePaintOfScrollbarIfNeeded(
@@ -3067,16 +3060,19 @@ void PaintLayerScrollableArea::InvalidatePaintOfScrollControlsIfNeeded(
     scroll_corner_and_resizer_visual_rect_ =
         new_scroll_corner_and_resizer_visual_rect;
     if (LayoutCustomScrollbarPart* scroll_corner = ScrollCorner()) {
+      DCHECK(!scroll_corner->PaintingLayer());
       ObjectPaintInvalidator(*scroll_corner)
-          .SlowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(
-              *scroll_corner, PaintInvalidationReason::kScrollControl);
+          .InvalidateDisplayItemClient(*scroll_corner,
+                                       PaintInvalidationReason::kScrollControl);
     }
     if (LayoutCustomScrollbarPart* resizer = Resizer()) {
-      ObjectPaintInvalidator(*resizer)
-          .SlowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(
-              *resizer, PaintInvalidationReason::kScrollControl);
+      DCHECK(!resizer->PaintingLayer());
+      ObjectPaintInvalidator(*resizer).InvalidateDisplayItemClient(
+          *resizer, PaintInvalidationReason::kScrollControl);
     }
-    if (!GraphicsLayerForScrollCorner()) {
+    if (auto* graphics_layer = GraphicsLayerForScrollCorner()) {
+      graphics_layer->Invalidate(PaintInvalidationReason::kScrollControl);
+    } else {
       context.painting_layer->SetNeedsRepaint();
       ObjectPaintInvalidator(box).InvalidateDisplayItemClient(
           GetScrollCornerDisplayItemClient(),

@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
@@ -68,7 +68,7 @@ class DemoSetupControllerTestHelper {
 
   // Wait until the setup result arrives (either OnSetupError or OnSetupSuccess
   // is called), returns true when the success result matches with
-  // |success_expected| and setup step matches |setup_step_expected|.
+  // `success_expected` and setup step matches `setup_step_expected`.
   bool WaitResult(bool success_expected,
                   DemoSetupController::DemoSetupStep setup_step_expected) {
     // Run() stops immediately if Quit is already called.

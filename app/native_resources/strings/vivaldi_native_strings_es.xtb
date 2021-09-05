@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Enviar el enlace por correo</translation>
 <translation id="1454726940098520109">No volver a solicitar confirmación</translation>
 <translation id="1462666970065907900">¿Estás seguro de cerrar esta ventana?</translation>
+<translation id="1526344461589023948">Ocurrió un error al intentar guardar los archivos de actualización descargados. Por favor, revisa que tu equipo tenga suficiente espacio en disco y reinténtalo más tarde.</translation>
 <translation id="1657174850639146440">Monstruo 9</translation>
 <translation id="1676595396635191120">Ventana privada nueva</translation>
+<translation id="1702758681952953055">Si el error persiste, por favor repórtalo e incluye los siguientes detalles:</translation>
 <translation id="1728549374069268714">Pegar e ir</translation>
 <translation id="1756026472674246267">Abrir enlace en una pestaña nueva</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Paisaje 15</translation>
 <translation id="19598411548897379">Genérico</translation>
 <translation id="2079036669923635404">Clica aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Ocurrió un error al descargar los archivos de actualización. Por favor, revisa tu conexión a internet y reinténtalo más tarde.</translation>
 <translation id="2441056087170876076">Monstruo 2</translation>
 <translation id="2444387452209867610">Ingresar nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Abrir enlace en una ventana nueva</translation>
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3601066750251199488">Monstruo 3</translation>
+<translation id="3708982624815781692">La descarga fue cancelada.</translation>
 <translation id="3732157130969736834">Guardar en marcadores</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monstruo 5</translation>
 <translation id="5615637589913244581">Opera versión 15+ (beta)</translation>
 <translation id="5648110075441906505">Abrir imagen en una ventana nueva</translation>
+<translation id="5656371807944747581">¡Error al actualizar!</translation>
 <translation id="5716238312826274098">Desactivando notificaciones</translation>
 <translation id="5770433027661640693">Paisaje 10</translation>
 <translation id="5857090052475505287">Carpeta nueva</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5916080360077521750">Lamentablemente tus preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Chrome y luego clica en Continuar.</translation>
+<translation id="6040143037577758943">Cerrar</translation>
 <translation id="6229528619562190452">Clica aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagen como fondo de la pantalla de inicio</translation>
 <translation id="630690498669249215">Archivo de marcadores de Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Paisaje 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi ha sido hecho posible gracias al proyecto de código abierto <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> y a otros <ph name="BEGIN_LINK_OSS" />programas de código abierto<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Error al iniciar el instalador de actualizaciones. Por favor, revisa que el equipo tenga suficiente memoria o espacio en disco y reinténtalo más tarde.</translation>
 <translation id="7715497554424665066">&amp;Ignorar actualización</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7793738202466490491">Añadir como evento en el calendario</translation>
+<translation id="7848222781052558334">Error al verificar la firma digital de los archivos descargados.</translation>
 <translation id="7865983598101744945">Confirmar salida</translation>
 <translation id="7957213167373139414">Mi calendario</translation>
 <translation id="8027581147000338959">Abrir en una ventana nueva</translation>

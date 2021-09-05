@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/events/event_util.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -113,9 +114,7 @@ AXLayoutObject::~AXLayoutObject() {
 }
 
 LayoutBoxModelObject* AXLayoutObject::GetLayoutBoxModelObject() const {
-  if (!layout_object_ || !layout_object_->IsBoxModelObject())
-    return nullptr;
-  return ToLayoutBoxModelObject(layout_object_);
+  return DynamicTo<LayoutBoxModelObject>(layout_object_);
 }
 
 bool IsProgrammaticallyScrollable(LayoutBox* box) {
@@ -134,7 +133,7 @@ ScrollableArea* AXLayoutObject::GetScrollableAreaIfScrollable() const {
   if (!layout_object_ || !layout_object_->IsBox())
     return nullptr;
 
-  LayoutBox* box = ToLayoutBox(layout_object_);
+  auto* box = To<LayoutBox>(layout_object_);
 
   // This should possibly use box->CanBeScrolledAndHasScrollableArea() as it
   // used to; however, accessibility must consider any kind of non-visible
@@ -445,21 +444,15 @@ bool AXLayoutObject::IsFocused() const {
   if (!GetDocument())
     return false;
 
-  Element* focused_element = GetDocument()->FocusedElement();
-  if (!focused_element)
-    return false;
-  AXObject* focused_object = AXObjectCache().GetOrCreate(focused_element);
-  if (!IsA<AXLayoutObject>(focused_object))
-    return false;
-
   // A web area is represented by the Document node in the DOM tree, which isn't
-  // focusable.  Check instead if the frame's selection controller is focused
-  if (focused_object == this ||
-      (RoleValue() == ax::mojom::blink::Role::kRootWebArea &&
-       GetDocument()->GetFrame()->Selection().FrameIsFocusedAndActive()))
+  // focusable.  Check instead if the frame's selection controller is focused.
+  if (IsWebArea() &&
+      GetDocument()->GetFrame()->Selection().FrameIsFocusedAndActive()) {
     return true;
+  }
 
-  return false;
+  Element* focused_element = GetDocument()->FocusedElement();
+  return focused_element && focused_element == GetElement();
 }
 
 // aria-grabbed is deprecated in WAI-ARIA 1.1.
@@ -674,7 +667,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
     if (CanvasHasFallbackContent())
       return false;
 
-    const auto* canvas = ToLayoutHTMLCanvasOrNull(GetLayoutObject());
+    const auto* canvas = DynamicTo<LayoutHTMLCanvas>(GetLayoutObject());
     if (canvas &&
         (canvas->Size().Height() <= 1 || canvas->Size().Width() <= 1)) {
       if (ignored_reasons)
@@ -728,11 +721,14 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (block_flow && block_flow->ChildrenInline()) {
     // If the layout object has any plain text in it, that text will be
     // inside a LineBox, so the layout object will have a first LineBox.
-    bool has_any_text = HasLineBox(*block_flow);
+    const bool has_any_text = HasLineBox(*block_flow);
 
     // Always include interesting-looking objects.
-    if (has_any_text || MouseButtonListener())
+    if (has_any_text ||
+        (GetNode() && GetNode()->HasAnyEventListeners(
+                          event_util::MouseButtonEventTypes()))) {
       return false;
+    }
 
     if (ignored_reasons)
       ignored_reasons->push_back(IgnoredReason(kAXUninteresting));
@@ -776,7 +772,7 @@ bool AXLayoutObject::CanIgnoreSpaceNextTo(LayoutObject* layout,
 
   // If adjacent to a whitespace character, the current space can be ignored.
   if (layout->IsText()) {
-    LayoutText* layout_text = ToLayoutText(layout);
+    auto* layout_text = To<LayoutText>(layout);
     if (layout_text->HasEmptyText())
       return false;
     if (layout_text->GetText().Impl()->ContainsOnlyWhitespaceOrEmpty())
@@ -811,17 +807,17 @@ bool AXLayoutObject::CanIgnoreSpaceNextTo(LayoutObject* layout,
   }
 
   // Test against the appropriate child text node.
-  LayoutInline* layout_inline = ToLayoutInline(layout);
+  auto* layout_inline = To<LayoutInline>(layout);
   LayoutObject* child =
       is_after ? layout_inline->FirstChild() : layout_inline->LastChild();
   return CanIgnoreSpaceNextTo(child, is_after);
 }
 
 bool AXLayoutObject::CanIgnoreTextAsEmpty() const {
-  DCHECK(layout_object_->IsText());
-  DCHECK(layout_object_->Parent());
+  if (!layout_object_ || !layout_object_->IsText() || !layout_object_->Parent())
+    return false;
 
-  LayoutText* layout_text = ToLayoutText(layout_object_);
+  auto* layout_text = To<LayoutText>(layout_object_);
 
   // Ignore empty text
   if (layout_text->HasEmptyText()) {
@@ -1122,16 +1118,16 @@ AXObject* AXLayoutObject::NextOnLine() const {
   } else {
     InlineBox* inline_box = nullptr;
     if (GetLayoutObject()->IsBox()) {
-      inline_box = ToLayoutBox(GetLayoutObject())->InlineBoxWrapper();
+      inline_box = To<LayoutBox>(GetLayoutObject())->InlineBoxWrapper();
     } else if (GetLayoutObject()->IsLayoutInline()) {
       // For performance and memory consumption, LayoutInline may ignore some
       // inline-boxes during line layout because they don't actually impact
       // layout. This is known as "culled inline". We have to recursively look
       // to the LayoutInline's children via "LastLineBoxIncludingCulling".
       inline_box =
-          ToLayoutInline(GetLayoutObject())->LastLineBoxIncludingCulling();
+          To<LayoutInline>(GetLayoutObject())->LastLineBoxIncludingCulling();
     } else if (GetLayoutObject()->IsText()) {
-      inline_box = ToLayoutText(GetLayoutObject())->LastTextBox();
+      inline_box = To<LayoutText>(GetLayoutObject())->LastTextBox();
     }
 
     if (!inline_box)
@@ -1239,16 +1235,16 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
   } else {
     InlineBox* inline_box = nullptr;
     if (GetLayoutObject()->IsBox()) {
-      inline_box = ToLayoutBox(GetLayoutObject())->InlineBoxWrapper();
+      inline_box = To<LayoutBox>(GetLayoutObject())->InlineBoxWrapper();
     } else if (GetLayoutObject()->IsLayoutInline()) {
       // For performance and memory consumption, LayoutInline may ignore some
       // inline-boxes during line layout because they don't actually impact
       // layout. This is known as "culled inline". We have to recursively look
       // to the LayoutInline's children via "FirstLineBoxIncludingCulling".
       inline_box =
-          ToLayoutInline(GetLayoutObject())->FirstLineBoxIncludingCulling();
+          To<LayoutInline>(GetLayoutObject())->FirstLineBoxIncludingCulling();
     } else if (GetLayoutObject()->IsText()) {
-      inline_box = ToLayoutText(GetLayoutObject())->FirstTextBox();
+      inline_box = To<LayoutText>(GetLayoutObject())->FirstTextBox();
     }
 
     if (!inline_box)
@@ -1342,7 +1338,7 @@ String AXLayoutObject::StringValue() const {
     return GetText();
 
   if (layout_object_->IsFileUploadControl())
-    return ToLayoutFileUploadControl(layout_object_)->FileTextValue();
+    return To<LayoutFileUploadControl>(layout_object_)->FileTextValue();
 
   // Handle other HTML input elements that aren't text controls, like date and
   // time controls, by returning their value converted to text, with the
@@ -1398,7 +1394,7 @@ String AXLayoutObject::TextAlternative(bool recursive,
       found_text_alternative = true;
     } else if (layout_object_->IsText() &&
                (!recursive || !layout_object_->IsCounter())) {
-      LayoutText* layout_text = ToLayoutText(layout_object_);
+      auto* layout_text = To<LayoutText>(layout_object_);
       String visible_text = layout_text->PlainText();  // Actual rendered text.
       // If no text boxes we assume this is unrendered end-of-line whitespace.
       // TODO find robust way to deterministically detect end-of-line space.
@@ -1418,7 +1414,8 @@ String AXLayoutObject::TextAlternative(bool recursive,
       }
       found_text_alternative = true;
     } else if (layout_object_->IsListMarkerForNormalContent() && !recursive) {
-      text_alternative = ToLayoutListMarker(layout_object_)->TextAlternative();
+      text_alternative =
+          To<LayoutListMarker>(layout_object_)->TextAlternative();
       found_text_alternative = true;
     } else if (!recursive) {
       if (ListMarker* marker = ListMarker::Get(layout_object_)) {
@@ -1452,18 +1449,13 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
       !layout_object_->IsBox())
     return nullptr;
 
-    // Must be called with lifecycle >= compositing clean
+    // Must be called with lifecycle >= pre-paint clean
 #if DCHECK_IS_ON()
-  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
-    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
-              DocumentLifecycle::kPrePaintClean);
-  } else {
-    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
-              DocumentLifecycle::kCompositingAssignmentsClean);
-  }
+  DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+            DocumentLifecycle::kPrePaintClean);
 #endif
 
-  PaintLayer* layer = ToLayoutBox(layout_object_)->Layer();
+  PaintLayer* layer = To<LayoutBox>(layout_object_)->Layer();
 
   HitTestRequest request(HitTestRequest::kReadOnly | HitTestRequest::kActive |
                          HitTestRequest::kRetargetForInert);
@@ -1485,14 +1477,18 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
       return nullptr;
   }
 
-  LayoutObject* obj = node->GetLayoutObject();
-
-  // Retarget to respect https://dom.spec.whatwg.org/#retarget.
-  if (auto* elem = DynamicTo<Element>(node)) {
-    Element* element = &(GetDocument()->Retarget(*elem));
-    obj = element->GetLayoutObject();
+  // If |node| is in a user-agent shadow tree, reassign it as the host to hide
+  // details in the shadow tree. Previously this was implemented by using
+  // Retargeting (https://dom.spec.whatwg.org/#retarget), but this caused
+  // elements inside regular shadow DOMs to be ignored by screen reader. See
+  // crbug.com/1111800 and crbug.com/1048959.
+  const TreeScope& tree_scope = node->GetTreeScope();
+  if (auto* shadow_root = DynamicTo<ShadowRoot>(tree_scope.RootNode())) {
+    if (shadow_root->IsUserAgent())
+      node = &shadow_root->host();
   }
 
+  LayoutObject* obj = node->GetLayoutObject();
   if (!obj)
     return nullptr;
 
@@ -1614,17 +1610,17 @@ static inline LayoutInline* StartOfContinuations(LayoutObject* layout_object) {
   // For inline elements, if it's a continuation, the start of the chain
   // is always the primary layout object associated with the node.
   if (layout_object->IsInlineElementContinuation())
-    return ToLayoutInline(layout_object->GetNode()->GetLayoutObject());
+    return To<LayoutInline>(layout_object->GetNode()->GetLayoutObject());
 
   // Blocks with a previous continuation always have a next continuation,
   // so we can get the next continuation and do the same trick to get
   // the primary layout object associated with the node.
   auto* layout_block_flow = DynamicTo<LayoutBlockFlow>(layout_object);
   if (layout_block_flow && layout_block_flow->InlineElementContinuation()) {
-    LayoutInline* result =
-        ToLayoutInline(layout_block_flow->InlineElementContinuation()
-                           ->GetNode()
-                           ->GetLayoutObject());
+    auto* result =
+        To<LayoutInline>(layout_block_flow->InlineElementContinuation()
+                             ->GetNode()
+                             ->GetLayoutObject());
     DCHECK_NE(result, layout_object);
     return result;
   }
@@ -1665,7 +1661,7 @@ static bool IsContinuation(LayoutObject* layout_object) {
 // have one.
 LayoutObject* GetContinuation(LayoutObject* layout_object) {
   if (layout_object->IsLayoutInline())
-    return ToLayoutInline(layout_object)->Continuation();
+    return To<LayoutInline>(layout_object)->Continuation();
 
   if (auto* block_flow = DynamicTo<LayoutBlockFlow>(layout_object))
     return block_flow->Continuation();
@@ -1694,9 +1690,8 @@ AXObject* AXLayoutObject::RawFirstChild() const {
 
   // CSS first-letter pseudo element is handled as continuation. Returning it
   // will result in duplicated elements.
-  if (first_child && first_child->IsText() &&
-      ToLayoutText(first_child)->IsTextFragment() &&
-      ToLayoutTextFragment(first_child)->GetFirstLetterPseudoElement())
+  auto* fragment = DynamicTo<LayoutTextFragment>(first_child);
+  if (fragment && fragment->GetFirstLetterPseudoElement())
     return nullptr;
 
   // Skip over continuations.
@@ -1894,7 +1889,7 @@ bool AXLayoutObject::OnNativeSetValueAction(const String& string) {
   if (!layout_object_ || !layout_object_->IsBoxModelObject())
     return false;
 
-  LayoutBoxModelObject* layout_object = ToLayoutBoxModelObject(layout_object_);
+  auto* layout_object = To<LayoutBoxModelObject>(layout_object_);
   auto* html_input_element = DynamicTo<HTMLInputElement>(*GetNode());
   if (html_input_element && layout_object->IsTextFieldIncludingNG()) {
     html_input_element->setValue(
@@ -2166,7 +2161,7 @@ bool AXLayoutObject::IsDataTable() const {
       if (row < 5 && row == alternating_row_color_count) {
         LayoutObject* layout_row = cell_layout_block->Parent();
         if (!layout_row || !layout_row->IsBoxModelObject() ||
-            !ToLayoutBoxModelObject(layout_row)->IsTableRow())
+            !To<LayoutBoxModelObject>(layout_row)->IsTableRow())
           continue;
         const ComputedStyle* row_computed_style = layout_row->Style();
         if (!row_computed_style)

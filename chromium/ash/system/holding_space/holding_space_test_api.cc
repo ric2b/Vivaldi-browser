@@ -11,7 +11,7 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/holding_space/holding_space_item_chip_view.h"
-#include "ash/system/holding_space/holding_space_item_screenshot_view.h"
+#include "ash/system/holding_space/holding_space_item_screen_capture_view.h"
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/status_area_widget.h"
 #include "ui/aura/window.h"
@@ -115,15 +115,41 @@ std::vector<views::View*> HoldingSpaceTestApi::GetPinnedFileChips() {
   return pinned_file_chips;
 }
 
-std::vector<views::View*> HoldingSpaceTestApi::GetScreenshotViews() {
-  std::vector<views::View*> screenshot_views;
+std::vector<views::View*> HoldingSpaceTestApi::GetScreenCaptureViews() {
+  std::vector<views::View*> screen_capture_views;
   if (holding_space_tray_->GetBubbleView()) {
-    FindDescendentsOfClass<HoldingSpaceItemScreenshotView>(
+    FindDescendentsOfClass<HoldingSpaceItemScreenCaptureView>(
         holding_space_tray_->GetBubbleView()->GetViewByID(
             kHoldingSpaceRecentFilesContainerId),
-        &screenshot_views);
+        &screen_capture_views);
   }
-  return screenshot_views;
+  return screen_capture_views;
+}
+
+views::View* HoldingSpaceTestApi::GetTray() {
+  return holding_space_tray_;
+}
+
+views::View* HoldingSpaceTestApi::GetTrayIcon() {
+  return holding_space_tray_->GetViewByID(kHoldingSpaceTrayIconId);
+}
+
+bool HoldingSpaceTestApi::PinnedFilesContainerShown() const {
+  if (!holding_space_tray_->GetBubbleView())
+    return false;
+
+  views::View* container = holding_space_tray_->GetBubbleView()->GetViewByID(
+      kHoldingSpacePinnedFilesContainerId);
+  return container && container->GetVisible();
+}
+
+bool HoldingSpaceTestApi::RecentFilesContainerShown() const {
+  if (!holding_space_tray_->GetBubbleView())
+    return false;
+
+  views::View* container = holding_space_tray_->GetBubbleView()->GetViewByID(
+      kHoldingSpaceRecentFilesContainerId);
+  return container && container->GetVisible();
 }
 
 }  // namespace ash

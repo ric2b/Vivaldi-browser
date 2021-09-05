@@ -7,18 +7,17 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/attestation/attestation_key_payload.pb.h"
 #include "chrome/browser/chromeos/attestation/enrollment_certificate_uploader_impl.h"
 #include "chrome/browser/chromeos/attestation/fake_certificate.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
-#include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "content/public/test/browser_task_environment.h"
@@ -86,8 +85,8 @@ class EnrollmentCertificateUploaderTest : public ::testing::Test {
   }
 
   void Run(bool expected_status) {
-    EnrollmentCertificateUploaderImpl uploader(
-        &policy_client_, &cryptohome_client_, &attestation_flow_);
+    EnrollmentCertificateUploaderImpl uploader(&policy_client_,
+                                               &attestation_flow_);
     uploader.set_retry_limit(3);
     uploader.set_retry_delay(base::TimeDelta());
 
@@ -101,7 +100,6 @@ class EnrollmentCertificateUploaderTest : public ::testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
   ScopedCrosSettingsTestHelper settings_helper_;
-  FakeCryptohomeClient cryptohome_client_;
   StrictMock<MockAttestationFlow> attestation_flow_;
   StrictMock<policy::MockCloudPolicyClient> policy_client_;
 };

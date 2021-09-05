@@ -11,6 +11,7 @@
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/engine/forwarding_model_type_processor.h"
+#include "components/sync/model/type_entities_count.h"
 #include "components/sync/model_impl/processor_entity.h"
 #include "components/sync/nigori/nigori_sync_bridge.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
@@ -99,7 +100,7 @@ void NigoriModelTypeProcessor::OnCommitCompleted(
   model_type_state_ = type_state;
   if (!committed_response_list.empty()) {
     entity_->ReceiveCommitResponse(committed_response_list[0],
-                                   /*commit_only=*/false, ModelType::NIGORI);
+                                   /*commit_only=*/false);
   } else {
     // If the entity hasn't been mentioned in response_list, then it's not
     // committed and we should reset its commit_requested_sequence_number so
@@ -262,13 +263,13 @@ void NigoriModelTypeProcessor::GetAllNodesForDebugging(
   std::move(callback).Run(syncer::NIGORI, std::move(all_nodes));
 }
 
-void NigoriModelTypeProcessor::GetStatusCountersForDebugging(
-    StatusCountersCallback callback) {
+void NigoriModelTypeProcessor::GetTypeEntitiesCountForDebugging(
+    base::OnceCallback<void(const TypeEntitiesCount&)> callback) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  StatusCounters counters;
-  counters.num_entries = entity_ ? 1 : 0;
-  counters.num_entries_and_tombstones = counters.num_entries;
-  std::move(callback).Run(syncer::NIGORI, counters);
+  TypeEntitiesCount count(syncer::NIGORI);
+  count.non_tombstone_entities = entity_ ? 1 : 0;
+  count.entities = count.non_tombstone_entities;
+  std::move(callback).Run(count);
 }
 
 void NigoriModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {

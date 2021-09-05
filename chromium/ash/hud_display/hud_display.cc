@@ -24,7 +24,9 @@
 #include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 
 namespace ash {
 namespace hud_display {
@@ -69,12 +71,27 @@ class HTClientView : public views::ClientView {
 BEGIN_METADATA(HTClientView, views::ClientView)
 END_METADATA
 
+std::unique_ptr<views::ClientView> MakeClientView(views::Widget* widget) {
+  auto view = std::make_unique<HUDDisplayView>();
+  auto* weak_view = view.get();
+  return std::make_unique<HTClientView>(weak_view, widget, view.release());
+}
+
+void InitializeFrameView(views::WidgetDelegate* delegate) {
+  auto* frame_view = delegate->GetWidget()->non_client_view()->frame_view();
+  // TODO(oshima): support component type with TYPE_WINDOW_FLAMELESS widget.
+  if (frame_view) {
+    frame_view->SetEnabled(false);
+    frame_view->SetVisible(false);
+  }
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // HUDDisplayView, public:
 
-BEGIN_METADATA(HUDDisplayView, views::WidgetDelegateView)
+BEGIN_METADATA(HUDDisplayView, views::View)
 END_METADATA
 
 // static
@@ -90,8 +107,14 @@ void HUDDisplayView::Toggle() {
     return;
   }
 
+  auto delegate = std::make_unique<views::WidgetDelegate>();
+  delegate->SetClientViewFactory(base::BindOnce(&MakeClientView));
+  delegate->RegisterWidgetInitializedCallback(
+      base::BindOnce(&InitializeFrameView, base::Unretained(delegate.get())));
+  delegate->SetOwnedByWidget(true);
+
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
-  params.delegate = new HUDDisplayView();
+  params.delegate = delegate.release();
   params.parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                                       kShellWindowId_OverlayContainer);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -133,11 +156,12 @@ HUDDisplayView::HUDDisplayView() {
 
   // Setup header.
 
-  // TODO: Add tab buttons via:
-  header_view_->tab_strip()->AddTabButton(this, DisplayMode::CPU_DISPLAY,
+  header_view_->tab_strip()->AddTabButton(DisplayMode::CPU_DISPLAY,
                                           base::ASCIIToUTF16("CPU"));
-  header_view_->tab_strip()->AddTabButton(this, DisplayMode::MEMORY_DISPLAY,
+  header_view_->tab_strip()->AddTabButton(DisplayMode::MEMORY_DISPLAY,
                                           base::ASCIIToUTF16("RAM"));
+  header_view_->tab_strip()->AddTabButton(DisplayMode::FPS_DISPLAY,
+                                          base::ASCIIToUTF16("FPS"));
 
   // Setup data.
   data->SetBackground(views::CreateSolidBackground(kHUDBackground));
@@ -161,6 +185,12 @@ HUDDisplayView::~HUDDisplayView() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(ui_sequence_checker_);
 }
 
+// There is only one button.
+void HUDDisplayView::OnSettingsToggle() {
+  settings_view_->ToggleVisibility();
+  graphs_container_->SetVisible(!settings_view_->GetVisible());
+}
+
 int HUDDisplayView::NonClientHitTest(const gfx::Point& point) {
   const View* view = GetEventHandlerForPoint(point);
   if (!view)
@@ -172,26 +202,6 @@ int HUDDisplayView::NonClientHitTest(const gfx::Point& point) {
 void HUDDisplayView::SetDisplayMode(DisplayMode display_mode) {
   graphs_container_->SetMode(display_mode);
   header_view_->tab_strip()->ActivateTab(display_mode);
-}
-
-views::ClientView* HUDDisplayView::CreateClientView(views::Widget* widget) {
-  return new HTClientView(this, widget, TransferOwnershipOfContentsView());
-}
-
-void HUDDisplayView::OnWidgetInitialized() {
-  auto* frame_view = GetWidget()->non_client_view()->frame_view();
-  // TODO(oshima): support component type with TYPE_WINDOW_FLAMELESS widget.
-  if (frame_view) {
-    frame_view->SetEnabled(false);
-    frame_view->SetVisible(false);
-  }
-}
-
-// There is only one button.
-void HUDDisplayView::ButtonPressed(views::Button* /*sender*/,
-                                   const ui::Event& /*event*/) {
-  settings_view_->ToggleVisibility();
-  graphs_container_->SetVisible(!settings_view_->GetVisible());
 }
 
 }  // namespace hud_display

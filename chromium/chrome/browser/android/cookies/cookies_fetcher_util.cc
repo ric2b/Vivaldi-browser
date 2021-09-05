@@ -48,7 +48,8 @@ void OnCookiesFetchFinished(const net::CookieList& cookies) {
         i->ExpiryDate().ToDeltaSinceWindowsEpoch().InMicroseconds(),
         i->LastAccessDate().ToDeltaSinceWindowsEpoch().InMicroseconds(),
         i->IsSecure(), i->IsHttpOnly(), static_cast<int>(i->SameSite()),
-        i->Priority(), static_cast<int>(i->SourceScheme()));
+        i->Priority(), i->IsSameParty(), static_cast<int>(i->SourceScheme()),
+        i->SourcePort());
     env->SetObjectArrayElement(joa.obj(), index++, java_cookie.obj());
   }
 
@@ -88,19 +89,19 @@ static void JNI_CookiesFetcher_RestoreCookies(
     jboolean httponly,
     jint same_site,
     jint priority,
-    jint source_scheme) {
+    jboolean same_party,
+    jint source_scheme,
+    jint source_port) {
   // TODO(https://crbug.com/1060940): Update to cover all OTR profiles.
   if (!ProfileManager::GetPrimaryUserProfile()->HasPrimaryOTRProfile())
     return;  // Don't create it. There is nothing to do.
 
   std::string domain_str(base::android::ConvertJavaStringToUTF8(env, domain));
   std::string path_str(base::android::ConvertJavaStringToUTF8(env, path));
-  GURL url = net::cookie_util::CookieDomainAndPathToURL(
-      domain_str, path_str,
-      static_cast<net::CookieSourceScheme>(source_scheme));
+
   std::unique_ptr<net::CanonicalCookie> cookie =
-      net::CanonicalCookie::CreateSanitizedCookie(
-          url, base::android::ConvertJavaStringToUTF8(env, name),
+      net::CanonicalCookie::FromStorage(
+          base::android::ConvertJavaStringToUTF8(env, name),
           base::android::ConvertJavaStringToUTF8(env, value), domain_str,
           path_str,
           base::Time::FromDeltaSinceWindowsEpoch(
@@ -110,11 +111,8 @@ static void JNI_CookiesFetcher_RestoreCookies(
           base::Time::FromDeltaSinceWindowsEpoch(
               base::TimeDelta::FromMicroseconds(last_access)),
           secure, httponly, static_cast<net::CookieSameSite>(same_site),
-          static_cast<net::CookiePriority>(priority));
-
-  // These cookies were in the cookie store already so they should be valid.
-  // TODO(dylancutler) This early return should be removed when the condition is
-  // no longer met.
+          static_cast<net::CookiePriority>(priority), same_party,
+          static_cast<net::CookieSourceScheme>(source_scheme), source_port);
   if (!cookie)
     return;
 
@@ -128,6 +126,9 @@ static void JNI_CookiesFetcher_RestoreCookies(
       net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   options.set_do_not_update_access_time();
   GetCookieServiceClient()->SetCanonicalCookie(
-      *cookie, url, options,
-      network::mojom::CookieManager::SetCanonicalCookieCallback());
+      *cookie,
+      net::cookie_util::CookieDomainAndPathToURL(
+          domain_str, path_str,
+          static_cast<net::CookieSourceScheme>(source_scheme)),
+      options, network::mojom::CookieManager::SetCanonicalCookieCallback());
 }

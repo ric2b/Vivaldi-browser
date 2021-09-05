@@ -13,6 +13,8 @@
 #include "base/time/time.h"
 #include "media/base/media_util.h"
 #include "media/media_buildflags.h"
+#include "media/video/gpu_video_accelerator_factories.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_decoder_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk.h"
@@ -22,6 +24,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_init.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/inspector/inspector_media_context_impl.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/webcodecs/audio_decoder.h"
 #include "third_party/blink/renderer/modules/webcodecs/audio_frame.h"
@@ -33,22 +36,75 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
 
+namespace {
+
+void GetGpuFactoriesOnMainThread(
+    media::GpuVideoAcceleratorFactories** gpu_factories_out,
+    base::WaitableEvent* waitable_event) {
+  DCHECK(IsMainThread());
+  *gpu_factories_out = Platform::Current()->GetGpuFactories();
+  waitable_event->Signal();
+}
+
+}  // namespace
+
 template <typename Traits>
 DecoderTemplate<Traits>::DecoderTemplate(ScriptState* script_state,
                                          const InitType* init,
                                          ExceptionState& exception_state)
-    : script_state_(script_state), state_(V8CodecState::Enum::kUnconfigured) {
+    : ExecutionContextLifecycleObserver(ExecutionContext::From(script_state)),
+      script_state_(script_state),
+      state_(V8CodecState::Enum::kUnconfigured) {
   DVLOG(1) << __func__;
   DCHECK(init->hasOutput());
   DCHECK(init->hasError());
+
+  ExecutionContext* context = GetExecutionContext();
+  DCHECK(context);
+
+  // TODO(crbug.com/1151005): Use a real MediaLog in worker contexts too.
+  if (IsMainThread()) {
+    parent_media_log_ = Platform::Current()->GetMediaLog(
+        MediaInspectorContextImpl::From(*context),
+        context->GetTaskRunner(TaskType::kInternalMedia));
+  }
+
+  if (!parent_media_log_)
+    parent_media_log_ = std::make_unique<media::NullMediaLog>();
+
+  // This allows us to destroy |parent_media_log_| and stop logging,
+  // without causing problems to |media_log_| users.
+  media_log_ = parent_media_log_->Clone();
+
+  media_log_->SetProperty<media::MediaLogProperty::kFrameUrl>(
+      GetExecutionContext()->Url().GetString().Ascii());
+
   output_cb_ = init->output();
   error_cb_ = init->error();
+
+  if (Traits::kNeedsGpuFactories) {
+    if (IsMainThread()) {
+      gpu_factories_ = Platform::Current()->GetGpuFactories();
+    } else {
+      base::WaitableEvent waitable_event;
+      if (PostCrossThreadTask(
+              *Thread::MainThread()->GetTaskRunner(), FROM_HERE,
+              CrossThreadBindOnce(&GetGpuFactoriesOnMainThread,
+                                  CrossThreadUnretained(&gpu_factories_),
+                                  CrossThreadUnretained(&waitable_event)))) {
+        waitable_event.Wait();
+      }
+    }
+  }
 }
 
 template <typename Traits>
@@ -58,7 +114,7 @@ DecoderTemplate<Traits>::~DecoderTemplate() {
 
 template <typename Traits>
 int32_t DecoderTemplate<Traits>::decodeQueueSize() {
-  return requested_decodes_;
+  return num_pending_decodes_;
 }
 
 template <typename Traits>
@@ -96,6 +152,7 @@ void DecoderTemplate<Traits>::configure(const ConfigType* config,
   Request* request = MakeGarbageCollected<Request>();
   request->type = Request::Type::kConfigure;
   request->media_config = std::move(media_config);
+  request->reset_generation = reset_generation_;
   requests_.push_back(request);
   ProcessRequests();
 }
@@ -112,9 +169,17 @@ void DecoderTemplate<Traits>::decode(const InputType* chunk,
 
   Request* request = MakeGarbageCollected<Request>();
   request->type = Request::Type::kDecode;
-  request->decoder_buffer = MakeDecoderBuffer(*chunk);
+  request->reset_generation = reset_generation_;
+  auto status_or_buffer = MakeDecoderBuffer(*chunk);
+
+  if (status_or_buffer.has_value()) {
+    request->decoder_buffer = std::move(status_or_buffer.value());
+  } else {
+    request->status = std::move(status_or_buffer.error());
+  }
+
   requests_.push_back(request);
-  ++requested_decodes_;
+  ++num_pending_decodes_;
   ProcessRequests();
 }
 
@@ -132,6 +197,7 @@ ScriptPromise DecoderTemplate<Traits>::flush(ExceptionState& exception_state) {
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state_);
   request->resolver = resolver;
+  request->reset_generation = reset_generation_;
   requests_.push_back(request);
   ProcessRequests();
   return resolver->Promise();
@@ -143,16 +209,7 @@ void DecoderTemplate<Traits>::reset(ExceptionState& exception_state) {
   if (ThrowIfCodecStateClosed(state_, "reset", exception_state))
     return;
 
-  if (state_ == V8CodecState::Enum::kUnconfigured)
-    return;
-
-  state_ = V8CodecState(V8CodecState::Enum::kUnconfigured);
-
-  Request* request = MakeGarbageCollected<Request>();
-  request->type = Request::Type::kReset;
-  requests_.push_back(request);
-  ++requested_resets_;
-  ProcessRequests();
+  ResetAlgorithm();
 }
 
 template <typename Traits>
@@ -161,7 +218,7 @@ void DecoderTemplate<Traits>::close(ExceptionState& exception_state) {
   if (ThrowIfCodecStateClosed(state_, "close", exception_state))
     return;
 
-  Shutdown(false);
+  Shutdown();
 }
 
 template <typename Traits>
@@ -170,6 +227,17 @@ void DecoderTemplate<Traits>::ProcessRequests() {
   DCHECK(!IsClosed());
   while (!pending_request_ && !requests_.IsEmpty()) {
     Request* request = requests_.front();
+
+    // Skip processing for requests that are canceled by a recent reset().
+    if (request->reset_generation != reset_generation_) {
+      if (request->resolver) {
+        request->resolver.Release()->Reject();
+      }
+      requests_.pop_front();
+      continue;
+    }
+
+    DCHECK_EQ(request->reset_generation, reset_generation_);
     switch (request->type) {
       case Request::Type::kConfigure:
         if (!ProcessConfigureRequest(request))
@@ -204,11 +272,12 @@ bool DecoderTemplate<Traits>::ProcessConfigureRequest(Request* request) {
   // until there is a decode request.
 
   if (!decoder_) {
-    media_log_ = std::make_unique<media::NullMediaLog>();
     decoder_ = Traits::CreateDecoder(*ExecutionContext::From(script_state_),
-                                     media_log_.get());
+                                     gpu_factories_, media_log_.get());
     if (!decoder_) {
-      HandleError();
+      HandleError("Configuration error",
+                  media::Status(media::StatusCode::kDecoderCreationFailed,
+                                "Could not create decoder."));
       return false;
     }
 
@@ -220,16 +289,12 @@ bool DecoderTemplate<Traits>::ProcessConfigureRequest(Request* request) {
     Traits::InitializeDecoder(
         *decoder_, *pending_request_->media_config,
         WTF::Bind(&DecoderTemplate::OnInitializeDone, WrapWeakPersistent(this)),
-        WTF::BindRepeating(&DecoderTemplate::OnOutput,
-                           WrapWeakPersistent(this)));
+        WTF::BindRepeating(&DecoderTemplate::OnOutput, WrapWeakPersistent(this),
+                           reset_generation_));
     initializing_sync_ = false;
     return true;
   }
 
-  // Note: This flush must not be elided when there is a pending reset. An
-  // alternative would be to process Reset() requests immediately, then process
-  // already queued requests in a special mode. It seems easier to drop all of
-  // this and require configure() after reset() instead.
   if (pending_decodes_.size() + 1 >
       size_t{Traits::GetMaxDecodeRequests(*decoder_)}) {
     // Try again after OnDecodeDone().
@@ -250,12 +315,13 @@ bool DecoderTemplate<Traits>::ProcessDecodeRequest(Request* request) {
   DCHECK_EQ(state_, V8CodecState::Enum::kConfigured);
   DCHECK(!pending_request_);
   DCHECK_EQ(request->type, Request::Type::kDecode);
-  DCHECK_GT(requested_decodes_, 0);
-
-  // TODO(sandersd): If a reset has been requested, complete immediately.
+  DCHECK_GT(num_pending_decodes_, 0);
 
   if (!decoder_) {
-    HandleError();
+    HandleError(
+        "Decoding error",
+        media::Status(media::StatusCode::kDecoderInitializeNeverCompleted,
+                      "No decoder found."));
     return false;
   }
 
@@ -267,7 +333,13 @@ bool DecoderTemplate<Traits>::ProcessDecodeRequest(Request* request) {
 
   // The request may be invalid, if so report that now.
   if (!request->decoder_buffer || request->decoder_buffer->data_size() == 0) {
-    HandleError();
+    media::Status error =
+        !request->status.is_ok()
+            ? request->status
+            : media::Status(media::StatusCode::kDecoderFailedDecode,
+                            "Null or empty decoder buffer.");
+
+    HandleError("Decoding error", error);
     return false;
   }
 
@@ -280,7 +352,7 @@ bool DecoderTemplate<Traits>::ProcessDecodeRequest(Request* request) {
          pending_decodes_.Contains(pending_decode_id_))
     ;
   pending_decodes_.Set(pending_decode_id_, request);
-  --requested_decodes_;
+  --num_pending_decodes_;
   decoder_->Decode(std::move(request->decoder_buffer),
                    WTF::Bind(&DecoderTemplate::OnDecodeDone,
                              WrapWeakPersistent(this), pending_decode_id_));
@@ -294,14 +366,9 @@ bool DecoderTemplate<Traits>::ProcessFlushRequest(Request* request) {
   DCHECK(!pending_request_);
   DCHECK_EQ(request->type, Request::Type::kFlush);
 
-  // TODO(sandersd): If a reset has been requested, resolve immediately.
-
-  if (!decoder_) {
-    // TODO(sandersd): Maybe it is valid to flush no decoder? If not, it may be
-    // necessary to enter a full error state here.
-    request->resolver.Release()->Reject();
-    return true;
-  }
+  // flush() can only be called when state = "configured", in which case we
+  // should always have a decoder.
+  DCHECK(decoder_);
 
   if (pending_decodes_.size() + 1 >
       size_t{Traits::GetMaxDecodeRequests(*decoder_)}) {
@@ -323,29 +390,52 @@ bool DecoderTemplate<Traits>::ProcessResetRequest(Request* request) {
   DCHECK(!IsClosed());
   DCHECK(!pending_request_);
   DCHECK_EQ(request->type, Request::Type::kReset);
-  DCHECK_GT(requested_resets_, 0);
+  DCHECK_GT(reset_generation_, 0u);
 
   // Processing continues in OnResetDone().
   pending_request_ = request;
-  --requested_resets_;
+
+  // Signal [[codec implementation]] to cease producing output for the previous
+  // configuration.
   decoder_->Reset(
       WTF::Bind(&DecoderTemplate::OnResetDone, WrapWeakPersistent(this)));
   return true;
 }
 
 template <typename Traits>
-void DecoderTemplate<Traits>::HandleError() {
+void DecoderTemplate<Traits>::HandleError(std::string context,
+                                          media::Status status) {
   DVLOG(1) << __func__;
   if (IsClosed())
     return;
 
-  Shutdown(true);
+  media_log_->NotifyError(status);
+
+  std::string message =
+      context + (status.message().empty() ? "." : ": " + status.message());
+
+  // We could have different DOMExceptionCodes, but for the moment, all of our
+  // exceptions seem appropriate as operation errors.
+  auto* ex = MakeGarbageCollected<DOMException>(
+      DOMExceptionCode::kOperationError, message.c_str());
+  Shutdown(ex);
 }
 
 template <typename Traits>
-void DecoderTemplate<Traits>::Shutdown(bool is_error) {
+void DecoderTemplate<Traits>::Shutdown(DOMException* exception) {
   DVLOG(3) << __func__;
   DCHECK(!IsClosed());
+
+  // Abort pending work (otherwise it will never complete)
+  if (pending_request_) {
+    if (pending_request_->resolver)
+      pending_request_->resolver.Release()->Reject();
+
+    pending_request_.Release();
+  }
+
+  // Abort all upcoming work.
+  ResetAlgorithm();
 
   // Store the error callback so that we can use it after clearing state.
   V8WebCodecsErrorCallback* error_cb = error_cb_.Get();
@@ -361,24 +451,33 @@ void DecoderTemplate<Traits>::Shutdown(bool is_error) {
   // Clear decoding and JS-visible queue state.
   decoder_.reset();
   pending_decodes_.clear();
-  requested_decodes_ = 0;
-  requested_resets_ = 0;
+  num_pending_decodes_ = 0;
 
   // Fire the error callback if necessary.
-  // TODO(sandersd): Create a DOMException to report.
-  if (is_error)
-    error_cb->InvokeAndReportException(nullptr, nullptr);
+  if (exception)
+    error_cb->InvokeAndReportException(nullptr, exception);
+}
 
-  // Clear any pending requests, rejecting all promises.
-  if (pending_request_ && pending_request_->resolver)
-    pending_request_.Release()->resolver.Release()->Reject();
+template <typename Traits>
+void DecoderTemplate<Traits>::ResetAlgorithm() {
+  if (state_ == V8CodecState::Enum::kUnconfigured)
+    return;
 
-  while (!requests_.IsEmpty()) {
-    Request* request = requests_.front();
-    if (request->resolver)
-      request->resolver.Release()->Reject();
-    requests_.pop_front();
-  }
+  state_ = V8CodecState(V8CodecState::Enum::kUnconfigured);
+
+  // Increment reset counter to cause older pending requests to be rejected. See
+  // ProcessRequests().
+  reset_generation_++;
+
+  // Any previous pending decode will be filtered by ProcessRequests(). Reset
+  // the count immediately to report the correct value in decodeQueueSize().
+  num_pending_decodes_ = 0;
+
+  Request* request = MakeGarbageCollected<Request>();
+  request->type = Request::Type::kReset;
+  request->reset_generation = reset_generation_;
+  requests_.push_back(request);
+  ProcessRequests();
 }
 
 template <typename Traits>
@@ -391,7 +490,7 @@ void DecoderTemplate<Traits>::OnConfigureFlushDone(media::Status status) {
   DCHECK_EQ(pending_request_->type, Request::Type::kConfigure);
 
   if (!status.is_ok()) {
-    HandleError();
+    HandleError("Configuration error", status);
     return;
   }
 
@@ -399,7 +498,8 @@ void DecoderTemplate<Traits>::OnConfigureFlushDone(media::Status status) {
   Traits::InitializeDecoder(
       *decoder_, *pending_request_->media_config,
       WTF::Bind(&DecoderTemplate::OnInitializeDone, WrapWeakPersistent(this)),
-      WTF::BindRepeating(&DecoderTemplate::OnOutput, WrapWeakPersistent(this)));
+      WTF::BindRepeating(&DecoderTemplate::OnOutput, WrapWeakPersistent(this),
+                         reset_generation_));
 }
 
 template <typename Traits>
@@ -412,11 +512,12 @@ void DecoderTemplate<Traits>::OnInitializeDone(media::Status status) {
   DCHECK_EQ(pending_request_->type, Request::Type::kConfigure);
 
   if (!status.is_ok()) {
-    // TODO(tmathmeyer): this drops the media error - should we consider logging
-    // it or converting it to the DOMException type somehow?
-    HandleError();
+    HandleError("Decoder initialization error", status);
     return;
   }
+
+  Traits::UpdateDecoderLog(*decoder_, *pending_request_->media_config,
+                           media_log_.get());
 
   pending_request_.Release();
 
@@ -431,7 +532,7 @@ void DecoderTemplate<Traits>::OnDecodeDone(uint32_t id, media::Status status) {
     return;
 
   if (!status.is_ok() && status.code() != media::StatusCode::kAborted) {
-    HandleError();
+    HandleError("Decoding error", status);
     return;
   }
 
@@ -451,7 +552,7 @@ void DecoderTemplate<Traits>::OnFlushDone(media::Status status) {
   DCHECK_EQ(pending_request_->type, Request::Type::kFlush);
 
   if (!status.is_ok()) {
-    HandleError();
+    HandleError("Flushing error", status);
     return;
   }
 
@@ -473,8 +574,14 @@ void DecoderTemplate<Traits>::OnResetDone() {
 }
 
 template <typename Traits>
-void DecoderTemplate<Traits>::OnOutput(scoped_refptr<MediaOutputType> output) {
+void DecoderTemplate<Traits>::OnOutput(uint32_t reset_generation,
+                                       scoped_refptr<MediaOutputType> output) {
   DVLOG(3) << __func__;
+
+  // Suppress outputs belonging to an earlier reset_generation.
+  if (reset_generation != reset_generation_)
+    return;
+
   if (state_.AsEnum() != V8CodecState::Enum::kConfigured)
     return;
 
@@ -491,6 +598,17 @@ void DecoderTemplate<Traits>::Trace(Visitor* visitor) const {
   visitor->Trace(pending_request_);
   visitor->Trace(pending_decodes_);
   ScriptWrappable::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
+}
+
+template <typename Traits>
+void DecoderTemplate<Traits>::ContextDestroyed() {
+  parent_media_log_ = nullptr;
+}
+
+template <typename Traits>
+bool DecoderTemplate<Traits>::HasPendingActivity() const {
+  return pending_request_ || !requests_.IsEmpty();
 }
 
 template <typename Traits>

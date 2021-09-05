@@ -132,8 +132,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
     return non_scrolling_squashing_layer_offset_from_layout_object_;
   }
 
-  void SetAllLayersNeedDisplay();
-
   // Let all DrawsContent GraphicsLayers check raster invalidations after
   // a no-change paint.
   void SetNeedsCheckRasterInvalidation();
@@ -177,12 +175,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
                      GraphicsContext&,
                      GraphicsLayerPaintingPhase,
                      const IntRect& interest_rect) const override;
-  bool ShouldThrottleRendering() const override;
-  bool IsUnderSVGHiddenContainer() const override;
+  bool ShouldSkipPaintingSubtree() const override;
   bool IsTrackingRasterInvalidations() const override;
   void GraphicsLayersDidChange() override;
-  bool PaintBlockedByDisplayLockIncludingAncestors() const override;
-  void NotifyDisplayLockNeedsGraphicsLayerCollection() override;
 
 #if DCHECK_IS_ON()
   void VerifyNotPainting() override;
@@ -389,8 +384,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       PaintLayer& squashed_layer,
       wtf_size_t next_squashed_layer_index);
   void RemoveSquashedLayers(Vector<GraphicsLayerPaintInfo>& squashed_layers);
-
-  void SetContentsNeedDisplay();
 
   PaintLayer& owning_layer_;
 

@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
@@ -34,11 +36,13 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/crx_verifier.h"
+#include "components/policy/core/common/policy_service_impl.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
@@ -59,13 +63,18 @@ namespace {
 std::unique_ptr<TestingProfile> BuildTestingProfile(
     const ExtensionServiceTestBase::ExtensionServiceInitParams& params) {
   TestingProfile::Builder profile_builder;
-  // Create a PrefService that only contains user defined preference values.
+  // Create a PrefService that only contains user defined preference values and
+  // policies.
   sync_preferences::PrefServiceMockFactory factory;
   // If pref_file is empty, TestingProfile automatically creates
   // sync_preferences::TestingPrefServiceSyncable instance.
   if (!params.pref_file.empty()) {
     factory.SetUserPrefsFile(params.pref_file,
                              base::ThreadTaskRunnerHandle::Get().get());
+    if (params.policy_service) {
+      factory.SetManagedPolicies(params.policy_service,
+                                 g_browser_process->browser_policy_connector());
+    }
     scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
         new user_prefs::PrefRegistrySyncable);
     std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs(
@@ -109,7 +118,13 @@ ExtensionServiceTestBase::ExtensionServiceInitParams::
         default;
 
 ExtensionServiceTestBase::ExtensionServiceTestBase()
-    : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP),
+    : ExtensionServiceTestBase(
+          std::make_unique<content::BrowserTaskEnvironment>(
+              base::test::TaskEnvironment::MainThreadType::IO)) {}
+
+ExtensionServiceTestBase::ExtensionServiceTestBase(
+    std::unique_ptr<content::BrowserTaskEnvironment> task_environment)
+    : task_environment_(std::move(task_environment)),
       service_(nullptr),
       testing_local_state_(TestingBrowserProcess::GetGlobal()),
       registry_(nullptr),
@@ -120,6 +135,9 @@ ExtensionServiceTestBase::ExtensionServiceTestBase()
     return;
   }
   data_dir_ = test_data_dir.AppendASCII("extensions");
+
+  policy_service_ = std::make_unique<policy::PolicyServiceImpl>(
+      std::vector<policy::ConfigurationPolicyProvider*>{&policy_provider_});
 }
 
 ExtensionServiceTestBase::~ExtensionServiceTestBase() {
@@ -148,6 +166,8 @@ ExtensionServiceTestBase::CreateDefaultInitParams() {
   params.profile_path = path;
   params.pref_file = prefs_filename;
   params.extensions_install_dir = extensions_install_dir;
+
+  params.policy_service = policy_service_.get();
   return params;
 }
 
@@ -320,6 +340,7 @@ void ExtensionServiceTestBase::TearDown() {
     if (partition)
       partition->WaitForDeletionTasksForTesting();
   }
+  policy_provider_.Shutdown();
 }
 
 void ExtensionServiceTestBase::SetUpTestCase() {

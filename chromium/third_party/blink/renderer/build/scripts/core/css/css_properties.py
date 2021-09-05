@@ -37,6 +37,8 @@ def validate_property(prop):
         'Only longhands can be valid_for_cue [%s]' % name
     assert not prop['valid_for_marker'] or prop['is_longhand'], \
         'Only longhands can be valid_for_marker [%s]' % name
+    assert not prop['valid_for_highlight'] or prop['is_longhand'], \
+        'Only longhands can be valid_for_highlight [%s]' % name
 
 
 def validate_alias(alias):
@@ -242,7 +244,6 @@ class CSSProperties(object):
         if not method_name:
             method_name = name.to_upper_camel_case().replace('Webkit', '')
         set_if_none(property_, 'inherited', False)
-        set_if_none(property_, 'affected_by_forced_colors', False)
 
         # Initial function, Getters and Setters for ComputedStyle.
         set_if_none(property_, 'initial', 'Initial' + method_name)

@@ -44,6 +44,31 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
   }
 
   /**
+   * Create a mock event object.
+   * @param {number} keyCode
+   * @param {{altGraphKey: boolean=,
+   *         altKey: boolean=,
+   *         ctrlKey: boolean=,
+   *         metaKey: boolean=,
+   *         searchKeyHeld: boolean=,
+   *         shiftKey: boolean=,
+   *         stickyMode: boolean=,
+   *         prefixKey: boolean=}=} opt_modifiers
+   * @return {Object} The mock event.
+   */
+  createMockKeyEvent(keyCode, opt_modifiers) {
+    const modifiers = opt_modifiers === undefined ? {} : opt_modifiers;
+    const keyEvent = {};
+    keyEvent.keyCode = keyCode;
+    for (const key in modifiers) {
+      keyEvent[key] = modifiers[key];
+    }
+    keyEvent.preventDefault = _ => {};
+    keyEvent.stopPropagation = _ => {};
+    return keyEvent;
+  }
+
+  /**
    * Create a function which performs the command |cmd|.
    * @param {string} cmd
    * @return {function(): void}
@@ -64,10 +89,6 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
 
   /** @override */
   runWithLoadedTree(doc, callback, opt_params = {}) {
-    if (opt_params.returnPage === undefined) {
-      opt_params.returnPage = true;
-    }
-
     callback = this.newCallback(callback);
     const wrappedCallback = (node) => {
       CommandHandler.onCommand('nextObject');

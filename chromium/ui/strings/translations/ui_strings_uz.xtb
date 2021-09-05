@@ -23,6 +23,7 @@
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> yuborilmadi</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> va <ph name="SECOND_ITEM_TITLE" /> almashtirildi</translation>
 <translation id="1498028757988366001">Buni oldin qidirgan edingiz. Qidiruv tarixidan “<ph name="QUERY" />” oʻchirib tashlanganda u barcha . qurilmalaringizdagi hisobingizdan butunlay olib tashlanadi.</translation>
+<translation id="1510238584712386396">Ishga tushirish paneli</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 daqiqa va }other{# daqiqa va }}</translation>
 <translation id="1643823602425662293">Bildirishnoma</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> fayli</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />” deb qidirish</translation>
+<translation id="3622035490309591977">Vaqtinchalik xotira tarixi</translation>
 <translation id="364720409959344976">Yuklash uchun jildni tanlang</translation>
 <translation id="3660179305079774227">Tepaga qaragan strelka</translation>
 <translation id="3670030362669914947">Raqam</translation>
@@ -111,7 +113,7 @@
 <translation id="3909791450649380159">&amp;Kesib olish</translation>
 <translation id="3990502903496589789">O‘ng cheti</translation>
 <translation id="40579289237549812">{UNREAD_NOTIFICATIONS,plural, =1{1 ta yangi bildirishnoma}other{# ta yangi bildirishnoma}}</translation>
-<translation id="4202807286478387388">o‘tish</translation>
+<translation id="4202807286478387388">borish</translation>
 <translation id="4250229828105606438">Skrinshot</translation>
 <translation id="4266252015790371705">{MONTHS,plural, =1{1 oy oldin}other{# oy oldin}}</translation>
 <translation id="4289300219472526559">Gapirishni boshlang</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Bugun onlayn edi}=1{1 kun oldin onlayn edi}other{# kun oldin onlayn edi}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 kun va }other{# kun va }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Rasm.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 yildan keyin}other{# yildan keyin}}</translation>
 <translation id="588258955323874662">Butun ekran</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 soniya qoldi}other{# soniya qoldi}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">bosish</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 soat qoldi}other{# soat qoldi}}</translation>
 <translation id="688711909580084195">Nomlanmagan veb-sahifa</translation>
+<translation id="6902419395050653510">HTML kontent.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 yil qoldi}other{# yil qoldi}}</translation>
 <translation id="6945221475159498467">Tanlash</translation>

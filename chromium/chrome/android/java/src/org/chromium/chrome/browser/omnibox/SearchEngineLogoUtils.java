@@ -20,10 +20,8 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.toolbar.ToolbarCommonPropertiesModel;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -174,11 +172,10 @@ public class SearchEngineLogoUtils {
     }
 
     /** @return Whether the status icon should be hidden when the LocationBar is unfocused. */
-    public static boolean currentlyOnNTP(
-            ToolbarCommonPropertiesModel toolbarCommonPropertiesModel) {
+    public static boolean currentlyOnNTP(LocationBarDataProvider locationBarDataProvider) {
         if (ChromeApplication.isVivaldi()) return false; // Vivaldi should always display DSE logo.
-        return toolbarCommonPropertiesModel != null
-                && NewTabPage.isNTPUrl(toolbarCommonPropertiesModel.getCurrentUrl());
+        return locationBarDataProvider != null
+                && UrlUtilities.isNTPUrl(locationBarDataProvider.getCurrentUrl());
     }
 
     /**

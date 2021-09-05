@@ -16,8 +16,6 @@
 
 namespace {
 
-const char kSourcesName[] = "sources";
-
 // Helper class used for assignment operations: =, +=, and -= to generalize
 // writing to various types of destinations.
 class ValueDestination {
@@ -44,10 +42,6 @@ class ValueDestination {
   // node, and the value will be also marked unused (if possible) under the
   // assumption that it will be modified in-place.
   Value* GetExistingMutableValueIfExists(const ParseNode* origin);
-
-  // Returns the sources assignment filter if it exists for the current
-  // scope and it should be applied to this assignment. Otherwise returns null.
-  const PatternList* GetAssignmentFilter(const Scope* exec_scope) const;
 
   // Returns a pointer to the value that was set.
   Value* SetValue(Value value, const ParseNode* set_node);
@@ -177,19 +171,6 @@ Value* ValueDestination::GetExistingMutableValueIfExists(
   if (type_ == LIST)
     return &list_->list_value()[index_];
   return nullptr;
-}
-
-const PatternList* ValueDestination::GetAssignmentFilter(
-    const Scope* exec_scope) const {
-  if (type_ != SCOPE)
-    return nullptr;  // Destination can't be named, so no sources filtering.
-  if (name_token_->value() != kSourcesName)
-    return nullptr;  // Destination not named "sources".
-
-  const PatternList* filter = exec_scope->GetSourcesAssignmentFilter();
-  if (!filter || filter->is_empty())
-    return nullptr;  // No filter or empty filter, don't need to do anything.
-  return filter;
 }
 
 Value* ValueDestination::SetValue(Value value, const ParseNode* set_node) {
@@ -346,17 +327,7 @@ Value ExecuteEquals(Scope* exec_scope,
     }
   }
 
-  Value* written_value = dest->SetValue(std::move(right), op_node->right());
-
-  // Optionally apply the assignment filter in-place.
-  const PatternList* filter = dest->GetAssignmentFilter(exec_scope);
-  if (filter && written_value->type() == Value::LIST) {
-    std::vector<Value>& list_value = written_value->list_value();
-    auto first_deleted = std::remove_if(
-        list_value.begin(), list_value.end(),
-        [filter](const Value& v) { return filter->MatchesValue(v); });
-    list_value.erase(first_deleted, list_value.end());
-  }
+  dest->SetValue(std::move(right), op_node->right());
   return Value();
 }
 
@@ -501,21 +472,9 @@ void ExecutePlusEquals(Scope* exec_scope,
   } else if (mutable_dest->type() == Value::LIST) {
     // List concat.
     if (right.type() == Value::LIST) {
-      // Note: don't reserve() the dest vector here since that actually hurts
-      // the allocation pattern when the build script is doing multiple small
-      // additions.
-      const PatternList* filter = dest->GetAssignmentFilter(exec_scope);
-      if (filter) {
-        // Filtered list concat.
-        for (Value& value : right.list_value()) {
-          if (!filter->MatchesValue(value))
-            mutable_dest->list_value().push_back(std::move(value));
-        }
-      } else {
-        // Normal list concat. This is a destructive move.
-        for (Value& value : right.list_value())
-          mutable_dest->list_value().push_back(std::move(value));
-      }
+      // Normal list concat. This is a destructive move.
+      for (Value& value : right.list_value())
+        mutable_dest->list_value().push_back(std::move(value));
     } else {
       *err = Err(op_node->op(), "Incompatible types to add.",
                  "To append a single item to a list do \"foo += [ bar ]\".");

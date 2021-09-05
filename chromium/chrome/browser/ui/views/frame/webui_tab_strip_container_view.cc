@@ -33,16 +33,17 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/chrome_view_class_properties.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/frame/webui_tab_strip_field_trial.h"
-#include "chrome/browser/ui/views/in_product_help/feature_promo_colors.h"
-#include "chrome/browser/ui/views/in_product_help/feature_promo_controller_views.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/webui_tab_counter_button.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_colors.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_layout.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_metrics.h"
@@ -55,6 +56,8 @@
 #include "components/feature_engagement/public/tracker.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/drop_data.h"
+#include "ui/accessibility/ax_mode.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/aura/window.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/custom_data_helper.h"
@@ -515,6 +518,14 @@ bool WebUITabStripContainerView::SupportsTouchableTabStrip(
 
 // static
 bool WebUITabStripContainerView::UseTouchableTabStrip(const Browser* browser) {
+  // TODO(crbug.com/1136185, crbug.com/1136236): We currently do not switch to
+  // touchable tabstrip in Screen Reader mode due to the touchable tabstrip
+  // being less accessible than the traditional tabstrip.
+  if (ui::AXPlatformNode::GetAccessibilityMode().has_mode(
+          ui::AXMode::kScreenReader)) {
+    return false;
+  }
+
   // This is called at Browser start to check which mode to use. It is a
   // good place to check the feature state and set up a synthetic field
   // trial.
@@ -794,8 +805,27 @@ void WebUITabStripContainerView::ShowEditDialogForGroupAtPoint(
 
 TabStripUILayout WebUITabStripContainerView::GetLayout() {
   DCHECK(tab_contents_container_);
-  return TabStripUILayout::CalculateForWebViewportSize(
-      tab_contents_container_->size());
+
+  gfx::Size tab_contents_size = tab_contents_container_->size();
+
+  // Because some pages can display the bookmark bar even when the bookmark bar
+  // is disabled (e.g. NTP) and some pages never display the bookmark bar (e.g.
+  // crashed tab pages, pages in guest browser windows), we will always reserve
+  // room for the bookmarks bar so that the size and shape of the effective
+  // viewport doesn't change.
+  //
+  // This may cause the thumbnail to crop off the extreme right and left edge of
+  // the image in some cases, but a very slight crop is preferable to constantly
+  // changing thumbnail sizes.
+  //
+  // See: crbug.com/1066652 for more info
+  const int max_bookmark_height = GetLayoutConstant(BOOKMARK_BAR_HEIGHT);
+  const views::View* bookmarks = browser_view_->bookmark_bar();
+  const int bookmark_bar_height =
+      (bookmarks && bookmarks->GetVisible()) ? bookmarks->height() : 0;
+  tab_contents_size.Enlarge(0, -(max_bookmark_height - bookmark_bar_height));
+
+  return TabStripUILayout::CalculateForWebViewportSize(tab_contents_size);
 }
 
 SkColor WebUITabStripContainerView::GetColor(int id) const {

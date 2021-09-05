@@ -8,8 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "third_party/icu/source/common/unicode/locid.h"
 
 namespace chromeos {
 namespace switches {
@@ -221,7 +219,8 @@ const char kDisableFineGrainedTimeZoneDetection[] =
 const char kDisableGaiaServices[] = "disable-gaia-services";
 
 // Disables HID-detection OOBE screen.
-const char kDisableHIDDetectionOnOOBE[] = "disable-hid-detection-on-oobe";
+const char kDisableHIDDetectionOnOOBEForTesting[] =
+    "disable-hid-detection-on-oobe";
 
 // Avoid doing expensive animations upon login.
 const char kDisableLoginAnimations[] = "disable-login-animations";
@@ -534,12 +533,6 @@ const char kShelfHotseat[] = "shelf-hotseat";
 // App window previews when hovering over the shelf.
 const char kShelfHoverPreviews[] = "shelf-hover-previews";
 
-// If true, files in Android internal storage will be shown in Files app.
-const char kShowAndroidFilesInFilesApp[] = "show-android-files-in-files-app";
-
-// If true, files in Android internal storage will be hidden in Files app.
-const char kHideAndroidFilesInFilesApp[] = "hide-android-files-in-files-app";
-
 // The name of the per-model directory which contains per-region
 // subdirectories with regulatory label files for this model.
 // The per-model directories (if there are any) are located under
@@ -626,10 +619,6 @@ bool IsCellularFirstDevice() {
 bool IsSigninFrameClientCertsEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
       kDisableSigninFrameClientCerts);
-}
-
-bool ShouldShowShelfHotseat() {
-  return base::FeatureList::IsEnabled(features::kShelfHotseat);
 }
 
 bool ShouldShowShelfHoverPreviews() {

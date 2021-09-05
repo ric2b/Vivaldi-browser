@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
@@ -68,9 +68,9 @@ class PopupTracker : public content::WebContentsObserver,
           CheckResult& result) override;
   void OnSubresourceFilterGoingAway() override;
 
-  ScopedObserver<subresource_filter::SubresourceFilterObserverManager,
-                 subresource_filter::SubresourceFilterObserver>
-      scoped_observer_;
+  base::ScopedObservation<subresource_filter::SubresourceFilterObserverManager,
+                          subresource_filter::SubresourceFilterObserver>
+      scoped_observation_{this};
 
   // Will be unset until the first navigation commits. Will be set to the total
   // time the contents was visible at commit time.
@@ -87,6 +87,10 @@ class PopupTracker : public content::WebContentsObserver,
   // user activation and gesture scroll begin events.
   int num_activation_events_ = 0;
   int num_gesture_scroll_begin_events_ = 0;
+
+  // Number of redirects taken by the pop-up during navigation.
+  int num_redirects_ = 0;
+  bool first_navigation_committed_ = false;
 
   // The id of the web contents that created the popup at the time of creation.
   // SourceIds are permanent so it's okay to use at any point so long as it's

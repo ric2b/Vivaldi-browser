@@ -9,7 +9,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/feeds/media_feeds_service.h"
@@ -285,7 +285,8 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
 
   void SimulateNavigationToCommit(Browser* browser) {
     // Navigate to trigger the session to be saved.
-    ui_test_utils::NavigateToURL(browser, embedded_test_server()->base_url());
+    ui_test_utils::NavigateToURL(browser,
+                                 embedded_test_server()->GetURL("/empty.html"));
 
     // Wait until the session has finished saving.
     WaitForDB(GetMediaHistoryService(browser));

@@ -5,7 +5,7 @@
 #include "chrome/browser/hid/hid_chooser_context.h"
 
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
@@ -318,7 +318,7 @@ TEST_F(HidChooserContextTest, GuardPermission) {
   auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
   map->SetContentSettingDefaultScope(origin().GetURL(), origin().GetURL(),
                                      ContentSettingsType::HID_GUARD,
-                                     std::string(), CONTENT_SETTING_BLOCK);
+                                     CONTENT_SETTING_BLOCK);
 
   // 4. Check that the device permission is no longer granted.
   EXPECT_FALSE(context->HasDevicePermission(origin(), origin(), *device));

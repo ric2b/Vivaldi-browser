@@ -21,7 +21,7 @@
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task_runner_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "crypto/rsa_private_key.h"
@@ -675,7 +675,8 @@ void EmbeddedTestServer::HandleRequest(HttpConnection* connection,
       base::BindRepeating(&HttpConnection::SendResponseBytes,
                           connection->GetWeakPtr()),
       base::BindOnce(&EmbeddedTestServer::OnResponseCompleted,
-                     weak_factory_.GetWeakPtr(), connection));
+                     weak_factory_.GetWeakPtr(), connection,
+                     std::move(response)));
 }
 
 GURL EmbeddedTestServer::GetURL(const std::string& relative_url) const {
@@ -819,14 +820,23 @@ void EmbeddedTestServer::ServeFilesFromSourceDirectory(
 
 void EmbeddedTestServer::ServeFilesFromSourceDirectory(
     const base::FilePath& relative) {
-  base::FilePath test_data_dir;
-  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
-  ServeFilesFromDirectory(test_data_dir.Append(relative));
+  ServeFilesFromDirectory(GetFullPathFromSourceDirectory(relative));
 }
 
 void EmbeddedTestServer::AddDefaultHandlers(const base::FilePath& directory) {
   ServeFilesFromSourceDirectory(directory);
+  AddDefaultHandlers();
+}
+
+void EmbeddedTestServer::AddDefaultHandlers() {
   RegisterDefaultHandlers(this);
+}
+
+base::FilePath EmbeddedTestServer::GetFullPathFromSourceDirectory(
+    const base::FilePath& relative) {
+  base::FilePath test_data_dir;
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+  return test_data_dir.Append(relative);
 }
 
 void EmbeddedTestServer::RegisterRequestHandler(
@@ -954,7 +964,9 @@ bool EmbeddedTestServer::HandleReadResult(HttpConnection* connection, int rv) {
   return true;
 }
 
-void EmbeddedTestServer::OnResponseCompleted(HttpConnection* connection) {
+void EmbeddedTestServer::OnResponseCompleted(
+    HttpConnection* connection,
+    std::unique_ptr<HttpResponse> response) {
   DCHECK(io_thread_->task_runner()->BelongsToCurrentThread());
   DCHECK(connection);
   DCHECK_EQ(1u, connections_.count(connection->socket_.get()));

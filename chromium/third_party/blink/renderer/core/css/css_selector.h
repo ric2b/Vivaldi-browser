@@ -108,9 +108,23 @@ class CORE_EXPORT CSSSelector {
   static constexpr unsigned kClassLikeSpecificity = 0x000100;
   static constexpr unsigned kTagSpecificity = 0x000001;
 
+  // TODO(crbug.com/1143404): Fix :host pseudos and remove this enum.
+  enum class SpecificityMode {
+    // Normal mode currently treats :host() and :host-context() as zero.
+    // (The actual specificity is determined dynamically during selector
+    // matching).
+    kNormal,
+    // This mode calculates the specificity for :host() and :host-context()
+    // like it's calculated for :is(), i.e. the specificity is that of the
+    // most specific argument.
+    //
+    // This mode is intended for use-counting purposes only.
+    kIncludeHostPseudos
+  };
+
   // http://www.w3.org/TR/css3-selectors/#specificity
   // We use 256 as the base of the specificity number system.
-  unsigned Specificity() const;
+  unsigned Specificity(SpecificityMode = SpecificityMode::kNormal) const;
 
   /* how the attribute value has to match.... Default is Exact */
   enum MatchType {
@@ -195,6 +209,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoBefore,
     kPseudoAfter,
     kPseudoMarker,
+    kPseudoModal,
     kPseudoBackdrop,
     kPseudoLang,
     kPseudoNot,
@@ -256,9 +271,10 @@ class CORE_EXPORT CSSSelector {
     kPseudoSlotted,
     kPseudoVideoPersistent,
     kPseudoVideoPersistentAncestor,
+    kPseudoTargetText,
   };
 
-  enum AttributeMatchType {
+  enum class AttributeMatchType {
     kCaseSensitive,
     kCaseInsensitive,
   };
@@ -376,7 +392,10 @@ class CORE_EXPORT CSSSelector {
     kMatchVisited = 2,
     kMatchAll = kMatchLink | kMatchVisited
   };
-  unsigned ComputeLinkMatchType(unsigned link_match_type) const;
+
+  // True if :link or :visited pseudo-classes are found anywhere in
+  // the selector.
+  bool HasLinkOrVisited() const;
 
   bool IsForPage() const { return is_for_page_; }
   void SetForPage() { is_for_page_ = true; }
@@ -419,7 +438,8 @@ class CORE_EXPORT CSSSelector {
               pseudo_type);  // using a bitfield.
   }
 
-  unsigned SpecificityForOneSelector() const;
+  unsigned SpecificityForOneSelector(
+      SpecificityMode = SpecificityMode::kNormal) const;
   unsigned SpecificityForPage() const;
   const CSSSelector* SerializeCompound(StringBuilder&) const;
 

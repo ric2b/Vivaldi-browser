@@ -164,10 +164,9 @@ MEMORY_DEBUGGING_BLURB = "See https://bit.ly/2CpMhze for more information" \
                          " on debugging memory metrics."
 
 
-@benchmark.Info(
-    emails=['pasko@chromium.org', 'chrome-android-perf-status@chromium.org'],
-    documentation_url='https://bit.ly/system-health-benchmarks',
-    info_blurb=MEMORY_DEBUGGING_BLURB)
+@benchmark.Info(emails=['pasko@chromium.org', 'lizeb@chromium.org'],
+                documentation_url='https://bit.ly/system-health-benchmarks',
+                info_blurb=MEMORY_DEBUGGING_BLURB)
 class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
   PLATFORM = 'desktop'
@@ -182,10 +181,9 @@ class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
     return 'system_health.memory_desktop'
 
 
-@benchmark.Info(
-    emails=['pasko@chromium.org', 'chrome-android-perf-status@chromium.org'],
-    documentation_url='https://bit.ly/system-health-benchmarks',
-    info_blurb=MEMORY_DEBUGGING_BLURB)
+@benchmark.Info(emails=['pasko@chromium.org', 'lizeb@chromium.org'],
+                documentation_url='https://bit.ly/system-health-benchmarks',
+                info_blurb=MEMORY_DEBUGGING_BLURB)
 class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Mobile Chrome Memory System Health Benchmark."""
   PLATFORM = 'mobile'
@@ -246,3 +244,30 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'system_health.webview_startup'
+
+
+@benchmark.Info(emails=['cduvall@chromium.org', 'weblayer-team@chromium.org'],
+                component='Internals>WebLayer',
+                documentation_url='https://bit.ly/36XBtpn')
+class WebLayerStartupSystemHealthBenchmark(WebviewStartupSystemHealthBenchmark):
+  """WebLayer startup time benchmark
+
+  Benchmark that measures how long WebLayer takes to start up
+  and load a blank page.
+  """
+  # TODO(rmhasan): Remove the SUPPORTED_PLATFORMS lists.
+  # SUPPORTED_PLATFORMS is deprecated, please put system specifier tags
+  # from expectations.config in SUPPORTED_PLATFORM_TAGS.
+  # TODO(crbug.com/1137468): Add WEBLAYER to telemetry platforms.
+  SUPPORTED_PLATFORM_TAGS = [platforms.MOBILE]
+  SUPPORTED_PLATFORMS = [story.expectations.ALL_MOBILE]
+
+  def CreateCoreTimelineBasedMeasurementOptions(self):
+    options = super(WebLayerStartupSystemHealthBenchmark,
+                    self).CreateCoreTimelineBasedMeasurementOptions()
+    options.config.atrace_config.app_name = 'org.chromium.weblayer.shell'
+    return options
+
+  @classmethod
+  def Name(cls):
+    return 'system_health.weblayer_startup'

@@ -36,7 +36,7 @@ enum GatewayCanBePingedProblem {
   kDefaultNetworkAboveLatencyThreshold,
   // One or more of the non-default networks has failed pings.
   kUnsuccessfulNonDefaultNetworksPings,
-  // One of more of the non-default networks has a latency above the threshold.
+  // One or more of the non-default networks has a latency above the threshold.
   kNonDefaultNetworksAboveLatencyThreshold,
 };
 
@@ -60,9 +60,8 @@ enum DnsResolverPresentProblem {
 // Problems related to the DnsLatencyProblem routine.
 [Extensible]
 enum DnsLatencyProblem {
-  // The routine was unable to successfully resolve all the hosts. Note that
-  // this will be true if one or more hosts could not be successfully resolved.
-  kFailedToResolveAllHosts,
+  // The routine was unable to resolve one or more hosts.
+  kHostResolutionFailure,
   // Average DNS latency across hosts is slightly above expected threshold
   kSlightlyAboveThreshold,
   // Average DNS latency across hosts is significantly above expected threshold
@@ -81,11 +80,17 @@ enum DnsResolutionProblem {
 enum CaptivePortalProblem {
   // No active networks found.
   kNoActiveNetworks,
-  // The active network is detected to be behind a captive portal and have
-  // restricted connectivity.
-  kRestrictedConnectivity,
-  // The active network is detected to be behind a captive portal.
-  kCaptivePortalState,
+  // The active network is not connected or the portal state is not available.
+  kUnknownPortalState,
+  // A portal is suspected but no redirect was provided.
+  kPortalSuspected,
+  // The network is in a portal state with a redirect URL.
+  kPortal,
+  // A proxy requiring authentication is detected.
+  kProxyAuthRequired,
+  // The active network is connected but no internet is available and no proxy
+  // was detected.
+  kNoInternet,
 };
 
 // Problems related to the HttpFirewall routine.
@@ -97,6 +102,30 @@ enum HttpFirewallProblem {
   kFirewallDetected,
   // A firewall may potentially exist.
   kPotentialFirewall,
+};
+
+// Problems related to the HttpsFirewall routine.
+[Extensible]
+enum HttpsFirewallProblem {
+  // DNS resolution failure rate is high.
+  kHighDnsResolutionFailureRate,
+  // Firewall detected.
+  kFirewallDetected,
+  // A firewall may potentially exist.
+  kPotentialFirewall,
+};
+
+// Problems related to the HttpsLatency routine.
+[Extensible]
+enum HttpsLatencyProblem {
+  // One or more DNS resolutions resulted in a failure.
+  kFailedDnsResolutions,
+  // One or more HTTPS requests resulted in a failure.
+  kFailedHttpsRequests,
+  // HTTPS request latency is high.
+  kHighLatency,
+  // HTTPS request latency is very high.
+  kVeryHighLatency,
 };
 
 // This interface is to be used by any clients that need to run specific
@@ -142,4 +171,13 @@ interface NetworkDiagnosticsRoutines {
   // Tests whether a firewall is blocking HTTP port 80.
   HttpFirewall() => (RoutineVerdict verdict,
       array<HttpFirewallProblem> problems);
+
+  // Tests whether a firewall is blocking HTTPS port 443.
+  HttpsFirewall() => (RoutineVerdict verdict,
+      array<HttpsFirewallProblem> problems);
+
+  // Tests whether the HTTPS latency is within established tolerance levels for
+  // the system.
+  HttpsLatency() => (RoutineVerdict verdict,
+      array<HttpsLatencyProblem> problems);
 };

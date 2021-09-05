@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "cc/base/features.h"
+#include "cc/metrics/event_metrics.h"
 #include "cc/trees/layer_tree_host.h"
 #include "services/tracing/public/cpp/perfetto/flow_event_utils.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
@@ -28,7 +29,7 @@
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
 
 #if defined(OS_ANDROID)
-#include "third_party/blink/public/platform/input/synchronous_compositor_registry.h"
+#include "third_party/blink/renderer/platform/widget/compositing/android_webview/synchronous_compositor_registry.h"
 #include "third_party/blink/renderer/platform/widget/input/synchronous_compositor_proxy.h"
 #endif
 
@@ -217,7 +218,8 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
 void WidgetInputHandlerManager::InitInputHandler() {
   bool sync_compositing = false;
 #if defined(OS_ANDROID)
-  sync_compositing = Platform::Current()->IsSynchronousCompositingEnabled();
+  sync_compositing =
+      Platform::Current()->IsSynchronousCompositingEnabledForAndroidWebView();
 #endif
   uses_input_handler_ = true;
   base::OnceClosure init_closure = base::BindOnce(
@@ -248,6 +250,7 @@ void WidgetInputHandlerManager::AddInterface(
 
 bool WidgetInputHandlerManager::HandleInputEvent(
     const WebCoalescedInputEvent& event,
+    std::unique_ptr<cc::EventMetrics> metrics,
     HandledEventCallback handled_callback) {
   WidgetBaseInputHandler::HandledEventCallback blink_callback = base::BindOnce(
       [](HandledEventCallback callback,
@@ -263,7 +266,8 @@ bool WidgetInputHandlerManager::HandleInputEvent(
                                 touch_action);
       },
       std::move(handled_callback));
-  widget_->input_handler().HandleInputEvent(event, std::move(blink_callback));
+  widget_->input_handler().HandleInputEvent(event, std::move(metrics),
+                                            std::move(blink_callback));
   return true;
 }
 
@@ -281,12 +285,13 @@ void WidgetInputHandlerManager::WillShutdown() {
 
 void WidgetInputHandlerManager::DispatchNonBlockingEventToMainThread(
     std::unique_ptr<WebCoalescedInputEvent> event,
-    const WebInputEventAttribution& attribution) {
+    const WebInputEventAttribution& attribution,
+    std::unique_ptr<cc::EventMetrics> metrics) {
   DCHECK(input_event_queue_);
   input_event_queue_->HandleEvent(
       std::move(event), MainThreadEventQueue::DispatchType::kNonBlocking,
       mojom::blink::InputEventResultState::kSetNonBlocking, attribution,
-      HandledEventCallback());
+      std::move(metrics), HandledEventCallback());
 }
 
 void WidgetInputHandlerManager::FindScrollTargetOnMainThread(
@@ -318,13 +323,20 @@ void WidgetInputHandlerManager::DidStartScrollingViewport() {
 
 void WidgetInputHandlerManager::GenerateScrollBeginAndSendToMainThread(
     const WebGestureEvent& update_event,
-    const WebInputEventAttribution& attribution) {
+    const WebInputEventAttribution& attribution,
+    const cc::EventMetrics* update_metrics) {
   DCHECK_EQ(update_event.GetType(), WebInputEvent::Type::kGestureScrollUpdate);
-  std::unique_ptr<WebCoalescedInputEvent> event =
-      std::make_unique<WebCoalescedInputEvent>(
-          ScrollBeginFromScrollUpdate(update_event), ui::LatencyInfo());
+  auto event = std::make_unique<WebCoalescedInputEvent>(
+      ScrollBeginFromScrollUpdate(update_event), ui::LatencyInfo());
+  base::TimeTicks metrics_time_stamp = update_metrics
+                                           ? update_metrics->time_stamp()
+                                           : event->Event().TimeStamp();
+  std::unique_ptr<cc::EventMetrics> metrics = cc::EventMetrics::Create(
+      event->Event().GetTypeAsUiEventType(), base::nullopt, metrics_time_stamp,
+      event->Event().GetScrollInputType());
 
-  DispatchNonBlockingEventToMainThread(std::move(event), attribution);
+  DispatchNonBlockingEventToMainThread(std::move(event), attribution,
+                                       std::move(metrics));
 }
 
 void WidgetInputHandlerManager::SetAllowedTouchAction(
@@ -396,19 +408,21 @@ void WidgetInputHandlerManager::DispatchScrollGestureToCompositor(
   std::unique_ptr<WebCoalescedInputEvent> web_scoped_gesture_event =
       std::make_unique<WebCoalescedInputEvent>(std::move(event),
                                                ui::LatencyInfo());
-  DCHECK(compositor_task_runner_);
-  compositor_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&WidgetInputHandlerManager::
-                                    HandleInputEventWithLatencyInfoOnCompositor,
-                                this, std::move(web_scoped_gesture_event)));
+  // input thread task runner is |main_thread_task_runner_| only in tests
+  InputThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&WidgetInputHandlerManager::
+                         HandleInputEventWithLatencyOnInputHandlingThread,
+                     this, std::move(web_scoped_gesture_event)));
 }
 
-void WidgetInputHandlerManager::HandleInputEventWithLatencyInfoOnCompositor(
-    std::unique_ptr<WebCoalescedInputEvent> event) {
+void WidgetInputHandlerManager::
+    HandleInputEventWithLatencyOnInputHandlingThread(
+        std::unique_ptr<WebCoalescedInputEvent> event) {
   DCHECK(base::FeatureList::IsEnabled(features::kScrollUnification));
   DCHECK(input_handler_proxy_);
-  input_handler_proxy_->HandleInputEventWithLatencyInfo(std::move(event),
-                                                        base::DoNothing());
+  input_handler_proxy_->HandleInputEventWithLatencyInfo(
+      std::move(event), nullptr, base::DoNothing());
 }
 
 void WidgetInputHandlerManager::DispatchEvent(
@@ -445,6 +459,22 @@ void WidgetInputHandlerManager::DispatchEvent(
     event->EventPointer()->SetTimeStamp(base::TimeTicks::Now());
   }
 
+  base::Optional<cc::EventMetrics::ScrollUpdateType> scroll_update_type;
+  if (event->Event().GetType() == WebInputEvent::Type::kGestureScrollBegin) {
+    has_seen_first_gesture_scroll_update_after_begin_ = false;
+  } else if (event->Event().GetType() ==
+             WebInputEvent::Type::kGestureScrollUpdate) {
+    if (has_seen_first_gesture_scroll_update_after_begin_) {
+      scroll_update_type = cc::EventMetrics::ScrollUpdateType::kContinued;
+    } else {
+      scroll_update_type = cc::EventMetrics::ScrollUpdateType::kStarted;
+      has_seen_first_gesture_scroll_update_after_begin_ = true;
+    }
+  }
+  std::unique_ptr<cc::EventMetrics> metrics = cc::EventMetrics::Create(
+      event->Event().GetTypeAsUiEventType(), scroll_update_type,
+      event->Event().TimeStamp(), event->Event().GetScrollInputType());
+
   if (uses_input_handler_) {
     // If the input_handler_proxy has disappeared ensure we just ack event.
     if (!input_handler_proxy_) {
@@ -465,13 +495,14 @@ void WidgetInputHandlerManager::DispatchEvent(
     // either ACK the event as handled to the browser or forward it to the main
     // thread.
     input_handler_proxy_->HandleInputEventWithLatencyInfo(
-        std::move(event),
+        std::move(event), std::move(metrics),
         base::BindOnce(
             &WidgetInputHandlerManager::DidHandleInputEventSentToCompositor,
             this, std::move(callback)));
   } else {
     DCHECK(!input_handler_proxy_);
-    DispatchDirectlyToWidget(std::move(event), std::move(callback));
+    DispatchDirectlyToWidget(std::move(event), std::move(metrics),
+                             std::move(callback));
   }
 }
 
@@ -579,18 +610,14 @@ void WidgetInputHandlerManager::InitOnInputHandlingThread(
   if (!compositor_delegate)
     return;
 
-  // If there's no compositor thread (i.e. we're in a LayoutTest), force input
-  // to go through the main thread.
-  bool force_input_handling_on_main = !compositor_task_runner_;
-
   // The input handler is created and ownership is passed to the compositor
   // delegate; hence we only receive a WeakPtr back.
   base::WeakPtr<cc::InputHandler> input_handler =
       cc::InputHandler::Create(*compositor_delegate);
   DCHECK(input_handler);
 
-  input_handler_proxy_ = std::make_unique<InputHandlerProxy>(
-      *input_handler.get(), this, force_input_handling_on_main);
+  input_handler_proxy_ =
+      std::make_unique<InputHandlerProxy>(*input_handler.get(), this);
 
 #if defined(OS_ANDROID)
   if (sync_compositing) {
@@ -614,6 +641,7 @@ void WidgetInputHandlerManager::BindChannel(
 
 void WidgetInputHandlerManager::DispatchDirectlyToWidget(
     std::unique_ptr<WebCoalescedInputEvent> event,
+    std::unique_ptr<cc::EventMetrics> metrics,
     mojom::blink::WidgetInputHandler::DispatchEventCallback callback) {
   // This path should only be taken by non-frame WidgetBase that don't use a
   // compositor (e.g. popups, plugins). Events bounds for a frame WidgetBase
@@ -636,11 +664,13 @@ void WidgetInputHandlerManager::DispatchDirectlyToWidget(
       &WidgetInputHandlerManager::DidHandleInputEventSentToMainFromWidgetBase,
       this, std::move(callback));
 
-  widget_->input_handler().HandleInputEvent(*event, std::move(send_callback));
+  widget_->input_handler().HandleInputEvent(*event, std::move(metrics),
+                                            std::move(send_callback));
 }
 
 void WidgetInputHandlerManager::FindScrollTargetReply(
     std::unique_ptr<WebCoalescedInputEvent> event,
+    std::unique_ptr<cc::EventMetrics> metrics,
     mojom::blink::WidgetInputHandler::DispatchEventCallback browser_callback,
     uint64_t hit_test_result) {
   TRACE_EVENT1("input", "WidgetInputHandlerManager::FindScrollTargetReply",
@@ -660,7 +690,7 @@ void WidgetInputHandlerManager::FindScrollTargetReply(
   }
 
   input_handler_proxy_->ContinueScrollBeginAfterMainThreadHitTest(
-      std::move(event),
+      std::move(event), std::move(metrics),
       base::BindOnce(
           &WidgetInputHandlerManager::DidHandleInputEventSentToCompositor, this,
           std::move(browser_callback)),
@@ -672,7 +702,8 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
     InputHandlerProxy::EventDisposition event_disposition,
     std::unique_ptr<WebCoalescedInputEvent> event,
     std::unique_ptr<InputHandlerProxy::DidOverscrollParams> overscroll_params,
-    const WebInputEventAttribution& attribution) {
+    const WebInputEventAttribution& attribution,
+    std::unique_ptr<cc::EventMetrics> metrics) {
   TRACE_EVENT1("input",
                "WidgetInputHandlerManager::DidHandleInputEventSentToCompositor",
                "Disposition", event_disposition);
@@ -699,7 +730,7 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
 
     ElementAtPointCallback result_callback = base::BindOnce(
         &WidgetInputHandlerManager::FindScrollTargetReply, this->AsWeakPtr(),
-        std::move(event), std::move(callback));
+        std::move(event), std::move(metrics), std::move(callback));
 
     main_thread_task_runner_->PostTask(
         FROM_HERE,
@@ -733,7 +764,8 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
         &WidgetInputHandlerManager::DidHandleInputEventSentToMain, this,
         std::move(callback));
     input_event_queue_->HandleEvent(std::move(event), dispatch_type, ack_state,
-                                    attribution, std::move(handled_event));
+                                    attribution, std::move(metrics),
+                                    std::move(handled_event));
     return;
   }
 

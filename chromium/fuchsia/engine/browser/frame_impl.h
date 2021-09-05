@@ -19,6 +19,7 @@
 
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/optional.h"
 #include "components/media_control/browser/media_blocker.h"
 #include "components/on_load_script_injector/browser/on_load_script_injector_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -27,6 +28,7 @@
 #include "fuchsia/engine/browser/event_filter.h"
 #include "fuchsia/engine/browser/frame_permission_controller.h"
 #include "fuchsia/engine/browser/navigation_controller_impl.h"
+#include "fuchsia/engine/browser/theme_manager.h"
 #include "fuchsia/engine/browser/url_request_rewrite_rules_manager.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/wm/core/focus_controller.h"
@@ -41,19 +43,27 @@ class ContextImpl;
 class FrameWindowTreeHost;
 class FrameLayoutManager;
 class MediaPlayerImpl;
+class NavigationPolicyHandler;
 
 // Implementation of fuchsia.web.Frame based on content::WebContents.
 class FrameImpl : public fuchsia::web::Frame,
                   public content::WebContentsObserver,
                   public content::WebContentsDelegate {
  public:
+  // Returns FrameImpl that owns the |web_contents| or nullptr if the
+  // |web_contents| is nullptr.
+  static FrameImpl* FromWebContents(content::WebContents* web_contents);
+
   // Returns FrameImpl that owns the |render_frame_host| or nullptr if the
-  // |render_frame_host| is not owned by a FrameImpl.
+  // |render_frame_host| is nullptr.
   static FrameImpl* FromRenderFrameHost(
       content::RenderFrameHost* render_frame_host);
 
+  // |params_for_popups| is saved and applied to popups created by content
+  // running in this Frame.
   FrameImpl(std::unique_ptr<content::WebContents> web_contents,
             ContextImpl* context,
+            fuchsia::web::CreateFrameParams params_for_popups,
             fidl::InterfaceRequest<fuchsia::web::Frame> frame_request);
   ~FrameImpl() override;
 
@@ -66,15 +76,19 @@ class FrameImpl : public fuchsia::web::Frame,
     return &permission_controller_;
   }
 
+  UrlRequestRewriteRulesManager* url_request_rewrite_rules_manager() {
+    return &url_request_rewrite_rules_manager_;
+  }
+
+  NavigationPolicyHandler* navigation_policy_handler() {
+    return navigation_policy_handler_.get();
+  }
+
   zx::unowned_channel GetBindingChannelForTest() const;
   content::WebContents* web_contents_for_test() const {
     return web_contents_.get();
   }
   bool has_view_for_test() const { return window_tree_host_ != nullptr; }
-  void set_javascript_console_message_hook_for_test(
-      base::RepeatingCallback<void(base::StringPiece)> hook) {
-    console_log_message_hook_ = std::move(hook);
-  }
   AccessibilityBridge* accessibility_bridge_for_test() const {
     return accessibility_bridge_.get();
   }
@@ -84,6 +98,14 @@ class FrameImpl : public fuchsia::web::Frame,
   }
   CastStreamingSessionClient* cast_streaming_session_client_for_test() {
     return cast_streaming_session_client_.get();
+  }
+
+  // Enables explicit sites filtering and set the error page. If |error_page| is
+  // empty, the default error page will be used.
+  void EnableExplicitSitesFilter(std::string error_page);
+
+  const base::Optional<std::string>& explicit_sites_filter_error_page() const {
+    return explicit_sites_filter_error_page_;
   }
 
  private:
@@ -108,6 +130,9 @@ class FrameImpl : public fuchsia::web::Frame,
 
   // Cleans up the MediaPlayerImpl on disconnect.
   void OnMediaPlayerDisconnect();
+
+  // An error handler for |accessibility_bridge_|.
+  void OnAccessibilityError(zx_status_t error);
 
   // Initializes WindowTreeHost for the view with the specified |view_token|.
   // |view_token| may be uninitialized in headless mode.
@@ -186,6 +211,11 @@ class FrameImpl : public fuchsia::web::Frame,
       const content::MediaPlayerId& id,
       WebContentsObserver::MediaStoppedReason reason) override;
   void GetPrivateMemorySize(GetPrivateMemorySizeCallback callback) override;
+  void SetNavigationPolicyProvider(
+      fuchsia::web::NavigationPolicyProviderParams params,
+      fidl::InterfaceHandle<fuchsia::web::NavigationPolicyProvider> provider)
+      override;
+  void SetPreferredTheme(fuchsia::settings::ThemeType theme) override;
 
   // content::WebContentsDelegate implementation.
   void CloseContents(content::WebContents* source) override;
@@ -237,6 +267,9 @@ class FrameImpl : public fuchsia::web::Frame,
   const std::unique_ptr<content::WebContents> web_contents_;
   ContextImpl* const context_;
 
+  // Parameters applied to popups created by content running in this Frame.
+  const fuchsia::web::CreateFrameParams params_for_popups_;
+
   std::unique_ptr<FrameWindowTreeHost> window_tree_host_;
 
   std::unique_ptr<wm::FocusController> focus_controller_;
@@ -251,9 +284,9 @@ class FrameImpl : public fuchsia::web::Frame,
   EventFilter event_filter_;
   NavigationControllerImpl navigation_controller_;
   logging::LogSeverity log_level_;
-  base::RepeatingCallback<void(base::StringPiece)> console_log_message_hook_;
   UrlRequestRewriteRulesManager url_request_rewrite_rules_manager_;
   FramePermissionController permission_controller_;
+  std::unique_ptr<NavigationPolicyHandler> navigation_policy_handler_;
 
   // Session ID to use for fuchsia.media.AudioConsumer. Set with
   // SetMediaSessionId().
@@ -271,6 +304,15 @@ class FrameImpl : public fuchsia::web::Frame,
 
   fidl::Binding<fuchsia::web::Frame> binding_;
   media_control::MediaBlocker media_blocker_;
+
+  ThemeManager theme_manager_;
+
+  // The error page to be displayed when a navigation to an explicit site is
+  // filtered. Explicit sites are filtered if it has a value. If set to the
+  // empty string, the default error page will be displayed.
+  base::Optional<std::string> explicit_sites_filter_error_page_;
+
+  base::WeakPtrFactory<FrameImpl> weak_factory_{this};
 };
 
 #endif  // FUCHSIA_ENGINE_BROWSER_FRAME_IMPL_H_

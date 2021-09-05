@@ -10,6 +10,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/util/type_safety/pass_key.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/platform/graphics/apply_viewport_changes.h"
@@ -51,6 +52,8 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
           widget,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const viz::FrameSinkId& frame_sink_id,
       bool is_for_nested_main_frame,
       bool hidden,
       bool never_composited);
@@ -59,28 +62,18 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   // WebWidget overrides:
   void Close(
       scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) override;
-  WebSize Size() override;
-  void Resize(const WebSize& size_with_dsf) override;
+  gfx::Size Size() override;
+  void Resize(const gfx::Size& size_with_dsf) override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override;
-  void ThemeChanged() override;
-  WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) override;
-  WebInputEventResult DispatchBufferedTouchEvents() override;
-  void SetCursorVisibilityState(bool is_visible) override;
   void MouseCaptureLost() override;
-  bool SelectionBounds(WebRect& anchor, WebRect& focus) const override;
-  WebURL GetURLForDebugTrace() override;
-  WebString GetLastToolTipTextForTesting() const override;
 
   // blink::mojom::FrameWidget
   void EnableDeviceEmulation(const DeviceEmulationParams& parameters) override;
   void DisableDeviceEmulation() override;
 
   // WebFrameWidget overrides:
-  void DidDetachLocalFrameTree() override;
-  WebInputMethodController* GetActiveWebInputMethodController() const override;
   bool ScrollFocusedEditableElementIntoView() override;
-  WebHitTestResult HitTestResultAt(const gfx::PointF&) override;
   void SetZoomLevelForTesting(double zoom_level) override;
   void ResetZoomLevelForTesting() override;
   void SetDeviceScaleFactorForTesting(float factor) override;
@@ -88,7 +81,6 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   // WebFrameWidgetBase overrides:
   bool ForSubframe() const override { return false; }
   bool ForTopLevelFrame() const override { return !is_for_nested_main_frame_; }
-  HitTestResult CoreHitTestResultAt(const gfx::PointF&) override;
   void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
   void SetZoomLevel(double zoom_level) override;
   void SetAutoResizeMode(bool auto_resize,
@@ -103,6 +95,7 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   const ScreenInfo& GetOriginalScreenInfo() override;
   void ApplyVisualPropertiesSizing(
       const VisualProperties& visual_properties) override;
+  void CalculateSelectionBounds(gfx::Rect& anchor, gfx::Rect& focus) override;
 
   // FrameWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
@@ -110,31 +103,15 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   float GetEmulatorScale() override;
 
   // WidgetBaseClient overrides:
-  void BeginMainFrame(base::TimeTicks last_frame_time) override;
-  void SetSuppressFrameRequestsWorkaroundFor704763Only(bool) final;
-  void RecordStartOfFrameMetrics() override;
-  void RecordEndOfFrameMetrics(
-      base::TimeTicks frame_begin_time,
-      cc::ActiveFrameSequenceTrackers trackers) override;
-  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
-      override;
-  void BeginUpdateLayers() override;
-  void EndUpdateLayers() override;
-  void DidBeginMainFrame() override;
   void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override;
   void RecordManipulationTypeCounts(cc::ManipulationInfo info) override;
-  void SendOverscrollEventFromImplSide(
-      const gfx::Vector2dF& overscroll_delta,
-      cc::ElementId scroll_latched_element_id) override;
-  void SendScrollEndEventFromImplSide(
-      cc::ElementId scroll_latched_element_id) override;
-  void BeginCommitCompositorFrame() override;
-  void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
   void FocusChanged(bool enabled) override;
   float GetDeviceScaleFactorForTesting() override;
   gfx::Rect ViewportVisibleRect() override;
   bool UpdateScreenRects(const gfx::Rect& widget_screen_rect,
                          const gfx::Rect& window_screen_rect) override;
+  void RunPaintBenchmark(int repeat_count,
+                         cc::PaintBenchmarkResult& result) override;
 
   void SetScreenMetricsEmulationParameters(
       bool enabled,
@@ -145,9 +122,6 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
 
   void Trace(Visitor*) const override;
 
-  void UpdateSurfaceAndCompositorRect(
-      const viz::LocalSurfaceId& new_local_surface_id,
-      const gfx::Rect& compositor_viewport_pixel_rect);
   void SetIsNestedMainFrameWidget(bool is_nested);
   void DidAutoResize(const gfx::Size& size);
   void SetDeviceColorSpaceForTesting(const gfx::ColorSpace& color_space);
@@ -161,12 +135,15 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   gfx::Size DIPsToCeiledBlinkSpace(const gfx::Size& size);
 
  private:
-  PageWidgetEventHandler* GetPageWidgetEventHandler() override;
+  // PageWidgetEventHandler overrides:
+  void HandleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
+  WebInputEventResult HandleGestureEvent(const WebGestureEvent&) override;
+  WebInputEventResult HandleKeyEvent(const WebKeyboardEvent&) override;
+
   LocalFrameView* GetLocalFrameViewForAnimationScrolling() override;
   void SetWindowRectSynchronously(const gfx::Rect& new_window_rect);
 
   scoped_refptr<WebViewImpl> web_view_;
-  base::Optional<base::TimeTicks> commit_compositor_frame_start_time_;
 
   // Web tests override the zoom factor in the renderer with this. We store it
   // to keep the override if the browser passes along VisualProperties with the
@@ -206,10 +183,44 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   // than the WebViewImpl::size_ since isn't set in auto resize mode.
   gfx::Size size_;
 
+  // This stores the last hidden page popup. If a GestureTap attempts to open
+  // the popup that is closed by its previous GestureTapDown, the popup remains
+  // closed.
+  scoped_refptr<WebPagePopupImpl> last_hidden_page_popup_;
+
   SelfKeepAlive<WebViewFrameWidget> self_keep_alive_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewFrameWidget);
 };
+
+// Convenience type for creation method taken by
+// InstallCreateWebViewFrameWidgetHook(). The method signature matches the
+// WebViewFrameWidget constructor.
+using CreateWebViewFrameWidgetFunction =
+    WebViewFrameWidget* (*)(util::PassKey<WebFrameWidget>,
+                            WebWidgetClient&,
+                            WebViewImpl&,
+                            CrossVariantMojoAssociatedRemote<
+                                mojom::blink::FrameWidgetHostInterfaceBase>
+                                frame_widget_host,
+                            CrossVariantMojoAssociatedReceiver<
+                                mojom::blink::FrameWidgetInterfaceBase>
+                                frame_widget,
+                            CrossVariantMojoAssociatedRemote<
+                                mojom::blink::WidgetHostInterfaceBase>
+                                widget_host,
+                            CrossVariantMojoAssociatedReceiver<
+                                mojom::blink::WidgetInterfaceBase> widget,
+                            scoped_refptr<base::SingleThreadTaskRunner>
+                                task_runner,
+                            const viz::FrameSinkId& frame_sink_id,
+                            bool is_for_nested_main_frame,
+                            bool hidden,
+                            bool never_composited);
+// Overrides the implementation of WebFrameWidget::CreateForMainFrame() function
+// below. Used by tests to override some functionality on WebViewFrameWidget.
+void CORE_EXPORT InstallCreateWebViewFrameWidgetHook(
+    CreateWebViewFrameWidgetFunction create_widget);
 
 }  // namespace blink
 

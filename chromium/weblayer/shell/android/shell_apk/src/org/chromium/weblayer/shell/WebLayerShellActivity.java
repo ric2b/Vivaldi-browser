@@ -60,7 +60,6 @@ import org.chromium.weblayer.NavigationController;
 import org.chromium.weblayer.NewTabCallback;
 import org.chromium.weblayer.NewTabType;
 import org.chromium.weblayer.Profile;
-import org.chromium.weblayer.SettingType;
 import org.chromium.weblayer.SiteSettingsActivity;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.TabCallback;
@@ -72,8 +71,10 @@ import org.chromium.weblayer.WebLayer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Activity for managing the Demo Shell.
@@ -93,12 +94,17 @@ public class WebLayerShellActivity extends AppCompatActivity {
             implements View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
         private static final int MENU_ID_COPY_LINK_URI = 1;
         private static final int MENU_ID_COPY_LINK_TEXT = 2;
+        private static final int MENU_ID_DOWNLOAD_IMAGE = 3;
+        private static final int MENU_ID_DOWNLOAD_VIDEO = 4;
+        private static final int MENU_ID_DOWNLOAD_LINK = 5;
 
         private ContextMenuParams mParams;
+        private Tab mTab;
         private Context mContext;
 
-        public ContextMenuCreator(ContextMenuParams params) {
+        public ContextMenuCreator(ContextMenuParams params, Tab tab) {
             mParams = params;
+            mTab = tab;
         }
 
         @Override
@@ -115,6 +121,21 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 MenuItem copyLinkTextItem =
                         menu.add(Menu.NONE, MENU_ID_COPY_LINK_TEXT, Menu.NONE, "Copy link text");
                 copyLinkTextItem.setOnMenuItemClickListener(this);
+            }
+            if (mParams.canDownload) {
+                if (mParams.isImage) {
+                    MenuItem downloadImageItem = menu.add(
+                            Menu.NONE, MENU_ID_DOWNLOAD_IMAGE, Menu.NONE, "Download image");
+                    downloadImageItem.setOnMenuItemClickListener(this);
+                } else if (mParams.isVideo) {
+                    MenuItem downloadVideoItem = menu.add(
+                            Menu.NONE, MENU_ID_DOWNLOAD_VIDEO, Menu.NONE, "Download video");
+                    downloadVideoItem.setOnMenuItemClickListener(this);
+                } else if (mParams.linkUri != null) {
+                    MenuItem downloadVideoItem =
+                            menu.add(Menu.NONE, MENU_ID_DOWNLOAD_LINK, Menu.NONE, "Download link");
+                    downloadVideoItem.setOnMenuItemClickListener(this);
+                }
             }
             if (!TextUtils.isEmpty(mParams.titleOrAltText)) {
                 TextView altTextView = new TextView(mContext);
@@ -136,10 +157,26 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 case MENU_ID_COPY_LINK_TEXT:
                     clipboard.setPrimaryClip(ClipData.newPlainText("link text", mParams.linkText));
                     break;
+                case MENU_ID_DOWNLOAD_IMAGE:
+                case MENU_ID_DOWNLOAD_VIDEO:
+                case MENU_ID_DOWNLOAD_LINK:
+                    mTab.download(mParams);
+                    break;
                 default:
                     break;
             }
             return true;
+        }
+    }
+
+    // Used for any state that is per Tab.
+    private static final class PerTabState {
+        public final FaviconFetcher mFaviconFetcher;
+        public final TabCallback mTabCallback;
+
+        PerTabState(FaviconFetcher faviconFetcher, TabCallback tabCallback) {
+            mFaviconFetcher = faviconFetcher;
+            mTabCallback = tabCallback;
         }
     }
 
@@ -157,8 +194,12 @@ public class WebLayerShellActivity extends AppCompatActivity {
     private View mTopContentsContainer;
     private View mAltTopContentsContainer;
     private TabListCallback mTabListCallback;
+    private NewTabCallback mNewTabCallback;
+    private FullscreenCallback mFullscreenCallback;
+    private NavigationCallback mNavigationCallback;
+    private ErrorPageCallback mErrorPageCallback;
     private List<Tab> mPreviousTabList = new ArrayList<>();
-    private Map<Tab, FaviconFetcher> mTabToFaviconFetcher = new HashMap<>();
+    private Map<Tab, PerTabState> mTabToPerTabState = new HashMap<>();
     private Runnable mExitFullscreenRunnable;
     private boolean mIsTopViewVisible = true;
     private View mBottomView;
@@ -225,6 +266,9 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 .setVisible(mBrowser.getActiveTab().canTranslate());
         popup.getMenu().findItem(R.id.webview_compat_menu_id).setVisible(!mEnableWebViewCompat);
         popup.getMenu().findItem(R.id.no_webview_compat_menu_id).setVisible(mEnableWebViewCompat);
+        boolean isDesktopUserAgent = mBrowser.getActiveTab().isDesktopUserAgentEnabled();
+        popup.getMenu().findItem(R.id.desktop_site_menu_id).setVisible(!isDesktopUserAgent);
+        popup.getMenu().findItem(R.id.no_desktop_site_menu_id).setVisible(isDesktopUserAgent);
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.reload_menu_id) {
                 mBrowser.getActiveTab().getNavigationController().reload();
@@ -278,6 +322,14 @@ public class WebLayerShellActivity extends AppCompatActivity {
 
             if (item.getItemId() == R.id.no_webview_compat_menu_id) {
                 restartShell(false);
+            }
+
+            if (item.getItemId() == R.id.desktop_site_menu_id) {
+                mBrowser.getActiveTab().setDesktopUserAgentEnabled(true);
+            }
+
+            if (item.getItemId() == R.id.no_desktop_site_menu_id) {
+                mBrowser.getActiveTab().setDesktopUserAgentEnabled(false);
             }
 
             if (item.getItemId() == R.id.set_translate_target_lang_menu_id) {
@@ -374,11 +426,23 @@ public class WebLayerShellActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // NOTE: It's important to unregister any state installed on browser/tab as during a
+        // configuration change (such as rotation) the activity is destroyed but the
+        // browser/fragment/tabs are not.
         mUrlViewContainer.reset();
         if (mTabListCallback != null) {
-            mBrowser.unregisterTabListCallback(mTabListCallback);
-            mTabListCallback = null;
+            unregisterBrowserAndTabCallbacks();
         }
+    }
+
+    private void unregisterBrowserAndTabCallbacks() {
+        assert mBrowser != null;
+        mBrowser.unregisterTabListCallback(mTabListCallback);
+        mTabListCallback = null;
+
+        Set<Tab> tabs = new HashSet(mTabToPerTabState.keySet());
+        for (Tab tab : tabs) unregisterTabCallbacks(tab);
+        mTabToPerTabState.clear();
     }
 
     private void onWebLayerReady(WebLayer webLayer, Bundle savedInstanceState) {
@@ -395,7 +459,6 @@ public class WebLayerShellActivity extends AppCompatActivity {
         fragment.setRetainInstance(true);
         mBrowser = Browser.fromFragment(fragment);
         mProfile = mBrowser.getProfile();
-        mProfile.setBooleanSetting(SettingType.UKM_ENABLED, true);
         mProfile.setUserIdentityCallback(new UserIdentityCallback() {
             @Override
             public String getEmail() {
@@ -418,9 +481,12 @@ public class WebLayerShellActivity extends AppCompatActivity {
             }
         });
 
-        setTabCallbacks(mBrowser.getActiveTab(), fragment);
+        createTabCallbacks();
+
+        registerTabCallbacks(mBrowser.getActiveTab());
 
         updateTopView();
+
         mTabListCallback = new TabListCallback() {
             @Override
             public void onActiveTabChanged(Tab activeTab) {
@@ -435,6 +501,10 @@ public class WebLayerShellActivity extends AppCompatActivity {
             public void onTabRemoved(Tab tab) {
                 closeTab(tab);
             }
+            @Override
+            public void onWillDestroyBrowserAndAllTabs() {
+                unregisterBrowserAndTabCallbacks();
+            }
         };
         mBrowser.registerTabListCallback(mTabListCallback);
         View nonEditUrlView = mBrowser.getUrlBarController().createUrlBarView(
@@ -442,6 +512,7 @@ public class WebLayerShellActivity extends AppCompatActivity {
                         .setTextSizeSP(DEFAULT_TEXT_SIZE)
                         .setTextColor(android.R.color.black)
                         .setIconColor(android.R.color.black)
+                        .showPublisherUrl()
                         .setTextClickListener(v -> {
                             mEditUrlView.setText("");
                             mUrlViewContainer.setDisplayedChild(EDITABLE_URL_TEXT_VIEW);
@@ -489,16 +560,17 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 .toString();
     }
 
-    private void setTabCallbacks(Tab tab, Fragment fragment) {
-        tab.setNewTabCallback(new NewTabCallback() {
+    private void createTabCallbacks() {
+        mNewTabCallback = new NewTabCallback() {
             @Override
             public void onNewTab(Tab newTab, @NewTabType int type) {
-                setTabCallbacks(newTab, fragment);
+                registerTabCallbacks(newTab);
                 mPreviousTabList.add(mBrowser.getActiveTab());
                 mBrowser.setActiveTab(newTab);
             }
-        });
-        tab.setFullscreenCallback(new FullscreenCallback() {
+        };
+
+        mFullscreenCallback = new FullscreenCallback() {
             private int mSystemVisibilityToRestore;
 
             @Override
@@ -533,8 +605,36 @@ public class WebLayerShellActivity extends AppCompatActivity {
                     getWindow().setAttributes(attrs);
                 }
             }
-        });
-        tab.registerTabCallback(new TabCallback() {
+        };
+
+        mNavigationCallback = new NavigationCallback() {
+            @Override
+            public void onLoadStateChanged(boolean isLoading, boolean toDifferentDocument) {
+                mLoadProgressBar.setVisibility(
+                        isLoading && toDifferentDocument ? View.VISIBLE : View.INVISIBLE);
+            }
+
+            @Override
+            public void onLoadProgressChanged(double progress) {
+                mLoadProgressBar.setProgress((int) Math.round(100 * progress));
+            }
+        };
+
+        mErrorPageCallback = new ErrorPageCallback() {
+            @Override
+            public boolean onBackToSafety() {
+                WebLayerShellActivity.this.onBackPressed();
+                return true;
+            }
+        };
+    }
+
+    private void registerTabCallbacks(Tab tab) {
+        tab.setNewTabCallback(mNewTabCallback);
+        tab.setFullscreenCallback(mFullscreenCallback);
+        tab.getNavigationController().registerNavigationCallback(mNavigationCallback);
+        tab.setErrorPageCallback(mErrorPageCallback);
+        TabCallback tabCallback = new TabCallback() {
             @Override
             public void onVisibleUriChanged(Uri uri) {
                 mUrlViewContainer.setDisplayedChild(NONEDITABLE_URL_TEXT_VIEW);
@@ -548,7 +648,7 @@ public class WebLayerShellActivity extends AppCompatActivity {
             @Override
             public void showContextMenu(ContextMenuParams params) {
                 View webLayerView = getSupportFragmentManager().getFragments().get(0).getView();
-                webLayerView.setOnCreateContextMenuListener(new ContextMenuCreator(params));
+                webLayerView.setOnCreateContextMenuListener(new ContextMenuCreator(params, tab));
                 webLayerView.showContextMenu();
             }
 
@@ -561,32 +661,27 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 intent.setAction(Intent.ACTION_MAIN);
                 activity.startActivity(intent);
             }
-        });
-        tab.getNavigationController().registerNavigationCallback(new NavigationCallback() {
-            @Override
-            public void onLoadStateChanged(boolean isLoading, boolean toDifferentDocument) {
-                mLoadProgressBar.setVisibility(
-                        isLoading && toDifferentDocument ? View.VISIBLE : View.INVISIBLE);
-            }
-
-            @Override
-            public void onLoadProgressChanged(double progress) {
-                mLoadProgressBar.setProgress((int) Math.round(100 * progress));
-            }
-        });
-        tab.setErrorPageCallback(new ErrorPageCallback() {
-            @Override
-            public boolean onBackToSafety() {
-                fragment.getActivity().onBackPressed();
-                return true;
-            }
-        });
-        mTabToFaviconFetcher.put(tab, tab.createFaviconFetcher(new FaviconCallback() {
+        };
+        tab.registerTabCallback(tabCallback);
+        FaviconFetcher faviconFetcher = tab.createFaviconFetcher(new FaviconCallback() {
             @Override
             public void onFaviconChanged(Bitmap favicon) {
                 updateFavicon(tab);
             }
-        }));
+        });
+        mTabToPerTabState.put(tab, new PerTabState(faviconFetcher, tabCallback));
+    }
+
+    private void unregisterTabCallbacks(Tab tab) {
+        tab.setNewTabCallback(null);
+        tab.setFullscreenCallback(null);
+        tab.getNavigationController().unregisterNavigationCallback(mNavigationCallback);
+        tab.setErrorPageCallback(null);
+        PerTabState perTabState = mTabToPerTabState.get(tab);
+        assert perTabState != null;
+        tab.unregisterTabCallback(perTabState.mTabCallback);
+        perTabState.mFaviconFetcher.destroy();
+        mTabToPerTabState.remove(tab);
     }
 
     private void closeTab(Tab tab) {
@@ -594,6 +689,7 @@ public class WebLayerShellActivity extends AppCompatActivity {
         if (mBrowser.getActiveTab() == null && !mPreviousTabList.isEmpty()) {
             mBrowser.setActiveTab(mPreviousTabList.remove(mPreviousTabList.size() - 1));
         }
+        unregisterTabCallbacks(tab);
     }
 
     private Fragment getOrCreateBrowserFragment(Bundle savedInstanceState) {
@@ -709,9 +805,10 @@ public class WebLayerShellActivity extends AppCompatActivity {
 
     private void updateFavicon(@NonNull Tab tab) {
         if (tab == mBrowser.getActiveTab()) {
-            assert mTabToFaviconFetcher.containsKey(tab);
-            ((ImageView) findViewById(R.id.favicon_image_view))
-                    .setImageBitmap(mTabToFaviconFetcher.get(tab).getFaviconForCurrentNavigation());
+            assert mTabToPerTabState.containsKey(tab);
+            ((ImageView) mTopContentsContainer.findViewById(R.id.favicon_image_view))
+                    .setImageBitmap(mTabToPerTabState.get(tab)
+                                            .mFaviconFetcher.getFaviconForCurrentNavigation());
         }
     }
 }

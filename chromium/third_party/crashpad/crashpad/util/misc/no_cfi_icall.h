@@ -50,6 +50,38 @@ template <typename Functor>
 struct FunctorTraits;
 
 template <typename R, typename... Args>
+struct FunctorTraits<R (*)(Args...) noexcept> {
+  template <typename Function, typename... RunArgs>
+  DISABLE_CFI_ICALL static R Invoke(Function&& function, RunArgs&&... args) {
+    return std::forward<Function>(function)(std::forward<RunArgs>(args)...);
+  }
+};
+
+template <typename R, typename... Args>
+struct FunctorTraits<R (*)(Args..., ...) noexcept> {
+  template <typename Function, typename... RunArgs>
+  DISABLE_CFI_ICALL static R Invoke(Function&& function, RunArgs&&... args) {
+    return std::forward<Function>(function)(std::forward<RunArgs>(args)...);
+  }
+};
+
+#if defined(OS_WIN) && defined(ARCH_CPU_X86)
+template <typename R, typename... Args>
+struct FunctorTraits<R(__stdcall*)(Args...) noexcept> {
+  template <typename... RunArgs>
+  DISABLE_CFI_ICALL static R Invoke(R(__stdcall* function)(Args...),
+                                    RunArgs&&... args) {
+    return function(std::forward<RunArgs>(args)...);
+  }
+};
+#endif  // OS_WIN && ARCH_CPU_X86
+
+#if __cplusplus >= 201703L
+// These specializations match functions which are not explicitly declared
+// noexcept. They must only be present at C++17 when noexcept is part of a
+// function's type. If they are present earlier, they redefine the
+// specializations above.
+template <typename R, typename... Args>
 struct FunctorTraits<R (*)(Args...)> {
   template <typename Function, typename... RunArgs>
   DISABLE_CFI_ICALL static R Invoke(Function&& function, RunArgs&&... args) {
@@ -64,17 +96,7 @@ struct FunctorTraits<R (*)(Args..., ...)> {
     return std::forward<Function>(function)(std::forward<RunArgs>(args)...);
   }
 };
-
-#if defined(OS_WIN) && defined(ARCH_CPU_X86)
-template <typename R, typename... Args>
-struct FunctorTraits<R(__stdcall*)(Args...)> {
-  template <typename... RunArgs>
-  DISABLE_CFI_ICALL static R Invoke(R(__stdcall* function)(Args...),
-                                    RunArgs&&... args) {
-    return function(std::forward<RunArgs>(args)...);
-  }
-};
-#endif  // OS_WIN && ARCH_CPU_X86
+#endif
 
 }  // namespace
 

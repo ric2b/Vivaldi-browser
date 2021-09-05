@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -44,15 +44,6 @@ PasswordsPrivateRecordPasswordsPageAccessInSettingsFunction::Run() {
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.ManagePasswordsReferrer",
       password_manager::ManagePasswordsReferrer::kChromeSettings);
-  if (password_manager_util::IsSyncingWithNormalEncryption(
-          ProfileSyncServiceFactory::GetForProfile(
-              Profile::FromBrowserContext(browser_context())))) {
-    // We record this second histogram to better understand the impact of the
-    // Google Password Manager experiment for signed in and syncing users.
-    UMA_HISTOGRAM_ENUMERATION(
-        "PasswordManager.ManagePasswordsReferrerSignedInAndSyncing",
-        password_manager::ManagePasswordsReferrer::kChromeSettings);
-  }
   return RespondNow(NoArguments());
 }
 
@@ -139,7 +130,7 @@ ResponseAction PasswordsPrivateRequestPlaintextPasswordFunction::Run() {
 void PasswordsPrivateRequestPlaintextPasswordFunction::GotPassword(
     base::Optional<base::string16> password) {
   if (password) {
-    Respond(OneArgument(std::make_unique<base::Value>(std::move(*password))));
+    Respond(OneArgument(base::Value(std::move(*password))));
     return;
   }
 
@@ -198,12 +189,12 @@ void PasswordsPrivateGetPasswordExceptionListFunction::GotList(
 }
 
 // PasswordsPrivateMovePasswordToAccountFunction
-ResponseAction PasswordsPrivateMovePasswordToAccountFunction::Run() {
+ResponseAction PasswordsPrivateMovePasswordsToAccountFunction::Run() {
   auto parameters =
-      api::passwords_private::MovePasswordToAccount::Params::Create(*args_);
+      api::passwords_private::MovePasswordsToAccount::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
   GetDelegate(browser_context())
-      ->MovePasswordToAccount(parameters->id, GetSenderWebContents());
+      ->MovePasswordsToAccount(parameters->ids, GetSenderWebContents());
   return RespondNow(NoArguments());
 }
 
@@ -247,7 +238,7 @@ ResponseAction PasswordsPrivateRequestExportProgressStatusFunction::Run() {
 
 // PasswordsPrivateIsOptedInForAccountStorageFunction
 ResponseAction PasswordsPrivateIsOptedInForAccountStorageFunction::Run() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       GetDelegate(browser_context())->IsOptedInForAccountStorage())));
 }
 

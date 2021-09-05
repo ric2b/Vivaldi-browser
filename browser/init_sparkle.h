@@ -3,15 +3,26 @@
 #ifndef BROWSER_INIT_SPARKLE_H_
 #define BROWSER_INIT_SPARKLE_H_
 
-#include "base/callback.h"
+#include "url/gurl.h"
 
 namespace base {
 class CommandLine;
 }
 
-namespace vivaldi {
-void InitializeSparkle(const base::CommandLine& command_line,
-                       base::Callback<bool()> should_check_update_callback);
+namespace init_sparkle {
+
+struct Config {
+  GURL appcast_url;
+  bool show_appcast = false;
+};
+
+Config GetConfig(const base::CommandLine& command_line);
+
+#if defined(OS_MAC)
+
+void Initialize(const base::CommandLine& command_line);
+
+#endif
 }  // namespace vivaldi
 
 #endif  // BROWSER_INIT_SPARKLE_H_

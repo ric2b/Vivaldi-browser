@@ -6,16 +6,16 @@ import 'chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js'
 import 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
 import './scanning.mojom-lite.js';
+import './scan_settings_section.js';
+import './strings.m.js';
 import './throbber_css.js';
 
-import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import {ScannerArr} from './scanning_app_types.js';
-import {tokenToString} from './scanning_app_util.js';
-import './strings.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-/** @type {number} */
-const NUM_REQUIRED_SCANNERS = 2;
+import {ScannerArr} from './scanning_app_types.js';
+import {alphabeticalCompare, getScannerDisplayName, tokenToString} from './scanning_app_util.js';
+import {SelectBehavior} from './select_behavior.js';
 
 /**
  * @fileoverview
@@ -26,7 +26,7 @@ Polymer({
 
   _template: html`{__html_template__}`,
 
-  behaviors: [I18nBehavior],
+  behaviors: [I18nBehavior, SelectBehavior],
 
   properties: {
     /** @type {!ScannerArr} */
@@ -35,23 +35,17 @@ Polymer({
       value: () => [],
     },
 
-    /** @type {?string} */
+    /** @type {string} */
     selectedScannerId: {
       type: String,
       notify: true,
     },
 
     loaded: Boolean,
-
-    settingsDisabled: Boolean,
-
-    /** @private */
-    disabled_: Boolean,
   },
 
-  observers: [
-    'updateDisabled_(scanners.length, settingsDisabled)',
-  ],
+  observers:
+      ['onNumOptionsChange(scanners.length)', 'onScannersChange_(scanners.*)'],
 
   /**
    * @param {!chromeos.scanning.mojom.Scanner} scanner
@@ -59,8 +53,7 @@ Polymer({
    * @private
    */
   getScannerDisplayName_(scanner) {
-    return scanner.displayName.data.map(ch => String.fromCodePoint(ch))
-        .join('');
+    return getScannerDisplayName(scanner);
   },
 
   /**
@@ -75,12 +68,28 @@ Polymer({
   },
 
   /**
-   * Disables the dropdown if settings are disabled or the number of available
-   * scanners is less than the number of required scanners.
+   * Sorts the scanners and sets the selected scanner when the scanners array
+   * changes.
    * @private
    */
-  updateDisabled_() {
-    this.disabled_ =
-        this.settingsDisabled || this.scanners.length < NUM_REQUIRED_SCANNERS;
+  onScannersChange_() {
+    if (this.scanners.length > 1) {
+      this.scanners = this.customSort(
+          this.scanners, alphabeticalCompare,
+          (scanner) => getScannerDisplayName(scanner));
+    }
+
+    // If it exists, select the first option in the sorted array as the default.
+    if (this.scanners.length > 0) {
+      this.selectedScannerId = tokenToString(this.scanners[0].id);
+    }
   },
+
+  /**
+   * Helper function to decide whether to hide the scanner connection help link.
+   * @protected
+   */
+  shouldHideScanHelpLink_() {
+    return !this.loaded || this.scanners.length !== 0;
+  }
 });

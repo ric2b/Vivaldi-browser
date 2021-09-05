@@ -39,8 +39,8 @@
 #include "chrome/browser/nearby_sharing/share_target.h"
 #include "chrome/browser/nearby_sharing/transfer_metadata.h"
 #include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
-#include "chrome/services/sharing/public/mojom/nearby_decoder_types.mojom.h"
 #include "chrome/services/sharing/public/proto/wire_format.pb.h"
+#include "chromeos/services/nearby/public/mojom/nearby_decoder_types.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 
 class FastInitiationManager;
@@ -57,6 +57,7 @@ class Profile;
 class NearbySharingServiceImpl
     : public NearbySharingService,
       public nearby_share::mojom::NearbyShareSettingsObserver,
+      public NearbyShareCertificateManager::Observer,
       public NearbyProcessManager::Observer,
       public device::BluetoothAdapter::Observer,
       public NearbyConnectionsManager::IncomingConnectionListener,
@@ -89,6 +90,7 @@ class NearbySharingServiceImpl
                                      ReceiveSurfaceState state) override;
   StatusCodes UnregisterReceiveSurface(
       TransferUpdateCallback* transfer_callback) override;
+  StatusCodes ClearForegroundReceiveSurfaces() override;
   bool IsInHighVisibility() override;
   StatusCodes SendAttachments(
       const ShareTarget& share_target,
@@ -134,6 +136,10 @@ class NearbySharingServiceImpl
   void OnAllowedContactsChanged(
       const std::vector<std::string>& allowed_contacts) override;
 
+  // NearbyShareCertificateManager::Observer:
+  void OnPublicCertificatesDownloaded() override;
+  void OnPrivateCertificatesChanged() override;
+
   // NearbyConnectionsManager::DiscoveryListener:
   void OnEndpointDiscovered(const std::string& endpoint_id,
                             const std::vector<uint8_t>& endpoint_info) override;
@@ -176,6 +182,7 @@ class NearbySharingServiceImpl
   bool HasAvailableConnectionMediums();
   void InvalidateSurfaceState();
   bool ShouldStopNearbyProcess();
+  void OnProcessShutdownTimerFired();
   void InvalidateSendSurfaceState();
   void InvalidateScanningState();
   void InvalidateFastInitiationAdvertising();
@@ -186,6 +193,7 @@ class NearbySharingServiceImpl
   StatusCodes StopScanning();
   void ScheduleRotateBackgroundAdvertisementTimer();
   void OnRotateBackgroundAdvertisementTimerFired();
+  void RemoveOutgoingShareTargetWithEndpointId(const std::string& endpoint_id);
 
   void OnTransferComplete();
   void OnTransferStarted(bool is_incoming);
@@ -226,6 +234,7 @@ class NearbySharingServiceImpl
   void WriteResponse(
       NearbyConnection& connection,
       sharing::nearby::ConnectionResponseFrame::Status reponse_status);
+  void WriteCancel(NearbyConnection& connection);
   void Fail(const ShareTarget& share_target, TransferMetadata::Status status);
   void OnIncomingAdvertisementDecoded(
       const std::string& endpoint_id,
@@ -287,7 +296,7 @@ class NearbySharingServiceImpl
   void OnPayloadTransferUpdate(ShareTarget share_target,
                                TransferMetadata metadata);
   bool OnIncomingPayloadsComplete(ShareTarget& share_target);
-  void OnPayloadsFailed(ShareTarget share_target);
+  void RemoveIncomingPayloads(ShareTarget share_target);
   void Disconnect(const ShareTarget& share_target, TransferMetadata metadata);
   void OnDisconnectingConnectionTimeout(const std::string& endpoint_id);
   void OnDisconnectingConnectionDisconnected(const ShareTarget& share_target,
@@ -316,6 +325,13 @@ class NearbySharingServiceImpl
       NearbyConnectionsManager::ConnectionsStatus status);
   void SetInHighVisibility(bool in_high_visibility);
 
+  // Note: |share_target| is intentionally passed by value. A share target
+  // reference could likely be invalidated by the owner during the multi-step
+  // cancellation process.
+  void DoCancel(ShareTarget share_target,
+                StatusCodesCallback status_codes_callback,
+                bool write_cancel_frame);
+
   Profile* profile_;
   std::unique_ptr<NearbyConnectionsManager> nearby_connections_manager_;
   NearbyProcessManager* process_manager_;
@@ -334,6 +350,7 @@ class NearbySharingServiceImpl
   NearbyFileHandler file_handler_;
   bool is_screen_locked_ = false;
   base::OneShotTimer rotate_background_advertisement_timer_;
+  base::OneShotTimer process_shutdown_pending_timer_;
 
   // A list of service observers.
   base::ObserverList<NearbySharingService::Observer> observers_;

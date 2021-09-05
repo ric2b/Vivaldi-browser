@@ -5,26 +5,28 @@ package org.chromium.chrome.browser.toolbar;
 
 import android.os.Handler;
 
+import androidx.annotation.NonNull;
+
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
 import org.chromium.chrome.browser.datareduction.DataReductionSavingsMilestonePromo;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitor;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitorDelegate;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotTabObserver;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.CurrentTabObserver;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.translate.TranslateUtils;
@@ -33,6 +35,9 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
+import org.chromium.chrome.browser.video_tutorials.FeatureType;
+import org.chromium.chrome.browser.video_tutorials.VideoTutorialServiceFactory;
+import org.chromium.chrome.browser.video_tutorials.iph.VideoTutorialTryNowTracker;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -44,7 +49,7 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
  */
 public class ToolbarButtonInProductHelpController
         implements ScreenshotMonitorDelegate, PauseResumeWithNativeObserver {
-    private final ActivityTabTabObserver mPageLoadObserver;
+    private final CurrentTabObserver mPageLoadObserver;
     private final ChromeActivity mActivity;
     private final AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
     private final ScreenshotMonitor mScreenshotMonitor;
@@ -52,15 +57,23 @@ public class ToolbarButtonInProductHelpController
     private UserEducationHelper mUserEducationHelper;
     private final Handler mHandler = new Handler();
 
-    public ToolbarButtonInProductHelpController(final ChromeActivity activity,
-            AppMenuCoordinator appMenuCoordinator, ActivityLifecycleDispatcher lifecycleDispatcher,
-            ActivityTabProvider tabProvider) {
+    /**
+     * @param activity {@link ChromeActivity} on which this class runs.
+     * @param appMenuCoordinator {@link AppMenuCoordinator} whose visual state is to be updated
+     *        accordingly.
+     * @param lifecycleDispatcher {@link LifecycleDispatcher} that helps observe activity lifecycle.
+     * @param tabSupplier An observable supplier of the current {@link Tab}.
+     */
+    public ToolbarButtonInProductHelpController(@NonNull final ChromeActivity activity,
+            @NonNull AppMenuCoordinator appMenuCoordinator,
+            @NonNull ActivityLifecycleDispatcher lifecycleDispatcher,
+            @NonNull ObservableSupplier<Tab> tabSupplier) {
         mActivity = activity;
         mUserEducationHelper =
                 new UserEducationHelper(mActivity, mHandler, TrackerFactory::getTrackerForProfile);
         mScreenshotMonitor = new ScreenshotMonitor(this);
         lifecycleDispatcher.register(this);
-        mPageLoadObserver = new ActivityTabTabObserver(tabProvider) {
+        mPageLoadObserver = new CurrentTabObserver(tabSupplier, new EmptyTabObserver() {
             /**
              * Stores total data saved at the start of a page load. Used to calculate delta at the
              * end of page load, which is just an estimate of the data saved for the current page
@@ -123,16 +136,14 @@ public class ToolbarButtonInProductHelpController
                         Profile.fromWebContents(tab.getWebContents()));
                 tracker.notifyEvent(EventConstants.USER_HAS_SEEN_DINO);
             }
-        };
+        });
 
         mAppMenuHandler = appMenuCoordinator.getAppMenuHandler();
         mAppMenuPropertiesDelegate = appMenuCoordinator.getAppMenuPropertiesDelegate();
     }
 
     public void destroy() {
-        if (mPageLoadObserver != null) {
-            mPageLoadObserver.destroy();
-        }
+        mPageLoadObserver.destroy();
     }
 
     /**
@@ -146,7 +157,7 @@ public class ToolbarButtonInProductHelpController
                         R.string.iph_download_infobar_download_continuing_text)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .setOnShowCallback(
-                                () -> turnOnHighlightForMenuItem(R.id.downloads_menu_id, true))
+                                () -> turnOnHighlightForMenuItem(R.id.downloads_menu_id))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .build());
     }
@@ -167,6 +178,7 @@ public class ToolbarButtonInProductHelpController
         // (e.g. tab switch or in overview mode).
         if (mActivity.isTablet()) return;
         mScreenshotMonitor.startMonitoring();
+        mHandler.post(this::showVideoTutorialTryNowUIForDownload);
     }
 
     @Override
@@ -207,7 +219,7 @@ public class ToolbarButtonInProductHelpController
                         .setOnShowCallback(
                                 ()
                                         -> turnOnHighlightForMenuItem(
-                                                getDataReductionMenuItemHighlight(), false))
+                                                getDataReductionMenuItemHighlight()))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .build());
     }
@@ -232,7 +244,7 @@ public class ToolbarButtonInProductHelpController
                         .setOnShowCallback(
                                 ()
                                         -> turnOnHighlightForMenuItem(
-                                                getDataReductionMenuItemHighlight(), false))
+                                                getDataReductionMenuItemHighlight()))
                         .setOnDismissCallback(dismissCallback)
                         .build());
     }
@@ -256,7 +268,7 @@ public class ToolbarButtonInProductHelpController
                         R.string.iph_download_home_accessibility_text)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .setOnShowCallback(
-                                () -> turnOnHighlightForMenuItem(R.id.downloads_menu_id, true))
+                                () -> turnOnHighlightForMenuItem(R.id.downloads_menu_id))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .build());
     }
@@ -272,17 +284,14 @@ public class ToolbarButtonInProductHelpController
             return;
         }
 
-        final Integer offlinePageId =
-                CachedFeatureFlags.isEnabled(
-                        ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR)
-                ? R.id.offline_page_chip_id
-                : R.id.offline_page_id;
-
         mUserEducationHelper.requestShowIPH(
                 new IPHCommandBuilder(mActivity.getResources(), featureName,
                         R.string.iph_download_page_for_offline_usage_text,
                         R.string.iph_download_page_for_offline_usage_accessibility_text)
-                        .setOnShowCallback(() -> turnOnHighlightForMenuItem(offlinePageId, true))
+                        .setOnShowCallback(
+                                ()
+                                        -> turnOnHighlightForMenuItem(
+                                                AppMenuPropertiesDelegateImpl.getOfflinePageId()))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .build());
@@ -311,15 +320,37 @@ public class ToolbarButtonInProductHelpController
                         R.string.iph_translate_menu_button_text,
                         R.string.iph_translate_menu_button_accessibility_text)
                         .setOnShowCallback(
-                                () -> turnOnHighlightForMenuItem(R.id.translate_id, false))
+                                () -> turnOnHighlightForMenuItem(R.id.translate_id))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .build());
     }
 
-    private void turnOnHighlightForMenuItem(Integer highlightMenuItemId, boolean circleHighlight) {
+    /** Show the Try Now UI for video tutorial download feature. */
+    private void showVideoTutorialTryNowUIForDownload() {
+        VideoTutorialTryNowTracker tryNowTracker = VideoTutorialServiceFactory.getTryNowTracker();
+        if (!tryNowTracker.didClickTryNowButton(FeatureType.DOWNLOAD)) {
+            return;
+        }
+
+        Integer menuItemId = DownloadUtils.isAllowedToDownloadPage(mActivity.getActivityTab())
+                ? AppMenuPropertiesDelegateImpl.getOfflinePageId()
+                : R.id.downloads_menu_id;
+
+        mUserEducationHelper.requestShowIPH(
+                new IPHCommandBuilder(mActivity.getResources(), null,
+                        R.string.video_tutorials_iph_tap_here_to_start,
+                        R.string.video_tutorials_iph_tap_here_to_start)
+                        .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
+                        .setOnShowCallback(() -> turnOnHighlightForMenuItem(menuItemId))
+                        .setOnDismissCallback(this::turnOffHighlightForMenuItem)
+                        .build());
+        tryNowTracker.tryNowUIShown(FeatureType.DOWNLOAD);
+    }
+
+    private void turnOnHighlightForMenuItem(Integer highlightMenuItemId) {
         if (mAppMenuHandler != null) {
-            mAppMenuHandler.setMenuHighlight(highlightMenuItemId, circleHighlight);
+            mAppMenuHandler.setMenuHighlight(highlightMenuItemId);
         }
     }
 

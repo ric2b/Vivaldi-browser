@@ -4,11 +4,11 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//components/vector_icons/vector_icons.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
-import("//ui/ozone/ozone.gni")
 import("//ui/views/features.gni")
 
 assert(toolkit_views)
@@ -17,7 +17,7 @@ config("flags") {
   defines = [ "TOOLKIT_VIEWS=1" ]
 }
 
-aggregate_vector_icons2("views_vector_icons") {
+aggregate_vector_icons("views_vector_icons") {
   icon_directory = "vector_icons"
 
   sources = [
@@ -142,6 +142,7 @@ component("views") {
     "controls/menu/menu_scroll_view_container.h",
     "controls/menu/menu_separator.h",
     "controls/menu/menu_types.h",
+    "controls/menu/new_badge.h",
     "controls/menu/submenu_view.h",
     "controls/message_box_view.h",
     "controls/native/native_view_host.h",
@@ -189,6 +190,7 @@ component("views") {
     "input_event_activation_protector.h",
     "layout/animating_layout_manager.h",
     "layout/box_layout.h",
+    "layout/box_layout_view.h",
     "layout/fill_layout.h",
     "layout/flex_layout.h",
     "layout/flex_layout_types.h",
@@ -354,6 +356,7 @@ component("views") {
     "controls/menu/menu_runner_impl_adapter.cc",
     "controls/menu/menu_scroll_view_container.cc",
     "controls/menu/menu_separator.cc",
+    "controls/menu/new_badge.cc",
     "controls/menu/submenu_view.cc",
     "controls/message_box_view.cc",
     "controls/native/native_view_host.cc",
@@ -392,6 +395,7 @@ component("views") {
     "input_event_activation_protector.cc",
     "layout/animating_layout_manager.cc",
     "layout/box_layout.cc",
+    "layout/box_layout_view.cc",
     "layout/fill_layout.cc",
     "layout/flex_layout.cc",
     "layout/flex_layout_types.cc",
@@ -480,6 +484,7 @@ component("views") {
   deps = [
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//build:chromeos_buildflags",
     "//cc/paint",
     "//mojo/public/cpp/bindings",
     "//skia",
@@ -941,6 +946,7 @@ source_set("test_support") {
       "test/event_generator_delegate_mac.mm",
       "test/scoped_views_test_helper_cocoa.mm",
       "test/test_views_delegate_mac.mm",
+      "test/views_test_base_mac.mm",
       "test/views_test_helper_mac.h",
       "test/views_test_helper_mac.mm",
       "test/widget_test_mac.mm",
@@ -1009,6 +1015,7 @@ source_set("test_support") {
         "test/ui_controls_factory_desktop_aurax11.cc",
         "test/ui_controls_factory_desktop_aurax11.h",
       ]
+      deps += [ "//ui/base/x:test_support" ]
     }
   }
   if (use_x11) {
@@ -1018,8 +1025,18 @@ source_set("test_support") {
       "//ui/gfx/x",
     ]
   }
-  if (ozone_platform_x11) {
-    deps += [ "//ui/base/x" ]
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+
+  if (use_ozone && is_linux && enable_desktop_aura) {
+    sources += [
+      "test/test_desktop_screen_ozone.cc",
+      "test/test_desktop_screen_ozone.h",
+      "test/ui_controls_factory_desktop_aura_ozone.cc",
+      "test/ui_controls_factory_desktop_aura_ozone.h",
+    ]
+    deps += [ "//ui/ozone:ui_test_support" ]
   }
 }
 
@@ -1099,9 +1116,11 @@ test("views_unittests") {
     "focus/focus_traversal_unittest.cc",
     "layout/animating_layout_manager_unittest.cc",
     "layout/box_layout_unittest.cc",
+    "layout/box_layout_view_unittest.cc",
     "layout/composite_layout_tests.cc",
     "layout/fill_layout_unittest.cc",
     "layout/flex_layout_unittest.cc",
+    "layout/flex_layout_view_unittest.cc",
     "layout/grid_layout_unittest.cc",
     "layout/layout_manager_base_unittest.cc",
     "layout/normalized_geometry_unittest.cc",
@@ -1124,6 +1143,7 @@ test("views_unittests") {
     "widget/native_widget_unittest.cc",
     "widget/root_view_unittest.cc",
     "widget/unique_widget_ptr_unittest.cc",
+    "widget/widget_delegate_unittest.cc",
     "widget/widget_unittest.cc",
     "window/custom_frame_view_unittest.cc",
     "window/dialog_client_view_unittest.cc",
@@ -1312,7 +1332,7 @@ test("views_unittests") {
     }
   }
 
-  if (is_desktop_linux && use_ozone) {
+  if (is_linux && use_ozone) {
     data_deps +=
         [ "//testing/buildbot/filters:linux_ozone_views_unittests_filters" ]
   }
@@ -1325,6 +1345,10 @@ test("views_unittests") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "color_chooser/color_chooser_unittest.cc" ]
   }
 }
 
@@ -1378,7 +1402,7 @@ source_set("views_interactive_ui_tests") {
       "//ui/wm/public",
     ]
 
-    if (is_desktop_linux) {
+    if (is_linux) {
       sources += [ "widget/desktop_aura/desktop_window_tree_host_linux_interactive_uitest.cc" ]
     }
 

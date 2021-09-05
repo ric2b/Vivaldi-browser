@@ -314,7 +314,7 @@ Args::ValueWithOverrideMap Args::GetAllArguments() const {
 void Args::SetSystemVarsLocked(Scope* dest) const {
   // Host OS.
   const char* os = nullptr;
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MSYS)
   os = "win";
 #elif defined(OS_MACOSX)
   os = "mac";
@@ -328,6 +328,10 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   os = "openbsd";
 #elif defined(OS_HAIKU)
   os = "haiku";
+#elif defined(OS_SOLARIS)
+  os = "solaris";
+#elif defined(OS_NETBSD)
+  os = "netbsd";
 #else
 #error Unknown OS type.
 #endif

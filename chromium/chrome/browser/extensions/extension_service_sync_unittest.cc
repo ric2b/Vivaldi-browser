@@ -36,11 +36,11 @@
 #include "components/crx_file/id_util.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
-#include "components/sync/model/fake_sync_change_processor.h"
-#include "components/sync/model/sync_change_processor_wrapper_for_test.h"
 #include "components/sync/model/sync_data.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_change_processor_wrapper_for_test.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -242,11 +242,10 @@ TEST_F(ExtensionServiceSyncTest, DeferredSyncStartupPreInstalledComponent) {
   bool flare_was_called = false;
   syncer::ModelType triggered_type(syncer::UNSPECIFIED);
   base::WeakPtrFactory<ExtensionServiceSyncTest> factory(this);
-  extension_sync_service()->SetSyncStartFlareForTesting(
-      base::Bind(&ExtensionServiceSyncTest::MockSyncStartFlare,
-                 factory.GetWeakPtr(),
-                 &flare_was_called,  // Safe due to WeakPtrFactory scope.
-                 &triggered_type));  // Safe due to WeakPtrFactory scope.
+  extension_sync_service()->SetSyncStartFlareForTesting(base::BindRepeating(
+      &ExtensionServiceSyncTest::MockSyncStartFlare, factory.GetWeakPtr(),
+      &flare_was_called,  // Safe due to WeakPtrFactory scope.
+      &triggered_type));  // Safe due to WeakPtrFactory scope.
 
   // Install a component extension.
   std::string manifest;
@@ -268,11 +267,10 @@ TEST_F(ExtensionServiceSyncTest, DeferredSyncStartupPreInstalledNormal) {
   bool flare_was_called = false;
   syncer::ModelType triggered_type(syncer::UNSPECIFIED);
   base::WeakPtrFactory<ExtensionServiceSyncTest> factory(this);
-  extension_sync_service()->SetSyncStartFlareForTesting(
-      base::Bind(&ExtensionServiceSyncTest::MockSyncStartFlare,
-                 factory.GetWeakPtr(),
-                 &flare_was_called,  // Safe due to WeakPtrFactory scope.
-                 &triggered_type));  // Safe due to WeakPtrFactory scope.
+  extension_sync_service()->SetSyncStartFlareForTesting(base::BindRepeating(
+      &ExtensionServiceSyncTest::MockSyncStartFlare, factory.GetWeakPtr(),
+      &flare_was_called,  // Safe due to WeakPtrFactory scope.
+      &triggered_type));  // Safe due to WeakPtrFactory scope.
 
   ASSERT_FALSE(extension_system()->is_ready());
   service()->Init();
@@ -292,11 +290,10 @@ TEST_F(ExtensionServiceSyncTest, DeferredSyncStartupOnInstall) {
   bool flare_was_called = false;
   syncer::ModelType triggered_type(syncer::UNSPECIFIED);
   base::WeakPtrFactory<ExtensionServiceSyncTest> factory(this);
-  extension_sync_service()->SetSyncStartFlareForTesting(
-      base::Bind(&ExtensionServiceSyncTest::MockSyncStartFlare,
-                 factory.GetWeakPtr(),
-                 &flare_was_called,  // Safe due to WeakPtrFactory scope.
-                 &triggered_type));  // Safe due to WeakPtrFactory scope.
+  extension_sync_service()->SetSyncStartFlareForTesting(base::BindRepeating(
+      &ExtensionServiceSyncTest::MockSyncStartFlare, factory.GetWeakPtr(),
+      &flare_was_called,  // Safe due to WeakPtrFactory scope.
+      &triggered_type));  // Safe due to WeakPtrFactory scope.
 
   base::FilePath path = data_dir().AppendASCII("good.crx");
   InstallCRX(path, INSTALL_NEW);

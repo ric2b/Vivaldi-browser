@@ -45,8 +45,7 @@ void Sequence::Transaction::PushTask(Task task) {
 
   task.task = sequence()->traits_.shutdown_behavior() ==
                       TaskShutdownBehavior::BLOCK_SHUTDOWN
-                  ? MakeCriticalClosure(task.posted_from.ToString(),
-                                        std::move(task.task))
+                  ? MakeCriticalClosure(task.posted_from, std::move(task.task))
                   : std::move(task.task);
 
   if (sequence()->queue_.empty())
@@ -108,7 +107,8 @@ bool Sequence::DidProcessTask(TaskSource::Transaction* transaction) {
   return true;
 }
 
-TaskSourceSortKey Sequence::GetSortKey() const {
+TaskSourceSortKey Sequence::GetSortKey(
+    bool /* disable_fair_scheduling */) const {
   return TaskSourceSortKey(priority_racy(),
                            ready_time_.load(std::memory_order_relaxed));
 }

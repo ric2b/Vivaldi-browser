@@ -183,9 +183,12 @@ void V8ScriptValueDeserializer::Transfer() {
     // TODO(ricea): Make ExtendableMessageEvent store an
     // UnpackedSerializedScriptValue like MessageEvent does, and then this
     // special case won't be necessary.
+    Vector<MessagePortChannel> channels;
+    for (auto& stream : serialized_script_value_->GetStreams()) {
+      channels.push_back(stream.channel);
+    }
     transferred_stream_ports_ = MessagePort::EntanglePorts(
-        *ExecutionContext::From(script_state_),
-        serialized_script_value_->GetStreamChannels());
+        *ExecutionContext::From(script_state_), channels);
   }
 
   // There's nothing else to transfer if the deserializer was not given an
@@ -204,6 +207,10 @@ void V8ScriptValueDeserializer::Transfer() {
     v8::Local<v8::Value> wrapper =
         ToV8(array_buffer, creation_context, isolate);
     if (array_buffer->IsShared()) {
+      // Crash if we are receiving a SharedArrayBuffer and this isn't allowed.
+      auto* execution_context = ExecutionContext::From(script_state_);
+      CHECK(execution_context->SharedArrayBufferTransferAllowed());
+
       DCHECK(wrapper->IsSharedArrayBuffer());
       deserializer_.TransferSharedArrayBuffer(
           i, v8::Local<v8::SharedArrayBuffer>::Cast(wrapper));
@@ -435,7 +442,7 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       if (!image_data)
         return nullptr;
       DOMArrayBufferBase* pixel_buffer = image_data->BufferBase();
-      DCHECK_EQ(pixel_buffer->ByteLengthAsSizeT(), byte_length);
+      DCHECK_EQ(pixel_buffer->ByteLength(), byte_length);
       memcpy(pixel_buffer->Data(), pixels, byte_length);
       return image_data;
     }

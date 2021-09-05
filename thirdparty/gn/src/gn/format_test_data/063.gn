@@ -39,4 +39,12 @@ source_set("test") {
     "//a",
     ":z",
   ]
+
+  # Likewise for visibility
+  visibility = [
+    "//b:*",
+    "//a",
+    "//b/*",
+    ":z",
+  ]
 }

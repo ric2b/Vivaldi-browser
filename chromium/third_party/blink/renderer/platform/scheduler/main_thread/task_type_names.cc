@@ -23,6 +23,8 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "Networking";
     case TaskType::kNetworkingWithURLLoaderAnnotation:
       return "NetworkingWithURLLoaderAnnotation";
+    case TaskType::kNetworkingUnfreezable:
+      return "NetworkingUnfreezable";
     case TaskType::kNetworkingControl:
       return "NetworkingControl";
     case TaskType::kHistoryTraversal:
@@ -141,6 +143,8 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "InternalFindInPage";
     case TaskType::kInternalHighPriorityLocalFrame:
       return "InternalHighPriorityLocalFrame";
+    case TaskType::kMainThreadTaskQueueIPCTracking:
+      return "MainThreadTaskQueueIPCTracking";
     case TaskType::kCount:
       return "Count";
   }

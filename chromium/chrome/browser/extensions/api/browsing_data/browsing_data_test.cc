@@ -7,7 +7,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/browsing_data/browsing_data_api.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
@@ -57,7 +57,7 @@ bool SetGaiaCookieForProfile(Profile* profile) {
                               "/", base::Time(), base::Time(), base::Time(),
                               /*secure=*/true, false,
                               net::CookieSameSite::NO_RESTRICTION,
-                              net::COOKIE_PRIORITY_DEFAULT);
+                              net::COOKIE_PRIORITY_DEFAULT, false);
 
   bool success = false;
   base::RunLoop loop;

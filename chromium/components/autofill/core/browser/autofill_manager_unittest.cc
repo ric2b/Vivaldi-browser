@@ -37,6 +37,7 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/form_events.h"
 #include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
+#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_strike_database.h"
 #include "components/autofill/core/browser/payments/test_payments_client.h"
@@ -94,9 +95,6 @@ using testing::UnorderedElementsAre;
 
 namespace autofill {
 
-using features::kAutofillEnforceMinRequiredFieldsForHeuristics;
-using features::kAutofillEnforceMinRequiredFieldsForQuery;
-using features::kAutofillEnforceMinRequiredFieldsForUpload;
 using features::kAutofillRestrictUnownedFieldsToFormlessCheckout;
 using mojom::SubmissionIndicatorEvent;
 using mojom::SubmissionSource;
@@ -637,6 +635,7 @@ class AutofillManagerTest : public testing::Test {
   std::unique_ptr<MockAutocompleteHistoryManager> autocomplete_history_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
   TestStrikeDatabase* strike_database_;
+  TestPatternProvider test_pattern_provider_;
 
  private:
   int ToHistogramSample(AutofillMetrics::CardUploadDecisionMetric metric) {
@@ -953,9 +952,6 @@ TEST_P(AutofillManagerStructuredProfileTest,
 // them have an autocomplete attribute.
 TEST_P(AutofillManagerStructuredProfileTest,
        GetProfileSuggestions_MinFieldsEnforced_NoAutocomplete) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      features::kAutofillEnforceMinRequiredFieldsForHeuristics);
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -987,9 +983,6 @@ TEST_P(AutofillManagerStructuredProfileTest,
 // suggestions are only made for the one that has the attribute.
 TEST_P(AutofillManagerStructuredProfileTest,
        GetProfileSuggestions_MinFieldsEnforced_WithOneAutocomplete) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      features::kAutofillEnforceMinRequiredFieldsForHeuristics);
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -1018,86 +1011,11 @@ TEST_P(AutofillManagerStructuredProfileTest,
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
 }
 
-// Test that suggestions are returned by default when there are less than
-// three fields and none of them have an autocomplete attribute.
-TEST_P(AutofillManagerStructuredProfileTest,
-       GetProfileSuggestions_NoMinFieldsEnforced_NoAutocomplete) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(
-      kAutofillEnforceMinRequiredFieldsForHeuristics);
-  // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("MyForm");
-  form.url = GURL("https://myform.com/form.html");
-  form.action = GURL("https://myform.com/submit.html");
-  FormFieldData field;
-  test::CreateTestFormField("First Name", "firstname", "", "text", &field);
-  form.fields.push_back(field);
-  test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
-  form.fields.push_back(field);
-
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-
-  // Ensure that autocomplete manager is called for both fields.
-  EXPECT_CALL(*(autocomplete_history_manager_.get()),
-              OnGetAutocompleteSuggestions)
-      .Times(0);
-
-  GetAutofillSuggestions(form, form.fields[0]);
-  CheckSuggestions(kDefaultPageID,
-                   Suggestion("Charles", "Charles Hardin Holley", "", 1),
-                   Suggestion("Elvis", "Elvis Aaron Presley", "", 2));
-
-  GetAutofillSuggestions(form, form.fields[1]);
-  CheckSuggestions(kDefaultPageID,
-                   Suggestion("Holley", "Charles Hardin Holley", "", 1),
-                   Suggestion("Presley", "Elvis Aaron Presley", "", 2));
-}
-
-// Test that for form with two fields with one that has an autocomplete
-// attribute, suggestions are made for both if small form support is enabled
-// (no minimum number of fields enforced).
-TEST_P(AutofillManagerStructuredProfileTest,
-       GetProfileSuggestions_NoMinFieldsEnforced_WithOneAutocomplete) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(
-      kAutofillEnforceMinRequiredFieldsForHeuristics);
-  // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("MyForm");
-  form.url = GURL("https://myform.com/form.html");
-  form.action = GURL("https://myform.com/submit.html");
-  FormFieldData field;
-  test::CreateTestFormField("First Name", "firstname", "", "text", &field);
-  field.autocomplete_attribute = "given-name";
-  form.fields.push_back(field);
-  test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
-  field.autocomplete_attribute = "";
-  form.fields.push_back(field);
-
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-
-  GetAutofillSuggestions(form, form.fields[0]);
-  CheckSuggestions(kDefaultPageID,
-                   Suggestion("Charles", "Charles Hardin Holley", "", 1),
-                   Suggestion("Elvis", "Elvis Aaron Presley", "", 2));
-
-  GetAutofillSuggestions(form, form.fields[1]);
-  CheckSuggestions(kDefaultPageID,
-                   Suggestion("Holley", "Charles Hardin Holley", "", 1),
-                   Suggestion("Presley", "Elvis Aaron Presley", "", 2));
-}
-
 // Test that for a form with two fields with autocomplete attributes,
 // suggestions are made for both fields. This is true even if a minimum number
 // of fields is enforced.
 TEST_P(AutofillManagerStructuredProfileTest,
        GetProfileSuggestions_SmallFormWithTwoAutocomplete) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      features::kAutofillEnforceMinRequiredFieldsForHeuristics);
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -2121,6 +2039,79 @@ TEST_P(AutofillManagerStructuredProfileTest,
   GetAutofillSuggestions(form, field);
   // Verify that suggestions are returned.
   EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that the correct section is filled.
+TEST_F(AutofillManagerTest, FillTriggeredSection) {
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+  size_t index_of_trigger_field = form.fields.size();
+  test::CreateTestAddressFormData(&form);
+  FormsSeen({form});
+
+  // Check that the form has been parsed into two sections.
+  ASSERT_NE(form.fields.size(), 0u);
+  ASSERT_EQ(index_of_trigger_field, form.fields.size() / 2);
+  {
+    FormStructure* form_structure;
+    AutofillField* autofill_field;
+    bool found = autofill_manager_->GetCachedFormAndField(
+        form, form.fields[index_of_trigger_field], &form_structure,
+        &autofill_field);
+    ASSERT_TRUE(found);
+    for (size_t i = 0; i < form.fields.size() / 2; ++i) {
+      size_t j = form.fields.size() / 2 + i;
+      ASSERT_EQ(form_structure->field(i)->name, form_structure->field(j)->name);
+      ASSERT_NE(form_structure->field(i)->section,
+                form_structure->field(j)->section);
+      ASSERT_TRUE(form_structure->field(i)->SameFieldAs(form.fields[j]));
+      ASSERT_TRUE(form_structure->field(j)->SameFieldAs(form.fields[i]));
+    }
+  }
+
+  const char guid[] = "00000000-0000-0000-0000-000000000001";
+  AutofillProfile* profile = personal_data_.GetProfileWithGUID(guid);
+  ASSERT_TRUE(profile);
+  EXPECT_EQ(1U, profile->use_count());
+  EXPECT_NE(base::Time(), profile->use_date());
+
+  int response_page_id = 0;
+  FormData response_data;
+  FillAutofillFormDataAndSaveResults(
+      kDefaultPageID, form, form.fields[index_of_trigger_field],
+      MakeFrontendID(std::string(), guid), &response_page_id, &response_data);
+  // Extract the sections into individual forms to reduce boiler plate code.
+  size_t mid = response_data.fields.size() / 2;
+  FormData section1 = response_data;
+  FormData section2 = response_data;
+  section1.fields.erase(section1.fields.begin() + mid, section1.fields.end());
+  section2.fields.erase(section2.fields.begin(), section2.fields.end() - mid);
+  // First section should be empty, second should be filled.
+  ExpectFilledForm(response_page_id, section1, kDefaultPageID, "", "", "", "",
+                   "", "", "", "", "", "", "", "", "", "", "", true, false,
+                   false);
+  ExpectFilledAddressFormElvis(response_page_id, section2, kDefaultPageID,
+                               false);
+}
+
+// Tests that AutofillManager ignores loss of focus events sent from the
+// renderer if the renderer did not have a previously-interacted form.
+// TODO(crbug.com/1140473): Remove this test when workaround is no longer
+// needed.
+TEST_F(AutofillManagerTest,
+       ShouldIgnoreLossOfFocusWithNoPreviouslyInteractedForm) {
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+
+  autofill_manager_->UpdatePendingForm(form);
+  ASSERT_TRUE(autofill_manager_->pending_form_data()->SameFormAs(form));
+
+  // Receiving a notification that focus is no longer on the form *without* the
+  // renderer having a previously-interacted form should not result in
+  // any changes to the pending form.
+  autofill_manager_->OnFocusNoLongerOnForm(/*had_interacted_form=*/false);
+  EXPECT_TRUE(autofill_manager_->pending_form_data()->SameFormAs(form));
 }
 
 TEST_F(AutofillManagerTest,
@@ -6484,7 +6475,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
       form, form.fields.front(), gfx::RectF(), AutofillTickClock::NowTicks());
 
   // Simulate lost of focus on the form.
-  autofill_manager_->OnFocusNoLongerOnForm();
+  autofill_manager_->OnFocusNoLongerOnForm(true);
 }
 
 // Test that navigating with a filled form sends an upload with types matching
@@ -6589,7 +6580,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
                                                AutofillTickClock::NowTicks());
 
   // Simulate lost of focus on the form.
-  autofill_manager_->OnFocusNoLongerOnForm();
+  autofill_manager_->OnFocusNoLongerOnForm(true);
 }
 
 // Test that suggestions are returned for credit card fields with an
@@ -7291,60 +7282,18 @@ TEST_P(AutofillManagerStructuredProfileTest, ShouldUploadForm) {
   test::CreateTestFormField("Name", "name", "", "text", &field);
   form.fields.push_back(field);
 
-  // With min required fields enabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndEnableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_FALSE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
-
-  // With min required fields disabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndDisableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
+  EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
 
   // Add a second field to the form.
   test::CreateTestFormField("Email", "email", "", "text", &field);
   form.fields.push_back(field);
 
-  // With min required fields enabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndEnableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_FALSE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
-
-  // With min required fields disabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndDisableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
+  EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
 
   // Has less than 3 fields but has autocomplete attribute.
   form.fields[0].autocomplete_attribute = "given-name";
 
-  // With min required fields enabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndEnableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_FALSE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
-
-  // With min required fields disabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndDisableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
+  EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
 
   // Has more than 3 fields, no autocomplete attribute.
   form.fields[0].autocomplete_attribute = "";
@@ -7370,21 +7319,8 @@ TEST_P(AutofillManagerStructuredProfileTest, ShouldUploadForm) {
   test::CreateTestFormField("Password", "password", "", "password", &field);
   form.fields.push_back(field);
 
-  // With min required fields enabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndEnableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_FALSE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
-
   // With min required fields disabled.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndDisableFeature(
-        features::kAutofillEnforceMinRequiredFieldsForUpload);
-    EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
-  }
+  EXPECT_TRUE(autofill_manager_->ShouldUploadForm(FormStructure(form)));
 
   // Autofill disabled.
   autofill_manager_->SetAutofillProfileEnabled(false);
@@ -7591,55 +7527,6 @@ TEST_P(AutofillManagerStructuredProfileTest,
     GetAutofillSuggestions(form, field);
     EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
   }
-}
-
-// Test that with small form upload enabled but heuristics and query disabled
-// we get uploads but not quality metrics.
-TEST_P(AutofillManagerStructuredProfileTest,
-       SmallForm_Upload_NoHeuristicsOrQuery) {
-  // Setup the feature environment.
-  base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      // Enabled.
-      {kAutofillEnforceMinRequiredFieldsForHeuristics,
-       kAutofillEnforceMinRequiredFieldsForQuery},
-      // Disabled.
-      {kAutofillEnforceMinRequiredFieldsForUpload});
-
-  // Add a local card to allow data matching for upload votes.
-  CreditCard credit_card =
-      autofill::test::GetRandomCreditCard(CreditCard::LOCAL_CARD);
-  personal_data_.AddCreditCard(credit_card);
-
-  // Set up the form.
-  FormData form;
-  form.url = GURL("http://myform.com/form.html");
-  form.action = GURL("http://myform.com/submit.html");
-  FormFieldData field;
-  test::CreateTestFormField("Unknown", "unknown", "", "text", &field);
-  form.fields.push_back(field);
-
-  // Have the browser encounter the form.
-  FormsSeen({form});
-
-  // Populate the form with a credit card value.
-  form.fields.back().value = credit_card.number();
-
-  // Setup expectation on the test autofill manager (these are validated
-  // during the simlulated submit).
-  autofill_manager_->SetExpectedSubmittedFieldTypes({{CREDIT_CARD_NUMBER}});
-  autofill_manager_->SetExpectedObservedSubmission(true);
-  autofill_manager_->SetCallParentUploadFormData(true);
-  EXPECT_CALL(*download_manager_,
-              StartUploadRequest(_, false, _, std::string(), true, _));
-
-  base::HistogramTester histogram_tester;
-  FormSubmitted(form);
-
-  EXPECT_EQ(FormStructure(form).FormSignatureAsStr(),
-            autofill_manager_->GetSubmittedFormSignature());
-
-  histogram_tester.ExpectTotalCount("Autofill.FieldPrediction.CreditCard", 0);
 }
 
 // Test that is_all_server_suggestions is true if there are only
@@ -8990,10 +8877,7 @@ class OnFocusOnFormFieldTest : public AutofillManagerTest,
         // Enabled
         {},
         // Disabled
-        {kAutofillEnforceMinRequiredFieldsForHeuristics,
-         kAutofillEnforceMinRequiredFieldsForQuery,
-         kAutofillEnforceMinRequiredFieldsForUpload,
-         kAutofillRestrictUnownedFieldsToFormlessCheckout});
+        {kAutofillRestrictUnownedFieldsToFormlessCheckout});
   }
 
   void TearDown() override {

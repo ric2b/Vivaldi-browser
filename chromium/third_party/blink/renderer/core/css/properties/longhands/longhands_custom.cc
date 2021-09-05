@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+#include "third_party/blink/renderer/core/css/scoped_css_value.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/zoom_adjusted_pixel_value.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
@@ -312,6 +313,12 @@ const CSSValue* AnimationName::InitialValue() const {
   return value;
 }
 
+void AnimationName::ApplyValue(StyleResolverState& state,
+                               const ScopedCSSValue& scoped_value) const {
+  // TODO(futhark): Set the TreeScope on CSSAnimationData.
+  ApplyValue(state, scoped_value.GetCSSValue());
+}
+
 const CSSValue* AnimationPlayState::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
@@ -417,8 +424,11 @@ const CSSValue* AspectRatio::ParseSingleValue(
   if (css_parsing_utils::ConsumeSlashIncludingWhitespace(range)) {
     height = css_parsing_utils::ConsumeNumber(range, context,
                                               kValueRangeNonNegative);
+  } else {
+    // A missing height is treated as 1.
+    height = CSSNumericLiteralValue::Create(
+        1.0f, CSSPrimitiveValue::UnitType::kNumber);
   }
-  // missing height is legal (treated as 1)
 
   CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
   ratio_list->Append(*width);
@@ -451,10 +461,8 @@ const CSSValue* AspectRatio::CSSValueFromComputedStyleInternal(
   CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
   ratio_list->Append(*CSSNumericLiteralValue::Create(
       ratio.GetRatio().Width(), CSSPrimitiveValue::UnitType::kNumber));
-  if (ratio.GetRatio().Height() != 1.0f) {
-    ratio_list->Append(*CSSNumericLiteralValue::Create(
-        ratio.GetRatio().Height(), CSSPrimitiveValue::UnitType::kNumber));
-  }
+  ratio_list->Append(*CSSNumericLiteralValue::Create(
+      ratio.GetRatio().Height(), CSSPrimitiveValue::UnitType::kNumber));
   if (ratio.GetTypeForComputedStyle() == EAspectRatioType::kRatio)
     return ratio_list;
 
@@ -578,8 +586,10 @@ const CSSValue* BackgroundColor::CSSValueFromComputedStyleInternal(
         style.VisitedDependentColor(*this).Rgb());
   }
 
-  return ComputedStyleUtils::CurrentColorOrValidColor(style,
-                                                      style.BackgroundColor());
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.BackgroundColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BackgroundImage::ParseSingleValue(
@@ -809,10 +819,13 @@ const CSSValue* BorderBottomColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return allow_visited_style ? cssvalue::CSSColorValue::Create(
-                                   style.VisitedDependentColor(*this).Rgb())
-                             : ComputedStyleUtils::CurrentColorOrValidColor(
-                                   style, style.BorderBottomColor());
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return allow_visited_style
+             ? cssvalue::CSSColorValue::Create(
+                   style.VisitedDependentColor(*this).Rgb())
+             : ComputedStyleUtils::CurrentColorOrValidColor(
+                   style, style.BorderBottomColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BorderBottomLeftRadius::ParseSingleValue(
@@ -1060,10 +1073,13 @@ const CSSValue* BorderLeftColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return allow_visited_style ? cssvalue::CSSColorValue::Create(
-                                   style.VisitedDependentColor(*this).Rgb())
-                             : ComputedStyleUtils::CurrentColorOrValidColor(
-                                   style, style.BorderLeftColor());
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return allow_visited_style
+             ? cssvalue::CSSColorValue::Create(
+                   style.VisitedDependentColor(*this).Rgb())
+             : ComputedStyleUtils::CurrentColorOrValidColor(
+                   style, style.BorderLeftColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BorderLeftStyle::CSSValueFromComputedStyleInternal(
@@ -1110,10 +1126,13 @@ const CSSValue* BorderRightColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return allow_visited_style ? cssvalue::CSSColorValue::Create(
-                                   style.VisitedDependentColor(*this).Rgb())
-                             : ComputedStyleUtils::CurrentColorOrValidColor(
-                                   style, style.BorderRightColor());
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return allow_visited_style
+             ? cssvalue::CSSColorValue::Create(
+                   style.VisitedDependentColor(*this).Rgb())
+             : ComputedStyleUtils::CurrentColorOrValidColor(
+                   style, style.BorderRightColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BorderRightStyle::CSSValueFromComputedStyleInternal(
@@ -1160,11 +1179,13 @@ const CSSValue* BorderTopColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
   return allow_visited_style
              ? cssvalue::CSSColorValue::Create(
                    style.VisitedDependentColor(*this).Rgb())
              : ComputedStyleUtils::ComputedStyleUtils::CurrentColorOrValidColor(
-                   style, style.BorderTopColor());
+                   style, style.BorderTopColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BorderTopLeftRadius::ParseSingleValue(
@@ -1258,7 +1279,10 @@ const CSSValue* BoxShadow::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::ValueForShadowList(style.BoxShadow(), style, true);
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return ComputedStyleUtils::ValueForShadowList(style.BoxShadow(), style, true,
+                                                CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* BoxSizing::CSSValueFromComputedStyleInternal(
@@ -1337,17 +1361,15 @@ const CSSValue* CaretColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  blink::Color color;
   if (allow_visited_style) {
-    color = style.VisitedDependentColor(*this);
-  } else if (style.CaretColor().IsAutoColor()) {
-    color = StyleColor::CurrentColor().Resolve(style.GetCurrentColor(),
-                                               style.UsedColorScheme());
-  } else {
-    color = style.CaretColor().ToStyleColor().Resolve(style.GetCurrentColor(),
-                                                      style.UsedColorScheme());
+    return cssvalue::CSSColorValue::Create(
+        style.VisitedDependentColor(*this).Rgb());
   }
-  return cssvalue::CSSColorValue::Create(color.Rgb());
+
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return ComputedStyleUtils::ValueForStyleAutoColor(style, style.CaretColor(),
+                                                    CSSValuePhase::kUsedValue);
 }
 
 void CaretColor::ApplyInitial(StyleResolverState& state) const {
@@ -1441,7 +1463,8 @@ const CSSValue* ClipPath::ParseSingleValue(CSSParserTokenRange& range,
   if (cssvalue::CSSURIValue* url =
           css_parsing_utils::ConsumeUrl(range, context))
     return url;
-  return css_parsing_utils::ConsumeBasicShape(range, context);
+  return css_parsing_utils::ConsumeBasicShape(
+      range, context, css_parsing_utils::AllowPathValue::kAllow);
 }
 
 const CSSValue* ClipPath::CSSValueFromComputedStyleInternal(
@@ -1609,7 +1632,7 @@ void ColorScheme::ApplyValue(StyleResolverState& state,
   } else if (const auto* scheme_list = DynamicTo<CSSValueList>(value)) {
     bool prefers_dark =
         state.GetDocument().GetStyleEngine().GetPreferredColorScheme() ==
-        PreferredColorScheme::kDark;
+        mojom::blink::PreferredColorScheme::kDark;
     bool has_dark = false;
     bool has_light = false;
     Vector<AtomicString> color_schemes;
@@ -1628,6 +1651,15 @@ void ColorScheme::ApplyValue(StyleResolverState& state,
     }
     state.Style()->SetColorScheme(color_schemes);
     state.Style()->SetDarkColorScheme(has_dark && (!has_light || prefers_dark));
+
+    if (has_dark) {
+      // Record kColorSchemeDarkSupportedOnRoot if dark is present (though dark
+      // may not be used). This metric is also recorded in
+      // StyleEngine::UpdateColorSchemeMetrics if a meta tag supports dark.
+      auto& doc = state.GetDocument();
+      if (doc.documentElement() == state.ElementContext().GetElement())
+        UseCounter::Count(doc, WebFeature::kColorSchemeDarkSupportedOnRoot);
+    }
   } else {
     NOTREACHED();
   }
@@ -1697,7 +1729,8 @@ const CSSValue* ColumnRuleColor::CSSValueFromComputedStyleInternal(
   return allow_visited_style ? cssvalue::CSSColorValue::Create(
                                    style.VisitedDependentColor(*this).Rgb())
                              : ComputedStyleUtils::CurrentColorOrValidColor(
-                                   style, style.ColumnRuleColor());
+                                   style, style.ColumnRuleColor(),
+                                   CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* ColumnRuleStyle::CSSValueFromComputedStyleInternal(
@@ -2430,10 +2463,7 @@ const CSSValue* Display::CSSValueFromComputedStyleInternal(
 
   if (style.Display() == EDisplay::kBlockMath) {
     CSSValueList* values = CSSValueList::CreateSpaceSeparated();
-    if (style.Display() == EDisplay::kBlockMath)
-      values->Append(*CSSIdentifierValue::Create(CSSValueID::kBlock));
-    else
-      values->Append(*CSSIdentifierValue::Create(CSSValueID::kInline));
+    values->Append(*CSSIdentifierValue::Create(CSSValueID::kBlock));
     values->Append(*CSSIdentifierValue::Create(CSSValueID::kMath));
     return values;
   }
@@ -2655,8 +2685,8 @@ const CSSValue* FloodColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::CurrentColorOrValidColor(style,
-                                                      style.FloodColor());
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.FloodColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* FloodOpacity::ParseSingleValue(
@@ -2688,6 +2718,13 @@ const CSSValue* FontFamily::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return ComputedStyleUtils::ValueForFontFamily(style);
+}
+
+void FontFamily::ApplyValue(StyleResolverState& state,
+                            const ScopedCSSValue& scoped_value) const {
+  // TODO(futhark): Set TreeScope on the FontBuilder so that it can create a
+  // Font with a FontSelector for that TreeScope.
+  ApplyValue(state, scoped_value.GetCSSValue());
 }
 
 const CSSValue* FontFeatureSettings::ParseSingleValue(
@@ -3829,8 +3866,8 @@ const CSSValue* LightingColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::CurrentColorOrValidColor(style,
-                                                      style.LightingColor());
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.LightingColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* LineBreak::CSSValueFromComputedStyleInternal(
@@ -4000,7 +4037,7 @@ const CSSValue* MarginBottom::CSSValueFromComputedStyleInternal(
     return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(margin_bottom,
                                                                style);
   }
-  return ZoomAdjustedPixelValue(ToLayoutBox(layout_object)->MarginBottom(),
+  return ZoomAdjustedPixelValue(To<LayoutBox>(layout_object)->MarginBottom(),
                                 style);
 }
 
@@ -4054,7 +4091,7 @@ const CSSValue* MarginLeft::CSSValueFromComputedStyleInternal(
     return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(margin_left,
                                                                style);
   }
-  return ZoomAdjustedPixelValue(ToLayoutBox(layout_object)->MarginLeft(),
+  return ZoomAdjustedPixelValue(To<LayoutBox>(layout_object)->MarginLeft(),
                                 style);
 }
 
@@ -4083,19 +4120,18 @@ const CSSValue* MarginRight::CSSValueFromComputedStyleInternal(
                                                                style);
   }
   float value;
+  const auto& box = *To<LayoutBox>(layout_object);
   if (margin_right.IsPercentOrCalc()) {
     // LayoutBox gives a marginRight() that is the distance between the
     // right-edge of the child box and the right-edge of the containing box,
     // when display == EDisplay::kBlock. Let's calculate the absolute value
     // of the specified margin-right % instead of relying on LayoutBox's
     // marginRight() value.
-    value =
-        MinimumValueForLength(
-            margin_right,
-            ToLayoutBox(layout_object)->ContainingBlockLogicalWidthForContent())
-            .ToFloat();
+    value = MinimumValueForLength(margin_right,
+                                  box.ContainingBlockLogicalWidthForContent())
+                .ToFloat();
   } else {
-    value = ToLayoutBox(layout_object)->MarginRight().ToFloat();
+    value = box.MarginRight().ToFloat();
   }
   return ZoomAdjustedPixelValue(value, style);
 }
@@ -4124,7 +4160,8 @@ const CSSValue* MarginTop::CSSValueFromComputedStyleInternal(
     return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(margin_top,
                                                                style);
   }
-  return ZoomAdjustedPixelValue(ToLayoutBox(layout_object)->MarginTop(), style);
+  return ZoomAdjustedPixelValue(To<LayoutBox>(layout_object)->MarginTop(),
+                                style);
 }
 
 const CSSValue* MarkerEnd::ParseSingleValue(
@@ -4568,10 +4605,13 @@ const CSSValue* OutlineColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return allow_visited_style ? cssvalue::CSSColorValue::Create(
-                                   style.VisitedDependentColor(*this).Rgb())
-                             : ComputedStyleUtils::CurrentColorOrValidColor(
-                                   style, style.OutlineColor());
+  // https://drafts.csswg.org/cssom/#resolved-values
+  // For this property, the resolved value is the used value.
+  return allow_visited_style
+             ? cssvalue::CSSColorValue::Create(
+                   style.VisitedDependentColor(*this).Rgb())
+             : ComputedStyleUtils::CurrentColorOrValidColor(
+                   style, style.OutlineColor(), CSSValuePhase::kUsedValue);
 }
 
 const CSSValue* OutlineOffset::ParseSingleValue(
@@ -4641,6 +4681,22 @@ const CSSValue* OverflowAnchor::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.OverflowAnchor());
+}
+
+const CSSValue* OverflowClipMargin::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return ZoomAdjustedPixelValue(style.OverflowClipMargin(), style);
+}
+
+const CSSValue* OverflowClipMargin::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeLength(range, context,
+                                          kValueRangeNonNegative);
 }
 
 const CSSValue* OverflowWrap::CSSValueFromComputedStyleInternal(
@@ -4734,7 +4790,7 @@ const CSSValue* PaddingBottom::CSSValueFromComputedStyleInternal(
                                                                style);
   }
   return ZoomAdjustedPixelValue(
-      ToLayoutBox(layout_object)->ComputedCSSPaddingBottom(), style);
+      To<LayoutBox>(layout_object)->ComputedCSSPaddingBottom(), style);
 }
 
 bool PaddingInlineEnd::IsLayoutDependent(const ComputedStyle* style,
@@ -4788,7 +4844,7 @@ const CSSValue* PaddingLeft::CSSValueFromComputedStyleInternal(
                                                                style);
   }
   return ZoomAdjustedPixelValue(
-      ToLayoutBox(layout_object)->ComputedCSSPaddingLeft(), style);
+      To<LayoutBox>(layout_object)->ComputedCSSPaddingLeft(), style);
 }
 
 const CSSValue* PaddingRight::ParseSingleValue(
@@ -4816,7 +4872,7 @@ const CSSValue* PaddingRight::CSSValueFromComputedStyleInternal(
                                                                style);
   }
   return ZoomAdjustedPixelValue(
-      ToLayoutBox(layout_object)->ComputedCSSPaddingRight(), style);
+      To<LayoutBox>(layout_object)->ComputedCSSPaddingRight(), style);
 }
 
 const CSSValue* PaddingTop::ParseSingleValue(
@@ -4844,7 +4900,7 @@ const CSSValue* PaddingTop::CSSValueFromComputedStyleInternal(
                                                                style);
   }
   return ZoomAdjustedPixelValue(
-      ToLayoutBox(layout_object)->ComputedCSSPaddingTop(), style);
+      To<LayoutBox>(layout_object)->ComputedCSSPaddingTop(), style);
 }
 
 const CSSValue* Page::ParseSingleValue(CSSParserTokenRange& range,
@@ -5010,7 +5066,7 @@ const CSSValue* PerspectiveOrigin::CSSValueFromComputedStyleInternal(
   if (layout_object) {
     LayoutRect box;
     if (layout_object->IsBox())
-      box = ToLayoutBox(layout_object)->BorderBoxRect();
+      box = To<LayoutBox>(layout_object)->BorderBoxRect();
 
     return MakeGarbageCollected<CSSValuePair>(
         ZoomAdjustedPixelValue(
@@ -5392,6 +5448,14 @@ const CSSValue* ScrollbarGutter::CSSValueFromComputedStyleInternal(
   return list;
 }
 
+const CSSValue* ScrollbarWidth::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(style.ScrollbarWidth());
+}
+
 const CSSValue* ScrollBehavior::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
@@ -5760,8 +5824,8 @@ const CSSValue* ShapeOutside::ParseSingleValue(
     return image_value;
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   CSSValue* box_value = css_parsing_utils::ConsumeShapeBox(range);
-  if (CSSValue* shape_value =
-          css_parsing_utils::ConsumeBasicShape(range, context)) {
+  if (CSSValue* shape_value = css_parsing_utils::ConsumeBasicShape(
+          range, context, css_parsing_utils::AllowPathValue::kForbid)) {
     list->Append(*shape_value);
     if (!box_value) {
       box_value = css_parsing_utils::ConsumeShapeBox(range);
@@ -5961,7 +6025,8 @@ const CSSValue* StopColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::CurrentColorOrValidColor(style, style.StopColor());
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.StopColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* StopOpacity::ParseSingleValue(
@@ -6244,7 +6309,7 @@ const CSSValue* TextDecorationColor::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return ComputedStyleUtils::CurrentColorOrValidColor(
-      style, style.TextDecorationColor());
+      style, style.TextDecorationColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* TextDecorationLine::ParseSingleValue(
@@ -6480,8 +6545,8 @@ const CSSValue* TextShadow::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::ValueForShadowList(style.TextShadow(), style,
-                                                false);
+  return ComputedStyleUtils::ValueForShadowList(
+      style.TextShadow(), style, false, CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* TextSizeAdjust::ParseSingleValue(
@@ -7686,7 +7751,7 @@ const CSSValue* WebkitTapHighlightColor::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return ComputedStyleUtils::CurrentColorOrValidColor(
-      style, style.TapHighlightColor());
+      style, style.TapHighlightColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* WebkitTextCombine::CSSValueFromComputedStyleInternal(
@@ -7737,7 +7802,7 @@ const CSSValue* WebkitTextEmphasisColor::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return ComputedStyleUtils::CurrentColorOrValidColor(
-      style, style.TextEmphasisColor());
+      style, style.TextEmphasisColor(), CSSValuePhase::kComputedValue);
 }
 
 // [ over | under ] && [ right | left ]?
@@ -7963,8 +8028,8 @@ const CSSValue* WebkitTextFillColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::CurrentColorOrValidColor(style,
-                                                      style.TextFillColor());
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.TextFillColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* WebkitTextOrientation::CSSValueFromComputedStyleInternal(
@@ -8020,8 +8085,8 @@ const CSSValue* WebkitTextStrokeColor::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::CurrentColorOrValidColor(style,
-                                                      style.TextStrokeColor());
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, style.TextStrokeColor(), CSSValuePhase::kComputedValue);
 }
 
 const CSSValue* WebkitTextStrokeWidth::ParseSingleValue(
@@ -8409,6 +8474,14 @@ void Zoom::ApplyInherit(StyleResolverState& state) const {
 
 void Zoom::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
   state.SetZoom(StyleBuilderConverter::ConvertZoom(state, value));
+}
+
+const CSSValue* InternalAlignSelfBlock::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext&,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeIdent<CSSValueID::kCenter,
+                                         CSSValueID::kNormal>(range);
 }
 
 const CSSValue* InternalEmptyLineHeight::ParseSingleValue(

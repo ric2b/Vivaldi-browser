@@ -133,7 +133,7 @@ void WebSettingsImpl::SetMinimumLogicalFontSize(int size) {
   settings_->SetMinimumLogicalFontSize(size);
 }
 
-void WebSettingsImpl::SetAutoplayPolicy(web_pref::AutoplayPolicy policy) {
+void WebSettingsImpl::SetAutoplayPolicy(mojom::blink::AutoplayPolicy policy) {
   settings_->SetAutoplayPolicy(
       static_cast<blink::AutoplayPolicy::Type>(policy));
 }
@@ -235,7 +235,7 @@ void WebSettingsImpl::SetLoadsImagesAutomatically(
 }
 
 void WebSettingsImpl::SetImageAnimationPolicy(
-    web_pref::ImageAnimationPolicy policy) {
+    mojom::blink::ImageAnimationPolicy policy) {
   settings_->SetImageAnimationPolicy(policy);
 }
 
@@ -465,7 +465,7 @@ void WebSettingsImpl::SetShowContextMenuOnMouseUp(bool enabled) {
 }
 
 void WebSettingsImpl::SetEditingBehavior(
-    web_pref::EditingBehaviorType behavior) {
+    mojom::blink::EditingBehavior behavior) {
   settings_->SetEditingBehaviorType(behavior);
 }
 
@@ -624,6 +624,11 @@ void WebSettingsImpl::SetSyncXHRInDocumentsEnabled(bool enabled) {
   settings_->SetSyncXHRInDocumentsEnabled(enabled);
 }
 
+void WebSettingsImpl::SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(
+    bool enabled) {
+  settings_->SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(enabled);
+}
+
 void WebSettingsImpl::SetCaretBrowsingEnabled(bool enabled) {
   settings_->SetCaretBrowsingEnabled(enabled);
 }
@@ -664,7 +669,7 @@ void WebSettingsImpl::SetV8CacheOptions(mojom::blink::V8CacheOptions options) {
   settings_->SetV8CacheOptions(options);
 }
 
-void WebSettingsImpl::SetViewportStyle(web_pref::ViewportStyle style) {
+void WebSettingsImpl::SetViewportStyle(mojom::blink::ViewportStyle style) {
   dev_tools_emulator_->SetViewportStyle(style);
 }
 
@@ -771,8 +776,13 @@ void WebSettingsImpl::SetForceDarkModeEnabled(bool enabled) {
 }
 
 void WebSettingsImpl::SetPreferredColorScheme(
-    PreferredColorScheme color_scheme) {
+    mojom::blink::PreferredColorScheme color_scheme) {
   settings_->SetPreferredColorScheme(color_scheme);
+}
+
+void WebSettingsImpl::SetPreferredContrast(
+    mojom::blink::PreferredContrast contrast) {
+  settings_->SetPreferredContrast(contrast);
 }
 
 void WebSettingsImpl::SetNavigationControls(

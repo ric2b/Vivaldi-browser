@@ -1117,7 +1117,7 @@ QuicStreamFactory::QuicStreamFactory(
   DCHECK(transport_security_state_);
   DCHECK(http_server_properties_);
   if (params_.disable_tls_zero_rtt)
-    SetQuicRestartFlag(quic_enable_zero_rtt_for_tls_v2, false);
+    SetQuicFlag(FLAGS_quic_disable_client_tls_zero_rtt, true);
   InitializeMigrationOptions();
 }
 
@@ -1462,6 +1462,9 @@ std::unique_ptr<DatagramClientSocket> QuicStreamFactory::CreateSocket(
       DatagramSocket::DEFAULT_BIND, net_log, source);
   if (params_.enable_socket_recv_optimization)
     socket->EnableRecvOptimization();
+  if (params_.ios_network_service_type > 0) {
+    socket->SetIOSNetworkServiceType(params_.ios_network_service_type);
+  }
   return socket;
 }
 
@@ -1774,8 +1777,8 @@ int QuicStreamFactory::CreateSession(
   QuicChromiumPacketWriter* writer =
       new QuicChromiumPacketWriter(socket.get(), task_runner_);
   quic::QuicConnection* connection = new quic::QuicConnection(
-      connection_id, ToQuicSocketAddress(addr), helper_.get(),
-      alarm_factory_.get(), writer, true /* owns_writer */,
+      connection_id, quic::QuicSocketAddress(), ToQuicSocketAddress(addr),
+      helper_.get(), alarm_factory_.get(), writer, true /* owns_writer */,
       quic::Perspective::IS_CLIENT, {quic_version});
   connection->set_ping_timeout(ping_timeout_);
   connection->SetMaxPacketLength(params_.max_packet_length);

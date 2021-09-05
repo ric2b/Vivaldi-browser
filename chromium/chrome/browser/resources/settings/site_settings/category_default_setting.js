@@ -177,7 +177,6 @@ Polymer({
       case ContentSettingsTypes.GEOLOCATION:
       case ContentSettingsTypes.MIC:
       case ContentSettingsTypes.NOTIFICATIONS:
-      case ContentSettingsTypes.UNSANDBOXED_PLUGINS:
       case ContentSettingsTypes.MIDI_DEVICES:
       case ContentSettingsTypes.USB_DEVICES:
       case ContentSettingsTypes.SERIAL_PORTS:
@@ -193,13 +192,6 @@ Polymer({
         this.browserProxy.setDefaultValueForContentType(
             this.category,
             this.categoryEnabled ? ContentSetting.ASK : ContentSetting.BLOCK);
-        break;
-      case ContentSettingsTypes.PLUGINS:
-        // "Run important content" vs. "Block".
-        this.browserProxy.setDefaultValueForContentType(
-            this.category,
-            this.categoryEnabled ? ContentSetting.IMPORTANT_CONTENT :
-                                   ContentSetting.BLOCK);
         break;
       default:
         assertNotReached('Invalid category: ' + this.category);

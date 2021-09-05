@@ -7,6 +7,7 @@
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -23,16 +24,16 @@ based on that.
 */
 class VivaldiWindowsAPI : public BrowserListObserver,
                           public content::NotificationObserver,
+                          public TabStripModelObserver,
                           public BrowserContextKeyedAPI {
  public:
   explicit VivaldiWindowsAPI(content::BrowserContext* context);
   ~VivaldiWindowsAPI() override;
 
+  static void Init();
+
   // KeyedService implementation.
   void Shutdown() override;
-
-  // BrowserContextKeyedAPI implementation.
-  static BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>* GetFactoryInstance();
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -45,13 +46,27 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   // Is closing because a profile is closing or not?
   static bool IsWindowClosingBecauseProfileClose(Browser* browser);
 
- protected:
+  // BrowserContextKeyedAPI implementation.
+  using Factory = BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>;
+  friend class BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>;
+  static Factory* GetFactoryInstance();
+  static const char* service_name() { return "WindowsAPI"; }
+  static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
+
+ private:
   // chrome::BrowserListObserver implementation
   void OnBrowserRemoved(Browser* browser) override;
   void OnBrowserAdded(Browser* browser) override;
 
- private:
-  friend class BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>;
+  // TabStripModelObserver implementation
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
+  void OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) override;
 
   content::BrowserContext* browser_context_;
 
@@ -60,11 +75,6 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   // Used to track windows being closed by profiles being closed, they should
   // not have any confirmation dialogs.
   std::vector<Browser *> closing_windows_;
-
-  // BrowserContextKeyedAPI implementation.
-  static const char* service_name() { return "WindowsAPI"; }
-  static const bool kServiceIsNULLWhileTesting = true;
-  static const bool kServiceRedirectedInIncognito = true;
 };
 
 class WindowPrivateCreateFunction : public ExtensionFunction {

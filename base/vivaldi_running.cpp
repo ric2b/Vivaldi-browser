@@ -28,6 +28,8 @@ bool TestIsDebuggingVivaldi(const base::CommandLine& cmd_line) {
 void CheckVivaldiStatus() {
   if (g_checked_vivaldi_status)
     return;
+  if (!base::CommandLine::InitializedForCurrentProcess())
+    return;
   g_checked_vivaldi_status = true;
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   DCHECK(cmd_line);

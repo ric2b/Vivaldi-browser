@@ -6,8 +6,8 @@
 #define CHROME_TEST_BASE_IN_PROCESS_BROWSER_TEST_H_
 
 #include <memory>
+#include <string>
 
-#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
@@ -127,7 +127,8 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   explicit InProcessBrowserTest(
       std::unique_ptr<views::ViewsDelegate> views_delegate);
 #endif
-
+  InProcessBrowserTest(const InProcessBrowserTest&) = delete;
+  InProcessBrowserTest& operator=(const InProcessBrowserTest&) = delete;
   ~InProcessBrowserTest() override;
 
   // Configures everything for an in process browser test, then invokes
@@ -226,6 +227,14 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // is omitted, the currently active profile will be used.
   Browser* CreateIncognitoBrowser(Profile* profile = nullptr);
 
+#if !defined(OS_ANDROID) && !defined(CHROME_OS)
+  // Similar to |CreateBrowser|, but creates a Guest browser.
+  // To create a Guest browser for ChromeOS, you need to add proper switches to
+  // commandline while setting up the test. For an example see
+  // AppListClientGuestModeBrowserTest::SetUpCommandLine.
+  Browser* CreateGuestBrowser();
+#endif
+
   // Creates a browser for a popup window with a single tab (about:blank), waits
   // for the tab to finish loading, and shows the browser.
   Browser* CreateBrowserForPopup(Profile* profile);
@@ -323,8 +332,6 @@ class InProcessBrowserTest : public content::BrowserTestBase {
 #endif
 
   std::unique_ptr<MainThreadStackSamplingProfiler> sampling_profiler_;
-
-  DISALLOW_COPY_AND_ASSIGN(InProcessBrowserTest);
 };
 
 // When including either in_process_browser_test.h or android_browser_test.h

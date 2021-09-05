@@ -15,6 +15,8 @@
 
 namespace blink {
 
+class WebURLRequestExtraData;
+
 // WebURLLoaderFactory for InternetDisconnectedWebURLLoader.
 class BLINK_PLATFORM_EXPORT InternetDisconnectedWebURLLoaderFactory final
     : public WebURLLoaderFactory {
@@ -22,7 +24,9 @@ class BLINK_PLATFORM_EXPORT InternetDisconnectedWebURLLoaderFactory final
   std::unique_ptr<WebURLLoader> CreateURLLoader(
       const WebURLRequest&,
       std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
-          task_runner_handle) override;
+          freezable_task_runner_handle,
+      std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
+          unfreezable_task_runner_handle) override;
 };
 
 // WebURLLoader which always returns an internet disconnected error. At present,
@@ -37,9 +41,8 @@ class InternetDisconnectedWebURLLoader final : public WebURLLoader {
   // WebURLLoader implementation:
   void LoadSynchronously(
       std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+      scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool pass_response_pipe_to_client,
       bool no_mime_sniffing,
       base::TimeDelta timeout_interval,
@@ -49,17 +52,21 @@ class InternetDisconnectedWebURLLoader final : public WebURLLoader {
       WebData&,
       int64_t& encoded_data_length,
       int64_t& encoded_body_length,
-      WebBlobInfo& downloaded_blob) override;
+      WebBlobInfo& downloaded_blob,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper) override;
   void LoadAsynchronously(
       std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+      scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool no_mime_sniffing,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper,
       WebURLLoaderClient* client) override;
-  void SetDefersLoading(bool defers) override;
+  void SetDefersLoading(DeferType defers) override;
   void DidChangePriority(WebURLRequest::Priority, int) override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunnerForBodyLoader()
+      override;
 
  private:
   void DidFail(WebURLLoaderClient* client, const WebURLError& error);

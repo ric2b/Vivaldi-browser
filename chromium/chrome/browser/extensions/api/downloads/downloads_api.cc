@@ -12,8 +12,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -332,7 +332,7 @@ class DownloadFileIconExtractorImpl : public DownloadFileIconExtractor {
 
  private:
   void OnIconLoadComplete(float scale,
-                          const IconURLCallback& callback,
+                          IconURLCallback callback,
                           gfx::Image icon);
 
   base::CancelableTaskTracker cancelable_task_tracker_;
@@ -350,17 +350,16 @@ bool DownloadFileIconExtractorImpl::ExtractIconURLForPath(
   im->LoadIcon(
       path, icon_size,
       base::BindOnce(&DownloadFileIconExtractorImpl::OnIconLoadComplete,
-                     base::Unretained(this), scale, callback),
+                     base::Unretained(this), scale, std::move(callback)),
       &cancelable_task_tracker_);
   return true;
 }
 
-void DownloadFileIconExtractorImpl::OnIconLoadComplete(
-    float scale,
-    const IconURLCallback& callback,
-    gfx::Image icon) {
+void DownloadFileIconExtractorImpl::OnIconLoadComplete(float scale,
+                                                       IconURLCallback callback,
+                                                       gfx::Image icon) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  callback.Run(
+  std::move(callback).Run(
       icon.IsEmpty()
           ? std::string()
           : webui::GetBitmapDataUrl(
@@ -617,7 +616,7 @@ void RunDownloadQuery(
     if (incognito_manager)
       incognito_manager->GetAllDownloads(&all_items);
   }
-  query_out.AddFilter(base::Bind(&ShouldExport));
+  query_out.AddFilter(base::BindRepeating(&ShouldExport));
   query_out.Search(all_items.begin(), all_items.end(), results);
 }
 
@@ -1054,7 +1053,6 @@ ExtensionFunction::ResponseAction DownloadsDownloadFunction::Run() {
   std::unique_ptr<download::DownloadUrlParameters> download_params(
       new download::DownloadUrlParameters(
           download_url, source_process_id(),
-          render_frame_host()->GetRenderViewHost()->GetRoutingID(),
           render_frame_host()->GetRoutingID(), traffic_annotation));
 
   base::FilePath creator_suggested_filename;
@@ -1130,8 +1128,7 @@ void DownloadsDownloadFunction::OnStarted(
   VLOG(1) << __func__ << " " << item << " " << interrupt_reason;
   if (item) {
     DCHECK_EQ(download::DOWNLOAD_INTERRUPT_REASON_NONE, interrupt_reason);
-    Respond(OneArgument(
-        std::make_unique<base::Value>(static_cast<int>(item->GetId()))));
+    Respond(OneArgument(base::Value(static_cast<int>(item->GetId()))));
     if (!creator_suggested_filename.empty() ||
         (creator_conflict_action !=
          downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY)) {
@@ -1197,7 +1194,8 @@ ExtensionFunction::ResponseAction DownloadsSearchFunction::Run() {
     json_results->Append(std::move(json_item));
   }
   RecordApiFunctions(DOWNLOADS_FUNCTION_SEARCH);
-  return RespondNow(OneArgument(std::move(json_results)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(json_results))));
 }
 
 DownloadsPauseFunction::DownloadsPauseFunction() {}
@@ -1289,7 +1287,8 @@ ExtensionFunction::ResponseAction DownloadsEraseFunction::Run() {
     (*it)->Remove();
   }
   RecordApiFunctions(DOWNLOADS_FUNCTION_ERASE);
-  return RespondNow(OneArgument(std::move(json_results)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(json_results))));
 }
 
 DownloadsRemoveFileFunction::DownloadsRemoveFileFunction() {
@@ -1634,10 +1633,9 @@ ExtensionFunction::ResponseAction DownloadsGetFileIconFunction::Run() {
   if (web_contents && web_contents->GetRenderWidgetHostView())
     scale = web_contents->GetRenderWidgetHostView()->GetDeviceScaleFactor();
   EXTENSION_FUNCTION_VALIDATE(icon_extractor_->ExtractIconURLForPath(
-      download_item->GetTargetFilePath(),
-      scale,
+      download_item->GetTargetFilePath(), scale,
       IconLoaderSizeFromPixelSize(icon_size),
-      base::Bind(&DownloadsGetFileIconFunction::OnIconURLExtracted, this)));
+      base::BindOnce(&DownloadsGetFileIconFunction::OnIconURLExtracted, this)));
   return RespondLater();
 }
 
@@ -1649,7 +1647,7 @@ void DownloadsGetFileIconFunction::OnIconURLExtracted(const std::string& url) {
     return;
   }
   RecordApiFunctions(DOWNLOADS_FUNCTION_GET_FILE_ICON);
-  Respond(OneArgument(std::make_unique<base::Value>(url)));
+  Respond(OneArgument(base::Value(url)));
 }
 
 ExtensionDownloadsEventRouter::ExtensionDownloadsEventRouter(

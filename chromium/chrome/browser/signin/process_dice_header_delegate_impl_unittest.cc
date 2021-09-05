@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "chrome/browser/signin/dice_tab_helper.h"
 #include "chrome/browser/signin/dice_web_signin_interceptor.h"
 #include "chrome/browser/signin/dice_web_signin_interceptor_factory.h"
@@ -43,8 +43,8 @@ class TestDiceWebSigninInterceptorDelegate
   void ShowSigninInterceptionBubble(
       content::WebContents* web_contents,
       const BubbleParameters& bubble_parameters,
-      base::OnceCallback<void(bool)> callback) override {
-    std::move(callback).Run(false);
+      base::OnceCallback<void(SigninInterceptionResult)> callback) override {
+    std::move(callback).Run(SigninInterceptionResult::kDeclined);
   }
   void ShowProfileCustomizationBubble(Browser* browser) override {}
 };

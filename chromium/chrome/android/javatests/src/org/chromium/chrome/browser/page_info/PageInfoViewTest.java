@@ -18,6 +18,7 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
+import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.UI_THEME_SETTING;
 import static org.chromium.chrome.test.util.ViewUtils.onViewWaiting;
 import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS_MODE;
 
@@ -36,10 +37,16 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.night_mode.ThemeType;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
@@ -151,11 +158,13 @@ public class PageInfoViewTest {
         int expected = hasPermissions ? ContentSettingValues.ALLOW : ContentSettingValues.ASK;
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             assertEquals(expected,
-                    WebsitePreferenceBridgeJni.get().getNotificationSettingForOrigin(
-                            Profile.getLastUsedRegularProfile(), url));
+                    WebsitePreferenceBridgeJni.get().getSettingForOrigin(
+                            Profile.getLastUsedRegularProfile(), ContentSettingsType.NOTIFICATIONS,
+                            url, url));
             assertEquals(expected,
-                    WebsitePreferenceBridgeJni.get().getGeolocationSettingForOrigin(
-                            Profile.getLastUsedRegularProfile(), url, "*"));
+                    WebsitePreferenceBridgeJni.get().getSettingForOrigin(
+                            Profile.getLastUsedRegularProfile(), ContentSettingsType.GEOLOCATION,
+                            url, "*"));
         });
     }
 
@@ -304,6 +313,22 @@ public class PageInfoViewTest {
     }
 
     /**
+     * Tests the new PageInfo UI on a secure website in dark mode.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testShowOnSecureWebsiteDarkV2() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            SharedPreferencesManager.getInstance().writeInt(UI_THEME_SETTING, ThemeType.DARK);
+        });
+        mActivityTestRule.startMainActivityOnBlankPage();
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(sSimpleHtml));
+        mRenderTestRule.render(getPageInfoView(), "PageInfo_SecureWebsiteDarkV2");
+    }
+
+    /**
      * Tests the connection info page of the new PageInfo UI.
      */
     @Test
@@ -364,6 +389,7 @@ public class PageInfoViewTest {
     @Test
     @MediumTest
     @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    @FlakyTest(message = "https://crbug.com/1147236")
     public void testClearCookiesOnSubpage() throws Exception {
         mActivityTestRule.loadUrl(mTestServerRule.getServer().getURL(sSiteDataHtml));
         // Create cookies.
@@ -376,7 +402,7 @@ public class PageInfoViewTest {
         // Check that cookies usage is displayed.
         onViewWaiting(allOf(withText(containsString("stored data")), isDisplayed()));
         // Clear cookies in page info.
-        onView(withText("Clear cookies")).perform(click());
+        onView(withText(containsString("stored data"))).perform(click());
         onView(withText("Clear")).perform(click());
         // Wait until the UI navigates back and check cookies are deleted.
         onViewWaiting(allOf(withId(R.id.page_info_cookies_row), isDisplayed()));
@@ -408,6 +434,32 @@ public class PageInfoViewTest {
         onView(withId(R.id.page_info_permissions_row))
                 .check(matches(withEffectiveVisibility(GONE)));
         expectHasPermissions(url, false);
+    }
+
+    /**
+     * Tests that page info view is shown correctly for paint preview pages.
+     */
+    @Test
+    @MediumTest
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testPaintPreview() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            final ChromeActivity activity = mActivityTestRule.getActivity();
+            final Tab tab = activity.getActivityTab();
+            ChromePageInfoControllerDelegate pageInfoControllerDelegate =
+                    new ChromePageInfoControllerDelegate(activity, tab.getWebContents(),
+                            activity::getModalDialogManager,
+                            new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab)) {
+                        @Override
+                        public boolean isShowingPaintPreviewPage() {
+                            return true;
+                        }
+                    };
+            PageInfoController.show(mActivityTestRule.getActivity(), tab.getWebContents(), null,
+                    PageInfoController.OpenedFromSource.MENU, pageInfoControllerDelegate,
+                    new ChromePermissionParamsListBuilderDelegate());
+        });
+        onView(withText(R.string.page_info_connection_paint_preview)).check(matches(isDisplayed()));
     }
 
     // TODO(1071762): Add tests for preview pages, offline pages, offline state and other states.

@@ -184,7 +184,7 @@ const NoteNode* AddNote(int profile,
     LOG(ERROR) << "Could not add notes " << title << " to Profile " << profile;
     return NULL;
   }
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     const NoteNode* v_node = GetVerifierNotesModel()->AddNote(
@@ -227,7 +227,7 @@ const NoteNode* AddFolder(int profile,
     return NULL;
   }
   EXPECT_TRUE(result->parent() == parent);
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     DCHECK(v_parent);
@@ -249,7 +249,7 @@ void SetTitle(int profile,
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     GetVerifierNotesModel()->SetTitle(v_node, base::UTF8ToUTF16(new_title));
@@ -264,7 +264,7 @@ void SetContent(int profile,
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     GetVerifierNotesModel()->SetContent(v_node, base::UTF8ToUTF16(new_content));
@@ -281,7 +281,7 @@ const NoteNode* SetURL(int profile,
                << "Profile " << profile;
     return NULL;
   }
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     if (v_node->is_note())
@@ -300,7 +300,7 @@ void Move(int profile,
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_new_parent = NULL;
     const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, new_parent, &v_new_parent);
@@ -315,7 +315,7 @@ void Remove(int profile, const NoteNode* parent, int index) {
   ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     ASSERT_TRUE(NodesMatch(parent->children()[index].get(),
@@ -326,7 +326,7 @@ void Remove(int profile, const NoteNode* parent, int index) {
 }
 
 void RemoveAll(int profile) {
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* root_node = GetVerifierNotesModel()->root_node();
     for (auto& it_root : root_node->children()) {
       for (int j = it_root->children().size() - 1; j >= 0; --j) {
@@ -342,7 +342,7 @@ void SortChildren(int profile, const NoteNode* parent) {
   ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  if (sync_datatype_helper::test()->use_verifier()) {
+  if (sync_datatype_helper::test()->UseVerifier()) {
     const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     GetVerifierNotesModel()->SortChildren(v_parent);
@@ -363,7 +363,7 @@ void ReverseChildOrder(int profile, const NoteNode* parent) {
 }
 
 bool ModelMatchesVerifier(int profile) {
-  if (!sync_datatype_helper::test()->use_verifier()) {
+  if (!sync_datatype_helper::test()->UseVerifier()) {
     LOG(ERROR) << "Illegal to call ModelMatchesVerifier() after "
                << "DisableVerifier(). Use ModelsMatch() instead.";
     return false;

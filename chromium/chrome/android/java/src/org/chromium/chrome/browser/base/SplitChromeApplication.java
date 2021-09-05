@@ -4,11 +4,14 @@
 
 package org.chromium.chrome.browser.base;
 
+import android.app.Activity;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.Build;
+import android.content.ContextWrapper;
 
-import org.chromium.base.compat.ApiHelperForO;
+import org.chromium.base.ActivityState;
+import org.chromium.base.ApplicationStatus;
+
+import java.lang.reflect.Field;
 
 /**
  * Application class to use for Chrome when //chrome code is in an isolated split. This class will
@@ -20,7 +23,8 @@ public class SplitChromeApplication extends SplitCompatApplication {
     private String mChromeApplicationClassName;
 
     public SplitChromeApplication() {
-        this("org.chromium.chrome.browser.ChromeApplication$ChromeApplicationImpl");
+        this(SplitCompatUtils.getIdentifierName(
+                "org.chromium.chrome.browser.ChromeApplication$ChromeApplicationImpl"));
     }
 
     public SplitChromeApplication(String chromeApplicationClassName) {
@@ -30,40 +34,62 @@ public class SplitChromeApplication extends SplitCompatApplication {
     @Override
     protected void attachBaseContext(Context context) {
         if (isBrowserProcess()) {
-            context = createChromeContext(context);
-            setImpl(createChromeApplication(context));
+            context = SplitCompatUtils.createChromeContext(context);
+            setImpl((Impl) SplitCompatUtils.newInstance(context, mChromeApplicationClassName));
         } else {
             setImpl(createNonBrowserApplication());
         }
         super.attachBaseContext(context);
-    }
-
-    protected Impl createNonBrowserApplication() {
-        return new Impl();
-    }
-
-    private Impl createChromeApplication(Context context) {
-        try {
-            return (Impl) context.getClassLoader()
-                    .loadClass(mChromeApplicationClassName)
-                    .newInstance();
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
+        if (isBrowserProcess()) {
+            applyActivityClassLoaderWorkaround();
         }
     }
 
-    private Context createChromeContext(Context base) {
-        assert isBrowserProcess();
-        // Isolated splits are only supported in O+, so just return the base context on other
-        // versions, since this will have access to all splits.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return base;
-        }
-        try {
-            return ApiHelperForO.createContextForSplit(base, "chrome");
-        } catch (PackageManager.NameNotFoundException e) {
-            // This application class should not be used if the chrome split does not exist.
-            throw new RuntimeException(e);
-        }
+    protected MainDexApplicationImpl createNonBrowserApplication() {
+        return new MainDexApplicationImpl();
+    }
+
+    /**
+     * Fixes Activity ClassLoader if necessary. Isolated splits can cause a ClassLoader mismatch
+     * between the Application and Activity ClassLoaders. We have a workaround in
+     * SplitCompatAppComponentFactory which overrides the Activity ClassLoader, but this does not
+     * change the ClassLoader for the Activity's base context. We override that ClassLoader here, so
+     * it matches the ClassLoader that was used to load the Activity class. Note that
+     * ContextUtils.getApplicationContext().getClassLoader() may not give the right ClassLoader here
+     * because the Activity may be in a DFM which is a child of the chrome DFM. See
+     * crbug.com/1146745 for more info.
+     */
+    private static void applyActivityClassLoaderWorkaround() {
+        ApplicationStatus.registerStateListenerForAllActivities(
+                new ApplicationStatus.ActivityStateListener() {
+                    @Override
+                    public void onActivityStateChange(
+                            Activity activity, @ActivityState int newState) {
+                        if (newState != ActivityState.CREATED) {
+                            return;
+                        }
+
+                        // ClassLoaders are already the same, no workaround needed.
+                        if (activity.getClassLoader().equals(
+                                    activity.getClass().getClassLoader())) {
+                            return;
+                        }
+
+                        Context baseContext = activity.getBaseContext();
+                        while (baseContext instanceof ContextWrapper) {
+                            baseContext = ((ContextWrapper) baseContext).getBaseContext();
+                        }
+
+                        try {
+                            // baseContext should now be an instance of ContextImpl.
+                            Field classLoaderField =
+                                    baseContext.getClass().getDeclaredField("mClassLoader");
+                            classLoaderField.setAccessible(true);
+                            classLoaderField.set(baseContext, activity.getClass().getClassLoader());
+                        } catch (ReflectiveOperationException e) {
+                            throw new RuntimeException("Error fixing Activity ClassLoader.", e);
+                        }
+                    }
+                });
     }
 }

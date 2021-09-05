@@ -100,6 +100,9 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   void EnteredEditMode() override;
   float GetToolbarHeightInScreenCoords() override;
   void DocumentFocusChanged(bool document_has_focus) override;
+  void SetSelectedText(const std::string& selected_text) override;
+  void SetLinkUnderCursor(const std::string& link_under_cursor) override;
+  bool IsValidLink(const std::string& url) override;
 
   // BlinkUrlLoader::Client:
   bool IsValid() const override;

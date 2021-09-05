@@ -11,11 +11,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string_piece_forward.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 
 namespace password_manager {
+
+struct PasswordForm;
 
 // This interface provides a way for clients to obtain a list of all saved
 // passwords and register themselves as observers for changes. In contrast to
@@ -68,6 +69,13 @@ class SavedPasswordsPresenter : public PasswordStore::Observer,
   // notify clients that an edit event happened in case |form| was present
   // in |passwords_|.
   bool EditPassword(const PasswordForm& form, base::string16 new_password);
+
+  // Modifies provided password forms, with |new_username| and |new_password|.
+  // |forms| must represent single credential, with its duplicates, or the
+  // same form saved on another store type.
+  bool EditSavedPasswords(const SavedPasswordsView forms,
+                          const base::string16& new_username,
+                          const base::string16& new_password);
 
   // Returns a list of the currently saved credentials.
   SavedPasswordsView GetSavedPasswords() const;

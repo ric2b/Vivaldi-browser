@@ -5,6 +5,7 @@
 #include "ui/views/style/platform_style.h"
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/utf16_indexing.h"
@@ -16,7 +17,7 @@
 #include "ui/views/controls/focusable_border.h"
 #include "ui/views/controls/scrollbar/scroll_bar_views.h"
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 #endif
 
@@ -48,12 +49,20 @@ const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kUseRipples = true;
 const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = false;
 const bool PlatformStyle::kTextfieldUsesDragCursorWhenDraggable = true;
-const bool PlatformStyle::kPreferFocusRings = true;
 const bool PlatformStyle::kInactiveWidgetControlsAppearDisabled = false;
+
+// Linux clips bubble windows that extend outside their parent window
+// bounds.
+const bool PlatformStyle::kAdjustBubbleIfOffscreen =
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    false;
+#else
+    true;
+#endif
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   return std::make_unique<OverlayScrollBar>(is_horizontal);
 #else
   return std::make_unique<ScrollBarViews>(is_horizontal);
@@ -70,6 +79,11 @@ gfx::Range PlatformStyle::RangeToDeleteBackwards(const base::string16& text,
   size_t previous_grapheme_index =
       gfx::UTF16OffsetToIndex(text, cursor_position, -1);
   return gfx::Range(cursor_position, previous_grapheme_index);
+}
+
+// static
+View::FocusBehavior PlatformStyle::DefaultFocusBehavior() {
+  return View::FocusBehavior::ALWAYS;
 }
 
 #endif  // OS_APPLE

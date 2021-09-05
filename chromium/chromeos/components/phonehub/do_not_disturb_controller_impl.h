@@ -10,19 +10,32 @@
 namespace chromeos {
 namespace phonehub {
 
-// TODO(https://crbug.com/1106937): Add real implementation.
+class MessageSender;
+class UserActionRecorder;
+
+// Responsible for sending and receiving states in regards to the DoNotDisturb
+// feature of the user's remote phone.
 class DoNotDisturbControllerImpl : public DoNotDisturbController {
  public:
-  DoNotDisturbControllerImpl();
+  DoNotDisturbControllerImpl(MessageSender* message_sender,
+                             UserActionRecorder* user_action_recorder);
   ~DoNotDisturbControllerImpl() override;
 
  private:
+  friend class DoNotDisturbControllerImplTest;
+
   // DoNotDisturbController:
   bool IsDndEnabled() const override;
-  void SetDoNotDisturbStateInternal(bool is_dnd_enabled) override;
+  void SetDoNotDisturbStateInternal(bool is_dnd_enabled,
+                                    bool can_request_new_dnd_state) override;
   void RequestNewDoNotDisturbState(bool enabled) override;
+  bool CanRequestNewDndState() const override;
+
+  MessageSender* message_sender_;
+  UserActionRecorder* user_action_recorder_;
 
   bool is_dnd_enabled_ = false;
+  bool can_request_new_dnd_state_ = false;
 };
 
 }  // namespace phonehub

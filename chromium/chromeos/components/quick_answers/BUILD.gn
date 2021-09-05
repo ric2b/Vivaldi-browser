@@ -6,10 +6,10 @@ source_set("quick_answers") {
   sources = [
     "quick_answers_client.cc",
     "quick_answers_client.h",
-    "quick_answers_consents.cc",
-    "quick_answers_consents.h",
     "quick_answers_model.cc",
     "quick_answers_model.h",
+    "quick_answers_notice.cc",
+    "quick_answers_notice.h",
     "result_loader.cc",
     "result_loader.h",
     "search_result_loader.cc",
@@ -48,6 +48,7 @@ source_set("quick_answers") {
     "//chromeos/services/assistant/public/shared",
     "//chromeos/services/machine_learning/public/cpp",
     "//chromeos/services/machine_learning/public/mojom",
+    "//chromeos/strings:strings_grit",
     "//components/prefs:prefs",
     "//net:net",
     "//services/data_decoder/public/cpp",
@@ -62,7 +63,7 @@ source_set("unit_tests") {
 
   sources = [
     "quick_answers_client_unittest.cc",
-    "quick_answers_consents_unittest.cc",
+    "quick_answers_notice_unittest.cc",
     "search_result_loader_unittest.cc",
     "search_result_parsers/definition_result_parser_unittest.cc",
     "search_result_parsers/kp_entity_result_parser_unittest.cc",
@@ -72,6 +73,8 @@ source_set("unit_tests") {
     "search_result_parsers/unit_conversion_result_parser_unittest.cc",
     "test/test_helpers.cc",
     "test/test_helpers.h",
+    "translation_response_parser_unittest.cc",
+    "translation_result_loader_unittest.cc",
     "understanding/intent_generator_unittest.cc",
   ]
 

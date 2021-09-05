@@ -190,11 +190,11 @@ ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
     mojo::PendingRemote<mojom::DiscardableSharedMemoryManager> manager,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> periodic_purge_task_runner)
-    : heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
-      periodic_purge_task_runner_(std::move(periodic_purge_task_runner)),
-      io_task_runner_(std::move(io_task_runner)),
-      manager_mojo_(std::make_unique<
-                    mojo::Remote<mojom::DiscardableSharedMemoryManager>>()) {
+    : ClientDiscardableSharedMemoryManager(
+          std::move(io_task_runner),
+          std::move(periodic_purge_task_runner)) {
+  manager_mojo_ =
+      std::make_unique<mojo::Remote<mojom::DiscardableSharedMemoryManager>>();
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "ClientDiscardableSharedMemoryManager",
       base::ThreadTaskRunnerHandle::Get());
@@ -206,7 +206,9 @@ ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
 ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> periodic_purge_task_runner)
-    : heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
+    : RefCountedDeleteOnSequence<ClientDiscardableSharedMemoryManager>(
+          base::ThreadTaskRunnerHandle::Get()),
+      heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
       periodic_purge_task_runner_(std::move(periodic_purge_task_runner)),
       io_task_runner_(std::move(io_task_runner)) {}
 
@@ -314,6 +316,11 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
 
     free_span->set_is_locked(true);
 
+    if (pages >= allocation_pages) {
+      UMA_HISTOGRAM_BOOLEAN("Memory.Discardable.LargeAllocationFromFreelist",
+                            true);
+    }
+
     // Memory usage is guaranteed to have changed after having removed
     // at least one span from the free lists.
     MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
@@ -371,6 +378,11 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
         leftover->length() * base::GetPageSize());
     leftover->set_is_locked(false);
     heap_->MergeIntoFreeLists(std::move(leftover));
+  }
+
+  if (pages >= allocation_pages) {
+    UMA_HISTOGRAM_BOOLEAN("Memory.Discardable.LargeAllocationFromFreelist",
+                          false);
   }
 
   MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());

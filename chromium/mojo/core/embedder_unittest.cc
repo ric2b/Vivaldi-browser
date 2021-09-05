@@ -30,7 +30,6 @@
 #include "mojo/core/core.h"
 #include "mojo/core/shared_buffer_dispatcher.h"
 #include "mojo/core/test/mojo_test_base.h"
-#include "mojo/core/test_utils.h"
 #include "mojo/public/c/system/core.h"
 #include "mojo/public/cpp/system/handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
@@ -47,7 +46,7 @@ MojoResult CreateSharedBufferFromRegion(T&& region, MojoHandle* handle) {
   scoped_refptr<SharedBufferDispatcher> buffer;
   MojoResult result =
       SharedBufferDispatcher::CreateFromPlatformSharedMemoryRegion(
-          T::TakeHandleForSerialization(std::move(region)), &buffer);
+          T::TakeHandleForSerialization(std::forward<T>(region)), &buffer);
   if (result != MOJO_RESULT_OK)
     return result;
 

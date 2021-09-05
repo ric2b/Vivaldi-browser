@@ -15,6 +15,14 @@
 // define the matchers in the app process.
 @interface ChromeMatchersAppInterface : NSObject
 
+// Matcher for a window with a given number.
+// Window numbers are assigned at scene creation. Normally, each EGTest will
+// start with exactly one window with number 0. Each time a window is created,
+// it is assigned an accessibility identifier equal to the number of connected
+// scenes (stored as NSString). This means typically any windows created in a
+// test will have consecutive numbers.
++ (id<GREYMatcher>)windowWithNumber:(int)windowNumber;
+
 // Matcher for element with accessibility label corresponding to |label| and
 // accessibility trait UIAccessibilityTraitButton.
 + (id<GREYMatcher>)buttonWithAccessibilityLabel:(NSString*)label;
@@ -186,8 +194,14 @@
 // settings menu.
 + (id<GREYMatcher>)autofillCreditCardTableView;
 
+// Returns matcher for the "Addresses and More" button in the settings menu.
++ (id<GREYMatcher>)addressesAndMoreButton;
+
 // Returns matcher for the "Payment Methods" button in the settings menu.
 + (id<GREYMatcher>)paymentMethodsButton;
+
+// Returns matcher for the "Languages" button in the settings menu.
++ (id<GREYMatcher>)languagesButton;
 
 // Returns matcher for the "Add Credit Card" view in the Settings menu.
 + (id<GREYMatcher>)addCreditCardView;

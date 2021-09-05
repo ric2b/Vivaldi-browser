@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -461,6 +460,9 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
           break;
         case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
           UMA(policy::kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted);
+          break;
+        case policy::DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE:
+          UMA(policy::kMetricEnrollmentIllegalAccountForPackagedEDULicense);
           break;
       }
       break;

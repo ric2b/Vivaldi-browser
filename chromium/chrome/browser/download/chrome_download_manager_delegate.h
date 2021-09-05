@@ -324,6 +324,16 @@ class ChromeDownloadManagerDelegate
   base::WeakPtrFactory<ChromeDownloadManagerDelegate> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ChromeDownloadManagerDelegate);
+
+// Vivaldi - External download manager support
+#if defined(OS_ANDROID)
+  bool DownloadWithExternalDownloadManager(gfx::NativeWindow native_window,
+                          DownloadLocationDialogType dialog_type,
+                          const base::FilePath& suggested_path,
+                          download::DownloadItem *download,
+                          DownloadDialogBridge::DialogCallback callback);
+#endif
+
 };
 
 #endif  // CHROME_BROWSER_DOWNLOAD_CHROME_DOWNLOAD_MANAGER_DELEGATE_H_

@@ -87,7 +87,6 @@ component("shared_impl") {
     "ppb_var_shared.h",
     "ppb_view_shared.cc",
     "ppb_view_shared.h",
-    "ppp_flash_browser_operations_shared.h",
     "ppp_instance_combined.cc",
     "ppp_instance_combined.h",
     "proxy_lock.cc",
@@ -131,8 +130,6 @@ component("shared_impl") {
 
   if (!is_nacl) {
     sources += [
-      "flash_clipboard_format_registry.cc",
-      "flash_clipboard_format_registry.h",
       "ppb_url_util_shared.cc",
       "ppb_url_util_shared.h",
       "ppb_video_decoder_shared.cc",

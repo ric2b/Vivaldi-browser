@@ -137,8 +137,7 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
   void Init() override;
 
   // BubbleSyncPromoDelegate:
-  void OnEnableSync(const AccountInfo& account_info,
-                    bool is_default_promo_account) override;
+  void OnEnableSync(const AccountInfo& account_info) override;
 
   void LinkClicked();
 
@@ -249,7 +248,7 @@ void ExtensionInstalledBubbleView::Init() {
   if (model_->show_key_binding()) {
     auto* manage_shortcut = AddChildView(std::make_unique<views::Link>(
         l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_SHORTCUTS)));
-    manage_shortcut->set_callback(base::BindRepeating(
+    manage_shortcut->SetCallback(base::BindRepeating(
         &ExtensionInstalledBubbleView::LinkClicked, base::Unretained(this)));
   }
 
@@ -259,12 +258,10 @@ void ExtensionInstalledBubbleView::Init() {
   }
 }
 
-void ExtensionInstalledBubbleView::OnEnableSync(const AccountInfo& account,
-                                                bool is_default_promo_account) {
-  signin_ui_util::EnableSyncFromPromo(
+void ExtensionInstalledBubbleView::OnEnableSync(const AccountInfo& account) {
+  signin_ui_util::EnableSyncFromSingleAccountPromo(
       browser_, account,
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
-      is_default_promo_account);
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
   GetWidget()->Close();
 }
 

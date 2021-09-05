@@ -71,12 +71,20 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     private final UrlBarControllerImpl mUrlBarController;
     private boolean mFragmentStarted;
     private boolean mFragmentResumed;
-    private boolean mFragmentStoppedForConfigurationChange;
+
+    // Tracks whether the fragment is in the middle of a configuration change and was attached when
+    // the configuration change started. This is set to true in onFragmentStop() and false when
+    // isViewAttachedToWindow() is true in either onViewAttachedToWindow() or onFragmentStarted().
+    // It's important to only set this to false when isViewAttachedToWindow() is true, as otherwise
+    // the WebContents may be prematurely hidden.
+    private boolean mInConfigurationChangeAndWasAttached;
+
     // Cache the value instead of querying system every time.
     private Boolean mPasswordEchoEnabled;
     private Boolean mDarkThemeEnabled;
     private Float mFontScale;
     private boolean mViewAttachedToWindow;
+    private boolean mNotifyOnBrowserControlsOffsetsChanged;
 
     // Created in the constructor from saved state and used in setClient().
     private PersistenceInfo mPersistenceInfo;
@@ -156,7 +164,7 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         mWindowAndroid = windowAndroid;
         mEmbedderActivityContext = embedderAppContext;
         mViewController = new BrowserViewController(
-                windowAndroid, this, mViewControllerState, mFragmentStoppedForConfigurationChange);
+                windowAndroid, this, mViewControllerState, mInConfigurationChangeAndWasAttached);
         mLocaleReceiver = new LocaleChangedBroadcastReceiver(windowAndroid.getContext().get());
         mPasswordEchoEnabled = null;
     }
@@ -231,8 +239,10 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
 
     @Override
     public TabImpl createTab() {
-        TabImpl tab = new TabImpl(mProfile, mWindowAndroid);
-        addTab(tab);
+        TabImpl tab = new TabImpl(this, mProfile, mWindowAndroid);
+        // This needs |alwaysAdd| set to true as the Tab is created with the Browser already set to
+        // this.
+        addTab(tab, /* alwaysAdd */ true);
         return tab;
     }
 
@@ -282,14 +292,17 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     @Override
     public void addTab(ITab iTab) {
         StrictModeWorkaround.apply();
-        TabImpl tab = (TabImpl) iTab;
-        if (tab.getBrowser() == this) return;
+        addTab((TabImpl) iTab, /* alwaysAdd */ false);
+    }
+
+    private void addTab(TabImpl tab, boolean alwaysAdd) {
+        if (!alwaysAdd && tab.getBrowser() == this) return;
         BrowserImplJni.get().addTab(mNativeBrowser, tab.getNativeTab());
     }
 
     @CalledByNative
     private void createJavaTabForNativeTab(long nativeTab) {
-        new TabImpl(mProfile, mWindowAndroid, nativeTab);
+        new TabImpl(this, mProfile, mWindowAndroid, nativeTab);
     }
 
     private void checkPreferences() {
@@ -356,36 +369,23 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     }
 
     @CalledByNative
-    private void onTabAdded(TabImpl tab) {
+    private void onTabAdded(TabImpl tab) throws RemoteException {
         tab.attachToBrowser(this);
-        try {
-            if (mClient != null) mClient.onTabAdded(tab);
-        } catch (RemoteException e) {
-            throw new APICallException(e);
-        }
+        if (mClient != null) mClient.onTabAdded(tab);
     }
 
     @CalledByNative
-    private void onActiveTabChanged(TabImpl tab) {
+    private void onActiveTabChanged(TabImpl tab) throws RemoteException {
         if (mViewController != null) mViewController.setActiveTab(tab);
-        if (mInDestroy) return;
-        try {
-            if (mClient != null) {
-                mClient.onActiveTabChanged(tab != null ? tab.getId() : 0);
-            }
-        } catch (RemoteException e) {
-            throw new APICallException(e);
+        if (!mInDestroy && mClient != null) {
+            mClient.onActiveTabChanged(tab != null ? tab.getId() : 0);
         }
     }
 
     @CalledByNative
-    private void onTabRemoved(TabImpl tab) {
+    private void onTabRemoved(TabImpl tab) throws RemoteException {
         if (mInDestroy) return;
-        try {
-            if (mClient != null) mClient.onTabRemoved(tab.getId());
-        } catch (RemoteException e) {
-            throw new APICallException(e);
-        }
+        if (mClient != null) mClient.onTabRemoved(tab.getId());
         // This doesn't reset state on TabImpl as |browser| is either about to be
         // destroyed, or switching to a different fragment.
     }
@@ -471,6 +471,21 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     }
 
     @Override
+    public void setBrowserControlsOffsetsEnabled(boolean enable) {
+        mNotifyOnBrowserControlsOffsetsChanged = enable;
+    }
+
+    public void onBrowserControlsOffsetsChanged(TabImpl tab, boolean isTop, int controlsOffset) {
+        if (mNotifyOnBrowserControlsOffsetsChanged && tab == getActiveTab()) {
+            try {
+                mClient.onBrowserControlsOffsetsChanged(isTop, controlsOffset);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+    }
+
+    @Override
     public boolean isRestoringPreviousState() {
         return BrowserImplJni.get().isRestoringPreviousState(mNativeBrowser);
     }
@@ -504,15 +519,17 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     }
 
     public void onFragmentStart() {
-        mFragmentStoppedForConfigurationChange = false;
         mFragmentStarted = true;
+        if (mViewAttachedToWindow) {
+            mInConfigurationChangeAndWasAttached = false;
+        }
         BrowserImplJni.get().onFragmentStart(mNativeBrowser);
         updateAllTabs();
         checkPreferences();
     }
 
     public void onFragmentStop(boolean forConfigurationChange) {
-        mFragmentStoppedForConfigurationChange = forConfigurationChange;
+        mInConfigurationChangeAndWasAttached = forConfigurationChange;
         mFragmentStarted = false;
         updateAllTabs();
     }
@@ -536,8 +553,8 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         return mFragmentResumed;
     }
 
-    public boolean isFragmentStoppedForConfigurationChange() {
-        return mFragmentStoppedForConfigurationChange;
+    public boolean isInConfigurationChangeAndWasAttached() {
+        return mInConfigurationChangeAndWasAttached;
     }
 
     public boolean isViewAttachedToWindow() {
@@ -547,6 +564,9 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
     @Override
     public void onViewAttachedToWindow(View v) {
         mViewAttachedToWindow = true;
+        if (mFragmentStarted) {
+            mInConfigurationChangeAndWasAttached = false;
+        }
         updateAllTabsViewAttachedState();
     }
 

@@ -24,10 +24,10 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
  public:
   // The setters on this builder are in the writing mode of parent_space.
   NGConstraintSpaceBuilder(const NGConstraintSpace& parent_space,
-                           WritingMode out_writing_mode,
+                           WritingDirectionMode writing_direction,
                            bool is_new_fc)
       : NGConstraintSpaceBuilder(parent_space.GetWritingMode(),
-                                 out_writing_mode,
+                                 writing_direction,
                                  is_new_fc) {
     if (parent_space.IsInsideBalancedColumns())
       space_.EnsureRareData()->is_inside_balanced_columns = true;
@@ -41,12 +41,13 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   // When this occurs we would miss setting the kOrthogonalWritingModeRoot flag
   // unless we force it.
   NGConstraintSpaceBuilder(WritingMode parent_writing_mode,
-                           WritingMode out_writing_mode,
+                           WritingDirectionMode writing_direction,
                            bool is_new_fc,
                            bool force_orthogonal_writing_mode_root = false)
-      : space_(out_writing_mode),
+      : space_(writing_direction),
         is_in_parallel_flow_(
-            IsParallelWritingMode(parent_writing_mode, out_writing_mode)),
+            IsParallelWritingMode(parent_writing_mode,
+                                  writing_direction.GetWritingMode())),
         is_new_fc_(is_new_fc),
         force_orthogonal_writing_mode_root_(
             force_orthogonal_writing_mode_root) {
@@ -118,10 +119,6 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 #endif
     if (offset != LayoutUnit())
       space_.EnsureRareData()->fragmentainer_offset_at_bfc = offset;
-  }
-
-  void SetTextDirection(TextDirection direction) {
-    space_.bitfields_.direction = static_cast<unsigned>(direction);
   }
 
   void SetIsFixedInlineSize(bool b) {
@@ -328,7 +325,21 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     DCHECK(!is_table_cell_hidden_for_paint_set_);
     is_table_cell_hidden_for_paint_set_ = true;
 #endif
-    space_.EnsureRareData()->SetIsTableCellHiddenForPaint(is_hidden_for_paint);
+    if (is_hidden_for_paint) {
+      space_.EnsureRareData()->SetIsTableCellHiddenForPaint(
+          is_hidden_for_paint);
+    }
+  }
+
+  void SetIsTableCellWithCollapsedBorders(bool has_collapsed_borders) {
+#if DCHECK_IS_ON()
+    DCHECK(!is_table_cell_with_collapsed_borders_set_);
+    is_table_cell_with_collapsed_borders_set_ = true;
+#endif
+    if (has_collapsed_borders) {
+      space_.EnsureRareData()->SetIsTableCellWithCollapsedBorders(
+          has_collapsed_borders);
+    }
   }
 
   void SetTableCellChildLayoutMode(
@@ -372,6 +383,11 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 #endif
     space_.EnsureRareData()->SetTableSectionData(std::move(table_data),
                                                  section_index);
+  }
+
+  void SetIsLineClampContext(bool is_line_clamp_context) {
+    DCHECK(!is_new_fc_);
+    space_.bitfields_.is_line_clamp_context = is_line_clamp_context;
   }
 
   void SetLinesUntilClamp(const base::Optional<int>& clamp) {
@@ -449,6 +465,7 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   bool is_table_cell_alignment_baseline_set_ = false;
   bool is_table_cell_column_index_set_ = false;
   bool is_table_cell_hidden_for_paint_set_ = false;
+  bool is_table_cell_with_collapsed_borders_set_ = false;
   bool is_custom_layout_data_set_ = false;
   bool is_lines_until_clamp_set_ = false;
   bool is_table_row_data_set_ = false;

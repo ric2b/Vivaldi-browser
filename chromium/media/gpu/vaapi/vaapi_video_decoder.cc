@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
@@ -26,6 +26,11 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/gpu/vaapi/vp8_vaapi_video_decoder_delegate.h"
 #include "media/gpu/vaapi/vp9_vaapi_video_decoder_delegate.h"
+#include "media/media_buildflags.h"
+
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+#include "media/gpu/vaapi/h265_vaapi_video_decoder_delegate.h"
+#endif
 
 namespace media {
 
@@ -76,7 +81,12 @@ std::unique_ptr<DecoderInterface> VaapiVideoDecoder::Create(
 SupportedVideoDecoderConfigs VaapiVideoDecoder::GetSupportedConfigs(
     const gpu::GpuDriverBugWorkarounds& workarounds) {
   return ConvertFromSupportedProfiles(
-      VaapiWrapper::GetSupportedDecodeProfiles(workarounds), false);
+      VaapiWrapper::GetSupportedDecodeProfiles(workarounds),
+#if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
+      true /* allow_encrypted */);
+#else
+      false /* allow_encrypted */);
+#endif
 }
 
 VaapiVideoDecoder::VaapiVideoDecoder(
@@ -121,6 +131,7 @@ VaapiVideoDecoder::~VaapiVideoDecoder() {
 }
 
 void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
+                                   CdmContext* cdm_context,
                                    InitCB init_cb,
                                    const OutputCB& output_cb) {
   DVLOGF(2) << config.AsHumanReadableString();
@@ -133,6 +144,12 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
     LOG(ERROR)
         << "Don't call Initialize() while there are pending decode tasks";
     std::move(init_cb).Run(StatusCode::kVaapiReinitializedDuringDecode);
+    return;
+  }
+
+  if (cdm_context || config.is_encrypted()) {
+    VLOGF(1) << "Vaapi decoder does not support encrypted stream";
+    std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
     return;
   }
 
@@ -164,7 +181,8 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
   const VideoCodecProfile profile = config.profile();
   vaapi_wrapper_ = VaapiWrapper::CreateForVideoCodec(
       VaapiWrapper::kDecode, profile,
-      base::Bind(&ReportVaapiErrorToUMA, "Media.VaapiVideoDecoder.VAAPIError"));
+      base::BindRepeating(&ReportVaapiErrorToUMA,
+                          "Media.VaapiVideoDecoder.VAAPIError"));
   UMA_HISTOGRAM_BOOLEAN("Media.VaapiVideoDecoder.VaapiWrapperCreationSuccess",
                         vaapi_wrapper_.get());
   if (!vaapi_wrapper_.get()) {
@@ -454,9 +472,11 @@ void VaapiVideoDecoder::ApplyResolutionChange() {
   CHECK(format);
   auto format_fourcc = Fourcc::FromVideoPixelFormat(*format);
   CHECK(format_fourcc);
-  if (!frame_pool_->Initialize(*format_fourcc, pic_size, visible_rect,
-                               natural_size,
-                               decoder_->GetRequiredNumOfPictures())) {
+  // TODO(jkardatzke): Pass true for the last argument when we are in protected
+  // mode.
+  if (!frame_pool_->Initialize(
+          *format_fourcc, pic_size, visible_rect, natural_size,
+          decoder_->GetRequiredNumOfPictures(), /*use_protected=*/false)) {
     DLOG(WARNING) << "Failed Initialize()ing the frame pool.";
     SetState(State::kError);
     return;
@@ -477,8 +497,8 @@ void VaapiVideoDecoder::ApplyResolutionChange() {
     profile_ = decoder_->GetProfile();
     auto new_vaapi_wrapper = VaapiWrapper::CreateForVideoCodec(
         VaapiWrapper::kDecode, profile_,
-        base::Bind(&ReportVaapiErrorToUMA,
-                   "Media.VaapiVideoDecoder.VAAPIError"));
+        base::BindRepeating(&ReportVaapiErrorToUMA,
+                            "Media.VaapiVideoDecoder.VAAPIError"));
     if (!new_vaapi_wrapper.get()) {
       DLOG(WARNING) << "Failed creating VaapiWrapper";
       SetState(State::kError);
@@ -623,6 +643,15 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
 
     decoder_.reset(
         new VP9Decoder(std::move(accelerator), profile_, color_space_));
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+  } else if (profile_ >= HEVCPROFILE_MIN && profile_ <= HEVCPROFILE_MAX) {
+    auto accelerator =
+        std::make_unique<H265VaapiVideoDecoderDelegate>(this, vaapi_wrapper_);
+    decoder_delegate_ = accelerator.get();
+
+    decoder_.reset(
+        new H265Decoder(std::move(accelerator), profile_, color_space_));
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
   } else {
     return Status(StatusCode::kDecoderUnsupportedProfile)
         .WithData("profile", profile_);

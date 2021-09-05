@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
 
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/text/mathml_operator_dictionary.h"
@@ -93,8 +94,10 @@ MathMLOperatorElement::ParseOperatorContent() {
   if (HasOneTextChild()) {
     operator_content.characters = textContent();
     operator_content.characters.Ensure16Bit();
-    operator_content.is_vertical = Character::IsVerticalMathCharacter(
-        OperatorCodepoint(operator_content.characters));
+    operator_content.code_point =
+        OperatorCodepoint(operator_content.characters);
+    operator_content.is_vertical =
+        Character::IsVerticalMathCharacter(operator_content.code_point);
   }
   return operator_content;
 }
@@ -138,6 +141,14 @@ void MathMLOperatorElement::ParseAttribute(
   } else if (param.name == mathml_names::kMovablelimitsAttr) {
     SetOperatorPropertyDirtyFlagIfNeeded(
         param, MathMLOperatorElement::kMovableLimits, needs_layout);
+  } else if (param.name == mathml_names::kLspaceAttr ||
+             param.name == mathml_names::kRspaceAttr) {
+    needs_layout = param.new_value != param.old_value;
+    if (needs_layout && GetLayoutObject()) {
+      SetNeedsStyleRecalc(
+          kLocalStyleChange,
+          StyleChangeReasonForTracing::Create(style_change_reason::kAttribute));
+    }
   }
   if (needs_layout && GetLayoutObject() && GetLayoutObject()->IsMathML()) {
     GetLayoutObject()
@@ -197,7 +208,7 @@ void MathMLOperatorElement::ComputeDictionaryCategory() {
            fallback_form++) {
         if (fallback_form == form)
           continue;
-        auto category = FindCategory(
+        category = FindCategory(
             GetOperatorContent().characters,
             static_cast<MathMLOperatorDictionaryForm>(fallback_form));
         if (category != MathMLOperatorDictionaryCategory::kNone) {
@@ -252,6 +263,13 @@ bool MathMLOperatorElement::HasBooleanProperty(OperatorPropertyFlag flag) {
     properties_.dirty_flags &= ~flag;
   }
   return properties_.flags & flag;
+}
+
+void MathMLOperatorElement::CheckFormAfterSiblingChange() {
+  if (properties_.dictionary_category !=
+          MathMLOperatorDictionaryCategory::kUndefined &&
+      !FastHasAttribute(mathml_names::kFormAttr))
+    SetOperatorFormDirty();
 }
 
 void MathMLOperatorElement::SetOperatorFormDirty() {

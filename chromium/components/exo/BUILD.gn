@@ -33,10 +33,7 @@ static_library("exo") {
     "display.h",
     "drag_drop_operation.cc",
     "drag_drop_operation.h",
-    "extended_drag_offer.cc",
-    "extended_drag_offer.h",
-    "extended_drag_source.cc",
-    "extended_drag_source.h",
+    "file_helper.h",
     "frame_sink_resource_manager.cc",
     "frame_sink_resource_manager.h",
     "input_trace.h",
@@ -90,6 +87,7 @@ static_library("exo") {
     "//services/viz/privileged/mojom/compositing",
     "//skia",
     "//third_party/blink/public/common",
+    "//ui/accessibility:ax_base",
     "//ui/aura",
     "//ui/base/cursor",
     "//ui/base/ime",
@@ -127,6 +125,10 @@ static_library("exo") {
       "//ash/keyboard/ui",
       "//ash/public/cpp",
       "//chromeos/constants",
+      "//chromeos/crosapi/cpp",
+      "//chromeos/ui/base",
+      "//chromeos/ui/frame",
+      "//ui/base",
       "//ui/events/ozone/layout",
     ]
     sources += [
@@ -134,6 +136,10 @@ static_library("exo") {
       "client_controlled_accelerators.h",
       "client_controlled_shell_surface.cc",
       "client_controlled_shell_surface.h",
+      "extended_drag_offer.cc",
+      "extended_drag_offer.h",
+      "extended_drag_source.cc",
+      "extended_drag_source.h",
       "gamepad.cc",
       "gamepad.h",
       "gamepad_observer.h",
@@ -186,6 +192,8 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "mock_vsync_timing_observer.cc",
+    "mock_vsync_timing_observer.h",
     "test/exo_test_base_views.cc",
     "test/exo_test_base_views.h",
     "test/exo_test_suite_aura.cc",
@@ -217,12 +225,15 @@ source_set("test_support") {
     sources += [
       "test/exo_test_base.cc",
       "test/exo_test_base.h",
+      "test/exo_test_file_helper.cc",
+      "test/exo_test_file_helper.h",
       "test/exo_test_helper.cc",
       "test/exo_test_helper.h",
     ]
     deps += [
       "//ash:test_support",
       "//ash/public/cpp",
+      "//chromeos/ui/base",
     ]
   }
 }
@@ -274,6 +285,7 @@ source_set("unit_tests") {
       "data_source_unittest.cc",
       "display_unittest.cc",
       "drag_drop_operation_unittest.cc",
+      "extended_drag_source_unittest.cc",
       "gamepad_unittest.cc",
       "gaming_seat_unittest.cc",
       "input_method_surface_unittest.cc",
@@ -290,6 +302,7 @@ source_set("unit_tests") {
       "toast_surface_unittest.cc",
       "touch_unittest.cc",
       "ui_lock_controller_unittest.cc",
+      "wm_helper_chromeos_unittest.cc",
       "xdg_shell_surface_unittest.cc",
     ]
 
@@ -299,6 +312,8 @@ source_set("unit_tests") {
       "//ash/keyboard/ui",
       "//ash/public/cpp",
       "//chromeos/constants",
+      "//chromeos/ui/base",
+      "//chromeos/ui/frame",
       "//ui/base:test_support",
       "//ui/base/cursor/mojom:cursor_type",
       "//ui/base/dragdrop/mojom:mojom_shared",

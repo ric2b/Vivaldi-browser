@@ -385,10 +385,12 @@ void RestrictedCookieManager::SetCanonicalCookie(
       GURL::SchemeIsCryptographic(origin_.scheme())
           ? net::CookieSourceScheme::kSecure
           : net::CookieSourceScheme::kNonSecure;
-  auto sanitized_cookie = std::make_unique<net::CanonicalCookie>(
+  auto sanitized_cookie = net::CanonicalCookie::FromStorage(
       cookie.Name(), cookie.Value(), cookie.Domain(), cookie.Path(), now,
       cookie.ExpiryDate(), now, cookie.IsSecure(), cookie.IsHttpOnly(),
-      cookie.SameSite(), cookie.Priority(), source_scheme);
+      cookie.SameSite(), cookie.Priority(), cookie.IsSameParty(), source_scheme,
+      origin_.port());
+  DCHECK(sanitized_cookie);
   net::CanonicalCookie cookie_copy = *sanitized_cookie;
 
   net::CookieOptions options =

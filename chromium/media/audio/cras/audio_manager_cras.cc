@@ -24,6 +24,7 @@
 #include "media/audio/audio_features.h"
 #include "media/audio/cras/cras_input.h"
 #include "media/audio/cras/cras_unified.h"
+#include "media/audio/cras/cras_util.h"
 #include "media/base/channel_layout.h"
 #include "media/base/limits.h"
 #include "media/base/localized_strings.h"
@@ -47,7 +48,7 @@ bool AudioManagerCras::HasAudioOutputDevices() {
 }
 
 bool AudioManagerCras::HasAudioInputDevices() {
-  return true;
+  return !CrasGetAudioDevices(DeviceType::kInput).empty();
 }
 
 AudioManagerCras::AudioManagerCras(
@@ -64,11 +65,17 @@ AudioManagerCras::~AudioManagerCras() = default;
 void AudioManagerCras::GetAudioInputDeviceNames(
     AudioDeviceNames* device_names) {
   device_names->push_back(AudioDeviceName::CreateDefault());
+  for (const auto& device : CrasGetAudioDevices(DeviceType::kInput)) {
+    device_names->emplace_back(device.name, base::NumberToString(device.id));
+  }
 }
 
 void AudioManagerCras::GetAudioOutputDeviceNames(
     AudioDeviceNames* device_names) {
   device_names->push_back(AudioDeviceName::CreateDefault());
+  for (const auto& device : CrasGetAudioDevices(DeviceType::kOutput)) {
+    device_names->emplace_back(device.name, base::NumberToString(device.id));
+  }
 }
 
 AudioParameters AudioManagerCras::GetInputStreamParameters(
@@ -84,6 +91,28 @@ AudioParameters AudioManagerCras::GetInputStreamParameters(
       kDefaultSampleRate, buffer_size,
       AudioParameters::HardwareCapabilities(limits::kMinAudioBufferSize,
                                             limits::kMaxAudioBufferSize));
+
+  // Allow experimentation with system echo cancellation with all devices,
+  // but enable it by default on devices that actually support it.
+  params.set_effects(params.effects() |
+                     AudioParameters::EXPERIMENTAL_ECHO_CANCELLER);
+  if (base::FeatureList::IsEnabled(features::kCrOSSystemAEC)) {
+    if (CrasGetAecSupported()) {
+      const int32_t aec_group_id = CrasGetAecGroupId();
+
+      // Check if the system AEC has a group ID which is flagged to be
+      // deactivated by the field trial.
+      const bool system_aec_deactivated =
+          base::GetFieldTrialParamByFeatureAsBool(
+              features::kCrOSSystemAECDeactivatedGroups,
+              base::NumberToString(aec_group_id), false);
+
+      if (!system_aec_deactivated) {
+        params.set_effects(params.effects() | AudioParameters::ECHO_CANCELLER);
+      }
+    }
+  }
+
   return params;
 }
 
@@ -135,7 +164,11 @@ uint64_t AudioManagerCras::GetPrimaryActiveOutputNode() {
 }
 
 bool AudioManagerCras::IsDefault(const std::string& device_id, bool is_input) {
-  return true;
+  return device_id == AudioDeviceDescription::kDefaultDeviceId;
+}
+
+enum CRAS_CLIENT_TYPE AudioManagerCras::GetClientType() {
+  return CRAS_CLIENT_TYPE_LACROS;
 }
 
 }  // namespace media

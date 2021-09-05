@@ -15,7 +15,7 @@ const dpsl_internal = {};
 
 /**
  * Enum for message types.
- * @enum { string }
+ * @enum { !string }
  */
 dpsl_internal.Message = {
   DIAGNOSTICS_AVAILABLE_ROUTINES: 'DiagnosticsService.GetAvailableRoutines',
@@ -80,18 +80,14 @@ dpsl_internal.DiagnosticsGetRoutineUpdateResponse;
 /**
  * Request message sent by the unprivileged context to the privileged
  * context to run battery capacity routine.
- * @typedef {{
- *  lowMah: !number,
- *  highMah: !number}}
+ * @typedef { null }
  */
 dpsl_internal.DiagnosticsRunBatteryCapacityRoutineRequest;
 
 /**
  * Request message sent by the unprivileged context to the privileged
  * context to run battery health routine.
- * @typedef {{
- *  maximumCycleCount: !number,
- *  percentBatteryWearAllowed: !number}}
+ * @typedef { null }
  */
 dpsl_internal.DiagnosticsRunBatteryHealthRoutineRequest;
 

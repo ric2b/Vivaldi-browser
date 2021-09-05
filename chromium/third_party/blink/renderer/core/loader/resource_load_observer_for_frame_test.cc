@@ -4,9 +4,10 @@
 
 #include "third_party/blink/renderer/core/loader/resource_load_observer_for_frame.h"
 
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/loader/mock_content_security_notifier.h"
@@ -42,7 +43,7 @@ TEST(ResourceLoadObserverForFrameTest, MemoryCacheCertificateError) {
 
   KURL url("https://www.example.com/");
   ResourceRequest resource_request(url);
-  resource_request.SetRequestContext(mojom::RequestContextType::IMAGE);
+  resource_request.SetRequestContext(mojom::blink::RequestContextType::IMAGE);
   ResourceResponse response(url);
   response.SetHasMajorCertificateErrors(true);
   auto* resource = MakeGarbageCollected<MockResource>(resource_request);

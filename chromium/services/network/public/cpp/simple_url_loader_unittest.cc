@@ -28,7 +28,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -703,9 +703,9 @@ class SimpleURLLoaderTest
         network::ResourceRequest::TrustedParams();
     url::Origin request_origin = url::Origin::Create(url);
     resource_request->trusted_params->isolation_info =
-        net::IsolationInfo::Create(
-            net::IsolationInfo::RedirectMode::kUpdateNothing, request_origin,
-            request_origin, net::SiteForCookies());
+        net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                   request_origin, request_origin,
+                                   net::SiteForCookies());
     return std::make_unique<SimpleLoaderTestHelper>(std::move(resource_request),
                                                     GetParam());
   }
@@ -1852,7 +1852,7 @@ TEST_P(SimpleURLLoaderTest, UploadFileWithRetry) {
     EXPECT_EQ(1, test_helper->download_as_stream_retries());
 }
 
-TEST_P(SimpleURLLoaderTest, UploadNonexistantFile) {
+TEST_P(SimpleURLLoaderTest, UploadNonexistentFile) {
   std::unique_ptr<SimpleLoaderTestHelper> test_helper =
       CreateHelperForURL(test_server_.GetURL("/echo"), "POST");
   // Path to a file that doesn't exist.  Start with the test directory just to

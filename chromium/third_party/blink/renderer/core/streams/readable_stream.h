@@ -21,10 +21,14 @@ class AbortSignal;
 class ExceptionState;
 class MessagePort;
 class ReadableStreamDefaultController;
+class ReadableStreamDefaultReaderOrReadableStreamBYOBReader;
+class ReadableStreamGetReaderOptions;
+class ReadableWritablePair;
 class ScriptPromise;
 class ScriptState;
 class StrategySizeAlgorithm;
 class StreamAlgorithm;
+class StreamPipeOptions;
 class StreamPromiseResolver;
 class StreamStartAlgorithm;
 class UnderlyingSourceBase;
@@ -40,9 +44,7 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
   class PipeOptions : public GarbageCollected<PipeOptions> {
    public:
     PipeOptions();
-    PipeOptions(ScriptState* script_state,
-                ScriptValue options,
-                ExceptionState& exception_state);
+    explicit PipeOptions(const StreamPipeOptions* options);
 
     bool PreventClose() const { return prevent_close_; }
     bool PreventAbort() const { return prevent_abort_; }
@@ -109,33 +111,43 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
   // https://streams.spec.whatwg.org/#rs-cancel
   ScriptPromise cancel(ScriptState*, ScriptValue reason, ExceptionState&);
 
-  ReadableStreamDefaultReader* getReader(ScriptState*, ExceptionState&);
+  void getReader(
+      ScriptState*,
+      ReadableStreamDefaultReaderOrReadableStreamBYOBReader& return_value,
+      ExceptionState&);
 
   // https://streams.spec.whatwg.org/#rs-get-reader
-  ReadableStreamDefaultReader* getReader(ScriptState*,
-                                         ScriptValue options,
-                                         ExceptionState&);
+  void getReader(
+      ScriptState*,
+      ReadableStreamGetReaderOptions* options,
+      ReadableStreamDefaultReaderOrReadableStreamBYOBReader& return_value,
+      ExceptionState&);
 
-  ScriptValue pipeThrough(ScriptState*,
-                          ScriptValue transform_stream,
-                          ExceptionState&);
+  ReadableStreamDefaultReader* GetDefaultReaderForTesting(ScriptState*,
+                                                          ExceptionState&);
+
+  ReadableStream* pipeThrough(ScriptState*,
+                              ReadableWritablePair* transform,
+                              ExceptionState&);
 
   // https://streams.spec.whatwg.org/#rs-pipe-through
-  ScriptValue pipeThrough(ScriptState*,
-                          ScriptValue transform_stream,
-                          ScriptValue options,
-                          ExceptionState&);
+  ReadableStream* pipeThrough(ScriptState*,
+                              ReadableWritablePair* transform,
+                              const StreamPipeOptions* options,
+                              ExceptionState&);
 
-  ScriptPromise pipeTo(ScriptState*, ScriptValue destination, ExceptionState&);
+  ScriptPromise pipeTo(ScriptState*,
+                       WritableStream* destination,
+                       ExceptionState&);
 
   // https://streams.spec.whatwg.org/#rs-pipe-to
   ScriptPromise pipeTo(ScriptState*,
-                       ScriptValue destination_value,
-                       ScriptValue options,
+                       WritableStream* destination,
+                       const StreamPipeOptions* options,
                        ExceptionState&);
 
   // https://streams.spec.whatwg.org/#rs-tee
-  ScriptValue tee(ScriptState*, ExceptionState&);
+  HeapVector<Member<ReadableStream>> tee(ScriptState*, ExceptionState&);
 
   // TODO(domenic): cloneForBranch2 argument from spec not supported yet
   void Tee(ScriptState*,
@@ -212,7 +224,8 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
 
  private:
   friend class ReadableStreamDefaultController;
-  friend class ReadableStreamReader;
+  friend class ReadableStreamDefaultReader;
+  friend class ReadableStreamGenericReader;
 
   class PipeToEngine;
   class ReadHandleImpl;
@@ -229,10 +242,10 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
   static void Initialize(ReadableStream*);
 
   // https://streams.spec.whatwg.org/#acquire-readable-stream-reader
-  static ReadableStreamReader* AcquireDefaultReader(ScriptState*,
-                                                    ReadableStream*,
-                                                    bool for_author_code,
-                                                    ExceptionState&);
+  static ReadableStreamDefaultReader* AcquireDefaultReader(ScriptState*,
+                                                           ReadableStream*,
+                                                           bool for_author_code,
+                                                           ExceptionState&);
 
   // https://streams.spec.whatwg.org/#readable-stream-add-read-request
   static StreamPromiseResolver* AddReadRequest(ScriptState*, ReadableStream*);
@@ -267,15 +280,9 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
   // TODO(ricea): Functions for transferable streams.
   //
 
-  // Validates the "options" argument to ReadableStream::getReader().
-  // If an exception is thrown validation failed.
-  static void GetReaderValidateOptions(ScriptState*,
-                                       ScriptValue options,
-                                       ExceptionState&);
-
   // Calls Tee() on |readable|, converts the two branches to a JavaScript array
   // and returns them.
-  static ScriptValue CallTeeAndReturnBranchArray(
+  static HeapVector<Member<ReadableStream>> CallTeeAndReturnBranchArray(
       ScriptState* script_state,
       ReadableStream* readable,
       ExceptionState& exception_state);
@@ -283,7 +290,7 @@ class CORE_EXPORT ReadableStream : public ScriptWrappable {
   bool is_disturbed_ = false;
   State state_ = kReadable;
   Member<ReadableStreamDefaultController> readable_stream_controller_;
-  Member<ReadableStreamReader> reader_;
+  Member<ReadableStreamGenericReader> reader_;
   TraceWrapperV8Reference<v8::Value> stored_error_;
 };
 

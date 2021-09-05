@@ -6,7 +6,10 @@
 #define ASH_SYSTEM_PHONEHUB_PHONE_HUB_TRAY_H_
 
 #include "ash/ash_export.h"
+#include "ash/system/phonehub/onboarding_view.h"
+#include "ash/system/phonehub/phone_hub_content_view.h"
 #include "ash/system/phonehub/phone_hub_ui_controller.h"
+#include "ash/system/phonehub/phone_status_view.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/scoped_observer.h"
 
@@ -22,11 +25,14 @@ class ImageView;
 
 namespace ash {
 
+class PhoneHubContentView;
 class TrayBubbleWrapper;
 
 // This class represents the Phone Hub tray button in the status area and
 // controls the bubble that is shown when the tray button is clicked.
 class ASH_EXPORT PhoneHubTray : public TrayBackgroundView,
+                                public OnboardingView::Delegate,
+                                public PhoneStatusView::Delegate,
                                 public PhoneHubUiController::Observer {
  public:
   explicit PhoneHubTray(Shelf* shelf);
@@ -51,7 +57,18 @@ class ASH_EXPORT PhoneHubTray : public TrayBackgroundView,
   TrayBubbleView* GetBubbleView() override;
   const char* GetClassName() const override;
 
+  // PhoneStatusView::Delegate:
+  bool CanOpenConnectedDeviceSettings() override;
+  void OpenConnectedDevicesSettings() override;
+
+  // OnboardingView::Delegate:
+  void HideStatusHeaderView() override;
+
   views::View* content_view_for_testing() { return content_view_; }
+
+  PhoneHubUiController* ui_controller_for_testing() {
+    return ui_controller_.get();
+  }
 
  private:
   // TrayBubbleView::Delegate:
@@ -76,9 +93,12 @@ class ASH_EXPORT PhoneHubTray : public TrayBackgroundView,
   // The bubble that appears after clicking the tray button.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
 
+  // The header status view on top of the bubble.
+  views::View* phone_status_view_ = nullptr;
+
   // The main content view of the bubble, which changes depending on the state.
   // Unowned.
-  views::View* content_view_ = nullptr;
+  PhoneHubContentView* content_view_ = nullptr;
 
   ScopedObserver<PhoneHubUiController, PhoneHubUiController::Observer>
       observed_phone_hub_ui_controller_{this};

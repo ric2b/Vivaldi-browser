@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/guid.h"
 #include "base/i18n/string_compare.h"
@@ -118,18 +118,6 @@ class EmptyUndoDelegate : public BookmarkUndoDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(EmptyUndoDelegate);
 };
-
-#if DCHECK_IS_ON()
-void AddGuidsToIndexRecursive(const BookmarkNode* node,
-                              std::set<std::string>* guid_index) {
-  bool success = guid_index->insert(node->guid()).second;
-  DCHECK(success);
-
-  // Recurse through children.
-  for (size_t i = node->children().size(); i > 0; --i)
-    AddGuidsToIndexRecursive(node->children()[i - 1].get(), guid_index);
-}
-#endif  // DCHECK_IS_ON()
 
 }  // namespace
 
@@ -744,26 +732,18 @@ void BookmarkModel::ResetDateFolderModified(const BookmarkNode* node) {
   SetDateFolderModified(node, Time());
 }
 
-void BookmarkModel::GetBookmarksMatching(const base::string16& text,
-                                         size_t max_count,
-                                         std::vector<TitledUrlMatch>* matches) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  GetBookmarksMatching(text, max_count,
-                       query_parser::MatchingAlgorithm::DEFAULT, matches);
-}
-
-void BookmarkModel::GetBookmarksMatching(
-    const base::string16& text,
+std::vector<TitledUrlMatch> BookmarkModel::GetBookmarksMatching(
+    const base::string16& query,
     size_t max_count,
     query_parser::MatchingAlgorithm matching_algorithm,
-    std::vector<TitledUrlMatch>* matches) {
+    bool match_ancestor_titles) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!loaded_)
-    return;
+    return {};
 
-  titled_url_index_->GetResultsMatching(text, max_count, matching_algorithm,
-                                        matches);
+  return titled_url_index_->GetResultsMatching(
+      query, max_count, matching_algorithm, match_ancestor_titles);
 }
 
 void BookmarkModel::ClearStore() {
@@ -781,16 +761,16 @@ void BookmarkModel::RestoreRemovedNode(const BookmarkNode* parent,
 
   // We might be restoring a folder node that have already contained a set of
   // child nodes. We need to notify all of them.
-  NotifyNodeAddedForAllDescendents(node_ptr);
+  NotifyNodeAddedForAllDescendants(node_ptr);
 }
 
-void BookmarkModel::NotifyNodeAddedForAllDescendents(const BookmarkNode* node) {
+void BookmarkModel::NotifyNodeAddedForAllDescendants(const BookmarkNode* node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   for (size_t i = 0; i < node->children().size(); ++i) {
     for (BookmarkModelObserver& observer : observers_)
       observer.BookmarkNodeAdded(this, node, i);
-    NotifyNodeAddedForAllDescendents(node->children()[i].get());
+    NotifyNodeAddedForAllDescendants(node->children()[i].get());
   }
 }
 
@@ -801,12 +781,6 @@ void BookmarkModel::RemoveNodeFromIndexRecursive(BookmarkNode* node) {
 
   if (node->is_url())
     titled_url_index_->Remove(node);
-
-  // Note that |guid_index_| is used for DCHECK-enabled builds only.
-#if DCHECK_IS_ON()
-  DCHECK(guid_index_.erase(node->guid()))
-      << "Bookmark GUID missing in index: " << node->guid();
-#endif  // DCHECK_IS_ON()
 
   CancelPendingFaviconLoadRequests(node);
 
@@ -841,10 +815,6 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   other_node_ = details->other_folder_node();
   mobile_node_ = details->mobile_folder_node();
   trash_node_ = details->trash_folder_node();
-
-#if DCHECK_IS_ON()
-  AddGuidsToIndexRecursive(root_, &guid_index_);
-#endif  // DCHECK_IS_ON()
 
   titled_url_index_->SetNodeSorter(
       std::make_unique<TypedCountSorter>(client_.get()));
@@ -886,18 +856,14 @@ BookmarkNode* BookmarkModel::AddNode(BookmarkNode* parent,
   return node_ptr;
 }
 
-void BookmarkModel::AddNodeToIndexRecursive(BookmarkNode* node) {
+void BookmarkModel::AddNodeToIndexRecursive(const BookmarkNode* node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // TODO(crbug.com/1143246): add a DCHECK to validate that all nodes have
+  // unique GUID when it is guaranteed.
 
   if (node->is_url())
     titled_url_index_->Add(node);
-
-  // The node's GUID must be unique. Note that |guid_index_| is used for
-  // DCHECK-enabled builds only.
-#if DCHECK_IS_ON()
-  DCHECK(guid_index_.insert(node->guid()).second)
-      << "Duplicate bookmark GUID: " << node->guid();
-#endif  // DCHECK_IS_ON()
 
   for (const auto& child : node->children())
     AddNodeToIndexRecursive(child.get());

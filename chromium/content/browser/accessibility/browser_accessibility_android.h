@@ -26,7 +26,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   // Overrides from BrowserAccessibility.
   void OnDataChanged() override;
   void OnLocationChanged() override;
-  base::string16 GetValue() const override;
+  base::string16 GetLocalizedStringForImageAnnotationStatus(
+      ax::mojom::ImageAnnotationStatus status) const override;
 
   bool IsCheckable() const;
   bool IsChecked() const;
@@ -46,7 +47,6 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsLink() const;
   bool IsMultiLine() const;
   bool IsMultiselectable() const;
-  bool IsRangeType() const;
   bool IsReportingCheckable() const;
   bool IsScrollable() const;
   bool IsSeekControl() const;
@@ -75,6 +75,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
 
   bool CanOpenPopup() const;
 
+  bool HasAriaCurrent() const;
+
   bool HasFocusableNonOptionChild() const;
   bool HasNonEmptyValue() const;
 
@@ -85,6 +87,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsChildOfLeaf() const override;
   bool IsLeaf() const override;
   base::string16 GetInnerText() const override;
+  base::string16 GetValueForControl() const override;
   base::string16 GetHint() const;
 
   std::string GetRoleString() const;
@@ -97,11 +100,13 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   base::string16 GetCheckboxStateDescription() const;
   base::string16 GetListBoxStateDescription() const;
   base::string16 GetListBoxItemStateDescription() const;
+  base::string16 GetAriaCurrentStateDescription() const;
 
   base::string16 GetRoleDescription() const;
 
   int GetItemIndex() const;
   int GetItemCount() const;
+  int GetSelectedItemCount() const;
 
   bool CanScrollForward() const;
   bool CanScrollBackward() const;
@@ -191,6 +196,9 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
                                    const base::string16 b);
   static size_t CommonEndLengths(const base::string16 a,
                                  const base::string16 b);
+
+  void AppendTextToString(base::string16 extra_text,
+                          base::string16* string) const;
 
   base::string16 cached_text_;
   base::string16 old_value_;

@@ -23,10 +23,11 @@ TEST(SelectorTest, Constructor_WithIframe) {
   Selector selector({"#frame", "#test"});
   ASSERT_EQ(4, selector.proto.filters().size());
   EXPECT_EQ("#frame", selector.proto.filters(0).css_selector());
-  EXPECT_EQ(selector.proto.filters(1).filter_case(),
-            SelectorProto::Filter::kPickOne);
-  EXPECT_EQ(selector.proto.filters(2).filter_case(),
-            SelectorProto::Filter::kEnterFrame);
+  EXPECT_EQ(SelectorProto::Filter::kNthMatch,
+            selector.proto.filters(1).filter_case());
+  EXPECT_EQ(0, selector.proto.filters(1).nth_match().index());
+  EXPECT_EQ(SelectorProto::Filter::kEnterFrame,
+            selector.proto.filters(2).filter_case());
   EXPECT_EQ("#test", selector.proto.filters(3).css_selector());
 }
 
@@ -73,6 +74,25 @@ TEST(SelectorTest, Comparison_Visibility) {
   EXPECT_FALSE(Selector({"a"}) == Selector({"a"}).MustBeVisible());
   EXPECT_TRUE(Selector({"a"}).MustBeVisible() ==
               Selector({"a"}).MustBeVisible());
+}
+
+TEST(SelectorTest, Comparison_NonEmptyBoundingBox) {
+  Selector has_bounding_box_default = Selector({"a"});
+  has_bounding_box_default.proto.add_filters()->mutable_bounding_box();
+
+  Selector has_bounding_box_explicit = Selector({"a"});
+  has_bounding_box_explicit.proto.add_filters()
+      ->mutable_bounding_box()
+      ->set_require_nonempty(false);
+
+  Selector has_nonempty_bounding_box = Selector({"a"});
+  has_nonempty_bounding_box.proto.add_filters()
+      ->mutable_bounding_box()
+      ->set_require_nonempty(true);
+
+  EXPECT_FALSE(has_bounding_box_default == has_nonempty_bounding_box);
+  EXPECT_FALSE(has_bounding_box_explicit == has_nonempty_bounding_box);
+  EXPECT_TRUE(has_bounding_box_default == has_bounding_box_explicit);
 }
 
 TEST(SelectorTest, Comparison_InnerText) {
@@ -136,6 +156,25 @@ TEST(SelectorTest, Comparison_Proximity) {
 
   EXPECT_TRUE(Selector(label2) == Selector(label2));
   EXPECT_FALSE(Selector(selector) == Selector(label2));
+}
+
+TEST(SelectorTest, Comparison_MatchCssSelector) {
+  Selector a = Selector({"button"});
+  a.proto.add_filters()->set_match_css_selector(".class1");
+  Selector b = Selector({"button"});
+  b.proto.add_filters()->set_match_css_selector(".class2");
+
+  EXPECT_FALSE(a == b);
+  EXPECT_TRUE(a == a);
+}
+
+TEST(SelectorTest, Comparison_OnTop) {
+  Selector a = Selector({"button"});
+  a.proto.add_filters()->mutable_on_top();
+  Selector b = Selector({"button"});
+
+  EXPECT_FALSE(a == b);
+  EXPECT_TRUE(a == a);
 }
 
 TEST(SelectorTest, Comparison_Frames) {

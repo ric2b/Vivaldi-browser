@@ -63,8 +63,7 @@ const int kCurrentVersionNumber = 28;
 // version can still read/write the current database.
 const int kCompatibleVersionNumber = 28;
 
-base::Pickle SerializeValueElementPairs(
-    const autofill::ValueElementVector& vec) {
+base::Pickle SerializeValueElementPairs(const ValueElementVector& vec) {
   base::Pickle p;
   for (const auto& pair : vec) {
     p.WriteString16(pair.first);
@@ -73,9 +72,8 @@ base::Pickle SerializeValueElementPairs(
   return p;
 }
 
-autofill::ValueElementVector DeserializeValueElementPairs(
-    const base::Pickle& p) {
-  autofill::ValueElementVector ret;
+ValueElementVector DeserializeValueElementPairs(const base::Pickle& p) {
+  ValueElementVector ret;
   base::string16 value;
   base::string16 field_name;
 
@@ -83,7 +81,7 @@ autofill::ValueElementVector DeserializeValueElementPairs(
   while (iterator.ReadString16(&value)) {
     bool name_success = iterator.ReadString16(&field_name);
     DCHECK(name_success);
-    ret.push_back(autofill::ValueElementPair(value, field_name));
+    ret.push_back(ValueElementPair(value, field_name));
   }
   return ret;
 }
@@ -594,16 +592,6 @@ PasswordForm GetFormForRemoval(const sql::Statement& statement) {
 }
 #endif
 
-// This converts `i` to type `Enum`. Terminates in case `i` is outside the valid
-// ranges for `Enum`. Requires `Enum::kMinValue` and `Enum::kMaxValue` to exist
-// and have correct semantics.
-template <typename Enum>
-Enum ToEnumOrDie(int i) {
-  CHECK_LE(static_cast<int>(Enum::kMinValue), i);
-  CHECK_GE(static_cast<int>(Enum::kMaxValue), i);
-  return static_cast<Enum>(i);
-}
-
 }  // namespace
 
 struct LoginDatabase::PrimaryKeyAndPassword {
@@ -614,16 +602,15 @@ struct LoginDatabase::PrimaryKeyAndPassword {
 
 LoginDatabase::LoginDatabase(const base::FilePath& db_path,
                              IsAccountStore is_account_store)
-    : db_path_(db_path), is_account_store_(is_account_store) {}
+    : db_path_(db_path),
+      is_account_store_(is_account_store),
+      // Set options for a small, private database (based on WebDatabase).
+      db_({.exclusive_locking = true, .page_size = 2048, .cache_size = 32}) {}
 
 LoginDatabase::~LoginDatabase() = default;
 
 bool LoginDatabase::Init() {
   TRACE_EVENT0("passwords", "LoginDatabase::Init");
-  // Set pragmas for a small, private database (based on WebDatabase).
-  db_.set_page_size(2048);
-  db_.set_cache_size(32);
-  db_.set_exclusive_locking();
   db_.set_histogram_tag("Passwords");
 
   if (!db_.Open(db_path_)) {
@@ -1432,9 +1419,11 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   form->date_created =
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_CREATED));
   form->blocked_by_user = (s.ColumnInt(COLUMN_BLACKLISTED_BY_USER) > 0);
-  form->scheme = ToEnumOrDie<PasswordForm::Scheme>(s.ColumnInt(COLUMN_SCHEME));
+  // TODO(crbug.com/1151214): Add metrics to capture how often these values fall
+  // out of the valid enum range.
+  form->scheme = static_cast<PasswordForm::Scheme>(s.ColumnInt(COLUMN_SCHEME));
   form->type =
-      ToEnumOrDie<PasswordForm::Type>(s.ColumnInt(COLUMN_PASSWORD_TYPE));
+      static_cast<PasswordForm::Type>(s.ColumnInt(COLUMN_PASSWORD_TYPE));
   if (s.ColumnByteLength(COLUMN_POSSIBLE_USERNAME_PAIRS)) {
     base::Pickle pickle(
         static_cast<const char*>(s.ColumnBlob(COLUMN_POSSIBLE_USERNAME_PAIRS)),
@@ -1462,7 +1451,7 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
       url::Origin::Create(GURL(s.ColumnString(COLUMN_FEDERATION_URL)));
   form->skip_zero_click = (s.ColumnInt(COLUMN_SKIP_ZERO_CLICK) > 0);
   form->generation_upload_status =
-      ToEnumOrDie<PasswordForm::GenerationUploadStatus>(
+      static_cast<PasswordForm::GenerationUploadStatus>(
           s.ColumnInt(COLUMN_GENERATION_UPLOAD_STATUS));
   form->date_last_used = base::Time::FromDeltaSinceWindowsEpoch(
       base::TimeDelta::FromMicroseconds(s.ColumnInt64(COLUMN_DATE_LAST_USED)));

@@ -59,6 +59,9 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   void UpdateBufferScale(bool update_bounds);
 
   WaylandSurface* root_surface() const { return root_surface_.get(); }
+  WaylandSubsurface* primary_subsurface() const {
+    return primary_subsurface_.get();
+  }
   const WidgetSubsurfaceSet& wayland_subsurfaces() const {
     return wayland_subsurfaces_;
   }
@@ -115,7 +118,7 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   bool IsVisible() const override;
   void PrepareForShutdown() override;
   void SetBounds(const gfx::Rect& bounds) override;
-  gfx::Rect GetBounds() override;
+  gfx::Rect GetBounds() const override;
   void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
@@ -229,13 +232,21 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   WaylandWindow* parent_window_ = nullptr;
   WaylandWindow* child_window_ = nullptr;
 
+  bool should_attach_background_buffer_ = false;
+  uint32_t background_buffer_id_ = 0u;
+  // |root_surface_| is a surface for the opaque background. Its z-order is
+  // INT32_MIN.
   std::unique_ptr<WaylandSurface> root_surface_;
+  // |primary_subsurface| is the primary that shows the widget content.
+  std::unique_ptr<WaylandSubsurface> primary_subsurface_;
+  // Subsurfaces excluding the primary_subsurface
   WidgetSubsurfaceSet wayland_subsurfaces_;
+  bool wayland_overlay_delegation_enabled_;
 
   // The stack of sub-surfaces to take effect when Commit() is called.
   // |subsurface_stack_above_| refers to subsurfaces that are stacked above the
-  // parent.
-  // Subsurface at the front of the list is the closest to the parent.
+  // primary.
+  // Subsurface at the front of the list is the closest to the primary.
   std::list<WaylandSubsurface*> subsurface_stack_above_;
   std::list<WaylandSubsurface*> subsurface_stack_below_;
 

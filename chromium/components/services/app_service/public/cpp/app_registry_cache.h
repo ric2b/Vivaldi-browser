@@ -31,7 +31,7 @@ namespace apps {
 //
 // This class is not thread-safe.
 //
-// See //components/services/app_service/README.md for more details.
+// See components/services/app_service/README.md for more details.
 class COMPONENT_EXPORT(APP_UPDATE) AppRegistryCache {
  public:
   class COMPONENT_EXPORT(APP_UPDATE) Observer : public base::CheckedObserver {
@@ -43,7 +43,7 @@ class COMPONENT_EXPORT(APP_UPDATE) AppRegistryCache {
     // Called when the AppRegistryCache object (the thing that this observer
     // observes) will be destroyed. In response, the observer, |this|, should
     // call "cache->RemoveObserver(this)", whether directly or indirectly (e.g.
-    // via ScopedObserver::Remove or via Observe(nullptr)).
+    // via base::ScopedObservation::Remove or via Observe(nullptr)).
     virtual void OnAppRegistryCacheWillBeDestroyed(AppRegistryCache* cache) = 0;
 
    protected:

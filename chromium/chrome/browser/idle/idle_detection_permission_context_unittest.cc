@@ -35,7 +35,7 @@ class TestIdleDetectionPermissionContext
                                           const GURL& url_b) {
     return HostContentSettingsMapFactory::GetForProfile(browser_context())
         ->GetContentSetting(url_a.GetOrigin(), url_b.GetOrigin(),
-                            content_settings_type(), std::string());
+                            content_settings_type());
   }
 
  private:
@@ -45,13 +45,14 @@ class TestIdleDetectionPermissionContext
                            const GURL& embedder_origin,
                            permissions::BrowserPermissionCallback callback,
                            bool persist,
-                           ContentSetting content_setting) override {
+                           ContentSetting content_setting,
+                           bool is_one_time) override {
     permission_set_count_++;
     last_permission_set_persisted_ = persist;
     last_permission_set_setting_ = content_setting;
     IdleDetectionPermissionContext::NotifyPermissionSet(
         id, requesting_origin, embedder_origin, std::move(callback), persist,
-        content_setting);
+        content_setting, is_one_time);
   }
 
   int permission_set_count_;

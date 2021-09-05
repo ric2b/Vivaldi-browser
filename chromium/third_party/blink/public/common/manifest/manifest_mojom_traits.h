@@ -55,6 +55,16 @@ struct BLINK_COMMON_EXPORT
     return internal::TruncateOptionalString16(manifest.short_name);
   }
 
+  static base::Optional<base::StringPiece16> description(
+      const ::blink::Manifest& manifest) {
+    return internal::TruncateOptionalString16(manifest.description);
+  }
+
+  static const std::vector<base::string16>& categories(
+      const ::blink::Manifest& manifest) {
+    return manifest.categories;
+  }
+
   static base::Optional<base::StringPiece16> gcm_sender_id(
       const ::blink::Manifest& manifest) {
     return internal::TruncateOptionalString16(manifest.gcm_sender_id);
@@ -103,6 +113,11 @@ struct BLINK_COMMON_EXPORT
     return manifest.icons;
   }
 
+  static const std::vector<::blink::Manifest::ImageResource>& screenshots(
+      const ::blink::Manifest& manifest) {
+    return manifest.screenshots;
+  }
+
   static const std::vector<::blink::Manifest::ShortcutItem>& shortcuts(
       const ::blink::Manifest& manifest) {
     return manifest.shortcuts;
@@ -121,6 +136,11 @@ struct BLINK_COMMON_EXPORT
   static const std::vector<::blink::Manifest::ProtocolHandler>&
   protocol_handlers(const ::blink::Manifest& manifest) {
     return manifest.protocol_handlers;
+  }
+
+  static const std::vector<::blink::Manifest::UrlHandler>& url_handlers(
+      const ::blink::Manifest& manifest) {
+    return manifest.url_handlers;
   }
 
   static const std::vector<::blink::Manifest::RelatedApplication>&
@@ -152,8 +172,8 @@ struct BLINK_COMMON_EXPORT
     return icon.sizes;
   }
 
-  static const std::vector<::blink::Manifest::ImageResource::Purpose>& purpose(
-      const ::blink::Manifest::ImageResource& icon) {
+  static const std::vector<::blink::mojom::ManifestImageResource_Purpose>&
+  purpose(const ::blink::Manifest::ImageResource& icon) {
     return icon.purpose;
   }
 
@@ -241,6 +261,19 @@ struct BLINK_COMMON_EXPORT
 
 template <>
 struct BLINK_COMMON_EXPORT
+    StructTraits<blink::mojom::ManifestUrlHandlerDataView,
+                 ::blink::Manifest::UrlHandler> {
+  static const url::Origin& origin(
+      const ::blink::Manifest::UrlHandler& url_handler) {
+    return url_handler.origin;
+  }
+
+  static bool Read(blink::mojom::ManifestUrlHandlerDataView data,
+                   ::blink::Manifest::UrlHandler* out);
+};
+
+template <>
+struct BLINK_COMMON_EXPORT
     StructTraits<blink::mojom::ManifestShareTargetParamsDataView,
                  ::blink::Manifest::ShareTargetParams> {
   static const base::Optional<base::StringPiece16> text(
@@ -272,11 +305,11 @@ struct BLINK_COMMON_EXPORT
       const ::blink::Manifest::ShareTarget& share_target) {
     return share_target.action;
   }
-  static ::blink::Manifest::ShareTarget::Method method(
+  static ::blink::mojom::ManifestShareTarget_Method method(
       const ::blink::Manifest::ShareTarget& share_target) {
     return share_target.method;
   }
-  static ::blink::Manifest::ShareTarget::Enctype enctype(
+  static ::blink::mojom::ManifestShareTarget_Enctype enctype(
       const ::blink::Manifest::ShareTarget& share_target) {
     return share_target.enctype;
   }
@@ -323,99 +356,6 @@ struct BLINK_COMMON_EXPORT
   }
   static bool Read(blink::mojom::ManifestProtocolHandlerDataView data,
                    ::blink::Manifest::ProtocolHandler* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT
-    EnumTraits<blink::mojom::ManifestImageResource_Purpose,
-               ::blink::Manifest::ImageResource::Purpose> {
-  static blink::mojom::ManifestImageResource_Purpose ToMojom(
-      ::blink::Manifest::ImageResource::Purpose purpose) {
-    switch (purpose) {
-      case ::blink::Manifest::ImageResource::Purpose::ANY:
-        return blink::mojom::ManifestImageResource_Purpose::ANY;
-      case ::blink::Manifest::ImageResource::Purpose::MONOCHROME:
-        return blink::mojom::ManifestImageResource_Purpose::MONOCHROME;
-      case ::blink::Manifest::ImageResource::Purpose::MASKABLE:
-        return blink::mojom::ManifestImageResource_Purpose::MASKABLE;
-    }
-    NOTREACHED();
-    return blink::mojom::ManifestImageResource_Purpose::ANY;
-  }
-  static bool FromMojom(blink::mojom::ManifestImageResource_Purpose input,
-                        ::blink::Manifest::ImageResource::Purpose* out) {
-    switch (input) {
-      case blink::mojom::ManifestImageResource_Purpose::ANY:
-        *out = ::blink::Manifest::ImageResource::Purpose::ANY;
-        return true;
-      case blink::mojom::ManifestImageResource_Purpose::MONOCHROME:
-        *out = ::blink::Manifest::ImageResource::Purpose::MONOCHROME;
-        return true;
-      case blink::mojom::ManifestImageResource_Purpose::MASKABLE:
-        *out = ::blink::Manifest::ImageResource::Purpose::MASKABLE;
-        return true;
-    }
-
-    return false;
-  }
-};
-
-template <>
-struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::ManifestShareTarget_Method,
-                                      ::blink::Manifest::ShareTarget::Method> {
-  static blink::mojom::ManifestShareTarget_Method ToMojom(
-      ::blink::Manifest::ShareTarget::Method method) {
-    switch (method) {
-      case ::blink::Manifest::ShareTarget::Method::kGet:
-        return blink::mojom::ManifestShareTarget_Method::kGet;
-      case ::blink::Manifest::ShareTarget::Method::kPost:
-        return blink::mojom::ManifestShareTarget_Method::kPost;
-    }
-    NOTREACHED();
-    return blink::mojom::ManifestShareTarget_Method::kGet;
-  }
-  static bool FromMojom(blink::mojom::ManifestShareTarget_Method input,
-                        ::blink::Manifest::ShareTarget::Method* out) {
-    switch (input) {
-      case blink::mojom::ManifestShareTarget_Method::kGet:
-        *out = ::blink::Manifest::ShareTarget::Method::kGet;
-        return true;
-      case blink::mojom::ManifestShareTarget_Method::kPost:
-        *out = ::blink::Manifest::ShareTarget::Method::kPost;
-        return true;
-    }
-
-    return false;
-  }
-};
-
-template <>
-struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::ManifestShareTarget_Enctype,
-                                      ::blink::Manifest::ShareTarget::Enctype> {
-  static blink::mojom::ManifestShareTarget_Enctype ToMojom(
-      ::blink::Manifest::ShareTarget::Enctype enctype) {
-    switch (enctype) {
-      case ::blink::Manifest::ShareTarget::Enctype::kFormUrlEncoded:
-        return blink::mojom::ManifestShareTarget_Enctype::kFormUrlEncoded;
-      case ::blink::Manifest::ShareTarget::Enctype::kMultipartFormData:
-        return blink::mojom::ManifestShareTarget_Enctype::kMultipartFormData;
-    }
-    NOTREACHED();
-    return blink::mojom::ManifestShareTarget_Enctype::kFormUrlEncoded;
-  }
-  static bool FromMojom(blink::mojom::ManifestShareTarget_Enctype input,
-                        ::blink::Manifest::ShareTarget::Enctype* out) {
-    switch (input) {
-      case blink::mojom::ManifestShareTarget_Enctype::kFormUrlEncoded:
-        *out = ::blink::Manifest::ShareTarget::Enctype::kFormUrlEncoded;
-        return true;
-      case blink::mojom::ManifestShareTarget_Enctype::kMultipartFormData:
-        *out = ::blink::Manifest::ShareTarget::Enctype::kMultipartFormData;
-        return true;
-    }
-
-    return false;
-  }
 };
 
 }  // namespace mojo

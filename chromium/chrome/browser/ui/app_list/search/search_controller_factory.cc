@@ -16,7 +16,6 @@
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/search/answer_card/answer_card_search_provider.h"
 #include "chrome/browser/ui/app_list/search/app_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_app_data_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_app_reinstall_search_provider.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/ui/app_list/search/assistant_text_search_provider.h"
 #include "chrome/browser/ui/app_list/search/drive_quick_access_provider.h"
 #include "chrome/browser/ui/app_list/search/files/drive_zero_state_provider.h"
+#include "chrome/browser/ui/app_list/search/help_app_provider.h"
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_provider.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/omnibox_provider.h"
@@ -57,8 +57,9 @@ constexpr size_t kGenericMaxResults = 10;
 
 // Some app results may be blocklisted (e.g. continue reading) for rendering
 // in some UI, so we need to allow returning more results than actual maximum
-// number of results to be displayed in UI.
-constexpr size_t kMaxAppsGroupResults = 7;
+// number of results to be displayed in UI. This also accounts for two results
+// (tile and chip) being created for each app.
+constexpr size_t kMaxAppsGroupResults = 14;
 constexpr size_t kMaxLauncherSearchResults = 4;
 // We need twice as many ZeroState and Drive file results as we need
 // duplicates of these results for the suggestion chips.
@@ -69,7 +70,8 @@ constexpr size_t kMaxAppReinstallSearchResults = 1;
 // be filtered out because they may correspond to already installed Web apps. So
 // we request twice as many Play Store apps as we can show. Note that this still
 // doesn't guarantee that all 6 positions will be filled, as we might in theory
-// filter out more than half of results.
+// filter out more than half of results. Double this again to account for two
+// results (tile and chip) being created for each app.
 // TODO(753947): Consider progressive algorithm of getting Play Store results.
 constexpr size_t kMaxPlayStoreResults = 12;
 
@@ -101,7 +103,6 @@ std::unique_ptr<SearchController> CreateSearchController(
   controller->InitializeRankers();
 
   size_t apps_group_id = controller->AddGroup(kMaxAppsGroupResults);
-  size_t answer_card_group_id = controller->AddGroup(1);
 
   size_t omnibox_group_id = controller->AddGroup(
       ash::AppListConfig::instance().max_search_result_list_items());
@@ -111,11 +112,6 @@ std::unique_ptr<SearchController> CreateSearchController(
       apps_group_id, std::make_unique<AppSearchProvider>(
                          profile, list_controller,
                          base::DefaultClock::GetInstance(), model_updater));
-  if (app_list_features::IsAnswerCardEnabled()) {
-    controller->AddProvider(answer_card_group_id,
-                            std::make_unique<AnswerCardSearchProvider>(
-                                profile, model_updater, list_controller));
-  }
 
   controller->AddProvider(omnibox_group_id, std::make_unique<OmniboxProvider>(
                                                 profile, list_controller));
@@ -209,6 +205,10 @@ std::unique_ptr<SearchController> CreateSearchController(
     controller->AddProvider(os_settings_search_group_id,
                             std::make_unique<OsSettingsProvider>(profile));
   }
+
+  size_t help_app_group_id = controller->AddGroup(kGenericMaxResults);
+  controller->AddProvider(help_app_group_id,
+                          std::make_unique<HelpAppProvider>(profile));
 
   return controller;
 }

@@ -10,7 +10,7 @@
 <translation id="1201402288615127009">Следно</translation>
 <translation id="1218444235442067213"><ph name="APP_NAME" />, апликација од Play Store</translation>
 <translation id="1243314992276662751">Постави</translation>
-<translation id="1266864766717917324">Не можеше да се сподели <ph name="CONTENT_TYPE" /></translation>
+<translation id="1266864766717917324">Не може да се сподели <ph name="CONTENT_TYPE" /></translation>
 <translation id="1269641567813814718">Win</translation>
 <translation id="1290982764014248209">Преместете ја <ph name="DRAGGED_APP" /> во папката <ph name="FOLDER_NAME" />.</translation>
 <translation id="1291104554099683393">Обидете се да споделите помали парчиња.</translation>
@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Не може да се сподели <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> се замени со <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Го пребарувавте ова порано. Ако го избришете „<ph name="QUERY" />“ од историјата, трајно ќе се отстрани од вашата сметка на сите уреди.</translation>
+<translation id="1510238584712386396">Стартер</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 минута и }one{# минута и }other{# минути и }}</translation>
 <translation id="1643823602425662293">Известување</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Датотека <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Побарај „<ph name="LOOKUP_STRING" />“</translation>
+<translation id="3622035490309591977">Историја на привремената меморија</translation>
 <translation id="364720409959344976">Избери папка за да се постави</translation>
 <translation id="3660179305079774227">Стрелка нагоре</translation>
 <translation id="3670030362669914947">Број</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Активен денес}=1{Активен пред 1 ден}one{Активен пред # ден}other{Активен пред # дена}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ден и }one{# ден и }other{# дена и }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Слика.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{за 1 г.}one{за # г.}other{за # г.}}</translation>
 <translation id="588258955323874662">Цел екран</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Преостана 1 секунда}one{Преостана # секунда}other{Преостанаа # секунди}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">притисни</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Преостана 1 час}one{Преостана # час}other{Преостанаа # часа}}</translation>
 <translation id="688711909580084195">Неименувана веб-страница</translation>
+<translation id="6902419395050653510">HTML-содржини.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> ПБ/сек.</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Преостанува 1 година}one{Преостанува # година}other{Преостануваат # години}}</translation>
 <translation id="6945221475159498467">Избери</translation>

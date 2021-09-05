@@ -13,7 +13,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -119,6 +119,12 @@ class TestObserver final : public chromeos::NetworkStateHandlerObserver {
             << " State: " << default_network_connection_state_;
   }
 
+  void PortalStateChanged(const NetworkState* default_network,
+                          NetworkState::PortalState portal_state) override {
+    default_network_portal_state_ = portal_state;
+    VLOG(1) << "PortalStateChanged: " << static_cast<int>(portal_state);
+  }
+
   void NetworkConnectionStateChanged(const NetworkState* network) override {
     network_connection_state_[network->path()] = network->connection_state();
     connection_state_changes_[network->path()]++;
@@ -188,6 +194,9 @@ class TestObserver final : public chromeos::NetworkStateHandlerObserver {
   std::string default_network_connection_state() {
     return default_network_connection_state_;
   }
+  NetworkState::PortalState default_network_portal_state() {
+    return default_network_portal_state_;
+  }
 
   int PropertyUpdatesForService(const std::string& service_path) {
     return property_updates_[service_path];
@@ -220,6 +229,7 @@ class TestObserver final : public chromeos::NetworkStateHandlerObserver {
   std::vector<std::string> active_network_paths_;
   std::string default_network_;
   std::string default_network_connection_state_;
+  NetworkState::PortalState default_network_portal_state_;
   std::map<std::string, int> property_updates_;
   std::map<std::string, int> device_property_updates_;
   std::map<std::string, int> connection_state_changes_;
@@ -1819,6 +1829,28 @@ TEST_F(NetworkStateHandlerTest, DefaultServiceChanged) {
   EXPECT_EQ(2u, test_observer_->default_network_change_count());
 }
 
+TEST_F(NetworkStateHandlerTest, PortalStateChanged) {
+  // Remove Ethernet.
+  manager_test_->RemoveTechnology(shill::kTypeEthernet);
+  service_test_->RemoveService(kShillManagerClientStubDefaultService);
+  manager_test_->SetManagerProperty(
+      shill::kDefaultServiceProperty,
+      base::Value(kShillManagerClientStubDefaultWifi));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(test_observer_->default_network(),
+            kShillManagerClientStubDefaultWifi);
+
+  // Set WiFi to portal-suspected and ensure observer is triggered.
+  ASSERT_EQ(NetworkState::PortalState::kOnline,
+            test_observer_->default_network_portal_state());
+  service_test_->SetServiceProperty(kShillManagerClientStubDefaultWifi,
+                                    shill::kStateProperty,
+                                    base::Value(shill::kStatePortalSuspected));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(NetworkState::PortalState::kPortalSuspected,
+            test_observer_->default_network_portal_state());
+}
+
 TEST_F(NetworkStateHandlerTest, RequestUpdate) {
   // Request an update for kShillManagerClientStubDefaultWifi.
   EXPECT_EQ(1, test_observer_->PropertyUpdatesForService(
@@ -2060,48 +2092,6 @@ TEST_F(NetworkStateHandlerTest, RemoveDefaultCellularNetwork) {
       NetworkTypePattern::Cellular(), false /* configured_only */,
       false /* visible_only */, 0, &cellular_networks);
   EXPECT_EQ(0u, cellular_networks.size());
-}
-
-TEST_F(NetworkStateHandlerTest, UpdateCaptivePortalProvider) {
-  constexpr char kProviderId[] = "TestProviderId";
-  constexpr char kProviderName[] = "TestProviderName";
-
-  // Verify initial state.
-  const NetworkState* wifi1 = network_state_handler_->GetNetworkState(
-      kShillManagerClientStubDefaultWifi);
-  ASSERT_TRUE(wifi1);
-  const NetworkState::CaptivePortalProviderInfo* info =
-      wifi1->captive_portal_provider();
-  EXPECT_EQ(nullptr, info);
-
-  // Verify that setting a captive portal provider applies to existing networks.
-  std::string hex_ssid = wifi1->GetHexSsid();
-  ASSERT_FALSE(hex_ssid.empty());
-  network_state_handler_->SetCaptivePortalProviderForHexSsid(
-      hex_ssid, kProviderId, kProviderName);
-  base::RunLoop().RunUntilIdle();
-
-  info = wifi1->captive_portal_provider();
-  ASSERT_NE(nullptr, info);
-  EXPECT_EQ(kProviderId, info->id);
-  EXPECT_EQ(kProviderName, info->name);
-
-  // Verify that adding a new network sets its captive portal provider.
-  constexpr char kNewSsid[] = "new_wifi";
-  std::string new_hex_ssid = base::HexEncode(kNewSsid, strlen(kNewSsid));
-  network_state_handler_->SetCaptivePortalProviderForHexSsid(
-      new_hex_ssid, kProviderId, kProviderName);
-  AddService("/service/new_wifi", "new_wifi_guid", kNewSsid, shill::kTypeWifi,
-             shill::kStateOnline);
-  base::RunLoop().RunUntilIdle();
-
-  const NetworkState* new_wifi =
-      network_state_handler_->GetNetworkState("/service/new_wifi");
-  ASSERT_TRUE(new_wifi);
-  info = new_wifi->captive_portal_provider();
-  ASSERT_NE(nullptr, info);
-  EXPECT_EQ(kProviderId, info->id);
-  EXPECT_EQ(kProviderName, info->name);
 }
 
 TEST_F(NetworkStateHandlerTest, BlockedByPolicyBlocked) {

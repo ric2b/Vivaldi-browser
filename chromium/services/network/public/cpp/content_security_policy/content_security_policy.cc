@@ -114,6 +114,45 @@ std::string ElideURLForReportViolation(const GURL& url) {
   return url.spec();
 }
 
+bool SupportedInReportOnly(CSPDirectiveName directive) {
+  switch (directive) {
+    case CSPDirectiveName::Sandbox:
+    case CSPDirectiveName::UpgradeInsecureRequests:
+    case CSPDirectiveName::TreatAsPublicAddress:
+      return false;
+
+    case CSPDirectiveName::BaseURI:
+    case CSPDirectiveName::BlockAllMixedContent:
+    case CSPDirectiveName::ChildSrc:
+    case CSPDirectiveName::ConnectSrc:
+    case CSPDirectiveName::DefaultSrc:
+    case CSPDirectiveName::FontSrc:
+    case CSPDirectiveName::FormAction:
+    case CSPDirectiveName::FrameAncestors:
+    case CSPDirectiveName::FrameSrc:
+    case CSPDirectiveName::ImgSrc:
+    case CSPDirectiveName::ManifestSrc:
+    case CSPDirectiveName::MediaSrc:
+    case CSPDirectiveName::NavigateTo:
+    case CSPDirectiveName::ObjectSrc:
+    case CSPDirectiveName::PluginTypes:
+    case CSPDirectiveName::PrefetchSrc:
+    case CSPDirectiveName::ReportTo:
+    case CSPDirectiveName::ReportURI:
+    case CSPDirectiveName::RequireTrustedTypesFor:
+    case CSPDirectiveName::ScriptSrc:
+    case CSPDirectiveName::ScriptSrcAttr:
+    case CSPDirectiveName::ScriptSrcElem:
+    case CSPDirectiveName::StyleSrc:
+    case CSPDirectiveName::StyleSrcAttr:
+    case CSPDirectiveName::StyleSrcElem:
+    case CSPDirectiveName::TrustedTypes:
+    case CSPDirectiveName::Unknown:
+    case CSPDirectiveName::WorkerSrc:
+      return true;
+  };
+}
+
 // Return the error message specific to one CSP |directive|.
 // $1: Blocked URL.
 // $2: Blocking policy.
@@ -220,12 +259,27 @@ const GURL ExtractInnerURL(const GURL& url) {
     return GURL(url.path());
 }
 
-bool ShouldBypassContentSecurityPolicy(CSPContext* context, const GURL& url) {
-  if (url.SchemeIsFileSystem() || url.SchemeIsBlob()) {
-    return context->SchemeShouldBypassCSP(ExtractInnerURL(url).scheme());
-  } else {
-    return context->SchemeShouldBypassCSP(url.scheme());
-  }
+std::string InnermostScheme(const GURL& url) {
+  if (url.SchemeIsFileSystem() || url.SchemeIsBlob())
+    return ExtractInnerURL(url).scheme();
+  return url.scheme();
+}
+
+// Extensions can load their own internal content into the document. They
+// shouldn't be blocked by the document's CSP.
+//
+// There is an exception: CSP:frame-ancestors. This one is not about allowing a
+// document to embed other resources. This is about being embedded. As such
+// this shouldn't be bypassed. A document should be able to deny being embedded
+// inside an extension.
+// See https://crbug.com/1115590
+bool ShouldBypassContentSecurityPolicy(CSPContext* context,
+                                       CSPDirectiveName directive,
+                                       const GURL& url) {
+  if (directive == CSPDirectiveName::FrameAncestors)
+    return false;
+
+  return context->SchemeShouldBypassCSP(InnermostScheme(url));
 }
 
 // Parses a "Content-Security-Policy" header.
@@ -753,6 +807,15 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
       continue;
     }
 
+    if (type == mojom::ContentSecurityPolicyType::kReport &&
+        !SupportedInReportOnly(directive_name)) {
+      out->parsing_errors.emplace_back(
+          base::StringPrintf("The Content Security Policy directive '%s' is "
+                             "ignored when delivered in a report-only policy.",
+                             directive.first.as_string().c_str()));
+      continue;
+    }
+
     switch (directive_name) {
       case CSPDirectiveName::BaseURI:
       case CSPDirectiveName::ChildSrc:
@@ -784,7 +847,7 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
         {
           auto sandbox = ParseWebSandboxPolicy(directive.second,
                                                mojom::WebSandboxFlags::kNone);
-          out->sandbox = ~sandbox.flags;
+          out->sandbox = sandbox.flags;
           out->parsing_errors.emplace_back(std::move(sandbox.error_message));
         }
         break;
@@ -982,7 +1045,7 @@ bool CheckContentSecurityPolicy(const mojom::ContentSecurityPolicyPtr& policy,
                                 CSPContext* context,
                                 const mojom::SourceLocationPtr& source_location,
                                 bool is_form_submission) {
-  if (ShouldBypassContentSecurityPolicy(context, url))
+  if (ShouldBypassContentSecurityPolicy(context, directive_name, url))
     return true;
 
   // 'navigate-to' has no effect when doing a form submission and a

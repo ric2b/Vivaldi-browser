@@ -18,7 +18,7 @@
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -52,8 +52,8 @@
 #include "url/url_constants.h"
 
 using base::WaitableEvent;
-using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertJavaStringToUTF16;
+using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
@@ -352,7 +352,8 @@ net::CookieStore* CookieManager::GetCookieStore() {
     // compatibility reasons.
     cookie_store_->SetCookieAccessDelegate(
         std::make_unique<network::CookieAccessDelegateImpl>(
-            network::mojom::CookieAccessDelegateType::ALWAYS_LEGACY));
+            network::mojom::CookieAccessDelegateType::ALWAYS_LEGACY,
+            nullptr /* preloaded_first_party_sets */));
   }
 
   return cookie_store_.get();

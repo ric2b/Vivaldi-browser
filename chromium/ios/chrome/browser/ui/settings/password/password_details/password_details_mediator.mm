@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_mediator.h"
 
 #include "base/strings/sys_string_conversions.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "ios/chrome/browser/passwords/password_check_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_consumer.h"
@@ -28,11 +28,15 @@ using InsecureCredentialsView =
   std::unique_ptr<PasswordCheckObserverBridge> _passwordCheckObserver;
 }
 
+// List of the usernames for the same domain.
+@property(nonatomic, strong) NSSet<NSString*>* usernamesWithSameDomain;
+
 @end
 
 @implementation PasswordDetailsMediator
 
-- (instancetype)initWithPassword:(const autofill::PasswordForm&)passwordForm
+- (instancetype)initWithPassword:
+                    (const password_manager::PasswordForm&)passwordForm
             passwordCheckManager:(IOSChromePasswordCheckManager*)manager {
   self = [super init];
   if (self) {
@@ -40,6 +44,16 @@ using InsecureCredentialsView =
     _password = passwordForm;
     _passwordCheckObserver.reset(
         new PasswordCheckObserverBridge(self, manager));
+    NSMutableSet<NSString*>* usernames = [[NSMutableSet alloc] init];
+    auto forms = manager->GetAllCredentials();
+    for (const auto& form : forms) {
+      if (form.signon_realm == passwordForm.signon_realm) {
+        [usernames addObject:base::SysUTF16ToNSString(form.username_value)];
+      }
+    }
+    [usernames
+        removeObject:base::SysUTF16ToNSString(passwordForm.username_value)];
+    _usernamesWithSameDomain = usernames;
   }
   return self;
 }
@@ -62,15 +76,21 @@ using InsecureCredentialsView =
             (PasswordDetailsTableViewController*)viewController
                didEditPasswordDetails:(PasswordDetails*)password {
   if ([password.password length] != 0) {
-    password.compromised
-        ? _manager->EditCompromisedPasswordForm(
-              _password, base::SysNSStringToUTF8(password.password))
-        : _manager->EditPasswordForm(
-              _password, base::SysNSStringToUTF8(password.password));
-    _password.password_value = base::SysNSStringToUTF16(password.password);
-  } else {
-    [self fetchPasswordWith:_manager->GetCompromisedCredentials()];
+    if (_manager->EditPasswordForm(
+            _password, base::SysNSStringToUTF8(password.username),
+            base::SysNSStringToUTF8(password.password))) {
+      _password.username_value = base::SysNSStringToUTF16(password.username);
+      _password.password_value = base::SysNSStringToUTF16(password.password);
+      return;
+    }
   }
+  [self fetchPasswordWith:_manager->GetCompromisedCredentials()];
+}
+
+- (BOOL)isUsernameReused:(NSString*)newUsername {
+  // It is more efficient to check set of the usernames for the same origin
+  // instead of delegating this to the |_manager|.
+  return [self.usernamesWithSameDomain containsObject:newUsername];
 }
 
 #pragma mark - PasswordCheckObserver

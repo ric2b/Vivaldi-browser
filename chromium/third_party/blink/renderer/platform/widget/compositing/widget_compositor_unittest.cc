@@ -16,9 +16,12 @@ namespace blink {
 class StubWidgetBaseClient : public WidgetBaseClient {
  public:
   void BeginMainFrame(base::TimeTicks) override {}
-  void RecordTimeToFirstActivePaint(base::TimeDelta) override {}
   void UpdateLifecycle(WebLifecycleUpdate, DocumentUpdateReason) override {}
-  void RequestNewLayerTreeFrameSink(LayerTreeFrameSinkCallback) override {}
+  std::unique_ptr<cc::LayerTreeFrameSink> AllocateNewLayerTreeFrameSink()
+      override {
+    return nullptr;
+  }
+  KURL GetURLForDebugTrace() override { return {}; }
   WebInputEventResult DispatchBufferedTouchEvents() override {
     return WebInputEventResult::kNotHandled;
   }
@@ -27,7 +30,7 @@ class StubWidgetBaseClient : public WidgetBaseClient {
   }
   bool SupportsBufferedTouchEvents() override { return false; }
   bool WillHandleGestureEvent(const WebGestureEvent&) override { return false; }
-  bool WillHandleMouseEvent(const WebMouseEvent&) override { return false; }
+  void WillHandleMouseEvent(const WebMouseEvent&) override {}
   void ObserveGestureEventAndResult(const WebGestureEvent&,
                                     const gfx::Vector2dF&,
                                     const cc::OverscrollBehavior&,
@@ -66,14 +69,19 @@ class WidgetCompositorTest : public cc::LayerTreeTest {
   using CompositorMode = cc::CompositorMode;
 
   void BeginTest() override {
+    mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+    mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+        widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<mojom::blink::WidgetHost> widget_host_remote;
+    ignore_result(widget_host_remote.BindNewEndpointAndPassDedicatedReceiver());
+
     widget_base_ = std::make_unique<WidgetBase>(
-        &client_,
-        blink::CrossVariantMojoAssociatedRemote<
-            blink::mojom::WidgetHostInterfaceBase>(),
-        blink::CrossVariantMojoAssociatedReceiver<
-            blink::mojom::WidgetInterfaceBase>(),
-        /* is_hidden */ false,
-        /* never_composited */ false);
+        &client_, widget_host_remote.Unbind(), std::move(widget_receiver),
+        base::ThreadTaskRunnerHandle::Get(),
+        /*is_hidden=*/false,
+        /*never_composited=*/false,
+        /*is_for_child_local_root=*/false);
 
     widget_compositor_ = base::MakeRefCounted<FakeWidgetCompositor>(
         layer_tree_host(), widget_base_->GetWeakPtr(),

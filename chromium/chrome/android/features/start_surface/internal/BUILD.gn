@@ -6,6 +6,7 @@ import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
 import("//components/feed/features.gni")
+import("//tools/grit/grit_rule.gni")
 
 java_strings_grd("java_strings_grd") {
   defines = chrome_grit_defines
@@ -70,13 +71,14 @@ android_library("java") {
     "//base:base_java",
     "//chrome/android:chrome_java",
     "//chrome/android/feed:chrome_feed_java_resources",
-    "//chrome/android/third_party/compositor_animator:compositor_animator_java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/tab:java",
     "//chrome/browser/tabmodel:java",
+    "//chrome/browser/ui/android/layouts:java",
+    "//chrome/browser/ui/android/layouts/third_party/float_property:java",
     "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
     "//chrome/browser/version:java",

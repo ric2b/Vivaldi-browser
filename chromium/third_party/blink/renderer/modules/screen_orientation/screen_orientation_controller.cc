@@ -7,6 +7,8 @@
 #include <memory>
 #include <utility>
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -101,15 +103,15 @@ void ScreenOrientationController::UpdateOrientation() {
   DCHECK(orientation_);
   DCHECK(GetPage());
   ChromeClient& chrome_client = GetPage()->GetChromeClient();
-  ScreenInfo screen_info = chrome_client.GetScreenInfo(*GetFrame());
+  LocalFrame& frame = *DomWindow()->GetFrame();
+  ScreenInfo screen_info = chrome_client.GetScreenInfo(frame);
   mojom::blink::ScreenOrientation orientation_type =
       screen_info.orientation_type;
   if (orientation_type == mojom::blink::ScreenOrientation::kUndefined) {
     // The embedder could not provide us with an orientation, deduce it
     // ourselves.
-    orientation_type =
-        ComputeOrientation(chrome_client.GetScreenInfo(*GetFrame()).rect,
-                           screen_info.orientation_angle);
+    orientation_type = ComputeOrientation(
+        chrome_client.GetScreenInfo(frame).rect, screen_info.orientation_angle);
   }
   DCHECK(orientation_type != mojom::blink::ScreenOrientation::kUndefined);
 
@@ -130,26 +132,31 @@ void ScreenOrientationController::PageVisibilityChanged() {
 
   // The orientation type and angle are tied in a way that if the angle has
   // changed, the type must have changed.
+  LocalFrame& frame = *DomWindow()->GetFrame();
   uint16_t current_angle =
-      GetPage()->GetChromeClient().GetScreenInfo(*GetFrame()).orientation_angle;
+      GetPage()->GetChromeClient().GetScreenInfo(frame).orientation_angle;
 
   // FIXME: sendOrientationChangeEvent() currently send an event all the
   // children of the frame, so it should only be called on the frame on
   // top of the tree. We would need the embedder to call
   // sendOrientationChangeEvent on every WebFrame part of a WebView to be
   // able to remove this.
-  if (GetFrame() == GetFrame()->LocalFrameRoot() &&
+  if (&frame == frame.LocalFrameRoot() &&
       orientation_->angle() != current_angle)
     NotifyOrientationChanged();
 }
 
 void ScreenOrientationController::NotifyOrientationChanged() {
+  // TODO(dcheng): Remove this and check in the caller.
+  if (!DomWindow())
+    return;
+
   // Keep track of the frames that need to be notified before notifying the
   // current frame as it will prevent side effects from the change event
   // handlers.
   HeapVector<Member<LocalFrame>> frames;
-  for (Frame* frame = GetFrame(); frame;
-       frame = frame->Tree().TraverseNext(GetFrame())) {
+  for (Frame* frame = DomWindow()->GetFrame(); frame;
+       frame = frame->Tree().TraverseNext(DomWindow()->GetFrame())) {
     if (auto* local_frame = DynamicTo<LocalFrame>(frame))
       frames.push_back(local_frame);
   }
@@ -237,6 +244,18 @@ void ScreenOrientationController::OnLockOrientationResult(
     ScreenOrientationLockResult result) {
   if (!pending_callback_ || request_id != request_id_)
     return;
+
+  if (IdentifiabilityStudySettings::Get()->ShouldSample(
+          IdentifiableSurface::FromTypeAndToken(
+              IdentifiableSurface::Type::kWebFeature,
+              WebFeature::kScreenOrientationLock))) {
+    auto* context = GetExecutionContext();
+    IdentifiabilityMetricBuilder(context->UkmSourceID())
+        .SetWebfeature(WebFeature::kScreenOrientationLock,
+                       result == ScreenOrientationLockResult::
+                                     SCREEN_ORIENTATION_LOCK_RESULT_SUCCESS)
+        .Record(context->UkmRecorder());
+  }
 
   switch (result) {
     case ScreenOrientationLockResult::SCREEN_ORIENTATION_LOCK_RESULT_SUCCESS:

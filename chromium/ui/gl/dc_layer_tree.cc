@@ -20,11 +20,9 @@ bool SizeContains(const gfx::Size& a, const gfx::Size& b) {
 }  // namespace
 
 DCLayerTree::DCLayerTree(bool disable_nv12_dynamic_textures,
-                         bool disable_larger_than_screen_overlays,
                          bool disable_vp_scaling,
                          bool reset_vp_when_colorspace_changes)
     : disable_nv12_dynamic_textures_(disable_nv12_dynamic_textures),
-      disable_larger_than_screen_overlays_(disable_larger_than_screen_overlays),
       disable_vp_scaling_(disable_vp_scaling),
       reset_vp_when_colorspace_changes_(reset_vp_when_colorspace_changes) {}
 
@@ -34,6 +32,8 @@ bool DCLayerTree::Initialize(
     HWND window,
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
     Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device) {
+  DCHECK(window);
+  window_ = window;
   DCHECK(d3d11_device);
   d3d11_device_ = std::move(d3d11_device);
   DCHECK(dcomp_device);
@@ -44,7 +44,7 @@ bool DCLayerTree::Initialize(
   DCHECK(desktop_device);
 
   HRESULT hr =
-      desktop_device->CreateTargetForHwnd(window, TRUE, &dcomp_target_);
+      desktop_device->CreateTargetForHwnd(window_, TRUE, &dcomp_target_);
   if (FAILED(hr)) {
     DLOG(ERROR) << "CreateTargetForHwnd failed with error 0x" << std::hex << hr;
     return false;
@@ -69,7 +69,9 @@ bool DCLayerTree::InitializeVideoProcessor(
     const gfx::Size& input_size,
     const gfx::Size& output_size,
     const gfx::ColorSpace& input_color_space,
-    const gfx::ColorSpace& output_color_space) {
+    const gfx::ColorSpace& output_color_space,
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
+    bool is_yuv_swapchain) {
   if (!video_device_) {
     // This can fail if the D3D device is "Microsoft Basic Display Adapter".
     if (FAILED(d3d11_device_.As(&video_device_))) {
@@ -88,10 +90,15 @@ bool DCLayerTree::InitializeVideoProcessor(
   }
 
   bool colorspace_changed = !(input_color_space == video_input_color_space_ &&
-                              output_color_space == video_output_color_space_);
+                              output_color_space == video_output_color_space_ &&
+                              is_yuv_video_output_ == is_yuv_swapchain);
   if (video_processor_ && SizeContains(video_input_size_, input_size) &&
       SizeContains(video_output_size_, output_size) &&
       !(colorspace_changed && reset_vp_when_colorspace_changes_)) {
+    if (colorspace_changed) {
+      SetColorSpaceForVideoProcessor(input_color_space, output_color_space,
+                                     std::move(swap_chain), is_yuv_swapchain);
+    }
     return true;
   }
   TRACE_EVENT2("gpu", "DCLayerTree::InitializeVideoProcessor", "input_size",
@@ -137,34 +144,22 @@ bool DCLayerTree::InitializeVideoProcessor(
     DirectCompositionSurfaceWin::DisableOverlays();
     return false;
   }
-  // Color spaces should be updated later through
-  // SetColorspaceForVideoProcessor() for the new VP.
-  video_input_color_space_ = gfx::ColorSpace();
-  video_output_color_space_ = gfx::ColorSpace();
-
   // Auto stream processing (the default) can hurt power consumption.
   video_context_->VideoProcessorSetStreamAutoProcessingMode(
       video_processor_.Get(), 0, FALSE);
+  SetColorSpaceForVideoProcessor(input_color_space, output_color_space,
+                                 std::move(swap_chain), is_yuv_swapchain);
   return true;
 }
 
-void DCLayerTree::SetColorspaceForVideoProcessor(
+void DCLayerTree::SetColorSpaceForVideoProcessor(
     const gfx::ColorSpace& input_color_space,
     const gfx::ColorSpace& output_color_space,
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> swapchain,
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
     bool is_yuv_swapchain) {
-  // Reset colorspace of video processor in two circumstances:
-  // 1. Input/output colorspaces change.
-  // 2. Swapchain changes.
-  // Others just return.
-  if ((input_color_space == video_input_color_space_) &&
-      (output_color_space == video_output_color_space_) &&
-      swapchain == last_swapchain_setting_colorspace_)
-    return;
-
   Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain3;
   Microsoft::WRL::ComPtr<ID3D11VideoContext1> context1;
-  if (SUCCEEDED(swapchain.As(&swap_chain3)) &&
+  if (SUCCEEDED(swap_chain.As(&swap_chain3)) &&
       SUCCEEDED(video_context_.As(&context1))) {
     DCHECK(swap_chain3);
     DCHECK(context1);
@@ -175,13 +170,12 @@ void DCLayerTree::SetColorspaceForVideoProcessor(
     // Set output color space.
     DXGI_COLOR_SPACE_TYPE output_dxgi_color_space =
         gfx::ColorSpaceWin::GetDXGIColorSpace(output_color_space,
-                                              is_yuv_swapchain /* force_yuv */);
+                                              /*force_yuv=*/is_yuv_swapchain);
 
     if (SUCCEEDED(swap_chain3->SetColorSpace1(output_dxgi_color_space))) {
       context1->VideoProcessorSetOutputColorSpace1(video_processor_.Get(),
                                                    output_dxgi_color_space);
     }
-    last_swapchain_setting_colorspace_ = swapchain;
   } else {
     // This can't handle as many different types of color spaces, so use it
     // only if ID3D11VideoContext1 isn't available.
@@ -196,6 +190,7 @@ void DCLayerTree::SetColorspaceForVideoProcessor(
   }
   video_input_color_space_ = input_color_space;
   video_output_color_space_ = output_color_space;
+  is_yuv_video_output_ = is_yuv_swapchain;
 }
 
 Microsoft::WRL::ComPtr<IDXGISwapChain1>
@@ -203,6 +198,16 @@ DCLayerTree::GetLayerSwapChainForTesting(size_t index) const {
   if (index < video_swap_chains_.size())
     return video_swap_chains_[index]->swap_chain();
   return nullptr;
+}
+
+void DCLayerTree::GetSwapChainVisualInfoForTesting(size_t index,
+                                                   gfx::Transform* transform,
+                                                   gfx::Point* offset,
+                                                   gfx::Rect* clip_rect) const {
+  if (index < video_swap_chains_.size()) {
+    video_swap_chains_[index]->GetSwapChainVisualInfoForTesting(  // IN-TEST
+        transform, offset, clip_rect);
+  }
 }
 
 bool DCLayerTree::CommitAndClearPendingOverlays(
@@ -255,7 +260,7 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
         new_video_swap_chains.emplace_back(std::move(video_swap_chains_[i]));
       } else {
         new_video_swap_chains.emplace_back(std::make_unique<SwapChainPresenter>(
-            this, d3d11_device_, dcomp_device_));
+            this, window_, d3d11_device_, dcomp_device_));
         if (frame_rate_ > 0)
           new_video_swap_chains.back()->SetFrameRate(frame_rate_);
       }

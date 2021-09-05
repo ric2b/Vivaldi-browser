@@ -5,10 +5,11 @@
 #include "media/gpu/chromeos/video_decoder_pipeline.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "media/base/cdm_context.h"
 #include "media/base/media_util.h"
 #include "media/base/status.h"
 #include "media/base/video_decoder_config.h"
@@ -34,12 +35,13 @@ class MockVideoFramePool : public DmabufVideoFramePool {
   ~MockVideoFramePool() override = default;
 
   // DmabufVideoFramePool implementation.
-  MOCK_METHOD5(Initialize,
+  MOCK_METHOD6(Initialize,
                base::Optional<GpuBufferLayout>(const Fourcc&,
                                                const gfx::Size&,
                                                const gfx::Rect&,
                                                const gfx::Size&,
-                                               size_t));
+                                               size_t,
+                                               bool));
   MOCK_METHOD0(GetFrame, scoped_refptr<VideoFrame>());
   MOCK_METHOD0(IsExhausted, bool());
   MOCK_METHOD1(NotifyWhenFrameAvailable, void(base::OnceClosure));
@@ -54,8 +56,9 @@ class MockDecoder : public DecoderInterface {
                          base::WeakPtr<DecoderInterface::Client>(nullptr)) {}
   ~MockDecoder() override = default;
 
-  MOCK_METHOD3(Initialize,
-               void(const VideoDecoderConfig&, InitCB, const OutputCB&));
+  MOCK_METHOD4(
+      Initialize,
+      void(const VideoDecoderConfig&, CdmContext*, InitCB, const OutputCB&));
   MOCK_METHOD2(Decode, void(scoped_refptr<DecoderBuffer>, DecodeCB));
   MOCK_METHOD1(Reset, void(base::OnceClosure));
   MOCK_METHOD0(ApplyResolutionChange, void());
@@ -125,8 +128,8 @@ class VideoDecoderPipelineTest
       scoped_refptr<base::SequencedTaskRunner> /* decoder_task_runner */,
       base::WeakPtr<DecoderInterface::Client> /* client */) {
     std::unique_ptr<MockDecoder> decoder(new MockDecoder());
-    EXPECT_CALL(*decoder, Initialize(_, _, _))
-        .WillOnce(::testing::WithArgs<1>([](VideoDecoder::InitCB init_cb) {
+    EXPECT_CALL(*decoder, Initialize(_, _, _, _))
+        .WillOnce(::testing::WithArgs<2>([](VideoDecoder::InitCB init_cb) {
           std::move(init_cb).Run(OkStatus());
         }));
     return std::move(decoder);
@@ -137,8 +140,8 @@ class VideoDecoderPipelineTest
       scoped_refptr<base::SequencedTaskRunner> /* decoder_task_runner */,
       base::WeakPtr<DecoderInterface::Client> /* client */) {
     std::unique_ptr<MockDecoder> decoder(new MockDecoder());
-    EXPECT_CALL(*decoder, Initialize(_, _, _))
-        .WillOnce(::testing::WithArgs<1>([](VideoDecoder::InitCB init_cb) {
+    EXPECT_CALL(*decoder, Initialize(_, _, _, _))
+        .WillOnce(::testing::WithArgs<2>([](VideoDecoder::InitCB init_cb) {
           std::move(init_cb).Run(StatusCode::kDecoderFailedInitialization);
         }));
     return std::move(decoder);

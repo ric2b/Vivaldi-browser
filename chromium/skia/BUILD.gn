@@ -249,6 +249,8 @@ component("skia") {
     "ext/google_logging.cc",
     "ext/image_operations.cc",
     "ext/image_operations.h",
+    "ext/legacy_display_globals.cc",
+    "ext/legacy_display_globals.h",
     "ext/opacity_filter_canvas.cc",
     "ext/opacity_filter_canvas.h",
     "ext/recursive_gaussian_convolution.cc",
@@ -998,11 +1000,6 @@ grit("skia_resources") {
     "grit/skia_resources_map.cc",
     "grit/skia_resources_map.h",
     "skia_resources.pak",
-  ]
-
-  grit_flags = [
-    "-E",
-    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
   ]
 
   deps = [ "public/mojom:mojom_js" ]

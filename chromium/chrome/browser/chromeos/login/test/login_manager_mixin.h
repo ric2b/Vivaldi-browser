@@ -37,11 +37,11 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
  public:
   // Represents test user.
   struct TestUserInfo {
-    // Creates test user with regular user type from the given |account_id|.
+    // Creates test user with regular user type from the given `account_id`.
     explicit TestUserInfo(const AccountId& account_id)
         : TestUserInfo(account_id, user_manager::USER_TYPE_REGULAR) {}
 
-    // Creates test user with |user_type| from the given |account_id|.
+    // Creates test user with `user_type` from the given `account_id`.
     TestUserInfo(const AccountId& account_id, user_manager::UserType user_type)
         : TestUserInfo(account_id,
                        user_type,
@@ -68,7 +68,6 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   // Should be called before any InProcessBrowserTestMixin functions.
   void AppendRegularUsers(int n);
   void AppendManagedUsers(int n);
-  void AppendLegacySupervisedUsers(int n);
 
   explicit LoginManagerMixin(InProcessBrowserTestMixinHost* host);
   LoginManagerMixin(InProcessBrowserTestMixinHost* host,
@@ -107,7 +106,7 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   void SetUpLocalState() override;
 
   // Starts login attempt for a user, using the stub authenticator provided by
-  // |authenticator_builder|.
+  // `authenticator_builder`.
   // Note that this will not wait for the login attempt to finish.
   void AttemptLoginUsingAuthenticator(
       const UserContext& user_context,

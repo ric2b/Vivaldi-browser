@@ -6,6 +6,8 @@
 #define CC_TREES_SINGLE_THREAD_PROXY_H_
 
 #include <limits>
+#include <memory>
+#include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/time/time.h"
@@ -138,6 +140,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void NotifyPaintWorkletStateChange(
       Scheduler::PaintWorkletState state) override;
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override;
+  bool IsInSynchronousComposite() const override;
 
   void RequestNewLayerTreeFrameSink();
 
@@ -151,7 +154,8 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
 
   // Called by the legacy path where RenderWidget does the scheduling.
   // Rasterization of tiles is only performed when |raster| is true.
-  void CompositeImmediately(base::TimeTicks frame_begin_time, bool raster);
+  void CompositeImmediatelyForTest(base::TimeTicks frame_begin_time,
+                                   bool raster);
 
  protected:
   SingleThreadProxy(LayerTreeHost* layer_tree_host,

@@ -1,6 +1,7 @@
 // Copyright (c) 2016-2019 Vivaldi Technologies. All Rights Reserved.
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "prefs/native_settings_observer_win.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -43,7 +44,7 @@ void NativeSettingsObserverWin::OnThemeColorUpdated() {
 
   // Watch for future changes. base::Unretained(this) because theme_key_
   // is valid as long as |this| is.
-  if (!theme_key_->StartWatching(base::Bind(
+  if (!theme_key_->StartWatching(base::BindOnce(
     &NativeSettingsObserverWin::OnThemeColorUpdated, base::Unretained(this)))) {
     theme_key_.reset();
   }

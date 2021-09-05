@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.omnibox.suggestions;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -41,19 +42,24 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteMediator.EditSessionState;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
+import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
+import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -66,11 +72,60 @@ public class AutocompleteMediatorUnitTest {
     private static final int SUGGESTION_MIN_HEIGHT = 20;
     private static final int HEADER_MIN_HEIGHT = 15;
 
+    // Empty AutocompleteDelegate implementation for test. This is to work around an issue that
+    // mock doesn't work on inherited methods in some builds.
+    static class AutocompleteDelegateForTest implements AutocompleteDelegate {
+        @Override
+        public void setOmniboxEditingText(String text) {}
+
+        @Override
+        public void clearOmniboxFocus() {}
+
+        @Override
+        public void onUrlTextChanged() {}
+
+        @Override
+        public void onSuggestionsChanged(String autocompleteText) {}
+
+        @Override
+        public void onSuggestionsHidden() {}
+
+        @Override
+        public void setKeyboardVisibility(boolean shouldShow, boolean delayHide) {}
+
+        @Override
+        public boolean isKeyboardActive() {
+            return true;
+        }
+
+        @Override
+        public void loadUrl(String url, @PageTransition int transition, long inputStart) {}
+
+        @Override
+        public void loadUrlWithPostData(String url, @PageTransition int transition, long inputStart,
+                String postDataType, byte[] postData) {}
+
+        @Override
+        public boolean didFocusUrlFromFakebox() {
+            return false;
+        }
+
+        @Override
+        public boolean isUrlBarFocused() {
+            return false;
+        }
+
+        @Override
+        public boolean didFocusUrlFromQueryTiles() {
+            return false;
+        }
+    }
+
     @Rule
     public TestRule mProcessor = new Features.JUnitProcessor();
 
     @Mock
-    AutocompleteDelegate mAutocompleteDelegate;
+    AutocompleteDelegateForTest mAutocompleteDelegate;
 
     @Mock
     UrlBarEditingTextStateProvider mTextStateProvider;
@@ -85,7 +140,7 @@ public class AutocompleteMediatorUnitTest {
     AutocompleteController mAutocompleteController;
 
     @Mock
-    ToolbarDataProvider mToolbarDataProvider;
+    LocationBarDataProvider mLocationBarDataProvider;
 
     @Mock
     Handler mHandler;
@@ -107,7 +162,7 @@ public class AutocompleteMediatorUnitTest {
         mMediator = new AutocompleteMediator(ContextUtils.getApplicationContext(),
                 mAutocompleteDelegate, mTextStateProvider, mAutocompleteController, mListModel,
                 mHandler);
-        mMediator.setToolbarDataProvider(mToolbarDataProvider);
+        mMediator.setLocationBarDataProvider(mLocationBarDataProvider);
         mMediator.getDropdownItemViewInfoListBuilderForTest().registerSuggestionProcessor(
                 mMockProcessor);
         mMediator.getDropdownItemViewInfoListBuilderForTest().setHeaderProcessorForTest(
@@ -180,8 +235,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void updateSuggestionsList_notEffectiveWhenDisabled() {
         mMediator.onNativeInitialized();
 
@@ -198,7 +252,6 @@ public class AutocompleteMediatorUnitTest {
     @SmallTest
     @UiThreadTest
     @EnableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
     public void updateSuggestionsList_worksWithNullList() {
         mMediator.onNativeInitialized();
 
@@ -215,7 +268,6 @@ public class AutocompleteMediatorUnitTest {
     @SmallTest
     @UiThreadTest
     @EnableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
     public void updateSuggestionsList_worksWithEmptyList() {
         mMediator.onNativeInitialized();
 
@@ -231,39 +283,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
-    public void updateSuggestionsList_defersKeyboardPopupWhenHaveLotsOfSuggestionsToShow() {
-        mMediator.onNativeInitialized();
-        mMediator.signalPendingKeyboardShowDecision();
-        mMediator.onSuggestionsReceived(new AutocompleteResult(mSuggestionsList, null), "");
-        Assert.assertTrue(
-                mMediator.getDropdownItemViewInfoListBuilderForTest().hasFullyConcealedElements());
-        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(false));
-        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(true));
-    }
-
-    @Test
-    @SmallTest
-    @UiThreadTest
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
-    public void updateSuggestionsList_showsKeyboardWhenHaveFewSuggestionsToShow() {
-        mMediator.onNativeInitialized();
-        mMediator.signalPendingKeyboardShowDecision();
-        mMediator.onSuggestionsReceived(
-                new AutocompleteResult(
-                        mSuggestionsList.subList(0, MINIMUM_NUMBER_OF_SUGGESTIONS_TO_SHOW), null),
-                "");
-        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(true));
-        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(false));
-    }
-
-    @Test
-    @SmallTest
-    @UiThreadTest
     @EnableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
     public void updateSuggestionsList_scrolEventsWithConcealedItemsTogglesKeyboardVisibility() {
         mMediator.onNativeInitialized();
 
@@ -278,22 +298,21 @@ public class AutocompleteMediatorUnitTest {
         // With fully concealed elements, scroll should trigger keyboard hide.
         reset(mAutocompleteDelegate);
         mMediator.onSuggestionDropdownScroll();
-        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(false));
-        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(true));
+        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(false), anyBoolean());
+        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(true), anyBoolean());
 
         // Pretend that the user scrolled back to top with an overscroll.
         // This should bring back the soft keyboard.
         reset(mAutocompleteDelegate);
         mMediator.onSuggestionDropdownOverscrolledToTop();
-        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(true));
-        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(false));
+        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(true), anyBoolean());
+        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(false), anyBoolean());
     }
 
     @Test
     @SmallTest
     @UiThreadTest
     @EnableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
     public void updateSuggestionsList_updateHeightWhenHardwareKeyboardIsConnected() {
         // Simulates behavior of physical keyboard being attached to the device.
         // In this scenario, requesting keyboard to come up will not result with an actual
@@ -337,7 +356,6 @@ public class AutocompleteMediatorUnitTest {
     @SmallTest
     @UiThreadTest
     @EnableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
     public void updateSuggestionsList_rejectsHeightUpdatesWhenKeyboardIsHidden() {
         // Simulates scenario where we receive dropdown height update after software keyboard is
         // explicitly hidden. In this scenario the updates should be rejected when estimating
@@ -368,29 +386,6 @@ public class AutocompleteMediatorUnitTest {
     @SmallTest
     @UiThreadTest
     @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
-    @EnableFeatures(ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP)
-    public void updateSuggestionsList_retainsKeyboardOnScrollWithFewSuggestions() {
-        mMediator.onNativeInitialized();
-        mMediator.signalPendingKeyboardShowDecision();
-        mMediator.onSuggestionsReceived(
-                new AutocompleteResult(
-                        mSuggestionsList.subList(0, MINIMUM_NUMBER_OF_SUGGESTIONS_TO_SHOW), null),
-                "");
-        verify(mAutocompleteDelegate, times(1)).setKeyboardVisibility(eq(true));
-
-        // Should perform no action.
-        mMediator.onSuggestionDropdownScroll();
-        // Should perform no action.
-        mMediator.onSuggestionDropdownScroll();
-
-        verify(mAutocompleteDelegate, never()).setKeyboardVisibility(eq(false));
-    }
-
-    @Test
-    @SmallTest
-    @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
     public void onTextChanged_emptyTextTriggersZeroSuggest() {
         when(mAutocompleteDelegate.isUrlBarFocused()).thenReturn(true);
         when(mAutocompleteDelegate.didFocusUrlFromFakebox()).thenReturn(false);
@@ -398,12 +393,12 @@ public class AutocompleteMediatorUnitTest {
         Profile profile = Mockito.mock(Profile.class);
         String url = "http://www.example.com";
         String title = "Title";
-        int pageClassification = 2;
-        when(mToolbarDataProvider.getProfile()).thenReturn(profile);
-        when(mToolbarDataProvider.getCurrentUrl()).thenReturn(url);
-        when(mToolbarDataProvider.getTitle()).thenReturn(title);
-        when(mToolbarDataProvider.hasTab()).thenReturn(true);
-        when(mToolbarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
+        int pageClassification = PageClassification.BLANK_VALUE;
+        when(mLocationBarDataProvider.getProfile()).thenReturn(profile);
+        when(mLocationBarDataProvider.getCurrentUrl()).thenReturn(url);
+        when(mLocationBarDataProvider.getTitle()).thenReturn(title);
+        when(mLocationBarDataProvider.hasTab()).thenReturn(true);
+        when(mLocationBarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
 
         when(mTextStateProvider.getTextWithAutocomplete()).thenReturn("");
 
@@ -416,16 +411,15 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void onTextChanged_nonEmptyTextTriggersSuggestions() {
         Profile profile = Mockito.mock(Profile.class);
         String url = "http://www.example.com";
-        int pageClassification = 2;
-        when(mToolbarDataProvider.getProfile()).thenReturn(profile);
-        when(mToolbarDataProvider.getCurrentUrl()).thenReturn(url);
-        when(mToolbarDataProvider.hasTab()).thenReturn(true);
-        when(mToolbarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
+        int pageClassification = PageClassification.BLANK_VALUE;
+        when(mLocationBarDataProvider.getProfile()).thenReturn(profile);
+        when(mLocationBarDataProvider.getCurrentUrl()).thenReturn(url);
+        when(mLocationBarDataProvider.hasTab()).thenReturn(true);
+        when(mLocationBarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
 
         when(mTextStateProvider.shouldAutocomplete()).thenReturn(true);
         when(mTextStateProvider.getSelectionStart()).thenReturn(4);
@@ -440,16 +434,15 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void onTextChanged_cancelsPendingRequests() {
         Profile profile = Mockito.mock(Profile.class);
         String url = "http://www.example.com";
-        int pageClassification = 2;
-        when(mToolbarDataProvider.getProfile()).thenReturn(profile);
-        when(mToolbarDataProvider.getCurrentUrl()).thenReturn(url);
-        when(mToolbarDataProvider.hasTab()).thenReturn(true);
-        when(mToolbarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
+        int pageClassification = PageClassification.BLANK_VALUE;
+        when(mLocationBarDataProvider.getProfile()).thenReturn(profile);
+        when(mLocationBarDataProvider.getCurrentUrl()).thenReturn(url);
+        when(mLocationBarDataProvider.hasTab()).thenReturn(true);
+        when(mLocationBarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
 
         when(mTextStateProvider.shouldAutocomplete()).thenReturn(true);
         when(mTextStateProvider.getSelectionStart()).thenReturn(4);
@@ -465,8 +458,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void onSuggestionsReceived_sendsOnSuggestionsChanged() {
         mMediator.onNativeInitialized();
         mMediator.onSuggestionsReceived(
@@ -482,8 +474,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void setLayoutDirection_beforeInitialization() {
         mMediator.onNativeInitialized();
         mMediator.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -501,8 +492,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void setLayoutDirection_afterInitialization() {
         mMediator.onNativeInitialized();
         mMediator.onSuggestionDropdownHeightChanged(Integer.MAX_VALUE);
@@ -529,8 +519,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void onUrlFocusChange_triggersZeroSuggest_nativeInitialized() {
         when(mAutocompleteDelegate.isUrlBarFocused()).thenReturn(true);
         when(mAutocompleteDelegate.didFocusUrlFromFakebox()).thenReturn(false);
@@ -538,12 +527,12 @@ public class AutocompleteMediatorUnitTest {
         Profile profile = Mockito.mock(Profile.class);
         String url = "http://www.example.com";
         String title = "Title";
-        int pageClassification = 2;
-        when(mToolbarDataProvider.getProfile()).thenReturn(profile);
-        when(mToolbarDataProvider.getCurrentUrl()).thenReturn(url);
-        when(mToolbarDataProvider.getTitle()).thenReturn(title);
-        when(mToolbarDataProvider.hasTab()).thenReturn(true);
-        when(mToolbarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
+        int pageClassification = PageClassification.BLANK_VALUE;
+        when(mLocationBarDataProvider.getProfile()).thenReturn(profile);
+        when(mLocationBarDataProvider.getCurrentUrl()).thenReturn(url);
+        when(mLocationBarDataProvider.getTitle()).thenReturn(title);
+        when(mLocationBarDataProvider.hasTab()).thenReturn(true);
+        when(mLocationBarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
 
         when(mTextStateProvider.getTextWithAutocomplete()).thenReturn(url);
 
@@ -556,8 +545,7 @@ public class AutocompleteMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisableFeatures({ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT,
-            ChromeFeatureList.OMNIBOX_DEFERRED_KEYBOARD_POPUP})
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
     public void onUrlFocusChange_triggersZeroSuggest_nativeNotInitialized() {
         when(mAutocompleteDelegate.isUrlBarFocused()).thenReturn(true);
         when(mAutocompleteDelegate.didFocusUrlFromFakebox()).thenReturn(false);
@@ -565,12 +553,12 @@ public class AutocompleteMediatorUnitTest {
         Profile profile = Mockito.mock(Profile.class);
         String url = "http://www.example.com";
         String title = "Title";
-        int pageClassification = 2;
-        when(mToolbarDataProvider.getProfile()).thenReturn(profile);
-        when(mToolbarDataProvider.getCurrentUrl()).thenReturn(url);
-        when(mToolbarDataProvider.getTitle()).thenReturn(title);
-        when(mToolbarDataProvider.hasTab()).thenReturn(true);
-        when(mToolbarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
+        int pageClassification = PageClassification.BLANK_VALUE;
+        when(mLocationBarDataProvider.getProfile()).thenReturn(profile);
+        when(mLocationBarDataProvider.getCurrentUrl()).thenReturn(url);
+        when(mLocationBarDataProvider.getTitle()).thenReturn(title);
+        when(mLocationBarDataProvider.hasTab()).thenReturn(true);
+        when(mLocationBarDataProvider.getPageClassification(false)).thenReturn(pageClassification);
 
         when(mTextStateProvider.getTextWithAutocomplete()).thenReturn("");
 
@@ -581,5 +569,48 @@ public class AutocompleteMediatorUnitTest {
         mMediator.onNativeInitialized();
         verify(mAutocompleteController)
                 .startZeroSuggest(profile, "", url, pageClassification, title);
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
+    public void onQueryTilesSelected_thenTextChanged_editSessionActivatedByQueryTile() {
+        mMediator.onNativeInitialized();
+        QueryTile childTile = new QueryTile("sports", "sports", "sports", "sports",
+                new String[] {"http://foo/sports.jpg"}, null /* searchParams */,
+                null /* children */);
+        QueryTile tile =
+                new QueryTile("news", "news", "news", "news", new String[] {"http://foo/news.jpg"},
+                        null /* searchParams */, Arrays.asList(childTile));
+        mMediator.onUrlFocusChange(true);
+        Assert.assertEquals(mMediator.getEditSessionStateForTest(), EditSessionState.INACTIVE);
+
+        mMediator.onQueryTileSelected(tile);
+        Assert.assertEquals(
+                mMediator.getEditSessionStateForTest(), EditSessionState.ACTIVATED_BY_QUERY_TILE);
+        verify(mAutocompleteDelegate).setOmniboxEditingText("news ");
+        mMediator.onTextChanged("news s", "news sports");
+        Assert.assertEquals(
+                mMediator.getEditSessionStateForTest(), EditSessionState.ACTIVATED_BY_QUERY_TILE);
+
+        mMediator.onUrlFocusChange(false);
+        Assert.assertEquals(mMediator.getEditSessionStateForTest(), EditSessionState.INACTIVE);
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT)
+    public void onTextChanged_editSessionActivatedByUserInput() {
+        mMediator.onNativeInitialized();
+        mMediator.onUrlFocusChange(true);
+        Assert.assertEquals(mMediator.getEditSessionStateForTest(), EditSessionState.INACTIVE);
+        mMediator.onTextChanged("n", "news");
+        Assert.assertEquals(
+                mMediator.getEditSessionStateForTest(), EditSessionState.ACTIVATED_BY_USER_INPUT);
+
+        mMediator.onUrlFocusChange(false);
+        Assert.assertEquals(mMediator.getEditSessionStateForTest(), EditSessionState.INACTIVE);
     }
 }

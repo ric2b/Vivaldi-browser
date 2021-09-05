@@ -5,6 +5,7 @@
 #include "ash/capture_mode/stop_recording_button_tray.h"
 
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -22,7 +23,9 @@ StopRecordingButtonTray::StopRecordingButtonTray(Shelf* shelf)
     : TrayBackgroundView(shelf) {
   auto image_view = std::make_unique<views::ImageView>();
   image_view->SetImage(gfx::CreateVectorIcon(
-      kCaptureModeCircleStopIcon, ShelfConfig::Get()->shelf_icon_color()));
+      kCaptureModeCircleStopIcon,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorPrimary)));
   image_view->SetTooltipText(GetAccessibleNameForTray());
   image_view->SetHorizontalAlignment(views::ImageView::Alignment::kCenter);
   image_view->SetVerticalAlignment(views::ImageView::Alignment::kCenter);
@@ -36,10 +39,9 @@ bool StopRecordingButtonTray::PerformAction(const ui::Event& event) {
   DCHECK(event.type() == ui::ET_MOUSE_RELEASED ||
          event.type() == ui::ET_GESTURE_TAP);
 
-  // Stop recording and hide this button.
   base::RecordAction(base::UserMetricsAction("Tray_StopRecording"));
-  CaptureModeController::Get()->EndVideoRecording();
-  SetVisiblePreferred(false);
+  CaptureModeController::Get()->EndVideoRecording(
+      EndRecordingReason::kStopRecordingButton);
   return true;
 }
 

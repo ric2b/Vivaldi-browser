@@ -158,7 +158,7 @@ void LayoutRubyRun::RemoveChild(LayoutObject* child) {
     LayoutObject* right_neighbour = NextSibling();
     if (base && right_neighbour && right_neighbour->IsRubyRun()) {
       // Ruby run without a base can happen only at the first run.
-      LayoutRubyRun* right_run = ToLayoutRubyRun(right_neighbour);
+      auto* right_run = To<LayoutRubyRun>(right_neighbour);
       if (right_run->HasRubyBase()) {
         LayoutRubyBase* right_base = right_run->RubyBaseSafe();
         // Collect all children in a single base, then swap the bases.
@@ -208,8 +208,7 @@ LayoutRubyRun* LayoutRubyRun::StaticCreateRubyRun(
   DCHECK(parent_ruby);
   DCHECK(parent_ruby->IsRuby());
   LayoutRubyRun* rr;
-  if (RuntimeEnabledFeatures::LayoutNGRubyEnabled() &&
-      containing_block.IsLayoutNGObject()) {
+  if (containing_block.IsLayoutNGObject()) {
     rr = new LayoutNGRubyRun();
   } else {
     rr = new LayoutRubyRun(nullptr);
@@ -250,8 +249,7 @@ void LayoutRubyRun::UpdateLayout() {
   // the first line of the LayoutRubyBase.
   LayoutUnit last_line_ruby_text_bottom = rt->LogicalHeight();
   LayoutUnit first_line_ruby_text_top;
-  RootInlineBox* root_box = rt->LastRootBox();
-  if (root_box) {
+  if (RootInlineBox* root_box = rt->LastRootBox()) {
     // In order to align, we have to ignore negative leading.
     first_line_ruby_text_top = rt->FirstRootBox()->LogicalTopLayoutOverflow();
     last_line_ruby_text_bottom = root_box->LogicalBottomLayoutOverflow();
@@ -340,12 +338,12 @@ void LayoutRubyRun::GetOverhang(bool first_line,
   if (start_overhang)
     start_overhang = std::min<int>(
         start_overhang,
-        std::min<int>(ToLayoutText(start_layout_object)->MinLogicalWidth(),
+        std::min<int>(To<LayoutText>(start_layout_object)->MinLogicalWidth(),
                       half_width_of_font_size));
   if (end_overhang)
     end_overhang = std::min<int>(
         end_overhang,
-        std::min<int>(ToLayoutText(end_layout_object)->MinLogicalWidth(),
+        std::min<int>(To<LayoutText>(end_layout_object)->MinLogicalWidth(),
                       half_width_of_font_size));
 }
 

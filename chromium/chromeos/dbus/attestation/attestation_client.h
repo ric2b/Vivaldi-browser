@@ -6,9 +6,11 @@
 #define CHROMEOS_DBUS_ATTESTATION_ATTESTATION_CLIENT_H_
 
 #include <deque>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/component_export.h"
+#include "base/time/time.h"
 #include "chromeos/dbus/attestation/interface.pb.h"
 
 namespace dbus {
@@ -84,12 +86,112 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS_ATTESTATION) AttestationClient {
     // the |sequence| one-by-one until all the elements are consumed.
     virtual void ConfigureEnrollmentPreparationsSequence(
         std::deque<bool> sequence) = 0;
+    // Injects a bad status to `GetEnrollmentPreparations()` calls. By design,
+    // this only accepts bad status so |STATUS_SUCCESS| is seen as an illegal
+    // input and abort the program. To recover the fake behavior to successful
+    // calls, call ConfigureEnrollmentPreparations(Sequence)?.
+    virtual void ConfigureEnrollmentPreparationsStatus(
+        ::attestation::AttestationStatus status) = 0;
+
+    // Gets the mutable |GetStatusReply| that is returned when queried.
+    virtual ::attestation::GetStatusReply* mutable_status_reply() = 0;
 
     // Allowlists |request| so the certificate requests that comes in afterwards
-    // will get a fake certificate. if any alias of |request| has been
+    // will get a fake certificate. If any alias of |request| has been
     // allowlisted this functions performs no-ops.
     virtual void AllowlistCertificateRequest(
         const ::attestation::GetCertificateRequest& request) = 0;
+
+    // Gets the history of `DeleteKeys()` requests.
+    virtual const std::vector<::attestation::DeleteKeysRequest>&
+    delete_keys_history() const = 0;
+
+    // Clears the request history of `DeleteKeys()`.
+    virtual void ClearDeleteKeysHistory() = 0;
+
+    // Sets returned enrollment ids, when ignoring/not ignoring cache,
+    // respectively.
+    virtual void set_enrollment_id_ignore_cache(const std::string& id) = 0;
+    virtual void set_cached_enrollment_id(const std::string& id) = 0;
+    // Sets the returned status of `GetEnrollmentId()` to be D-Bus error for
+    // `count` times to emulate D-Bus late availability.
+    virtual void set_enrollment_id_dbus_error_count(int count) = 0;
+
+    // Gets the reply to the key info query as a fake database.
+    virtual ::attestation::GetKeyInfoReply* GetMutableKeyInfoReply(
+        const std::string& username,
+        const std::string& label) = 0;
+    // Sets the returned status of `GetKeyInfo()` to be D-Bus error for
+    // `count` times to emulate D-Bus late availability.
+    virtual void set_key_info_dbus_error_count(int count) = 0;
+    // Gets the remaining count of `GetKeyInfo()` replying D-Bus error.
+    virtual int key_info_dbus_error_count() const = 0;
+
+    // Verifies if `signed_data` is signed against `challenge`.
+    virtual bool VerifySimpleChallengeResponse(
+        const std::string& challenge,
+        const ::attestation::SignedData& signed_data) = 0;
+
+    // Sets the status code returned by `SignSimpleChallenge()`.
+    virtual void set_sign_simple_challenge_status(
+        ::attestation::AttestationStatus status) = 0;
+    // Allowlists the key used to sign simple challenge.
+    virtual void AllowlistSignSimpleChallengeKey(const std::string& username,
+                                                 const std::string& label) = 0;
+
+    // Sets the status code returned by `RegisterKeyWithChapsToken()`.
+    virtual void set_register_key_status(
+        ::attestation::AttestationStatus status) = 0;
+    // Allowlists the key allowed to be registered to the key store.
+    virtual void AllowlistRegisterKey(const std::string& username,
+                                      const std::string& label) = 0;
+
+    // Sets the status code returned by `SignEnterpriseChallenge()`.
+    virtual void set_sign_enterprise_challenge_status(
+        ::attestation::AttestationStatus status) = 0;
+    // Allowlists the key used to sign enterprise challenge. Note that
+    // `include_signed_public_key` and `challenge` are ignored for key
+    // comparison because they are are part of the key but the inputs for
+    // signature generation.
+    virtual void AllowlistSignEnterpriseChallengeKey(
+        const ::attestation::SignEnterpriseChallengeRequest& request) = 0;
+    // Signs the enterprise `challenge` with this class the same way the
+    // enterprise challenge is signed.
+    virtual std::string GetEnterpriseChallengeFakeSignature(
+        const std::string& challenge,
+        bool include_spkac) const = 0;
+    // Sets the delay to the time we reply to `SignEnterpriseChallenge()`.
+    virtual void set_sign_enterprise_challenge_delay(
+        const base::TimeDelta& delay) = 0;
+
+    // Sets the status code returned by `CreateEnrollRequestRequest()`.
+    virtual void set_enroll_request_status(
+        ::attestation::AttestationStatus status) = 0;
+    // Gets the fake enroll request when the status is configured to be good.
+    virtual std::string GetFakePcaEnrollRequest() const = 0;
+    // Gets the fake enroll response that is accepted by `FinishEnroll()`.
+    virtual std::string GetFakePcaEnrollResponse() const = 0;
+
+    // Allowlists the request that has `username`, `request_origin`, `profile`,
+    // and `key_type`, so the certificate requests that comes in afterwards will
+    // be successfully created.
+    virtual void AllowlistLegacyCreateCertificateRequest(
+        const std::string& username,
+        const std::string& request_origin,
+        ::attestation::CertificateProfile profile,
+        ::attestation::KeyType key_type) = 0;
+    // Sets the status code returned by `CreateCertificateRequest()`.
+    virtual void set_cert_request_status(
+        ::attestation::AttestationStatus status) = 0;
+    // Gets the fake certificate request when the status is configured to be
+    // good.
+    virtual std::string GetFakePcaCertRequest() const = 0;
+    // Gets the fake enroll response that is accepted by
+    // `FinishCertificateRequest()`.
+    virtual std::string GetFakePcaCertResponse() const = 0;
+    // Gets the fake certificate that is returned by
+    // successful `FinishCertificateRequest()`.
+    virtual std::string GetFakeCertificate() const = 0;
   };
 
   // Not copyable or movable.
@@ -109,6 +211,14 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS_ATTESTATION) AttestationClient {
 
   // Returns the global instance which may be null if not initialized.
   static AttestationClient* Get();
+
+  // Checks if |reply| indicates the attestation service is prepared with any
+  // ACA.
+  static bool IsAttestationPrepared(
+      const ::attestation::GetEnrollmentPreparationsReply& reply);
+
+  // Gets the verified access server type from command-line arguments.
+  static ::attestation::VAType GetVerifiedAccessServerType();
 
   // Attestation daemon D-Bus method calls. See org.chromium.Attestation.xml and
   // the corresponding protobuf definitions in Chromium OS code for the

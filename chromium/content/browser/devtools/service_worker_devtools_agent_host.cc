@@ -5,7 +5,7 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/devtools/devtools_renderer_channel.h"
@@ -262,11 +262,10 @@ ServiceWorkerDevToolsAgentHost::CreateNetworkFactoryParamsForDevTools() {
   const url::Origin origin = url::Origin::Create(url_);
   auto factory = URLLoaderFactoryParamsHelper::CreateForWorker(
       rph, origin,
-      net::IsolationInfo::Create(
-          net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-          net::SiteForCookies::FromOrigin(origin)),
-      /*coep_reporter=*/mojo::NullRemote(), /*debug_tag=*/
-      "ServiceWorkerDevToolsAgentHost::CreateNetworkFactoryParamsForDevTools");
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                 origin, origin,
+                                 net::SiteForCookies::FromOrigin(origin)),
+      /*coep_reporter=*/mojo::NullRemote());
   return {url::Origin::Create(GetURL()), net::SiteForCookies::FromUrl(GetURL()),
           std::move(factory)};
 }

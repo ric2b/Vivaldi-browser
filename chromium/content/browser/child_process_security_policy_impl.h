@@ -82,9 +82,7 @@ class CONTENT_EXPORT ProcessLock {
   // that wants to commit in this process must have COOP/COEP information that
   // matches the values used to create this lock.
   static ProcessLock CreateAllowAnySite(
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>&
-          coop_coep_cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
 
   ProcessLock();
   explicit ProcessLock(const SiteInfo& site_info);
@@ -134,17 +132,10 @@ class CONTENT_EXPORT ProcessLock {
   // This property is renderer process global because we ensure that a
   // renderer process host only cross-origin isolated agents or only
   // non-cross-origin isolated agents, not both.
-  bool is_coop_coep_cross_origin_isolated() const {
-    return site_info_.has_value() &&
-           site_info_->is_coop_coep_cross_origin_isolated();
-  }
-
-  // If is_coop_coep_cross_origin_isolated() returns true, this returns the
-  // origin shared across all top level frames in the renderer process.
-  base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin() const {
+  CoopCoepCrossOriginIsolatedInfo coop_coep_cross_origin_isolated_info() const {
     return site_info_.has_value()
-               ? site_info_->coop_coep_cross_origin_isolated_origin()
-               : base::nullopt;
+               ? site_info_->coop_coep_cross_origin_isolated_info()
+               : CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated();
   }
 
   // Returns whether lock_url() is at least at the granularity of a site (i.e.,
@@ -339,9 +330,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
       const IsolationContext& isolation_context,
       const url::Origin& origin,
       const UrlInfo& url_info,
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>&
-          coop_coep_cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
 
   // This function will check whether |origin| requires process isolation
   // within |isolation_context|, and if so, it will return true and put the
@@ -375,9 +364,9 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                  url::Origin* result);
 
   // Removes any origin isolation opt-in entries associated with the
-  // |isolation_context| of the BrowsingInstance.
+  // |browsing_instance_id| of the BrowsingInstance.
   void RemoveOptInIsolatedOriginsForBrowsingInstance(
-      const IsolationContext& isolation_context);
+      const BrowsingInstanceId& browsing_instance_id);
 
   // Registers |origin|'s isolation status with respect to the BrowsingInstance
   // associated with |isolation_context|. If it has already been registered,
@@ -617,6 +606,12 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                     const url::Origin& origin,
                                     bool is_global_walk_or_frame_removal);
 
+  // Allows tests to modify the delay in cleaning up BrowsingInstanceIds. If the
+  // delay is set to zero, cleanup happens immediately.
+  void SetBrowsingInstanceCleanupDelayForTesting(int64_t delay_in_seconds) {
+    browsing_instance_cleanup_delay_in_seconds_ = delay_in_seconds;
+  }
+
  private:
   friend class ChildProcessSecurityPolicyInProcessBrowserTest;
   friend class ChildProcessSecurityPolicyTest;
@@ -795,6 +790,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   void RemoveProcessReferenceLocked(int child_id)
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
+  // Internal helper for RemoveOptInIsolatedOriginsForBrowsingInstance().
+  void RemoveOptInIsolatedOriginsForBrowsingInstanceInternal(
+      const BrowsingInstanceId browsing_instance_id);
+
   // Creates the value to place in the "killed_process_origin_lock" crash key
   // based on the contents of |security_state|.
   static std::string GetKilledProcessOriginLock(
@@ -907,6 +906,11 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   base::flat_map<BrowsingInstanceId, std::vector<url::Origin>>
       origin_isolation_non_isolated_by_browsing_instance_
           GUARDED_BY(origins_isolation_opt_in_lock_);
+
+  // When we are notified a BrowsingInstance has destructed, delay cleanup by
+  // this amount to allow outstanding IO thread requests to complete. May be set
+  // to different values in tests.
+  int64_t browsing_instance_cleanup_delay_in_seconds_ = 10;
 
   DISALLOW_COPY_AND_ASSIGN(ChildProcessSecurityPolicyImpl);
 };

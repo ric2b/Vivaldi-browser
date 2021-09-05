@@ -2088,6 +2088,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="NetworkService.CorsForcedOffForIsolatedWorldOrigin"
+    enum="BooleanForceDisabled" expires_after="M92">
+  <owner>lukasza@chromium.org</owner>
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <summary>
+    Whether CORS was turned off based on the origin of an isolated world (e.g.
+    for a content script of a platform app).
+
+    Logged in CorsURLLoader::HandleComplete for all successful requests.
+
+    The logged value depends on whether CorsURLLoader::SetCorsFlagIfNeeded had
+    been affected by network::ResourceRequest::isolated_world_origin.
+  </summary>
+</histogram>
+
 <histogram name="NetworkService.CrossOriginResourcePolicy.ReportOnlyResult"
     enum="NetworkServiceCorpResult" expires_after="2020-09-30">
   <owner>mkwst@chromium.org</owner>
@@ -2125,6 +2140,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="NetworkService.StreamingUploadDataPipeGetterValidity"
+    units="BooleanValid" expires_after="2021-03-31">
+  <owner>yhirano@chromium.org</owner>
+  <owner>yoichio@chromium.org</owner>
+  <summary>
+    It seems in some cases the ChunkedDataPipeGetter for a request body is
+    missing. This histogram counts whether the mojo::Remote is valid, for each
+    request with body of type KChunkedDataPipe or kReadOnceStream.
+  </summary>
+</histogram>
+
 <histogram name="NetworkService.TimeToFirstResponse" units="ms"
     expires_after="M82">
   <owner>cduvall@chromium.org</owner>
@@ -2158,7 +2184,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="NetworkService.URLLoader.RequestInitiatorOriginLockCompatibility"
-    enum="RequestInitiatorOriginLockCompatibility" expires_after="2021-02-28">
+    enum="RequestInitiatorOriginLockCompatibility" expires_after="2021-05-02">
   <owner>lukasza@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>jam@chromium.org</owner>
@@ -2177,7 +2203,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     name="NetworkService.URLLoaderFactory.OriginHeaderSameAsRequestOrigin"
     enum="BooleanOriginHeaderSameAsRequestOrigin" expires_after="2019-06-30">
   <owner>jam@chromium.org</owner>
-  <owner>juncai@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
     Whether the Origin header is the same as the request origin in the

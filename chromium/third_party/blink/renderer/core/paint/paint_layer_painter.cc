@@ -299,7 +299,7 @@ void PaintLayerPainter::AdjustForPaintProperties(
 static IntRect FirstFragmentVisualRect(const LayoutBoxModelObject& object) {
   // We don't want to include overflowing contents.
   PhysicalRect overflow_rect =
-      object.IsBox() ? ToLayoutBox(object).PhysicalSelfVisualOverflowRect()
+      object.IsBox() ? To<LayoutBox>(object).PhysicalSelfVisualOverflowRect()
                      : object.PhysicalVisualOverflowRect();
   overflow_rect.Move(object.FirstFragment().PaintOffset());
   return EnclosingIntRect(overflow_rect);
@@ -374,8 +374,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
   // is not scrolled and should be above scrolled content.
   bool should_paint_self_outline =
       is_self_painting_layer && !is_painting_overlay_overflow_controls &&
-      (is_painting_composited_decoration ||
-       (!is_painting_overflow_contents && !is_painting_mask)) &&
+      is_painting_composited_decoration &&
       paint_layer_.GetLayoutObject().StyleRef().HasOutline();
 
   PhysicalOffset subpixel_accumulation =
@@ -521,7 +520,8 @@ PaintResult PaintLayerPainter::PaintLayerContents(
   }
 
   if (paint_layer_.GetScrollableArea() &&
-      paint_layer_.GetScrollableArea()->HasOverlayOverflowControls()) {
+      paint_layer_.GetScrollableArea()
+          ->ShouldOverflowControlsPaintAsOverlay()) {
     if (is_painting_overlay_overflow_controls ||
         !paint_layer_.NeedsReorderOverlayOverflowControls()) {
       PaintOverlayOverflowControlsForFragments(
@@ -645,8 +645,9 @@ void PaintLayerPainter::PaintOverlayOverflowControlsForFragments(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& painting_info,
     PaintLayerFlags paint_flags) {
-  DCHECK(paint_layer_.GetScrollableArea() &&
-         paint_layer_.GetScrollableArea()->HasOverlayOverflowControls());
+  DCHECK(
+      paint_layer_.GetScrollableArea() &&
+      paint_layer_.GetScrollableArea()->ShouldOverflowControlsPaintAsOverlay());
 
   // We don't need to paint composited overflow controls.
   if (paint_layer_.GetScrollableArea()->HasLayerForHorizontalScrollbar() ||

@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/ui/signin/profile_colors_util.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -41,7 +42,6 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/themes/theme_properties.h"  // nogncheck crbug.com/1125897
-#include "chrome/browser/ui/signin/profile_colors_util.h"
 #endif
 
 namespace {
@@ -97,20 +97,12 @@ int GetLowEntropyHashValue(const std::string& value) {
   return base::PersistentHash(value) % kNumberOfLowEntropyHashValues;
 }
 
+bool ShouldShowGenericColoredAvatar(size_t avatar_icon_index) {
+  return base::FeatureList::IsEnabled(features::kNewProfilePicker) &&
+         avatar_icon_index == profiles::GetPlaceholderAvatarIndex();
+}
+
 }  // namespace
-
-bool ProfileThemeColors::operator==(const ProfileThemeColors& other) const {
-  return std::tie(this->profile_highlight_color,
-                  this->default_avatar_fill_color,
-                  this->default_avatar_stroke_color) ==
-         std::tie(other.profile_highlight_color,
-                  other.default_avatar_fill_color,
-                  other.default_avatar_stroke_color);
-}
-
-bool ProfileThemeColors::operator!=(const ProfileThemeColors& other) const {
-  return !(*this == other);
-}
 
 const char ProfileAttributesEntry::kSupervisedUserId[] = "managed_user_id";
 const char ProfileAttributesEntry::kIsOmittedFromProfileListKey[] =
@@ -291,7 +283,8 @@ base::string16 ProfileAttributesEntry::GetUserName() const {
 }
 
 gfx::Image ProfileAttributesEntry::GetAvatarIcon(
-    int size_for_placeholder_avatar) const {
+    int size_for_placeholder_avatar,
+    bool use_high_res_file) const {
   if (IsUsingGAIAPicture()) {
     const gfx::Image* image = GetGAIAPicture();
     if (image)
@@ -300,17 +293,18 @@ gfx::Image ProfileAttributesEntry::GetAvatarIcon(
 
   // TODO(crbug.com/1100835): After launch, remove the treatment of placeholder
   // avatars from GetHighResAvatar() and from any other places.
-  if (base::FeatureList::IsEnabled(features::kNewProfilePicker) &&
-      GetAvatarIconIndex() == profiles::GetPlaceholderAvatarIndex()) {
+  if (ShouldShowGenericColoredAvatar(GetAvatarIconIndex())) {
     return GetPlaceholderAvatarIcon(size_for_placeholder_avatar);
   }
 
 #if !defined(OS_ANDROID)
   // Use the high resolution version of the avatar if it exists. Mobile doesn't
   // need the high resolution version so no need to fetch it.
-  const gfx::Image* image = GetHighResAvatar();
-  if (image)
-    return *image;
+  if (use_high_res_file) {
+    const gfx::Image* image = GetHighResAvatar();
+    if (image)
+      return *image;
+  }
 #endif
 
   const int icon_index = GetAvatarIconIndex();
@@ -441,27 +435,45 @@ size_t ProfileAttributesEntry::GetAvatarIconIndex() const {
   return icon_index;
 }
 
-ProfileThemeColors ProfileAttributesEntry::GetProfileThemeColors() const {
+base::Optional<ProfileThemeColors>
+ProfileAttributesEntry::GetProfileThemeColorsIfSet() const {
   base::Optional<SkColor> profile_highlight_color =
       GetProfileThemeColor(kProfileHighlightColorKey);
   base::Optional<SkColor> default_avatar_fill_color =
       GetProfileThemeColor(kDefaultAvatarFillColorKey);
   base::Optional<SkColor> default_avatar_stroke_color =
       GetProfileThemeColor(kDefaultAvatarStrokeColorKey);
+
+  DCHECK_EQ(profile_highlight_color.has_value(),
+            default_avatar_stroke_color.has_value());
+  DCHECK_EQ(profile_highlight_color.has_value(),
+            default_avatar_fill_color.has_value());
+
   if (!profile_highlight_color.has_value()) {
-    DCHECK(!default_avatar_fill_color.has_value() &&
-           !default_avatar_stroke_color.has_value());
-    return GetDefaultProfileThemeColors(
-        ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors());
+    return base::nullopt;
   }
 
-  DCHECK(default_avatar_fill_color.has_value() &&
-         default_avatar_stroke_color.has_value());
   ProfileThemeColors colors;
   colors.profile_highlight_color = profile_highlight_color.value();
   colors.default_avatar_fill_color = default_avatar_fill_color.value();
   colors.default_avatar_stroke_color = default_avatar_stroke_color.value();
   return colors;
+}
+
+ProfileThemeColors ProfileAttributesEntry::GetProfileThemeColors() const {
+#if defined(OS_ANDROID)
+  // Profile theme colors shouldn't be queried on Android.
+  NOTREACHED();
+  return {SK_ColorRED, SK_ColorRED, SK_ColorRED};
+#else
+  base::Optional<ProfileThemeColors> theme_colors =
+      GetProfileThemeColorsIfSet();
+  if (theme_colors)
+    return *theme_colors;
+
+  return GetDefaultProfileThemeColors(
+      ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors());
+#endif
 }
 
 size_t ProfileAttributesEntry::GetMetricsBucketIndex() {
@@ -586,11 +598,6 @@ void ProfileAttributesEntry::SetIsAuthError(bool value) {
 }
 
 void ProfileAttributesEntry::SetAvatarIconIndex(size_t icon_index) {
-  if (!profiles::IsDefaultAvatarIconIndex(icon_index)) {
-    DLOG(WARNING) << "Unknown avatar icon index: " << icon_index;
-    // switch to generic avatar
-    icon_index = 0;
-  }
   std::string default_avatar_icon_url =
       profiles::GetDefaultAvatarIconUrl(icon_index);
   if (default_avatar_icon_url == GetString(kAvatarIconKey)) {
@@ -615,15 +622,24 @@ void ProfileAttributesEntry::SetAvatarIconIndex(size_t icon_index) {
 
 void ProfileAttributesEntry::SetProfileThemeColors(
     const base::Optional<ProfileThemeColors>& colors) {
+  bool changed = false;
   if (colors.has_value()) {
-    SetInteger(kProfileHighlightColorKey, colors->profile_highlight_color);
-    SetInteger(kDefaultAvatarFillColorKey, colors->default_avatar_fill_color);
-    SetInteger(kDefaultAvatarStrokeColorKey,
-               colors->default_avatar_stroke_color);
+    changed |=
+        SetInteger(kProfileHighlightColorKey, colors->profile_highlight_color);
+    changed |= SetInteger(kDefaultAvatarFillColorKey,
+                          colors->default_avatar_fill_color);
+    changed |= SetInteger(kDefaultAvatarStrokeColorKey,
+                          colors->default_avatar_stroke_color);
   } else {
-    ClearValue(kProfileHighlightColorKey);
-    ClearValue(kDefaultAvatarFillColorKey);
-    ClearValue(kDefaultAvatarStrokeColorKey);
+    changed |= ClearValue(kProfileHighlightColorKey);
+    changed |= ClearValue(kDefaultAvatarFillColorKey);
+    changed |= ClearValue(kDefaultAvatarStrokeColorKey);
+  }
+
+  if (changed) {
+    profile_info_cache_->NotifyProfileThemeColorsChanged(GetPath());
+    if (ShouldShowGenericColoredAvatar(GetAvatarIconIndex()))
+      profile_info_cache_->NotifyOnProfileAvatarChanged(GetPath());
   }
 }
 
@@ -694,25 +710,6 @@ size_t ProfileAttributesEntry::profile_index() const {
   size_t index = profile_info_cache_->GetIndexOfProfileWithPath(profile_path_);
   DCHECK(index < profile_info_cache_->GetNumberOfProfiles());
   return index;
-}
-
-// static
-ProfileThemeColors ProfileAttributesEntry::GetDefaultProfileThemeColors(
-    bool dark_mode) {
-#if defined(OS_ANDROID)
-  // Profile theme colors shouldn't be queried on Android.
-  NOTREACHED();
-  return {SK_ColorRED, SK_ColorRED, SK_ColorRED};
-#else
-  ProfileThemeColors default_colors;
-  default_colors.profile_highlight_color = ThemeProperties::GetDefaultColor(
-      ThemeProperties::COLOR_FRAME_ACTIVE, /*incognito=*/false, dark_mode);
-  default_colors.default_avatar_fill_color = ThemeProperties::GetDefaultColor(
-      ThemeProperties::COLOR_FRAME_ACTIVE, /*incognito=*/false, dark_mode);
-  default_colors.default_avatar_stroke_color =
-      GetAvatarStrokeColor(default_colors.default_avatar_fill_color);
-  return default_colors;
-#endif
 }
 
 const gfx::Image* ProfileAttributesEntry::GetHighResAvatar() const {

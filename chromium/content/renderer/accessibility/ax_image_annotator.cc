@@ -138,11 +138,8 @@ bool AXImageAnnotator::ImageNameHasMostlyStopwords(
     if (AXImageStopwords::GetInstance().IsImageStopword(word.c_str()))
       continue;
 
-    base::i18n::UTF8CharIterator iter(&word);
-    while (!iter.end()) {
+    for (base::i18n::UTF8CharIterator iter(word); !iter.end(); iter.Advance())
       remaining_codepoints++;
-      iter.Advance();
-    }
   }
 
   return (remaining_codepoints <= 3);
@@ -210,7 +207,7 @@ void AXImageAnnotator::MarkDirty(const blink::WebAXObject& image) const {
   blink::WebAXObject parent = image.ParentObject();
   for (int ancestor_count = 0; !parent.IsDetached() && ancestor_count < 2;
        parent = parent.ParentObject()) {
-    if (parent.AccessibilityIsIncludedInTree()) {
+    if (!parent.AccessibilityIsIgnored()) {
       ++ancestor_count;
       if (parent.Role() == ax::mojom::Role::kLink ||
           parent.Role() == ax::mojom::Role::kRootWebArea) {
@@ -274,6 +271,11 @@ SkBitmap AXImageAnnotator::GetImageData(const blink::WebAXObject& image) {
 void AXImageAnnotator::OnImageAnnotated(
     const blink::WebAXObject& image,
     image_annotation::mojom::AnnotateImageResultPtr result) {
+  if (!blink::WebAXObject::MaybeUpdateLayoutAndCheckValidity(
+          image.GetDocument())) {
+    return;
+  }
+
   if (!base::Contains(image_annotations_, image.AxID()))
     return;
 

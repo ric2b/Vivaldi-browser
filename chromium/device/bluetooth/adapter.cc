@@ -89,6 +89,7 @@ void Adapter::AddObserver(mojo::PendingRemote<mojom::AdapterObserver> observer,
 
 void Adapter::RegisterAdvertisement(const device::BluetoothUUID& service_uuid,
                                     const std::vector<uint8_t>& service_data,
+                                    bool use_scan_response,
                                     RegisterAdvertisementCallback callback) {
   auto advertisement_data =
       std::make_unique<device::BluetoothAdvertisement::Data>(
@@ -98,10 +99,38 @@ void Adapter::RegisterAdvertisement(const device::BluetoothUUID& service_uuid,
   uuid_list->push_back(service_uuid.value());
   advertisement_data->set_service_uuids(std::move(uuid_list));
 
-  auto service_data_map =
-      std::make_unique<device::BluetoothAdvertisement::ServiceData>();
-  service_data_map->emplace(service_uuid.value(), service_data);
-  advertisement_data->set_service_data(std::move(service_data_map));
+  if (!use_scan_response) {
+    auto service_data_map =
+        std::make_unique<device::BluetoothAdvertisement::ServiceData>();
+    service_data_map->emplace(service_uuid.value(), service_data);
+    advertisement_data->set_service_data(std::move(service_data_map));
+  } else {
+    // Require the service uuid to be in 128-bit format.
+    DCHECK_EQ(service_uuid.format(),
+              device::BluetoothUUID::Format::kFormat128Bit);
+    auto scan_response_data_map =
+        std::make_unique<device::BluetoothAdvertisement::ScanResponseData>();
+    // Start with the original scan response data.
+    std::vector<uint8_t> scan_response_data(service_data.begin(),
+                                            service_data.end());
+    // Now insert in front of the service data the identifying 2-bytes of the
+    // service id assuming this is a valid 16-bit uuid. For example, the uuid:
+    // 0000fef3-0000-1000-8000-00805f9b34fb can be uniquely defined by two bytes
+    // ****fef3-****-****-****-************ the rest is the same for all 16-bit
+    // uuids as defined by the Bluetooth spec. We insert them in little endian
+    // ordering 0xf3 first, then 0xfe in for this example.
+    auto service_id_bytes = service_uuid.GetBytes();
+    // Take bytes 2 and 3.
+    auto id_bytes = base::make_span(service_id_bytes).subspan(2, 2);
+    // Add them in reverse order (little endian).
+    scan_response_data.insert(scan_response_data.begin(), id_bytes.rbegin(),
+                              id_bytes.rend());
+    // The platform API only supports AD Type 0x16 "Service Data" which assumes
+    // as 16-bit service id.
+    scan_response_data_map->emplace(0x16, scan_response_data);
+    advertisement_data->set_scan_response_data(
+        std::move(scan_response_data_map));
+  }
 
   auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
   adapter_->RegisterAdvertisement(
@@ -146,27 +175,44 @@ void Adapter::ConnectToServiceInsecurely(
     const std::string& address,
     const device::BluetoothUUID& service_uuid,
     ConnectToServiceInsecurelyCallback callback) {
+  auto* device = adapter_->GetDevice(address);
+  if (device) {
+    OnDeviceFetchedForInsecureServiceConnection(service_uuid,
+                                                std::move(callback), device);
+    return;
+  }
+
+  // This device has neither been discovered, nor has it been paired/connected
+  // to previously. Use the ConnectDevice() API, if available, to connect to it.
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
   auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
-  adapter_->GetDevice(address)->ConnectToServiceInsecurely(
-      service_uuid,
-      base::BindOnce(&Adapter::OnConnectToService,
-                     weak_ptr_factory_.GetWeakPtr(), copyable_callback),
+  adapter_->ConnectDevice(
+      address, /*address_type=*/base::nullopt,
+      base::BindOnce(&Adapter::OnDeviceFetchedForInsecureServiceConnection,
+                     weak_ptr_factory_.GetWeakPtr(), service_uuid,
+                     copyable_callback),
       base::BindOnce(&Adapter::OnConnectToServiceError,
-                     weak_ptr_factory_.GetWeakPtr(), copyable_callback));
+                     weak_ptr_factory_.GetWeakPtr(), copyable_callback,
+                     "Cannot connect to device."));
+#else
+  OnConnectToServiceError(std::move(callback), "Device does not exist.");
+#endif
 }
 
-void Adapter::CreateRfcommService(const std::string& service_name,
-                                  const device::BluetoothUUID& service_uuid,
-                                  CreateRfcommServiceCallback callback) {
+void Adapter::CreateRfcommServiceInsecurely(
+    const std::string& service_name,
+    const device::BluetoothUUID& service_uuid,
+    CreateRfcommServiceInsecurelyCallback callback) {
   device::BluetoothAdapter::ServiceOptions service_options;
   service_options.name = service_name;
+  service_options.require_authentication = false;
 
   auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
   adapter_->CreateRfcommService(
       service_uuid, service_options,
-      base::BindOnce(&Adapter::OnCreateRfcommService,
+      base::BindOnce(&Adapter::OnCreateRfcommServiceInsecurely,
                      weak_ptr_factory_.GetWeakPtr(), copyable_callback),
-      base::BindOnce(&Adapter::OnCreateRfcommServiceError,
+      base::BindOnce(&Adapter::OnCreateRfcommServiceInsecurelyError,
                      weak_ptr_factory_.GetWeakPtr(), copyable_callback));
 }
 
@@ -213,6 +259,56 @@ void Adapter::DeviceRemoved(device::BluetoothAdapter* adapter,
   auto device_info = Device::ConstructDeviceInfoStruct(device);
   for (auto& observer : observers_)
     observer->DeviceRemoved(device_info->Clone());
+}
+
+void Adapter::GattServicesDiscovered(device::BluetoothAdapter* adapter,
+                                     device::BluetoothDevice* device) {
+  // GattServicesDiscovered() and IsGattServicesDiscoveryComplete() actually
+  // indicate that all services on the remote device, including SDP, are
+  // resolved. Once service probing for a device within a cached request (in
+  // |pending_connect_to_service_args_|) concludes, attempt socket creation
+  // again via OnDeviceFetchedForInsecureServiceConnection().
+  if (!device->IsGattServicesDiscoveryComplete())
+    return;
+
+  const std::string& address = device->GetAddress();
+
+  auto it = pending_connect_to_service_args_.begin();
+  while (it != pending_connect_to_service_args_.end()) {
+    if (address == std::get<0>(*it)) {
+      OnDeviceFetchedForInsecureServiceConnection(
+          /*service_uuid=*/std::get<1>(*it),
+          /*callback=*/std::move(std::get<2>(*it)), device);
+      it = pending_connect_to_service_args_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void Adapter::OnDeviceFetchedForInsecureServiceConnection(
+    const device::BluetoothUUID& service_uuid,
+    ConnectToServiceInsecurelyCallback callback,
+    device::BluetoothDevice* device) {
+  if (device->IsConnected() && !device->IsGattServicesDiscoveryComplete()) {
+    // This provided device is most likely a result of calling ConnectDevice():
+    // it's connected, but the remote device's services are still being probed
+    // (IsGattServicesDiscoveryComplete() refers to all services, not just GATT
+    // services). That means attempting ConnectToServiceInsecurely() right now
+    // would fail with an "InProgress" error. Wait for GattServicesDiscovered()
+    // to be called to signal that ConnectToServiceInsecurely() can be called.
+    pending_connect_to_service_args_.emplace_back(
+        device->GetAddress(), service_uuid, std::move(callback));
+    return;
+  }
+
+  auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
+  device->ConnectToServiceInsecurely(
+      service_uuid,
+      base::BindOnce(&Adapter::OnConnectToService,
+                     weak_ptr_factory_.GetWeakPtr(), copyable_callback),
+      base::BindOnce(&Adapter::OnConnectToServiceError,
+                     weak_ptr_factory_.GetWeakPtr(), copyable_callback));
 }
 
 void Adapter::OnGattConnected(
@@ -327,8 +423,8 @@ void Adapter::OnConnectToServiceError(
   std::move(callback).Run(/*result=*/nullptr);
 }
 
-void Adapter::OnCreateRfcommService(
-    CreateRfcommServiceCallback callback,
+void Adapter::OnCreateRfcommServiceInsecurely(
+    CreateRfcommServiceInsecurelyCallback callback,
     scoped_refptr<device::BluetoothSocket> socket) {
   mojo::PendingRemote<mojom::ServerSocket> pending_server_socket;
   mojo::MakeSelfOwnedReceiver(
@@ -337,8 +433,9 @@ void Adapter::OnCreateRfcommService(
   std::move(callback).Run(std::move(pending_server_socket));
 }
 
-void Adapter::OnCreateRfcommServiceError(CreateRfcommServiceCallback callback,
-                                         const std::string& message) {
+void Adapter::OnCreateRfcommServiceInsecurelyError(
+    CreateRfcommServiceInsecurelyCallback callback,
+    const std::string& message) {
   LOG(ERROR) << "Failed to create service: '" << message << "'";
   std::move(callback).Run(/*server_socket=*/mojo::NullRemote());
 }

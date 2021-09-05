@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Надіслати посилання по пошті</translation>
 <translation id="1454726940098520109">Не показувати це підтвердження</translation>
 <translation id="1462666970065907900">Ви дійсно бажаєте закрити це вікно?</translation>
+<translation id="1526344461589023948">Під час збереження завантажених файлів оновлення сталася помилка. Будь ласка, перевірте наявність вільного місця на диску та спробуйте ще раз.</translation>
 <translation id="1657174850639146440">Монстр 9</translation>
 <translation id="1676595396635191120">Нове приватне вікно</translation>
+<translation id="1702758681952953055">Якщо помилка повторюється, напишіть нам про неї разом з такими деталями:</translation>
 <translation id="1728549374069268714">Вставити й перейти</translation>
 <translation id="1756026472674246267">Відкрити посилання в новій вкладці</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Краєвид 15</translation>
 <translation id="19598411548897379">Загальний</translation>
 <translation id="2079036669923635404">Натисніть тут, щоб оновити Vivaldi до версії <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Під час завантаження файлів оновлення сталася помилка. Будь ласка, перевірте інтернет-з'єднання та спробуйте ще раз.</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставити нотатку</translation>
 <translation id="2486841023299517366">Тварина 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Відкрити посилання у новому вікні</translation>
 <translation id="3588820906588687999">Відкрити зображення в новій вкладці</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
+<translation id="3708982624815781692">Завантаження було скасовано.</translation>
 <translation id="3732157130969736834">Помістити посилання в закладки</translation>
 <translation id="3732388226447288666">Тварина 2</translation>
 <translation id="3732439195215136813">Тварина 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Монстр 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Відкрити зображення у новому вікні</translation>
+<translation id="5656371807944747581">Помилка оновлення!</translation>
 <translation id="5716238312826274098">Вимкнення сповіщень</translation>
 <translation id="5770433027661640693">Краєвид 10</translation>
 <translation id="5857090052475505287">Нова тека</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
 <translation id="5916080360077521750">На жаль, налаштування Chrome недоступні при працюючому браузері. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані і закрийте всі вікна Chrome. Потім натисніть "Продовжити".</translation>
+<translation id="6040143037577758943">Закрити</translation>
 <translation id="6229528619562190452">Натисніть тут, щоб оновити Vivaldi.</translation>
 <translation id="6234173136417926046">Встановити фоном Експрес-панелі</translation>
 <translation id="630690498669249215">Файл закладок Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Краєвид 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi створено за використання проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> з відкритим кодом та іншого <ph name="BEGIN_LINK_OSS" />програмного забезпечення з відкритим кодом<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Сталася помилка при запуску інсталятора. Перевірте наявність вільного місця та пам'яті та спробуйте ще раз.</translation>
 <translation id="7715497554424665066">Ігнорувати оновлення</translation>
 <translation id="7724603315864178912">Вирізати</translation>
 <translation id="7793738202466490491">Додати у ролі події календаря</translation>
+<translation id="7848222781052558334">Сталася помилка під час перевірки цифрового підпису завантажених файлів.</translation>
 <translation id="7865983598101744945">Підтвердіть вихід</translation>
 <translation id="7957213167373139414">Мій календар</translation>
 <translation id="8027581147000338959">Відкрити у новому вікні</translation>

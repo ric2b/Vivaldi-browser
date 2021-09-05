@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #import "chrome/browser/ui/cocoa/window_size_autosaver.h"
 #include "chrome/browser/ui/task_manager/task_manager_columns.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -534,6 +533,10 @@ NSString* ColumnIdentifier(int id) {
 - (NSInteger)numberOfRowsInTableView:(NSTableView*)tableView {
   DCHECK(tableView == _tableView || _tableView == nil);
   return _tableModel->RowCount();
+}
+
+- (CGFloat)tableView:(NSTableView*)tableView heightOfRow:(NSInteger)row {
+  return 16;
 }
 
 - (NSString*)modelTextForRow:(int)row column:(int)columnId {

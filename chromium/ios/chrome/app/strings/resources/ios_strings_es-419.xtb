@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Se produjo un error en la impresión.</translation>
 <translation id="1125564390852150847">Crea una pestaña nueva.</translation>
 <translation id="1145536944570833626">Borra los datos existentes.</translation>
+<translation id="1147031633655575115">Accediste como <ph name="USER" /></translation>
 <translation id="1154690515305205900">No se puede crear un vínculo al texto destacado.</translation>
+<translation id="1157749421655780457">Permitir acceso a la ubicación…</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1172898394251786223">Campo siguiente</translation>
 <translation id="1176932207622159128">Error al guardar imagen</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Ocultar contraseña</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> elementos</translation>
 <translation id="1491277525950327607">Presiona dos veces para activar o desactivar la configuración</translation>
+<translation id="1492417797159476138">Ya guardaste este nombre de usuario en este sitio</translation>
 <translation id="1509486075633541495">Acceder al sitio web</translation>
 <translation id="1509960214886564027">Es posible que las características de muchos sitios no funcionen de forma correcta</translation>
 <translation id="152234381334907219">Nunca guardado</translation>
@@ -87,7 +90,7 @@
 <translation id="1753905327828125965">Más visitados</translation>
 <translation id="1803264062614276815">Nombre del titular de la tarjeta</translation>
 <translation id="1809939268435598390">Eliminar carpeta</translation>
-<translation id="1813414402673211292">Eliminar datos de navegación</translation>
+<translation id="1813414402673211292">Borrar datos de navegación</translation>
 <translation id="1820259098641718022">Se agregó a la lista de lectura</translation>
 <translation id="1870148520156231997">Mostrar contraseña</translation>
 <translation id="1872096359983322073">Linterna</translation>
@@ -266,6 +269,7 @@ Realiza los siguientes pasos:</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3892144330757387737">Aquí encontrarás tu historial</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3913386780052199712">Accediste a Chrome.</translation>
 <translation id="3915450441834151894">Información del sitio</translation>
 <translation id="3922310737605261887">Buscar el texto copiado</translation>
 <translation id="3928666092801078803">Combinar mis datos</translation>
@@ -340,6 +344,7 @@ Tus datos están encriptados con tu frase de contraseña para sincronización. D
 <translation id="4751645464639803239">Nueva pestaña de incógnito</translation>
 <translation id="4758977202923349869">Coloca la tarjeta de crédito en este marco</translation>
 <translation id="4775879719735953715">Navegador predeterminado</translation>
+<translation id="4778644898150334464">Usar otra contraseña</translation>
 <translation id="4802417911091824046">La encriptación de la frase de contraseña no incluye formas de pago ni direcciones de Google Pay.
 
 Para cambiar esta configuración, <ph name="BEGIN_LINK" />restablece la sincronización<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Para cambiar esta configuración, <ph name="BEGIN_LINK" />restablece la sincroni
 <translation id="5059136629401106827">Aceptar</translation>
 <translation id="5062321486222145940">Instalar Google Drive</translation>
 <translation id="5083464117946352670">Tamaño de archivo desconocido</translation>
+<translation id="5090832849094901128">Si borras esta contraseña, no se quitará tu cuenta de <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Tweet publicado</translation>
 <translation id="5118764316110575523">No</translation>
 <translation id="5127805178023152808">La sincronización está desactivada.</translation>
@@ -511,6 +517,9 @@ Sin embargo, no pueden usar cookies para ver la actividad de navegación en dife
 <translation id="6476800141292307438">Se está traduciendo la página al <ph name="LANGUAGE" />. Las opciones disponibles se encuentran cerca de la parte inferior de la pantalla.</translation>
 <translation id="648164694371393720">Error de autenticación</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elementos eliminados</translation>
+<translation id="6497772452874122664">Si confías en <ph name="TIME" />, puedes usar una contraseña guardada de otro sitio.
+
+Intenta usar una contraseña única para cada sitio.</translation>
 <translation id="651505212789431520">¿Quieres cancelar la sincronización? Puedes activarla en la Configuración en cualquier momento.</translation>
 <translation id="6561262006871132942">Acercar</translation>
 <translation id="6585618849026997638">Agrega un favorito para poder regresar a una página que consideres importante</translation>
@@ -590,6 +599,7 @@ Sin embargo, no pueden usar cookies para ver la actividad de navegación en dife
 <translation id="739941347996872055">Pestaña anterior</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> artículos sin leer.</translation>
+<translation id="7412027924265291969">Continuar</translation>
 <translation id="7425346204213733349">Los cambios de tus favoritos, historial, contraseñas y otras opciones de configuración ya no se sincronizarán con tu cuenta de Google. Sin embargo, los datos existentes permanecerán almacenados en tu cuenta de Google.</translation>
 <translation id="7435356471928173109">El administrador desactivó la función</translation>
 <translation id="7454057999980797137">Estado/condado</translation>
@@ -600,6 +610,7 @@ Sin embargo, no pueden usar cookies para ver la actividad de navegación en dife
 <translation id="7472734401283673885">Nombre de empresa</translation>
 <translation id="7473891865547856676">No, gracias</translation>
 <translation id="7481312909269577407">Reenviar</translation>
+<translation id="7483467499335917849">Usa tu ubicación actual</translation>
 <translation id="750493650310597496">0 seleccionados</translation>
 <translation id="7514365320538308">Descargar</translation>
 <translation id="7537586195939242955">Tu pase no se puede instalar en Passbook en este momento.</translation>
@@ -733,6 +744,7 @@ También pueden usar cookies para ver la actividad de navegación en diferentes 
 <translation id="9094033019050270033">Actualizar contraseña</translation>
 <translation id="9100610230175265781">Se necesita una frase de contraseña.</translation>
 <translation id="9107664647686727385">Verifica si hay contraseñas hackeadas</translation>
+<translation id="9137526406337347448">Servicios de Google</translation>
 <translation id="9148126808321036104">Accede nuevamente</translation>
 <translation id="9152539721251340337">Crear un código QR</translation>
 <translation id="9157836665414082580">Suprimir diálogos</translation>

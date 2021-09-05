@@ -20,6 +20,11 @@ enum ChromeIsolatedWorldIDs {
   ISOLATED_WORLD_ID_APPLESCRIPT,
 #endif  // defined(OS_MAC)
 
+  // Grabbing 5 world IDs for the content injection feature.
+  ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION,
+  ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END =
+      ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION + 5,
+
   // Numbers for isolated worlds for extensions are set in
   // extensions/renderer/script_injection.cc, and are are greater than or equal
   // to this number.

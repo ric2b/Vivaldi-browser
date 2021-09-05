@@ -5,13 +5,19 @@
 #import "ios/chrome/browser/ui/content_suggestions/discover_feed_metrics_recorder.h"
 
 #import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "components/feed/core/v2/common_enums.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using feed::FeedEngagementType;
+using feed::FeedUserActionType;
 
 // Values for the UMA ContentSuggestions.Feed.LoadStreamStatus.LoadMore
 // histogram. These values are persisted to logs. Entries should not be
@@ -43,55 +49,6 @@ enum class FeedLoadStreamStatus {
   kMaxValue = kCannotLoadMoreNoNextPageToken,
 };
 
-// Values for the UMA ContentSuggestions.Feed.UserActions
-// histogram. These values are persisted to logs. Entries should not be
-// renumbered and numeric values should never be reused. This must be kept
-// in sync with FeedUserActionType in enums.xml.
-enum class FeedUserActionType {
-  // User tapped on card, opening the article in the same tab.
-  kTappedOnCard = 0,
-  kShownCard = 1,
-  // User tapped on 'Send Feedback' in the back of card menu.
-  kTappedSendFeedback = 2,
-  // Discover feed header menu 'Learn More' tapped.
-  kTappedLearnMore = 3,
-  kTappedHideStory = 4,
-  kTappedNotInterestedIn = 5,
-  // Discover feed header menu 'Manage Interests' tapped.
-  kTappedManageInterests = 6,
-  kTappedDownload = 7,
-  // User opened the article in a new tab from the back of card menu.
-  kTappedOpenInNewTab = 8,
-  kOpenedContextMenu = 9,
-  kOpenedFeedSurface = 10,
-  // User opened the article in an incognito tab from the back of card menu.
-  kTappedOpenInNewIncognitoTab = 11,
-  kEphemeralChange = 12,
-  kEphemeralChangeRejected = 13,
-  // Discover feed visibility toggled from header menu.
-  kTappedTurnOn = 14,
-  kTappedTurnOff = 15,
-  // Discover feed header menu 'Manage Activity' tapped.
-  kTappedManageActivity = 16,
-  // User added article to 'Read Later' list.
-  kAddedToReadLater = 17,
-  // Highest enumerator. Recommended by Histogram metrics best practices.
-  kMaxValue = kAddedToReadLater,
-};
-
-// Values for the UMA ContentSuggestions.Feed.EngagementType
-// histogram. These values are persisted to logs. Entries should not be
-// renumbered and numeric values should never be reused. This must be kept
-// in sync with FeedEngagementType in enums.xml.
-enum class FeedEngagementType {
-  kFeedEngaged = 0,
-  kFeedEngagedSimple = 1,
-  kFeedInteracted = 2,
-  kDeprecatedFeedScrolled = 3,
-  kFeedScrolled = 4,
-  kMaxValue = kFeedScrolled,
-};
-
 namespace {
 // Histogram name for the infinite feed trigger.
 const char kDiscoverFeedInfiniteFeedTriggered[] =
@@ -100,6 +57,10 @@ const char kDiscoverFeedInfiniteFeedTriggered[] =
 // Histogram name for the Discover feed user actions.
 const char kDiscoverFeedUserActionHistogram[] =
     "ContentSuggestions.Feed.UserActions";
+
+// Histogram name for the Discover feed user actions commands.
+const char kDiscoverFeedUserActionCommandHistogram[] =
+    "ContentSuggestions.Feed.UserActions.Commands";
 
 // User action names for toggling the feed visibility from the header menu.
 const char kDiscoverFeedUserActionTurnOn[] =
@@ -120,6 +81,18 @@ const char kDiscoverFeedUserActionReadLaterTapped[] =
     "ContentSuggestions.Feed.CardAction.ReadLater";
 const char kDiscoverFeedUserActionSendFeedbackOpened[] =
     "ContentSuggestions.Feed.CardAction.SendFeedback";
+const char kDiscoverFeedUserActionContextMenuOpened[] =
+    "ContentSuggestions.Feed.CardAction.ContextMenu";
+const char kDiscoverFeedUserActionHideStory[] =
+    "ContentSuggestions.Feed.CardAction.HideStory";
+const char kDiscoverFeedUserActionCloseContextMenu[] =
+    "ContentSuggestions.Feed.CardAction.ClosedContextMenu";
+const char kDiscoverFeedUserActionNativeContextMenuOpened[] =
+    "ContentSuggestions.Feed.CardAction.NativeContextMenu";
+const char kDiscoverFeedUserActionReportContentOpened[] =
+    "ContentSuggestions.Feed.CardAction.ReportContent";
+const char kDiscoverFeedUserActionReportContentClosed[] =
+    "ContentSuggestions.Feed.CardAction.ClosedReportContent";
 
 // User action names for feed header menu.
 const char kDiscoverFeedUserActionManageActivityTapped[] =
@@ -134,6 +107,45 @@ const char kDiscoverFeedUserActionInfiniteFeedTriggered[] =
 // Histogram name for the feed engagement types.
 const char kDiscoverFeedEngagementTypeHistogram[] =
     "ContentSuggestions.Feed.EngagementType";
+
+// Histogram name to capture Feed Notice card impressions.
+const char kDiscoverFeedNoticeCardFulfilled[] =
+    "ContentSuggestions.Feed.NoticeCardFulfilled2";
+
+// Histogram name to measure the time it took the Feed to fetch articles
+// successfully.
+const char kDiscoverFeedArticlesFetchNetworkDurationSuccess[] =
+    "ContentSuggestions.Feed.Network.Duration.ArticlesFetchSuccess";
+
+// Histogram name to measure the time it took the Feed to fetch articles
+// unsuccessfully.
+const char kDiscoverFeedArticlesFetchNetworkDurationFailure[] =
+    "ContentSuggestions.Feed.Network.Duration.ArticlesFetchFailure";
+
+// Histogram name to measure the time it took the Feed to fetch more articles
+// successfully.
+const char kDiscoverFeedMoreArticlesFetchNetworkDurationSuccess[] =
+    "ContentSuggestions.Feed.Network.Duration.MoreArticlesFetchSuccess";
+
+// Histogram name to measure the time it took the Feed to fetch more articles
+// unsuccessfully.
+const char kDiscoverFeedMoreArticlesFetchNetworkDurationFailure[] =
+    "ContentSuggestions.Feed.Network.Duration.MoreArticlesFetchFailure";
+
+// Histogram name to measure the time it took the Feed to upload actions
+// successfully.
+const char kDiscoverFeedUploadActionsNetworkDurationSuccess[] =
+    "ContentSuggestions.Feed.Network.Duration.ActionUploadSuccess";
+
+// Histogram name to measure the time it took the Feed to upload actions
+// unsuccessfully.
+const char kDiscoverFeedUploadActionsNetworkDurationFailure[] =
+    "ContentSuggestions.Feed.Network.Duration.ActionUploadFailure";
+
+// Histogram name to measure the time it took the Feed to perform a network
+// operation.
+const char kDiscoverFeedNetworkDuration[] =
+    "ContentSuggestions.Feed.Network.Duration";
 
 // Minimum scrolling amount to record a FeedEngagementType::kFeedEngaged due to
 // scrolling.
@@ -164,6 +176,7 @@ const int kMinutesBetweenSessions = 5;
 #pragma mark - Public
 
 - (void)recordFeedScrolled:(int)scrollDistance {
+  DCHECK(IsDiscoverFeedEnabled());
   [self recordEngagement:scrollDistance interacted:NO];
 
   if (!self.scrolledReported) {
@@ -247,6 +260,111 @@ const int kMinutesBetweenSessions = 5;
       base::UserMetricsAction(kDiscoverFeedUserActionSendFeedbackOpened));
 }
 
+- (void)recordOpenBackOfCardMenu {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kOpenedContextMenu];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionContextMenuOpened));
+}
+
+- (void)recordCloseBackOfCardMenu {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kClosedContextMenu];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionCloseContextMenu));
+}
+
+- (void)recordOpenNativeBackOfCardMenu {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kOpenedNativeContextMenu];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionNativeContextMenuOpened));
+}
+
+- (void)recordShowDialog {
+  [self
+      recordDiscoverFeedUserActionHistogram:FeedUserActionType::kOpenedDialog];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionReportContentOpened));
+}
+
+- (void)recordDismissDialog {
+  [self
+      recordDiscoverFeedUserActionHistogram:FeedUserActionType::kClosedDialog];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionReportContentClosed));
+}
+
+- (void)recordDismissCard {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kEphemeralChange];
+  base::RecordAction(base::UserMetricsAction(kDiscoverFeedUserActionHideStory));
+}
+
+- (void)recordUndoDismissCard {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kEphemeralChangeRejected];
+}
+
+- (void)recordCommittDismissCard {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kEphemeralChangeCommited];
+}
+
+- (void)recordShowSnackbar {
+  [self
+      recordDiscoverFeedUserActionHistogram:FeedUserActionType::kShowSnackbar];
+}
+
+- (void)recordCommandID:(int)commandID {
+  base::UmaHistogramSparse(kDiscoverFeedUserActionCommandHistogram, commandID);
+}
+
+- (void)recordNoticeCardShown:(BOOL)shown {
+  base::UmaHistogramBoolean(kDiscoverFeedNoticeCardFulfilled, shown);
+}
+
+- (void)recordFeedArticlesFetchDurationInSeconds:
+            (NSTimeInterval)durationInSeconds
+                                         success:(BOOL)success {
+  if (success) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedArticlesFetchNetworkDurationSuccess,
+                               base::TimeDelta::FromSeconds(durationInSeconds));
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedArticlesFetchNetworkDurationFailure,
+                               base::TimeDelta::FromSeconds(durationInSeconds));
+  }
+  [self recordNetworkRequestDurationInSeconds:durationInSeconds];
+}
+
+- (void)recordFeedMoreArticlesFetchDurationInSeconds:
+            (NSTimeInterval)durationInSeconds
+                                             success:(BOOL)success {
+  if (success) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        kDiscoverFeedMoreArticlesFetchNetworkDurationSuccess,
+        base::TimeDelta::FromSeconds(durationInSeconds));
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        kDiscoverFeedMoreArticlesFetchNetworkDurationFailure,
+        base::TimeDelta::FromSeconds(durationInSeconds));
+  }
+  [self recordNetworkRequestDurationInSeconds:durationInSeconds];
+}
+
+- (void)recordFeedUploadActionsDurationInSeconds:
+            (NSTimeInterval)durationInSeconds
+                                         success:(BOOL)success {
+  if (success) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedUploadActionsNetworkDurationSuccess,
+                               base::TimeDelta::FromSeconds(durationInSeconds));
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedUploadActionsNetworkDurationFailure,
+                               base::TimeDelta::FromSeconds(durationInSeconds));
+  }
+  [self recordNetworkRequestDurationInSeconds:durationInSeconds];
+}
+
 #pragma mark - Private
 
 // Records histogram metrics for Discover feed user actions.
@@ -289,6 +407,7 @@ const int kMinutesBetweenSessions = 5;
 
 // Records any direct interaction with the Feed, this doesn't include scrolling.
 - (void)recordInteraction {
+  DCHECK(IsDiscoverFeedEnabled());
   [self recordEngagement:0 interacted:YES];
   [self recordEngagementTypeHistogram:FeedEngagementType::kFeedInteracted];
 }
@@ -307,6 +426,14 @@ const int kMinutesBetweenSessions = 5;
   self.engagedReported = NO;
   self.engagedSimpleReported = NO;
   self.scrolledReported = NO;
+}
+
+// Records the |durationInSeconds| it took to Discover feed to perform any
+// network operation.
+- (void)recordNetworkRequestDurationInSeconds:
+    (NSTimeInterval)durationInSeconds {
+  UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedNetworkDuration,
+                             base::TimeDelta::FromSeconds(durationInSeconds));
 }
 
 @end

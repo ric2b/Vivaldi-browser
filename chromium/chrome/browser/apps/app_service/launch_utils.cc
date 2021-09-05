@@ -112,7 +112,7 @@ std::vector<base::FilePath> GetLaunchFilesFromCommandLine(
 
 Browser* CreateBrowserWithNewTabPage(Profile* profile) {
   Browser::CreateParams create_params(profile, /*user_gesture=*/false);
-  Browser* browser = new Browser(create_params);
+  Browser* browser = Browser::Create(create_params);
 
   NavigateParams params(browser, GURL(chrome::kChromeUINewTabURL),
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
@@ -157,7 +157,7 @@ apps::AppLaunchParams CreateAppLaunchParamsForIntent(
     apps::mojom::AppLaunchSource source,
     int64_t display_id,
     apps::mojom::LaunchContainer fallback_container,
-    const apps::mojom::IntentPtr& intent) {
+    apps::mojom::IntentPtr&& intent) {
   auto params = CreateAppIdLaunchParamsWithEventFlags(
       app_id, event_flags, source, display_id, fallback_container);
 
@@ -175,6 +175,8 @@ apps::AppLaunchParams CreateAppLaunchParamsForIntent(
     LOG(ERROR) << "url is:" << params.override_url.spec();
     DCHECK(params.override_url.is_valid());
   }
+
+  params.intent = std::move(intent);
 
   return params;
 }

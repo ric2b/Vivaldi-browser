@@ -11,9 +11,11 @@
 #include <string>
 #include <vector>
 
+#include "base/optional.h"
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/trigger_scripts/trigger_script.h"
 
 class GURL;
 
@@ -50,7 +52,14 @@ class ProtocolUtils {
       const std::string& global_payload,
       const std::string& script_payload,
       const std::vector<ProcessedActionProto>& processed_actions,
+      const RoundtripTimingStats& timing_stats,
       const ClientContextProto& client_context);
+
+  // Create request to get the available trigger scripts for |url|.
+  static std::string CreateGetTriggerScriptsRequest(
+      const GURL& url,
+      const ClientContextProto& client_context,
+      const std::map<std::string, std::string>& script_parameters);
 
   // Create an action from the |action|.
   static std::unique_ptr<Action> CreateAction(ActionDelegate* delegate,
@@ -72,6 +81,15 @@ class ProtocolUtils {
                            std::vector<std::unique_ptr<Action>>* actions,
                            std::vector<std::unique_ptr<Script>>* scripts,
                            bool* should_update_scripts);
+
+  // Parse trigger scripts from the given |response| and insert them into
+  // |trigger_scripts|. Returns false if parsing failed, else true.
+  static bool ParseTriggerScripts(
+      const std::string& response,
+      std::vector<std::unique_ptr<TriggerScript>>* trigger_scripts,
+      std::vector<std::string>* additional_allowed_domains,
+      int* trigger_condition_check_interval_ms,
+      base::Optional<int>* timeout_ms);
 
  private:
   // To avoid instantiate this class by accident.

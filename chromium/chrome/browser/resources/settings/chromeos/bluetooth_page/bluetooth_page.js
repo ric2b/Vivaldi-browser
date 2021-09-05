@@ -185,7 +185,7 @@ Polymer({
    */
   currentRouteChanged(newRoute, oldRoute) {
     // Does not apply to this page.
-    if (newRoute != settings.routes.BLUETOOTH) {
+    if (newRoute !== settings.routes.BLUETOOTH) {
       return;
     }
 
@@ -238,6 +238,18 @@ Polymer({
     }
   },
 
+  /**
+   * Listens for toggle change events (rather than state changes) to handle
+   * just user-triggered changes to the bluetoothToggleState_.
+   * @private
+   */
+  onBluetoothToggledByUser_() {
+    // Record that the user manually enabled/disabled Bluetooth.
+    settings.recordSettingChange(
+        chromeos.settings.mojom.Setting.kBluetoothOnOff,
+        {boolValue: this.bluetoothToggleState_});
+  },
+
   /** @private */
   onTap_() {
     if (!this.isToggleEnabled_()) {
@@ -262,7 +274,7 @@ Polymer({
   /** @private */
   bluetoothToggleStateChanged_() {
     if (!this.adapterState_ || !this.isToggleEnabled_() ||
-        this.bluetoothToggleState_ == this.adapterState_.powered) {
+        this.bluetoothToggleState_ === this.adapterState_.powered) {
       return;
     }
     this.stateChangeInProgress_ = true;
@@ -273,7 +285,7 @@ Polymer({
           this.stateChangeInProgress_ = false;
 
           const error = chrome.runtime.lastError;
-          if (error && error != 'Error setting adapter properties: powered') {
+          if (error && error !== 'Error setting adapter properties: powered') {
             console.error('Error enabling bluetooth: ' + error.message);
             return;
           }

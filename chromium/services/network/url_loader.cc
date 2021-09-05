@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
@@ -224,10 +224,6 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
         element_readers.push_back(std::make_unique<FileElementReader>(
             body, file_task_runner, element, std::move(*opened_file++)));
         break;
-      case network::mojom::DataElementType::kBlob: {
-        CHECK(false) << "Network service always uses DATA_PIPE for blobs.";
-        break;
-      }
       case network::mojom::DataElementType::kDataPipe: {
         element_readers.push_back(std::make_unique<DataPipeElementReader>(
             body, element.CloneDataPipeGetter()));
@@ -552,9 +548,9 @@ URLLoader::URLLoader(
     }
   } else if (factory_params_->automatically_assign_isolation_info) {
     url::Origin origin = url::Origin::Create(request.url);
-    url_request_->set_isolation_info(net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-        net::SiteForCookies()));
+    url_request_->set_isolation_info(
+        net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                   origin, origin, net::SiteForCookies()));
   }
 
   if (url_request_context_->require_network_isolation_key())
@@ -651,6 +647,25 @@ URLLoader::URLLoader(
 
   // Resolve elements from request_body and prepare upload data.
   if (request.request_body.get()) {
+    const auto& elements = *request.request_body->elements();
+    // TODO(crbug.com/1156550): Move this logic to the deserialization part.
+    if (elements.size() == 1 &&
+        (elements[0].type() == mojom::DataElementType::kChunkedDataPipe ||
+         elements[0].type() == mojom::DataElementType::kReadOnceStream)) {
+      const bool chunked_data_pipe_getter_is_valid =
+          elements[0].chunked_data_pipe_getter().is_valid();
+      UMA_HISTOGRAM_BOOLEAN(
+          "NetworkService.StreamingUploadDataPipeGetterValidity",
+          chunked_data_pipe_getter_is_valid);
+      if (!chunked_data_pipe_getter_is_valid) {
+        base::SequencedTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE,
+            base::BindOnce(&URLLoader::NotifyCompleted, base::Unretained(this),
+                           net::ERR_INVALID_ARGUMENT));
+        return;
+      }
+    }
+
     OpenFilesForUpload(request);
     return;
   }
@@ -982,15 +997,13 @@ void URLLoader::ResumeReadingBodyFromNet() {
   }
 }
 
-int URLLoader::CanConnectToRemoteEndpoint(
-    const net::TransportInfo& info) const {
-  const mojom::IPAddressSpace remote_address_space =
-      IPAddressToIPAddressSpace(info.endpoint.address());
+bool URLLoader::CanConnectToAddressSpace(
+    mojom::IPAddressSpace resource_address_space) const {
   if (options_ & mojom::kURLLoadOptionBlockLocalRequest &&
-      IsLessPublicAddressSpace(remote_address_space,
+      IsLessPublicAddressSpace(resource_address_space,
                                network::mojom::IPAddressSpace::kPublic)) {
     DVLOG(1) << "CORS-RFC1918 check: failed due to loader options.";
-    return net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST;
+    return false;
   }
 
   // Depending on the type of URL request, we source the client security state
@@ -1013,7 +1026,7 @@ int URLLoader::CanConnectToRemoteEndpoint(
 
   if (!security_state) {
     DVLOG(1) << "CORS-RFC1918 check: skipped, missing client security state.";
-    return net::OK;
+    return true;
   }
 
   DVLOG(1) << "CORS-RFC1918 check: running against client security state = { "
@@ -1033,16 +1046,16 @@ int URLLoader::CanConnectToRemoteEndpoint(
       // insecure public websites from making requests to someone's printer, for
       // example.
       if (!security_state->is_web_secure_context &&
-          IsLessPublicAddressSpace(remote_address_space,
+          IsLessPublicAddressSpace(resource_address_space,
                                    security_state->ip_address_space)) {
         DVLOG(1) << "CORS-RFC1918 check: "
                     "failed, blocking insecure private network request.";
-        return net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST;
+        return false;
       }
   }
 
   DVLOG(1) << "CORS-RFC1918 check: success.";
-  return net::OK;
+  return true;
 }
 
 int URLLoader::OnConnected(net::URLRequest* url_request,
@@ -1054,7 +1067,17 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
 
   // Now that the request endpoint's address has been resolved, check if
   // this request should be blocked by CORS-RFC1918 rules.
-  return CanConnectToRemoteEndpoint(info);
+  mojom::IPAddressSpace resource_address_space =
+      IPAddressToIPAddressSpace(info.endpoint.address());
+  if (!CanConnectToAddressSpace(resource_address_space)) {
+    // Remember the CORS error so we can annotate the URLLoaderCompletionStatus
+    // with it later, then fail the request with the same net error code as
+    // other CORS errors.
+    cors_error_status_ = CorsErrorStatus(resource_address_space);
+    return net::ERR_FAILED;
+  }
+
+  return net::OK;
 }
 
 void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
@@ -1370,7 +1393,7 @@ void URLLoader::ContinueOnResponseStarted() {
     // Create IsolationInfo as if this were an uncredentialed subresource
     // request of the original URL.
     net::IsolationInfo isolation_info = net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateNothing,
+        net::IsolationInfo::RequestType::kOther,
         url_request_->isolation_info().top_frame_origin().value(),
         url_request_->isolation_info().frame_origin().value(),
         net::SiteForCookies());
@@ -1751,6 +1774,7 @@ void URLLoader::NotifyCompleted(int error_code) {
         url_request_->response_info().resolve_error_info;
     if (trust_token_status_)
       status.trust_token_operation_status = *trust_token_status_;
+    status.cors_error_status = cors_error_status_;
 
     if ((options_ & mojom::kURLLoadOptionSendSSLInfoForCertificateError) &&
         net::IsCertStatusError(url_request_->ssl_info().cert_status)) {
@@ -1806,16 +1830,6 @@ void URLLoader::SendResponseToClient() {
   TRACE_EVENT1("loading", "network::URLLoader::SendResponseToClient", "url",
                url_request_->url().possibly_invalid_spec());
   url_loader_client_->OnReceiveResponse(std::move(response_));
-
-  net::IOBufferWithSize* metadata =
-      url_request_->response_info().metadata.get();
-  if (metadata) {
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(metadata->data());
-
-    url_loader_client_->OnReceiveCachedMetadata(
-        std::vector<uint8_t>(data, data + metadata->size()));
-  }
-
   url_loader_client_->OnStartLoadingResponseBody(std::move(consumer_handle_));
 }
 

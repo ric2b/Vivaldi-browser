@@ -23,6 +23,7 @@
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> paylaşmaq mümkün deyil</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> <ph name="SECOND_ITEM_TITLE" /> ilə dəyişdirildi</translation>
 <translation id="1498028757988366001">Bunu əvvəl axtarmısınız. Tarixçədən "<ph name="QUERY" />" sorğusunun silinməsi onu bütün cihazlardakı hesabınızdan həmişəlik siləcək.</translation>
+<translation id="1510238584712386396">Başladıcı</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 dəqiqə və }other{# dəqiqə və }}</translation>
 <translation id="1643823602425662293">Bildiriş</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> Fayl</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">"<ph name="LOOKUP_STRING" />" baxın</translation>
+<translation id="3622035490309591977">Mübadilə buferi tarixçəsi</translation>
 <translation id="364720409959344976">Yükləmək üçün Qovluq Seçin</translation>
 <translation id="3660179305079774227">Yuxarı Ox</translation>
 <translation id="3670030362669914947">Nömrə</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Bu gün aktivdir}=1{1 gün əvvəl aktiv olub}other{# gün əvvəl aktiv olub}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 gün və }other{# gün }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Şəkil.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 ildə}other{# ildə}}</translation>
 <translation id="588258955323874662">Tam ekran</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 saniyə qalıb}other{# saniyə qalıb}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">basın</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 saat qalıb}other{# saat qalıb}}</translation>
 <translation id="688711909580084195">Başlıqsız Veb</translation>
+<translation id="6902419395050653510">HTML məzmun.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 il qalıb}other{# il qalıb}}</translation>
 <translation id="6945221475159498467">Seçin</translation>

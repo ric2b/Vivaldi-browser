@@ -6,11 +6,11 @@
 
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/thread_pool/pooled_task_runner_delegate.h"
 #include "base/task/thread_pool/test_utils.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
@@ -27,13 +27,16 @@ class MockPooledTaskRunnerDelegate : public PooledTaskRunnerDelegate {
  public:
   MOCK_METHOD2(PostTaskWithSequence,
                bool(Task task, scoped_refptr<Sequence> sequence));
-  MOCK_CONST_METHOD1(ShouldYield, bool(const TaskSource* task_source));
+  MOCK_METHOD1(ShouldYield, bool(const TaskSource* task_source));
   MOCK_METHOD1(EnqueueJobTaskSource,
                bool(scoped_refptr<JobTaskSource> task_source));
   MOCK_METHOD1(RemoveJobTaskSource,
                void(scoped_refptr<JobTaskSource> task_source));
   MOCK_CONST_METHOD1(IsRunningPoolWithTraits, bool(const TaskTraits& traits));
   MOCK_METHOD2(UpdatePriority,
+               void(scoped_refptr<TaskSource> task_source,
+                    TaskPriority priority));
+  MOCK_METHOD2(UpdateJobPriority,
                void(scoped_refptr<TaskSource> task_source,
                     TaskPriority priority));
 };

@@ -16,21 +16,29 @@ namespace video_tutorials {
 TEST(VideoTutorialsConfigTest, FinchConfigEnabled) {
   base::test::ScopedFeatureList feature_list;
   std::map<std::string, std::string> params = {
-      {kBaseURLKey, "https://test.com"}, {kPreferredLocaleConfigKey, "en"}};
+      {kBaseURLKey, "https://test.com"},
+      {kPreferredLocaleConfigKey, "en"},
+      {"fetch_frequency", "10"},
+      {"experiment_tag", "{some_param:some_value}"}};
   feature_list.InitAndEnableFeatureWithParameters(features::kVideoTutorials,
                                                   params);
 
   EXPECT_EQ(Config::GetTutorialsServerURL().spec(),
             "https://test.com/v1/videotutorials");
   EXPECT_EQ(Config::GetDefaultPreferredLocale(), "en");
+  EXPECT_EQ(Config::GetFetchFrequency(), base::TimeDelta::FromDays(10));
+  EXPECT_EQ(Config::GetExperimentTag(), "{some_param:some_value}");
 }
 
 TEST(VideoTutorialsConfigTest, ConfigDefaultParams) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kVideoTutorials);
   EXPECT_EQ(Config::GetTutorialsServerURL().spec(),
-            "https://chromeupboarding-pa.googleapis.com/v1/videotutorials");
-  EXPECT_EQ(Config::GetDefaultPreferredLocale(), "hi");
+            "https://staging-gsaprototype-pa.sandbox.googleapis.com/v1/"
+            "videotutorials");
+  EXPECT_EQ(Config::GetDefaultPreferredLocale(), "en");
+  EXPECT_EQ(Config::GetFetchFrequency(), base::TimeDelta::FromDays(15));
+  EXPECT_EQ(Config::GetExperimentTag(), "");
 }
 
 }  // namespace video_tutorials

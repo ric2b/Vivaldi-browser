@@ -11,6 +11,7 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/media_export.h"
 #include "media/media_buildflags.h"
 
@@ -53,10 +54,6 @@ MEDIA_EXPORT extern const char kEnableProtectedVideoBuffers[];
 MEDIA_EXPORT extern const char kForceProtectedVideoOutputBuffers[];
 MEDIA_EXPORT extern const char kDisableAudioInput[];
 MEDIA_EXPORT extern const char kUseOverlaysForVideo[];
-#endif
-
-#if defined(OS_CHROMEOS)
-MEDIA_EXPORT extern const char kPlatformDisallowsChromeOSDirectVideoDecoder[];
 #endif
 
 #if defined(USE_CRAS)
@@ -117,7 +114,6 @@ MEDIA_EXPORT extern const base::Feature kD3D11PrintCodecOnCrash;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoder;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderIgnoreWorkarounds;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderVP9Profile2;
-MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderCopyPictures;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderSkipMultithreaded;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAlwaysCopy;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAllowOverlay;
@@ -153,7 +149,6 @@ MEDIA_EXPORT extern const base::Feature kMediaEngagementHTTPSOnly;
 MEDIA_EXPORT extern const base::Feature kMediaFeeds;
 MEDIA_EXPORT extern const base::Feature kMediaFeedsBackgroundFetching;
 MEDIA_EXPORT extern const base::Feature kMediaFeedsSafeSearch;
-MEDIA_EXPORT extern const base::Feature kMediaInspectorLogging;
 MEDIA_EXPORT extern const base::Feature kMediaLearningExperiment;
 MEDIA_EXPORT extern const base::Feature kMediaLearningFramework;
 MEDIA_EXPORT extern const base::Feature kMediaLearningSmoothnessExperiment;
@@ -177,6 +172,7 @@ MEDIA_EXPORT extern const base::Feature kUseFakeDeviceForMediaStream;
 MEDIA_EXPORT extern const base::Feature kUseMediaHistoryStore;
 MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 MEDIA_EXPORT extern const base::Feature kUseSodaForLiveCaption;
+MEDIA_EXPORT extern const base::Feature kVaapiAV1Decoder;
 MEDIA_EXPORT extern const base::Feature kVaapiLowPowerEncoderGen9x;
 MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP9Encoder;
@@ -188,9 +184,9 @@ MEDIA_EXPORT extern const base::Feature kResolutionBasedDecoderPriority;
 MEDIA_EXPORT extern const base::Feature kForceHardwareVideoDecoders;
 MEDIA_EXPORT extern const base::Feature kForceHardwareAudioDecoders;
 
-#if defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
+#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_ASH)
 MEDIA_EXPORT extern const base::Feature kVp9kSVCHWDecoding;
-#endif  // defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
+#endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_ASH)
 
 #if defined(OS_ANDROID)
 MEDIA_EXPORT extern const base::Feature kAllowNonSecureOverlays;
@@ -205,14 +201,13 @@ MEDIA_EXPORT extern const base::Feature kHlsPlayer;
 MEDIA_EXPORT extern const base::Feature kRequestSystemAudioFocus;
 MEDIA_EXPORT extern const base::Feature kUseAudioLatencyFromHAL;
 MEDIA_EXPORT extern const base::Feature kUsePooledSharedImageVideoProvider;
-MEDIA_EXPORT extern const base::Feature kWebViewZeroCopyVideo;
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#if BUILDFLAG(IS_ASH) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 MEDIA_EXPORT extern const base::Feature kUseChromeOSDirectVideoDecoder;
 
 MEDIA_EXPORT extern const base::Feature kUseAlternateVideoDecoderImplementation;
-#endif  // defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#endif  // BUILDFLAG(IS_ASH) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #if defined(OS_WIN)
 MEDIA_EXPORT extern const base::Feature kDelayCopyNV12Textures;
@@ -239,6 +234,17 @@ MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
     const base::CommandLine& command_line);
 
 MEDIA_EXPORT bool IsVideoCaptureAcceleratedJpegDecodingEnabled();
+
+enum class kCrosGlobalMediaControlsPinOptions {
+  kPin,
+  kNotPin,
+  kHeuristic,
+};
+
+// Feature param used to force default pin/unpin for global media controls in
+// CrOS.
+MEDIA_EXPORT extern const base::FeatureParam<kCrosGlobalMediaControlsPinOptions>
+    kCrosGlobalMediaControlsPinParam;
 
 }  // namespace media
 

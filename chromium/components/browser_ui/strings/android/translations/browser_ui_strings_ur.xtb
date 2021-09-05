@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">سائٹ <ph name="SITE_NAME" /> شامل کی گئی</translation>
 <translation id="1383876407941801731">تلاش کریں</translation>
 <translation id="1384959399684842514">ڈاؤن لوڈ موقوف ہوگیا</translation>
+<translation id="1415402041810619267">‏URL کو چھوٹا کیا گیا</translation>
 <translation id="1431402976894535801">سائٹس کو اپنی موجودگی کے بارے میں جاننے سے مسدود کریں</translation>
 <translation id="1446450296470737166">‏MIDI آلات کے مکمل کنٹرول کی اجازت دیں</translation>
 <translation id="1509960214886564027">بہت سی سائٹس پر خصوصیات میں خلل ہو سکتا ہے</translation>
 <translation id="1620510694547887537">کیمرا</translation>
-<translation id="1647391597548383849">اپنے کیمرے تک رسائی حاصل کریں</translation>
 <translation id="1660204651932907780">سائٹس کو آواز چلانے کی اجازت دیں (تجویز کردہ)</translation>
 <translation id="1677097821151855053">کوکیز اور سائٹ کا دیگر ڈیٹا آپ کو یاد رکھنے کے لئے استعمال ہوتا ہے، مثال کے طور پر آپ کو سائن ان کرنے یا اشتہارات کو ذاتی نوعیت کا بنانے کے لیے۔ سبھی سائٹس کی خاطر کوکیز کا نظم کرنے کے لیے، <ph name="BEGIN_LINK" />ترتیبات<ph name="END_LINK" /> دیکھیں۔</translation>
 <translation id="1688867105868176567">سائٹ کا ڈیٹا صاف کریں؟</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">‏سائٹ کا URL</translation>
 <translation id="2025115093177348061">افزودہ حقیقت</translation>
 <translation id="2030769033451695672"><ph name="URL_OF_THE_CURRENT_TAB" /> پر واپس جانے کے لیے تھپتھپائیں</translation>
+<translation id="2054665754582400095">آپ کی موجودگی</translation>
 <translation id="2079545284768500474">کالعدم کریں</translation>
 <translation id="2091887806945687916">آواز</translation>
 <translation id="2107397443965016585">سائٹس کو محفوظ مواد چلانے کی اجازت دینے سے پہلے پوچھیں (تجویز کردہ)</translation>
 <translation id="2146738493024040262">فوری ایپ کھولیں</translation>
 <translation id="2148716181193084225">آج</translation>
 <translation id="2182457891543959921">‏سائٹس کو اپنے اطراف کا 3D نقشہ تخلیق یا کیمرے کی پوزیشن ٹریک کرنے کی اجازت دینے سے پہلے پوچھیں (تجویز کردہ)</translation>
-<translation id="2187243482123994665">صارف کی موجودگی</translation>
 <translation id="2212565012507486665">کوکیز کی اجازت دیں</translation>
 <translation id="2228071138934252756">‏<ph name="APP_NAME" /> کو اپنے کیمرے تک رسائی دینے کے لیے، <ph name="BEGIN_LINK" />Android کی ترتیبات<ph name="END_LINK" /> میں بھی کیمرا آن کریں۔</translation>
 <translation id="2241634353105152135">بس ایک بار</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747">‎<ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" /> اور <ph name="NUM_MORE" /> مزید کی اجازت دی گئی}other{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" /> اور <ph name="NUM_MORE" /> مزید کی اجازت دی گئی}}</translation>
 <translation id="2434158240863470628">ڈاؤن لوڈ مکمل ہو گیا <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">مقام تک رسائی</translation>
 <translation id="2482878487686419369">اطلاعات</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> کے زیر انتظام</translation>
 <translation id="2498359688066513246">مدد اور تاثرات</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">مائیکروفون</translation>
 <translation id="3277252321222022663">سائٹس کو سینسرز تک رسائی حاصل کرنے کی اجازت دیں (تجویز کردہ)</translation>
 <translation id="3295602654194328831">معلومات چھپائیں</translation>
+<translation id="3328801116991980348">سائٹ کی معلومات</translation>
 <translation id="3333961966071413176">تمام رابطے</translation>
 <translation id="3386292677130313581">سائٹس کو آپ کا مقام جاننے کی اجازت دینے سے پہلے پوچھیں (تجویز کردہ)</translation>
 <translation id="3538390592868664640">‏سائٹس کو اپنے اطراف کا 3D نقشہ تخلیق یا کیمرے کی پوزیشن ٹریک کرنے سے مسدود کریں</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">سائٹس کو محفوظ مواد چلانے کی اجازت دیں</translation>
 <translation id="4468959413250150279">کسی مخصوص سائٹ کیلئے آواز بند کریں۔</translation>
 <translation id="4479647676395637221">سائٹس کو آپ کا کیمرا استعمال کرنے کی اجازت دینے سے پہلے پوچھیں (تجویز کردہ)</translation>
+<translation id="4505788138578415521">‏URL کو پھیلا دیا گیا</translation>
 <translation id="4534723447064627427">‏<ph name="APP_NAME" /> کو اپنے مائیکروفون تک رسائی دینے کے لیے، <ph name="BEGIN_LINK" />Android کی ترتیبات<ph name="END_LINK" /> میں بھی مائیکروفون آن کریں۔</translation>
 <translation id="4570913071927164677">تفاصیل</translation>
 <translation id="4645575059429386691">آپ کے والدین کے زیر انتظام</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">بلوٹوتھ</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" /> اور <ph name="NUM_MORE" /> مزید}other{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" /> اور <ph name="NUM_MORE" /> مزید}}</translation>
 <translation id="913657688200966289">‏<ph name="BEGIN_LINK" />Android ترتیبات<ph name="END_LINK" /> میں <ph name="APP_NAME" /> کے لیے اجازتیں آن کریں۔</translation>
-<translation id="945632385593298557">اپنے مائیکروفون تک رسائی حاصل کریں</translation>
 <translation id="965817943346481315">اگر سائٹ دخل انداز یا گمراہ کن اشتہارات دکھاتی ہے تو مسدود کریں (تجویز کردہ)</translation>
 <translation id="967624055006145463">اسٹور کردہ ڈیٹا</translation>
 </translationbundle>

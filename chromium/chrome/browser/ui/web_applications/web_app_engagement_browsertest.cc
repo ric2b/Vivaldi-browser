@@ -10,7 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -24,13 +24,12 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -157,7 +156,16 @@ namespace web_app {
 class WebAppEngagementBrowserTest : public WebAppControllerBrowserTestBase {
  public:
   WebAppEngagementBrowserTest() = default;
+  WebAppEngagementBrowserTest(const WebAppEngagementBrowserTest&) = delete;
+  WebAppEngagementBrowserTest& operator=(const WebAppEngagementBrowserTest&) =
+      delete;
   ~WebAppEngagementBrowserTest() override = default;
+
+  void SetUpOnMainThread() override {
+    WebAppControllerBrowserTestBase::SetUpOnMainThread();
+    os_hooks_suppress_ =
+        OsIntegrationManager::ScopedSuppressOsHooksForTesting();
+  }
 
   void TestEngagementEventWebAppLaunch(const base::HistogramTester& tester,
                                        const Histograms& histograms) {
@@ -221,17 +229,10 @@ class WebAppEngagementBrowserTest : public WebAppControllerBrowserTestBase {
   base::Optional<InstallResultCode> result_code_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(WebAppEngagementBrowserTest);
+  ScopedOsHooksSuppress os_hooks_suppress_;
 };
 
-// TODO(crbug.com/1012171): Migrate all to WebAppEngagementBrowserTest.
-class HostedAppEngagementBrowserTest : public WebAppEngagementBrowserTest {
- public:
-  HostedAppEngagementBrowserTest() = default;
-  ~HostedAppEngagementBrowserTest() override = default;
-};
-
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, AppInWindow) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, AppInWindow) {
   base::HistogramTester tester;
 
   const GURL example_url = GURL("http://example.org/");
@@ -257,7 +258,7 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, AppInWindow) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/1, /*tabLaunches=*/0);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, AppInTab) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, AppInTab) {
   base::HistogramTester tester;
 
   const GURL example_url = GURL("http://example.org/");
@@ -282,7 +283,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, AppInTab) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/0, /*tabLaunches=*/1);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, AppWithoutScope) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, AppWithoutScope) {
   base::HistogramTester tester;
 
   const GURL example_url = GURL("http://example.org/");
@@ -311,7 +312,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, AppWithoutScope) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/1, /*tabLaunches=*/0);
 }
 
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, TwoApps) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, TwoApps) {
   base::HistogramTester tester;
 
   const GURL example_url1 = GURL("http://example.org/");
@@ -356,7 +357,7 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, TwoApps) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/3, /*tabLaunches=*/0);
 }
 
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, ManyUserApps) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, ManyUserApps) {
   base::HistogramTester tester;
 
   // More than 3 user-installed apps:
@@ -401,7 +402,7 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, ManyUserApps) {
                      /*tabLaunches=*/0);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, DefaultApp) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, DefaultApp) {
   base::HistogramTester tester;
 
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -427,7 +428,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, DefaultApp) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/1, /*tabLaunches=*/0);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, NavigateAwayFromAppTab) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, NavigateAwayFromAppTab) {
   base::HistogramTester tester;
   const GURL start_url = GURL("http://example.org/app/");
   const GURL outer_url = GURL("http://example.org/");
@@ -460,7 +461,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppEngagementBrowserTest, NavigateAwayFromAppTab) {
   ExpectLaunchCounts(tester, /*windowLaunches=*/0, /*tabLaunches=*/1);
 }
 
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, RecordedForNonApps) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, RecordedForNonApps) {
   base::HistogramTester tester;
   CountUserInstalledApps();
 
@@ -479,7 +480,7 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, RecordedForNonApps) {
   TestEngagementEventsAfterLaunch(histograms, browser());
 }
 
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, CommandLineWindow) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, CommandLineWindow) {
   base::HistogramTester tester;
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -534,7 +535,7 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, CommandLineWindow) {
   EXPECT_EQ(expected_tabs, app_browser->tab_strip_model()->count());
 }
 
-IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, CommandLineTab) {
+IN_PROC_BROWSER_TEST_F(WebAppEngagementBrowserTest, CommandLineTab) {
   base::HistogramTester tester;
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -586,16 +587,5 @@ IN_PROC_BROWSER_TEST_P(WebAppEngagementBrowserTest, CommandLineTab) {
   EXPECT_EQ(expected_browsers, chrome::GetBrowserCount(browser()->profile()));
   EXPECT_EQ(expected_tabs, browser()->tab_strip_model()->count());
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         WebAppEngagementBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         HostedAppEngagementBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps),
-                         ProviderTypeParamToString);
 
 }  // namespace web_app

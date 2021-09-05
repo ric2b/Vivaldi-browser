@@ -43,6 +43,7 @@
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
@@ -229,7 +230,7 @@ ResourceLoadPriority AdjustPriorityWithPriorityHint(
       //     of `as` value/type.
       if (type == ResourceType::kImage ||
           resource_request.GetRequestContext() ==
-              mojom::RequestContextType::FETCH ||
+              mojom::blink::RequestContextType::FETCH ||
           is_link_preload) {
         new_priority = ResourceLoadPriority::kLow;
       }
@@ -367,21 +368,24 @@ void PopulateAndAddResourceTimingInfo(Resource* resource,
 ResourceFetcherInit::ResourceFetcherInit(
     DetachableResourceFetcherProperties& properties,
     FetchContext* context,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner,
     ResourceFetcher::LoaderFactory* loader_factory,
     ContextLifecycleNotifier* context_lifecycle_notifier)
     : properties(&properties),
       context(context),
-      task_runner(std::move(task_runner)),
+      freezable_task_runner(std::move(freezable_task_runner)),
+      unfreezable_task_runner(std::move(unfreezable_task_runner)),
       loader_factory(loader_factory),
       context_lifecycle_notifier(context_lifecycle_notifier) {
   DCHECK(context);
-  DCHECK(this->task_runner);
+  DCHECK(this->freezable_task_runner);
+  DCHECK(this->unfreezable_task_runner);
   DCHECK(loader_factory || properties.IsDetached());
   DCHECK(context_lifecycle_notifier || properties.IsDetached());
 }
 
-mojom::RequestContextType ResourceFetcher::DetermineRequestContext(
+mojom::blink::RequestContextType ResourceFetcher::DetermineRequestContext(
     ResourceType type,
     IsImageSet is_image_set) {
   DCHECK((is_image_set == kImageNotImageSet) ||
@@ -391,36 +395,36 @@ mojom::RequestContextType ResourceFetcher::DetermineRequestContext(
       DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
       FALLTHROUGH;
     case ResourceType::kCSSStyleSheet:
-      return mojom::RequestContextType::STYLE;
+      return mojom::blink::RequestContextType::STYLE;
     case ResourceType::kScript:
-      return mojom::RequestContextType::SCRIPT;
+      return mojom::blink::RequestContextType::SCRIPT;
     case ResourceType::kFont:
-      return mojom::RequestContextType::FONT;
+      return mojom::blink::RequestContextType::FONT;
     case ResourceType::kImage:
       if (is_image_set == kImageIsImageSet)
-        return mojom::RequestContextType::IMAGE_SET;
-      return mojom::RequestContextType::IMAGE;
+        return mojom::blink::RequestContextType::IMAGE_SET;
+      return mojom::blink::RequestContextType::IMAGE;
     case ResourceType::kRaw:
-      return mojom::RequestContextType::SUBRESOURCE;
+      return mojom::blink::RequestContextType::SUBRESOURCE;
     case ResourceType::kImportResource:
-      return mojom::RequestContextType::IMPORT;
+      return mojom::blink::RequestContextType::IMPORT;
     case ResourceType::kLinkPrefetch:
-      return mojom::RequestContextType::PREFETCH;
+      return mojom::blink::RequestContextType::PREFETCH;
     case ResourceType::kTextTrack:
-      return mojom::RequestContextType::TRACK;
+      return mojom::blink::RequestContextType::TRACK;
     case ResourceType::kSVGDocument:
-      return mojom::RequestContextType::IMAGE;
+      return mojom::blink::RequestContextType::IMAGE;
     case ResourceType::kAudio:
-      return mojom::RequestContextType::AUDIO;
+      return mojom::blink::RequestContextType::AUDIO;
     case ResourceType::kVideo:
-      return mojom::RequestContextType::VIDEO;
+      return mojom::blink::RequestContextType::VIDEO;
     case ResourceType::kManifest:
-      return mojom::RequestContextType::MANIFEST;
+      return mojom::blink::RequestContextType::MANIFEST;
     case ResourceType::kMock:
-      return mojom::RequestContextType::SUBRESOURCE;
+      return mojom::blink::RequestContextType::SUBRESOURCE;
   }
   NOTREACHED();
-  return mojom::RequestContextType::SUBRESOURCE;
+  return mojom::blink::RequestContextType::SUBRESOURCE;
 }
 
 network::mojom::RequestDestination ResourceFetcher::DetermineRequestDestination(
@@ -534,11 +538,11 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
   } else if (FetchParameters::kLazyLoad == defer_option) {
     priority = ResourceLoadPriority::kVeryLow;
   } else if (resource_request.GetRequestContext() ==
-                 mojom::RequestContextType::BEACON ||
+                 mojom::blink::RequestContextType::BEACON ||
              resource_request.GetRequestContext() ==
-                 mojom::RequestContextType::PING ||
+                 mojom::blink::RequestContextType::PING ||
              resource_request.GetRequestContext() ==
-                 mojom::RequestContextType::CSP_REPORT) {
+                 mojom::blink::RequestContextType::CSP_REPORT) {
     if (base::FeatureList::IsEnabled(features::kSetLowPriorityForBeacon)) {
       priority = ResourceLoadPriority::kLow;
     } else {
@@ -581,7 +585,8 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
 ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
     : properties_(*init.properties),
       context_(init.context),
-      task_runner_(init.task_runner),
+      freezable_task_runner_(init.freezable_task_runner),
+      unfreezable_task_runner_(init.unfreezable_task_runner),
       use_counter_(init.use_counter
                        ? init.use_counter
                        : MakeGarbageCollected<DetachableUseCounter>(nullptr)),
@@ -598,7 +603,7 @@ ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
           init.loading_behavior_observer)),
       archive_(init.archive),
       resource_timing_report_timer_(
-          task_runner_,
+          freezable_task_runner_,
           this,
           &ResourceFetcher::ResourceTimingReportTimerFired),
       frame_or_worker_scheduler_(
@@ -672,7 +677,8 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
   if (resource->EncodedSize() > 0) {
     resource_load_observer_->DidReceiveData(
         request.InspectorId(),
-        base::span<const char>(nullptr, resource->EncodedSize()));
+        base::make_span(static_cast<const char*>(nullptr),
+                        resource->EncodedSize()));
   }
 
   resource_load_observer_->DidFinishLoading(
@@ -760,7 +766,7 @@ Resource* ResourceFetcher::ResourceForStaticData(
   if (data->size())
     resource->SetResourceBuffer(data);
   resource->SetCacheIdentifier(cache_identifier);
-  resource->Finish(base::TimeTicks(), task_runner_.get());
+  resource->Finish(base::TimeTicks(), freezable_task_runner_.get());
 
   AddToMemoryCacheIfNeeded(params, resource);
   return resource;
@@ -774,10 +780,10 @@ Resource* ResourceFetcher::ResourceForBlockedRequest(
   Resource* resource = factory.Create(
       params.GetResourceRequest(), params.Options(), params.DecoderOptions());
   if (client)
-    client->SetResource(resource, task_runner_.get());
+    client->SetResource(resource, freezable_task_runner_.get());
   resource->FinishAsError(ResourceError::CancelledDueToAccessCheckError(
                               params.Url(), blocked_reason),
-                          task_runner_.get());
+                          freezable_task_runner_.get());
   return resource;
 }
 
@@ -924,7 +930,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
         resource_request, resource_type, params.Defer()));
   }
   if (resource_request.GetRequestContext() ==
-      mojom::RequestContextType::UNSPECIFIED) {
+      mojom::blink::RequestContextType::UNSPECIFIED) {
     resource_request.SetRequestContext(
         DetermineRequestContext(resource_type, kImageNotImageSet));
     resource_request.SetRequestDestination(
@@ -970,7 +976,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
 
   // For initial requests, call PrepareRequest() here before revalidation
   // policy is determined.
-  Context().PrepareRequest(resource_request, options.initiator_info,
+  Context().PrepareRequest(resource_request, params.MutableOptions(),
                            virtual_time_pauser, resource_type);
 
   if (!params.Url().IsValid())
@@ -1116,7 +1122,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     resource->VirtualTimePauser() = std::move(pauser);
 
   if (client)
-    client->SetResource(resource, task_runner_.get());
+    client->SetResource(resource, freezable_task_runner_.get());
 
   // TODO(yoav): It is not clear why preloads are exempt from this check. Can we
   // remove the exemption?
@@ -1161,9 +1167,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   LoadBlockingPolicy load_blocking_policy = LoadBlockingPolicy::kDefault;
   if (resource->GetType() == ResourceType::kImage) {
     image_resources_.insert(resource);
-#if DCHECK_IS_ON()
-    DCHECK(!not_loaded_image_resources_is_being_iterated_);
-#endif
     not_loaded_image_resources_.insert(resource);
     if (params.GetImageRequestBehavior() ==
         FetchParameters::kNonBlockingImage) {
@@ -1180,7 +1183,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
                    std::move(params.MutableResourceRequest().MutableBody()),
                    load_blocking_policy)) {
       resource->FinishAsError(ResourceError::CancelledError(params.Url()),
-                              task_runner_.get());
+                              freezable_task_runner_.get());
     }
   }
 
@@ -1267,10 +1270,12 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
     // TODO(yoichio): CreateURLLoader take a ResourceRequestHead instead of
     // ResourceRequest.
     return loader_factory_->CreateURLLoader(ResourceRequest(request),
-                                            new_options, task_runner_);
+                                            new_options, freezable_task_runner_,
+                                            unfreezable_task_runner_);
   }
   return loader_factory_->CreateURLLoader(ResourceRequest(request), options,
-                                          task_runner_);
+                                          freezable_task_runner_,
+                                          unfreezable_task_runner_);
 }
 
 std::unique_ptr<WebCodeCacheLoader> ResourceFetcher::CreateCodeCacheLoader() {
@@ -1734,11 +1739,6 @@ bool ResourceFetcher::ShouldDeferImageLoad(const KURL& url) const {
 }
 
 void ResourceFetcher::ReloadImagesIfNotDeferred() {
-#if DCHECK_IS_ON()
-  DCHECK(!not_loaded_image_resources_is_being_iterated_);
-  base::AutoReset<bool> is_being_modified_resetter(
-      &not_loaded_image_resources_is_being_iterated_, true);
-#endif
   for (Resource* resource : not_loaded_image_resources_) {
     DCHECK_EQ(resource->GetType(), ResourceType::kImage);
     if (resource->StillNeedsLoad() && !ShouldDeferImageLoad(resource->Url()))
@@ -1785,7 +1785,7 @@ void ResourceFetcher::ClearContext() {
     // to keep the ResourceFetcher and ResourceLoaders alive until the requests
     // complete or the timer fires.
     keepalive_loaders_task_handle_ = PostDelayedCancellableTask(
-        *task_runner_, FROM_HERE,
+        *freezable_task_runner_, FROM_HERE,
         WTF::Bind(&ResourceFetcher::StopFetchingIncludingKeepaliveLoaders,
                   WrapPersistent(this)),
         kKeepaliveLoadersTimeout);
@@ -1841,7 +1841,7 @@ void ResourceFetcher::ScheduleWarnUnusedPreloads() {
   if (preloads_.IsEmpty())
     return;
   unused_preloads_timer_ = PostDelayedCancellableTask(
-      *task_runner_, FROM_HERE,
+      *freezable_task_runner_, FROM_HERE,
       WTF::Bind(&ResourceFetcher::WarnUnusedPreloads, WrapWeakPersistent(this)),
       kUnusedPreloadTimeout);
 }
@@ -1901,7 +1901,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
 
   resource->VirtualTimePauser().UnpauseVirtualTime();
   if (type == kDidFinishLoading) {
-    resource->Finish(response_end, task_runner_.get());
+    resource->Finish(response_end, freezable_task_runner_.get());
 
     // Since this resource came from the network stack we only schedule a stale
     // while revalidate request if the network asked us to. If we called
@@ -1925,6 +1925,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
 }
 
 void ResourceFetcher::HandleLoaderError(Resource* resource,
+                                        base::TimeTicks finish_time,
                                         const ResourceError& error,
                                         uint32_t inflight_keepalive_bytes) {
   DCHECK(resource);
@@ -1937,7 +1938,7 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
   if (scoped_refptr<ResourceTimingInfo> info =
           resource_timing_info_map_.Take(resource)) {
     PopulateAndAddResourceTimingInfo(
-        resource, info, info->InitialTime(),
+        resource, info, finish_time,
         resource->GetResponse().EncodedDataLength());
     if (resource->Options().request_initiator_context == kDocumentContext)
       Context().AddResourceTiming(*info);
@@ -1951,7 +1952,7 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
     use_counter_->CountUse(
         mojom::WebFeature::kCertificateTransparencyRequiredErrorOnResourceLoad);
   }
-  resource->FinishAsError(error, task_runner_.get());
+  resource->FinishAsError(error, freezable_task_runner_.get());
   if (resource_load_observer_) {
     DCHECK(!IsDetached());
     resource_load_observer_->DidFailLoading(
@@ -2073,7 +2074,7 @@ void ResourceFetcher::StopFetching() {
   StopFetchingInternal(StopFetchingTarget::kExcludingKeepaliveLoaders);
 }
 
-void ResourceFetcher::SetDefersLoading(bool defers) {
+void ResourceFetcher::SetDefersLoading(WebURLLoader::DeferType defers) {
   for (const auto& loader : non_blocking_loaders_)
     loader->SetDefersLoading(defers);
   for (const auto& loader : loaders_)
@@ -2086,11 +2087,6 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
       "ResourceLoadPriorityOptimizer::updateAllImageResourcePriorities");
 
   HeapVector<Member<Resource>> to_be_removed;
-#if DCHECK_IS_ON()
-  DCHECK(!not_loaded_image_resources_is_being_iterated_);
-  base::AutoReset<bool> is_being_modified_resetter(
-      &not_loaded_image_resources_is_being_iterated_, true);
-#endif
   for (Resource* resource : not_loaded_image_resources_) {
     DCHECK_EQ(resource->GetType(), ResourceType::kImage);
     if (resource->IsLoaded()) {
@@ -2151,7 +2147,7 @@ String ResourceFetcher::GetCacheIdentifier(const KURL& url) const {
 void ResourceFetcher::EmulateLoadStartedForInspector(
     Resource* resource,
     const KURL& url,
-    mojom::RequestContextType request_context,
+    mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
     const AtomicString& initiator_name) {
   base::AutoReset<bool> r(&is_in_request_resource_, true);
@@ -2236,7 +2232,7 @@ void ResourceFetcher::ScheduleStaleRevalidate(Resource* stale_resource) {
   if (stale_resource->StaleRevalidationStarted())
     return;
   stale_resource->SetStaleRevalidationStarted();
-  task_runner_->PostTask(
+  freezable_task_runner_->PostTask(
       FROM_HERE,
       WTF::Bind(&ResourceFetcher::RevalidateStaleResource,
                 WrapWeakPersistent(this), WrapPersistent(stale_resource)));
@@ -2264,7 +2260,8 @@ void ResourceFetcher::RevalidateStaleResource(Resource* stale_resource) {
 mojom::blink::BlobRegistry* ResourceFetcher::GetBlobRegistry() {
   if (!blob_registry_remote_.is_bound()) {
     Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
-        blob_registry_remote_.BindNewPipeAndPassReceiver(task_runner_));
+        blob_registry_remote_.BindNewPipeAndPassReceiver(
+            freezable_task_runner_));
   }
   return blob_registry_remote_.get();
 }
@@ -2281,6 +2278,14 @@ void ResourceFetcher::AddSubresourceWebBundle(
 void ResourceFetcher::RemoveSubresourceWebBundle(
     SubresourceWebBundle& subresource_web_bundle) {
   subresource_web_bundles_.erase(&subresource_web_bundle);
+}
+
+void ResourceFetcher::EvictFromBackForwardCache(
+    mojom::RendererEvictionReason reason) {
+  if (!resource_load_observer_)
+    return;
+
+  resource_load_observer_->EvictFromBackForwardCache(reason);
 }
 
 void ResourceFetcher::Trace(Visitor* visitor) const {

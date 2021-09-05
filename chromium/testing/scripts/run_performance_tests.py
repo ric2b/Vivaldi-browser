@@ -105,6 +105,8 @@ GTEST_CONVERSION_WHITELIST = [
   'net_perftests',
   'browser_tests',
   'services_perftests',
+  # TODO(jmadill): Remove once migrated. http://anglebug.com/5124
+  'standalone_angle_perftests',
   'sync_performance_tests',
   'tracing_perftests',
   'views_perftests',
@@ -273,12 +275,24 @@ def write_simple_test_results(return_code, output_filepath, benchmark_name):
 
 
 def execute_gtest_perf_test(command_generator, output_paths, use_xvfb=False):
+  start = time.time()
+
   env = os.environ.copy()
   # Assume we want to set up the sandbox environment variables all the
   # time; doing so is harmless on non-Linux platforms and is needed
   # all the time on Linux.
   env[CHROME_SANDBOX_ENV] = CHROME_SANDBOX_PATH
   env['CHROME_HEADLESS'] = '1'
+  #TODO(crbug/1138988): Some gtests do not implements the unit_test_launcher.cc.
+  # As a result, they will not respect the arguments added by
+  # _generate_shard_args() and will still use the values of GTEST_SHARD_INDEX
+  # and GTEST_TOTAL_SHARDS to run part of the tests.
+  # Removing those environment variables as a workaround.
+  if command_generator._ignore_shard_env_vars:
+    if 'GTEST_TOTAL_SHARDS' in env:
+      env.pop('GTEST_TOTAL_SHARDS')
+    if 'GTEST_SHARD_INDEX' in env:
+      env.pop('GTEST_SHARD_INDEX')
 
   return_code = 0
   try:
@@ -324,6 +338,10 @@ def execute_gtest_perf_test(command_generator, output_paths, use_xvfb=False):
     return_code = 1
   write_simple_test_results(return_code, output_paths.test_results,
                             output_paths.name)
+
+  print_duration(
+      'executing gtest %s' % command_generator.executable_name, start)
+
   return return_code
 
 

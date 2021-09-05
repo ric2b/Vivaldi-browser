@@ -42,7 +42,7 @@ class ScrollMetricsTest : public SimTest {
   void SetUpHtml(const char*);
   void Scroll(Element*, const WebGestureDevice);
   void UpdateAllLifecyclePhases() {
-    GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+    GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   }
 };
 
@@ -117,7 +117,7 @@ void ScrollMetricsTest::Scroll(Element* element,
 }
 
 void ScrollMetricsTest::SetUpHtml(const char* html_content) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(html_content);
@@ -182,7 +182,7 @@ TEST_F(NonCompositedMainThreadScrollingReasonRecordTest,
   box->setAttribute("class", "composited transform box");
   UpdateAllLifecyclePhases();
   Scroll(box, WebGestureDevice::kTouchpad);
-  EXPECT_FALSE(ToLayoutBox(box->GetLayoutObject())
+  EXPECT_FALSE(To<LayoutBox>(box->GetLayoutObject())
                    ->GetScrollableArea()
                    ->GetNonCompositedMainThreadScrollingReasons());
   EXPECT_WHEEL_BUCKET(kNotOpaqueForTextAndLCDText, 1);

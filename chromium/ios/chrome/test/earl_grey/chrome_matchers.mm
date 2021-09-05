@@ -16,6 +16,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeMatchersAppInterface)
 
 namespace chrome_test_util {
 
+id<GREYMatcher> WindowWithNumber(int window_number) {
+  return [ChromeMatchersAppInterface windowWithNumber:window_number];
+}
+
 id<GREYMatcher> ButtonWithAccessibilityLabel(NSString* label) {
   return [ChromeMatchersAppInterface buttonWithAccessibilityLabel:label];
 }
@@ -43,6 +47,24 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id) {
 
 id<GREYMatcher> StaticTextWithAccessibilityLabel(NSString* label) {
   return [ChromeMatchersAppInterface staticTextWithAccessibilityLabel:label];
+}
+
+id<GREYMatcher> ContainsPartialText(NSString* text) {
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    return [[element text] containsString:text];
+  };
+  GREYDescribeToBlock describe = ^void(id<GREYDescription> description) {
+    [description
+        appendText:[NSString
+                       stringWithFormat:@"containsPartialText('%@')", text]];
+  };
+  id<GREYMatcher> matcher =
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe];
+  return grey_allOf(grey_anyOf(grey_kindOfClassName(@"UILabel"),
+                               grey_kindOfClassName(@"UITextField"),
+                               grey_kindOfClassName(@"UITextView"), nil),
+                    matcher, nil);
 }
 
 id<GREYMatcher> HeaderWithAccessibilityLabelId(int message_id) {
@@ -231,8 +253,16 @@ id<GREYMatcher> AutofillCreditCardTableView() {
   return [ChromeMatchersAppInterface autofillCreditCardTableView];
 }
 
+id<GREYMatcher> AddressesAndMoreButton() {
+  return [ChromeMatchersAppInterface addressesAndMoreButton];
+}
+
 id<GREYMatcher> PaymentMethodsButton() {
   return [ChromeMatchersAppInterface paymentMethodsButton];
+}
+
+id<GREYMatcher> LanguagesButton() {
+  return [ChromeMatchersAppInterface languagesButton];
 }
 
 id<GREYMatcher> AddCreditCardView() {

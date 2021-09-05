@@ -12,6 +12,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
@@ -25,9 +26,11 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/histograms.h"
+#include "cc/base/switches.h"
 #include "cc/raster/scoped_grcontext_access.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/mipmap_util.h"
+#include "cc/tiles/raster_dark_mode_filter.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -39,9 +42,9 @@
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/core/SkYUVAIndex.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/skia_util.h"
@@ -104,15 +107,16 @@ SkFilterQuality CalculateDesiredFilterQuality(const DrawImage& draw_image) {
 
 // Calculate the mip level to upload-scale the image to before uploading. We use
 // mip levels rather than exact scales to increase re-use of scaled images.
-int CalculateUploadScaleMipLevel(const DrawImage& draw_image) {
+int CalculateUploadScaleMipLevel(const DrawImage& draw_image,
+                                 bool enable_clipped_image_scaling = false) {
   // Images which are being clipped will have color-bleeding if scaled.
   // TODO(ericrk): Investigate uploading clipped images to handle this case and
   // provide further optimization. crbug.com/620899
-  if (draw_image.src_rect() !=
-      SkIRect::MakeWH(draw_image.paint_image().width(),
-                      draw_image.paint_image().height())) {
+  const bool is_clipped = draw_image.src_rect() !=
+                          SkIRect::MakeWH(draw_image.paint_image().width(),
+                                          draw_image.paint_image().height());
+  if (is_clipped && !enable_clipped_image_scaling)
     return 0;
-  }
 
   gfx::Size base_size(draw_image.paint_image().width(),
                       draw_image.paint_image().height());
@@ -471,8 +475,40 @@ sk_sp<SkImage> MakeTextureImage(viz::RasterContextProvider* context,
 
 size_t GetUploadedTextureSizeFromSkImage(const sk_sp<SkImage>& plane,
                                          const GrMipMapped mipped) {
-  const size_t plane_size = GrContext::ComputeImageSize(plane, mipped);
+  const size_t plane_size = GrDirectContext::ComputeImageSize(plane, mipped);
   return plane_size;
+}
+
+// Preserves the division of channels into planes and channel order within
+// planes but removes chroma subsampling. If there is no such config this will
+// return SkYUVAInfo::PlanarConfig::kUnknown.
+SkYUVAInfo::PlanarConfig ConvertPlanarConfigTo444(
+    SkYUVAInfo::PlanarConfig config) {
+  switch (config) {
+    case SkYUVAInfo::PlanarConfig::kY_U_V_444:
+    case SkYUVAInfo::PlanarConfig::kY_U_V_422:
+    case SkYUVAInfo::PlanarConfig::kY_U_V_420:
+    case SkYUVAInfo::PlanarConfig::kY_U_V_440:
+    case SkYUVAInfo::PlanarConfig::kY_U_V_411:
+    case SkYUVAInfo::PlanarConfig::kY_U_V_410:
+      return SkYUVAInfo::PlanarConfig::kY_U_V_444;
+
+    case SkYUVAInfo::PlanarConfig::kYUV_444:
+      return SkYUVAInfo::PlanarConfig::kYUV_444;
+    case SkYUVAInfo::PlanarConfig::kUYV_444:
+      return SkYUVAInfo::PlanarConfig::kUYV_444;
+    case SkYUVAInfo::PlanarConfig::kYUVA_4444:
+      return SkYUVAInfo::PlanarConfig::kYUVA_4444;
+    case SkYUVAInfo::PlanarConfig::kUYVA_4444:
+      return SkYUVAInfo::PlanarConfig::kUYVA_4444;
+
+    // There are planar configs with no 444[4] equivalent, none of which are
+    // used by GpuImageDecoderCache currently. For example, there is kY_UV_420
+    // but no kY_UV_444. Skia could easily have add the equivalents if required.
+    default:
+      NOTREACHED();
+      return SkYUVAInfo::PlanarConfig::kUnknown;
+  }
 }
 
 }  // namespace
@@ -872,6 +908,7 @@ GpuImageDecodeCache::ImageData::ImageData(
     bool do_hardware_accelerated_decode,
     bool is_yuv_format,
     SkYUVColorSpace yuv_cs,
+    SkYUVAPixmapInfo::PlanarConfig yuv_config,
     SkYUVAPixmapInfo::DataType yuv_dt)
     : paint_image_id(paint_image_id),
       mode(mode),
@@ -890,6 +927,7 @@ GpuImageDecodeCache::ImageData::ImageData(
   if (is_yuv) {
     DCHECK_LE(yuv_cs, SkYUVColorSpace::kLastEnum_SkYUVColorSpace);
     yuv_color_space = yuv_cs;
+    yuv_planar_config = yuv_config;
     yuv_data_type = yuv_dt;
   }
 }
@@ -956,15 +994,20 @@ GpuImageDecodeCache::GpuImageDecodeCache(
     SkColorType color_type,
     size_t max_working_set_bytes,
     int max_texture_size,
-    PaintImage::GeneratorClientId generator_client_id)
+    PaintImage::GeneratorClientId generator_client_id,
+    RasterDarkModeFilter* const dark_mode_filter)
     : color_type_(color_type),
       use_transfer_cache_(use_transfer_cache),
       context_(context),
       max_texture_size_(max_texture_size),
       generator_client_id_(generator_client_id),
+      enable_clipped_image_scaling_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kEnableClippedImageScaling)),
       persistent_cache_(PersistentCache::NO_AUTO_EVICT),
       max_working_set_bytes_(max_working_set_bytes),
-      max_working_set_items_(kMaxItemsInWorkingSet) {
+      max_working_set_items_(kMaxItemsInWorkingSet),
+      dark_mode_filter_(dark_mode_filter) {
   // Note that to compute |allow_accelerated_jpeg_decodes_| and
   // |allow_accelerated_webp_decodes_|, the last thing we check is the feature
   // flag. That's because we want to ensure that we're in OOP-R mode and the
@@ -1008,6 +1051,10 @@ GpuImageDecodeCache::GpuImageDecodeCache(
   memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
       FROM_HERE, base::BindRepeating(&GpuImageDecodeCache::OnMemoryPressure,
                                      base::Unretained(this)));
+
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "GpuImageDecodeCache::DarkModeFilter", "dark_mode_filter",
+               dark_mode_filter_);
 }
 
 GpuImageDecodeCache::~GpuImageDecodeCache() {
@@ -1182,11 +1229,20 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
 
   // We may or may not need to decode and upload the image we've found, the
   // following functions early-out to if we already decoded.
-  DecodeImageIfNecessary(draw_image, image_data, TaskType::kInRaster);
+  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
+                                                  TaskType::kInRaster);
   UploadImageIfNecessary(draw_image, image_data);
   // Unref the image decode, but not the image. The image ref will be released
   // in DrawWithImageFinished.
   UnrefImageDecode(draw_image, cache_key);
+
+  sk_sp<SkColorFilter> dark_mode_color_filter = nullptr;
+  if (draw_image.use_dark_mode()) {
+    auto it = image_data->decode.dark_mode_color_filter_cache.find(
+        draw_image.src_rect());
+    if (it != image_data->decode.dark_mode_color_filter_cache.end())
+      dark_mode_color_filter = it->second;
+  }
 
   if (image_data->mode == DecodedDataMode::kTransferCache) {
     DCHECK(use_transfer_cache_);
@@ -1198,8 +1254,8 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
     SkSize scale_factor = CalculateScaleFactorForMipLevel(
         draw_image, image_data->upload_scale_mip_level);
     DecodedDrawImage decoded_draw_image(
-        id, SkSize(), scale_factor, CalculateDesiredFilterQuality(draw_image),
-        image_data->needs_mips, image_data->is_budgeted);
+        id, std::move(dark_mode_color_filter), SkSize(), scale_factor,
+        CalculateDesiredFilterQuality(draw_image), image_data->needs_mips);
     return decoded_draw_image;
   } else {
     DCHECK(!use_transfer_cache_);
@@ -1211,8 +1267,8 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
     SkSize scale_factor = CalculateScaleFactorForMipLevel(
         draw_image, image_data->upload_scale_mip_level);
     DecodedDrawImage decoded_draw_image(
-        std::move(image), SkSize(), scale_factor,
-        CalculateDesiredFilterQuality(draw_image), image_data->is_budgeted);
+        std::move(image), std::move(dark_mode_color_filter), SkSize(),
+        scale_factor, CalculateDesiredFilterQuality(draw_image));
     return decoded_draw_image;
   }
 }
@@ -1507,7 +1563,8 @@ void GpuImageDecodeCache::DecodeImageInTask(const DrawImage& draw_image,
       draw_image, InUseCacheKey::FromDrawImage(draw_image));
   DCHECK(image_data);
   DCHECK(image_data->is_budgeted) << "Must budget an image for pre-decoding";
-  DecodeImageIfNecessary(draw_image, image_data, task_type);
+  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
+                                                  task_type);
 }
 
 void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
@@ -1529,7 +1586,8 @@ void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
   DCHECK(image_data->is_budgeted) << "Must budget an image for pre-decoding";
 
   if (image_data->is_bitmap_backed)
-    DecodeImageIfNecessary(draw_image, image_data, TaskType::kInRaster);
+    DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
+                                                    TaskType::kInRaster);
   UploadImageIfNecessary(draw_image, image_data);
 }
 
@@ -1860,9 +1918,50 @@ void GpuImageDecodeCache::InsertTransferCacheEntry(
   }
 }
 
-void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
-                                                 ImageData* image_data,
-                                                 TaskType task_type) {
+bool GpuImageDecodeCache::NeedsDarkModeFilter(const DrawImage& draw_image,
+                                              ImageData* image_data) {
+  DCHECK(image_data);
+
+  // |draw_image| does not need dark mode to be applied.
+  if (!draw_image.use_dark_mode())
+    return false;
+
+  // |dark_mode_filter_| must be valid, if |draw_image| has use_dark_mode set.
+  DCHECK(dark_mode_filter_);
+
+  // TODO(prashant.n): RSDM - Add support for YUV decoded data.
+  if (image_data->is_yuv)
+    return false;
+
+  // Dark mode filter is already generated and cached.
+  if (image_data->decode.dark_mode_color_filter_cache.find(
+          draw_image.src_rect()) !=
+      image_data->decode.dark_mode_color_filter_cache.end())
+    return false;
+
+  return true;
+}
+
+void GpuImageDecodeCache::DecodeImageAndGenerateDarkModeFilterIfNecessary(
+    const DrawImage& draw_image,
+    ImageData* image_data,
+    TaskType task_type) {
+  lock_.AssertAcquired();
+
+  // Check if image needs dark mode to be applied, based on this image may be
+  // decoded again if decoded data is not available.
+  bool needs_dark_mode_filter = NeedsDarkModeFilter(draw_image, image_data);
+  DecodeImageIfNecessary(draw_image, image_data, task_type,
+                         needs_dark_mode_filter);
+  if (needs_dark_mode_filter)
+    GenerateDarkModeFilter(draw_image, image_data);
+}
+
+void GpuImageDecodeCache::DecodeImageIfNecessary(
+    const DrawImage& draw_image,
+    ImageData* image_data,
+    TaskType task_type,
+    bool needs_decode_for_dark_mode) {
   lock_.AssertAcquired();
 
   DCHECK_GT(image_data->decode.ref_count, 0u);
@@ -1878,8 +1977,10 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
   }
 
   if (image_data->HasUploadedData() &&
-      TryLockImage(HaveContextLock::kNo, draw_image, image_data)) {
-    // We already have an uploaded image, no reason to decode.
+      TryLockImage(HaveContextLock::kNo, draw_image, image_data) &&
+      !needs_decode_for_dark_mode) {
+    // We already have an uploaded image and we don't need a decode for dark
+    // mode too, so no reason to decode.
     return;
   }
 
@@ -1987,6 +2088,28 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
                                      std::move(image),
                                      task_type == TaskType::kOutOfRaster);
   }
+}
+
+void GpuImageDecodeCache::GenerateDarkModeFilter(const DrawImage& draw_image,
+                                                 ImageData* image_data) {
+  DCHECK(dark_mode_filter_);
+  // Caller must ensure draw image needs dark mode to be applied.
+  DCHECK(NeedsDarkModeFilter(draw_image, image_data));
+  // Caller must ensure image is valid and has decoded data.
+  DCHECK(image_data->decode.image());
+
+  // TODO(prashant.n): Calling ApplyToImage() from |dark_mode_filter_| can be
+  // expensive. Check the possibilitiy of holding |lock_| only for accessing and
+  // storing dark mode result on |image_data|.
+  lock_.AssertAcquired();
+
+  if (image_data->decode.decode_failure)
+    return;
+
+  SkPixmap pixmap;
+  image_data->decode.image()->peekPixels(&pixmap);
+  image_data->decode.dark_mode_color_filter_cache[draw_image.src_rect()] =
+      dark_mode_filter_->ApplyToImage(pixmap, draw_image.src_rect());
 }
 
 void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
@@ -2159,6 +2282,7 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
       uploaded_image = CreateImageFromYUVATexturesInternal(
           uploaded_y_image.get(), uploaded_u_image.get(),
           uploaded_v_image.get(), image_width, image_height,
+          image_data->yuv_planar_config.value(),
           image_data->yuv_color_space.value(), color_space,
           decoded_target_colorspace);
     }
@@ -2354,6 +2478,8 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
                       mode != DecodedDataMode::kCpu &&
                       !image_larger_than_max_texture;
 
+  SkYUVAInfo::PlanarConfig yuv_planar_config =
+      SkYUVAInfo::PlanarConfig::kUnknown;
   // TODO(crbug.com/910276): Change after alpha support.
   if (is_yuv) {
     if (upload_scale_mip_level > 0) {
@@ -2363,9 +2489,13 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
           image_info.makeColorType(yuva_pixmap_info.planeInfo(0).colorType())
               .computeMinByteSize();
       DCHECK(!SkImageInfo::ByteSizeOverflowed(y_plane_size.ValueOrDie()));
+      yuv_planar_config =
+          ConvertPlanarConfigTo444(yuva_pixmap_info.yuvaInfo().planarConfig());
+      DCHECK_NE(yuv_planar_config, SkYUVAInfo::PlanarConfig::kUnknown);
       data_size = (3 * y_plane_size).ValueOrDie();
     } else {
       // Original size decode.
+      yuv_planar_config = yuva_pixmap_info.yuvaInfo().planarConfig();
       data_size = yuva_pixmap_info.computeTotalBytes();
       DCHECK(!SkImageInfo::ByteSizeOverflowed(data_size));
     }
@@ -2377,7 +2507,7 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
       CalculateDesiredFilterQuality(draw_image), upload_scale_mip_level,
       needs_mips, is_bitmap_backed, can_do_hardware_accelerated_decode,
       do_hardware_accelerated_decode, is_yuv, yuva_pixmap_info.yuvColorSpace(),
-      yuva_pixmap_info.dataType()));
+      yuv_planar_config, yuva_pixmap_info.dataType()));
 }
 
 void GpuImageDecodeCache::WillAddCacheEntry(const DrawImage& draw_image) {
@@ -2697,8 +2827,9 @@ GpuImageDecodeCache::ImageData* GpuImageDecodeCache::GetImageDataForDrawImage(
 bool GpuImageDecodeCache::IsCompatible(const ImageData* image_data,
                                        const DrawImage& draw_image) const {
   bool is_scaled = image_data->upload_scale_mip_level != 0;
-  bool scale_is_compatible = CalculateUploadScaleMipLevel(draw_image) >=
-                             image_data->upload_scale_mip_level;
+  bool scale_is_compatible =
+      CalculateUploadScaleMipLevel(draw_image, enable_clipped_image_scaling_) >=
+      image_data->upload_scale_mip_level;
   bool quality_is_compatible =
       CalculateDesiredFilterQuality(draw_image) <= image_data->quality;
   bool color_is_compatible =
@@ -2780,6 +2911,24 @@ sk_sp<SkImage> GpuImageDecodeCache::GetUploadedPlaneForTesting(
   }
 }
 
+size_t GpuImageDecodeCache::GetDarkModeImageCacheSizeForTesting(
+    const DrawImage& draw_image) {
+  base::AutoLock lock(lock_);
+  ImageData* image_data = GetImageDataForDrawImage(
+      draw_image, InUseCacheKey::FromDrawImage(draw_image));
+  return image_data ? image_data->decode.dark_mode_color_filter_cache.size()
+                    : 0u;
+}
+
+bool GpuImageDecodeCache::NeedsDarkModeFilterForTesting(
+    const DrawImage& draw_image) {
+  base::AutoLock lock(lock_);
+  ImageData* image_data = GetImageDataForDrawImage(
+      draw_image, InUseCacheKey::FromDrawImage(draw_image));
+
+  return NeedsDarkModeFilter(draw_image, image_data);
+}
+
 void GpuImageDecodeCache::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel level) {
   base::AutoLock lock(lock_);
@@ -2846,23 +2995,22 @@ sk_sp<SkImage> GpuImageDecodeCache::CreateImageFromYUVATexturesInternal(
     const SkImage* uploaded_v_image,
     const size_t image_width,
     const size_t image_height,
-    const SkYUVColorSpace& yuv_color_space,
+    const SkYUVAInfo::PlanarConfig yuva_planar_config,
+    const SkYUVColorSpace yuv_color_space,
     sk_sp<SkColorSpace> target_color_space,
     sk_sp<SkColorSpace> decoded_color_space) const {
   DCHECK(uploaded_y_image);
   DCHECK(uploaded_u_image);
   DCHECK(uploaded_v_image);
-  GrSurfaceOrigin origin_temp = kTopLeft_GrSurfaceOrigin;
+  SkYUVAInfo yuva_info({image_width, image_height}, yuva_planar_config,
+                       yuv_color_space);
   GrBackendTexture yuv_textures[3]{};
   yuv_textures[0] = uploaded_y_image->getBackendTexture(false);
   yuv_textures[1] = uploaded_u_image->getBackendTexture(false);
   yuv_textures[2] = uploaded_v_image->getBackendTexture(false);
-
-  SkYUVAIndex indices[SkYUVAIndex::kIndexCount];
-  indices[SkYUVAIndex::kY_Index] = {0, SkColorChannel::kR};
-  indices[SkYUVAIndex::kU_Index] = {1, SkColorChannel::kR};
-  indices[SkYUVAIndex::kV_Index] = {2, SkColorChannel::kR};
-  indices[SkYUVAIndex::kA_Index] = {-1, SkColorChannel::kR};
+  GrYUVABackendTextures yuva_backend_textures(yuva_info, yuv_textures,
+                                              kTopLeft_GrSurfaceOrigin);
+  DCHECK(yuva_backend_textures.isValid());
 
   if (target_color_space && SkColorSpace::Equals(target_color_space.get(),
                                                  decoded_color_space.get())) {
@@ -2870,8 +3018,7 @@ sk_sp<SkImage> GpuImageDecodeCache::CreateImageFromYUVATexturesInternal(
   }
 
   sk_sp<SkImage> yuva_image = SkImage::MakeFromYUVATextures(
-      context_->GrContext(), yuv_color_space, yuv_textures, indices,
-      SkISize::Make(image_width, image_height), origin_temp,
+      context_->GrContext(), yuva_backend_textures,
       std::move(decoded_color_space));
   if (target_color_space)
     return yuva_image->makeColorSpace(target_color_space,
@@ -2964,6 +3111,7 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
         CreateImageFromYUVATexturesInternal(
             image_y_with_mips_owned.get(), image_u_with_mips_owned.get(),
             image_v_with_mips_owned.get(), width, height,
+            image_data->yuv_planar_config.value(),
             image_data->yuv_color_space.value(), color_space,
             upload_color_space);
     // In case of lost context

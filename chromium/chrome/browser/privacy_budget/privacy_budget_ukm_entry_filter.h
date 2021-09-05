@@ -16,7 +16,7 @@
 // Doesn't affect any other kind of UKM event other than Identifiability events.
 class PrivacyBudgetUkmEntryFilter : public ukm::UkmEntryFilter {
  public:
-  // |settings| must outlive PrivacyBudgetUkmEntryFilter.
+  // |state| must outlive PrivacyBudgetUkmEntryFilter.
   explicit PrivacyBudgetUkmEntryFilter(IdentifiabilityStudyState* state);
 
   PrivacyBudgetUkmEntryFilter(const PrivacyBudgetUkmEntryFilter&) = delete;
@@ -24,13 +24,24 @@ class PrivacyBudgetUkmEntryFilter : public ukm::UkmEntryFilter {
       delete;
 
   // ukm::UkmEntryFilter
-  bool FilterEntry(
-      ukm::mojom::UkmEntry* entry,
-      base::flat_set<uint64_t>* removed_metric_hashes) const override;
-  void OnStoreRecordingsInReport() const override;
+  bool FilterEntry(ukm::mojom::UkmEntry* entry,
+                   base::flat_set<uint64_t>* removed_metric_hashes) const final;
+  void OnStoreRecordingsInReport() const final;
 
  private:
   IdentifiabilityStudyState* const identifiability_study_state_;
+
+  // Keeps track of whether Privacy Budget metadata was reported. This flag is
+  // reset each time the UKM service constructs a new UKM report. The goal being
+  // that each report includes a metadata tag.
+  //
+  // Mutable because this needs to be updated during `FilterEntry` which is
+  // const.
+  //
+  // This flag is meant as an optimization. Ideally every `UkmEntry` should
+  // include the metadata, but that leads to a fairly large overhead much of
+  // which is redundant.
+  mutable bool metadata_reported_ = false;
 };
 
 #endif  // CHROME_BROWSER_PRIVACY_BUDGET_PRIVACY_BUDGET_UKM_ENTRY_FILTER_H_

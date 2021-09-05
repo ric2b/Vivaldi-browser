@@ -112,6 +112,10 @@ struct PLATFORM_EXPORT ResourceLoaderOptions {
   scoped_refptr<base::RefCountedData<
       mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>>
       url_loader_factory;
+
+  // Used by DevTools to emulate unsupported image types. See crbug.com/1130556.
+  scoped_refptr<base::RefCountedData<HashSet<String>>>
+      unsupported_image_mime_types;
 };
 
 }  // namespace blink

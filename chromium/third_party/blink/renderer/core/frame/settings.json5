@@ -98,7 +98,7 @@
     {
       name: "editingBehaviorType",
       initial: "EditingBehaviorTypeForPlatform()",
-      type: "web_pref::EditingBehaviorType",
+      type: "mojom::EditingBehavior",
     },
 
     {
@@ -285,6 +285,10 @@
       initial: true,
     },
     {
+      name: "targetBlankImpliesNoOpenerEnabledWillBeRemoved",
+      initial: true,
+    },
+    {
       name: "cookieEnabled",
       initial: true,
     },
@@ -413,6 +417,7 @@
     {
       name: "mainFrameClipsContent",
       initial: true,
+      invalidate: "ViewportPaintProperties",
     },
 
     // For android.webkit.WebSettings.setUseWideViewport()
@@ -501,8 +506,8 @@
     },
     {
       name: "imageAnimationPolicy",
-      initial: "web_pref::kImageAnimationPolicyAllowed",
-      type: "web_pref::ImageAnimationPolicy",
+      initial: "mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed",
+      type: "mojom::blink::ImageAnimationPolicy",
     },
 
     // Html preload scanning is a fast, early scan of HTML documents to find loadable
@@ -715,9 +720,9 @@
     // used by content embedders to specify custom style on certain platforms.
     {
       name: "viewportStyle",
-      initial: "web_pref::ViewportStyle::kDefault",
+      initial: "mojom::blink::ViewportStyle::kDefault",
       invalidate: "ViewportRule",
-      type: "web_pref::ViewportStyle",
+      type: "mojom::blink::ViewportStyle",
     },
 
     // Automatic track selection is performed based on user preference for track kind specified
@@ -835,7 +840,7 @@
     {
       name: "hideScrollbars",
       initial: false,
-      invalidate: "ViewportScrollbar",
+      invalidate: "ViewportPaintProperties",
     },
 
     // Spellchecking is enabled by default for elements that do not specify it explicitly
@@ -1006,9 +1011,18 @@
     // evaluating the prefers-color-scheme media query.
     {
       name: "preferredColorScheme",
-      initial: "PreferredColorScheme::kLight",
+      initial: "mojom::blink::PreferredColorScheme::kLight",
       invalidate: "ColorScheme",
-      type: "PreferredColorScheme",
+      type: "mojom::blink::PreferredColorScheme",
+    },
+
+    // Preferred contrast from the OS/application passed to the renderer for
+    // evaluating the prefers-contrast media query.
+    {
+      name: "preferredContrast",
+      initial: "mojom::blink::PreferredContrast::kNoPreference",
+      invalidate: "MediaQuery",
+      type: "mojom::blink::PreferredContrast",
     },
 
     // Preferred motion-reduction setting from the OS/application passed to the

@@ -81,12 +81,14 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
 
   // Set up target, direct and all dependent configs.
   Config target_all(setup.settings(), Label(SourceDir("//target/"), "all"));
+  target_all.visibility().SetPublic();
   target_all.own_values().cflags().push_back("--target-all");
   target_all.own_values().include_dirs().push_back(SourceDir("//target/all/"));
   ASSERT_TRUE(target_all.OnResolved(&err));
 
   Config target_direct(setup.settings(),
                        Label(SourceDir("//target/"), "direct"));
+  target_direct.visibility().SetPublic();
   target_direct.own_values().cflags().push_back("--target-direct");
   target_direct.own_values().include_dirs().push_back(
       SourceDir("//target/direct/"));
@@ -95,6 +97,7 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
   // This config is applied directly to target.
   Config target_config(setup.settings(),
                        Label(SourceDir("//target/"), "config"));
+  target_config.visibility().SetPublic();
   target_config.own_values().cflags().push_back("--target-config");
   target_config.own_values().include_dirs().push_back(
       SourceDir("//target/config/"));

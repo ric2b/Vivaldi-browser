@@ -325,8 +325,8 @@ class TextNavigationManager {
    * @private
    */
   saveSelection_() {
-    if (this.selectionStartIndex_ == TextNavigationManager.NO_SELECT_INDEX ||
-        this.selectionEndIndex_ == TextNavigationManager.NO_SELECT_INDEX) {
+    if (this.selectionStartIndex_ === TextNavigationManager.NO_SELECT_INDEX ||
+        this.selectionEndIndex_ === TextNavigationManager.NO_SELECT_INDEX) {
       console.error(SwitchAccess.error(
           SAConstants.ErrorType.INVALID_SELECTION_BOUNDS,
           'Selection bounds are not set properly: ' +
@@ -351,7 +351,7 @@ class TextNavigationManager {
      */
     if (needToResetCursor) {
       if (TextNavigationManager.currentlySelecting() &&
-          this.selectionEndIndex_ != TextNavigationManager.NO_SELECT_INDEX) {
+          this.selectionEndIndex_ !== TextNavigationManager.NO_SELECT_INDEX) {
         // Move the cursor to the end of the existing selection.
         this.setSelection_();
       }
@@ -388,7 +388,7 @@ class TextNavigationManager {
     this.clipboardHasData_ = true;
     const node = NavigationManager.currentNode;
     if (node.hasAction(SwitchAccessMenuAction.PASTE)) {
-      MenuManager.reloadActionsForNode(node);
+      ActionManager.refreshMenuForNode(node);
     }
   }
 }

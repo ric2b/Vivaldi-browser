@@ -9,7 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chromeos/components/sample_system_web_app_ui/url_constants.h"
 #include "chromeos/grit/chromeos_sample_system_web_app_resources.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -24,7 +24,9 @@ std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForSampleSystemWebApp() {
   info->title = base::UTF8ToUTF16("Sample System Web App");
   web_app::CreateIconInfoForSystemWebApp(
       info->start_url,
-      {{"app_icon_192.png", 192, IDR_SAMPLE_SYSTEM_WEB_APP_ICON_192}}, *info);
+      {{"app_icon_192.png", 192,
+        IDR_CHROMEOS_SAMPLE_SYSTEM_WEB_APP_APP_ICON_192_PNG}},
+      *info);
   info->theme_color = 0xFF4285F4;
   info->background_color = 0xFFFFFFFF;
   info->display_mode = blink::mojom::DisplayMode::kStandalone;

@@ -144,6 +144,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     bool from_last_session,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data
@@ -158,17 +159,14 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
 
   WebContents* web_contents = chrome::AddRestoredTab(
       browser_, navigations, tab_index, selected_navigation, extension_app_id,
-      base::FeatureList::IsEnabled(features::kTabGroups) ? group
-                                                         : base::nullopt,
-      select, pin, from_last_session, base::TimeTicks(), storage_namespace,
-      user_agent_override, false /* from_session_restore */,
-      ext_data);
+      group, select, pin, from_last_session, base::TimeTicks(),
+      storage_namespace, user_agent_override, false /* from_session_restore */,
+      page_action_overrides, ext_data);
 
   // Only update the metadata if the group doesn't already exist since the
   // existing group has the latest metadata, which may have changed from the
   // time the tab was closed.
-  if (base::FeatureList::IsEnabled(features::kTabGroups) &&
-      first_tab_in_group) {
+  if (first_tab_in_group) {
     const tab_groups::TabGroupVisualData new_data(
         group_visual_data.title(), group_visual_data.color(), false);
     group_model->GetTabGroup(group.value())->SetVisualData(new_data);
@@ -211,6 +209,7 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data
@@ -222,7 +221,7 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
   WebContents* web_contents = chrome::ReplaceRestoredTab(
       browser_, navigations, selected_navigation, from_last_session,
       extension_app_id, storage_namespace, user_agent_override,
-      false /* from_session_restore */, ext_data);
+      false /* from_session_restore */, page_action_overrides, ext_data);
 
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
 }
@@ -258,7 +257,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
   create_params->initial_show_state = show_state;
   create_params->initial_workspace = workspace;
   create_params->user_title = user_title;
-  Browser* browser = new Browser(*create_params.get());
+  Browser* browser = Browser::Create(*create_params.get());
   return browser->live_tab_context();
 }
 

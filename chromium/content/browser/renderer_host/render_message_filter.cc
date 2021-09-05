@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/numerics/safe_math.h"
@@ -37,7 +37,6 @@
 #include "content/browser/resource_context_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/render_message_filter.mojom.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -78,7 +77,7 @@
 namespace content {
 namespace {
 
-const uint32_t kRenderFilteredMessageClasses[] = {ViewMsgStart};
+const uint32_t kRenderFilteredMessageClasses[] = {FrameMsgStart};
 
 }  // namespace
 
@@ -115,6 +114,16 @@ void RenderMessageFilter::OnDestruct() const {
 void RenderMessageFilter::GenerateRoutingID(
     GenerateRoutingIDCallback callback) {
   std::move(callback).Run(render_widget_helper_->GetNextRoutingID());
+}
+
+void RenderMessageFilter::GenerateFrameRoutingID(
+    GenerateFrameRoutingIDCallback callback) {
+  int32_t routing_id = render_widget_helper_->GetNextRoutingID();
+  auto frame_token = base::UnguessableToken::Create();
+  auto devtools_frame_token = base::UnguessableToken::Create();
+  render_widget_helper_->StoreNextFrameRoutingID(routing_id, frame_token,
+                                                 devtools_frame_token);
+  std::move(callback).Run(routing_id, frame_token, devtools_frame_token);
 }
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)

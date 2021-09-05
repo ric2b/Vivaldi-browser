@@ -60,9 +60,9 @@
     {
       "id": 19,
       "comment": "Corresponds to software rendering list #140",
-      "description": "Disable depth textures on older Qualcomm GPUs (legacy blocklist entry, original problem unclear)",
-      "cr_bugs": [682075],
-      "gl_renderer": "Adreno \\(TM\\) [23].*",
+      "description": "Disable depth textures on older Adreno 2xx Qualcomm GPUs (legacy blocklist entry, original problem unclear)",
+      "cr_bugs": [682075, 1042214],
+      "gl_renderer": "Adreno \\(TM\\) 2.*",
       "features": [
         "disable_depth_texture"
       ],
@@ -947,19 +947,6 @@
       ]
     },
     {
-      "id": 129,
-      "comment": "TODO(dshwang): Fix ANGLE crash. crbug.com/518889",
-      "description": "ANGLE crash on glReadPixels from incomplete cube map texture",
-      "cr_bugs": [518889],
-      "os": {
-        "type": "win"
-      },
-      "gl_renderer": "ANGLE.*",
-      "features": [
-        "force_cube_complete"
-      ]
-    },
-    {
       "id": 130,
       "description": "NVIDIA fails glReadPixels from incomplete cube map texture",
       "cr_bugs": [518889],
@@ -1094,17 +1081,6 @@
       "gl_renderer": "Adreno \\(TM\\) 4.*",
       "comment": "Originally on 418.",
       "disabled_extensions": ["GL_EXT_sRGB"]
-    },
-    {
-      "id": 141,
-      "cr_bugs": [570897],
-      "description": "Framebuffer discarding can hurt performance on non-tilers",
-      "os": {
-        "type": "win"
-      },
-      "features": [
-        "disable_discard_framebuffer"
-      ]
     },
     {
       "id": 142,
@@ -1884,11 +1860,18 @@
       "comment": [
         "Corresponds to software rendering list #140",
         "Mysteriously, the first workaround won't work without the second. crbug.com/698197#c10",
-        "MSAA workaround shouldn't be needed beyond Adreno 3xx. crbug.com/682075#c17"
+        "MSAA workaround shouldn't be needed beyond Adreno 3xx and Android 9. crbug.com/682075#c17, crbug.com/1042214"
       ],
       "description": "Some Adreno 3xx don't setup scissor state correctly when FBO0 is bound, nor support MSAA properly.",
-      "cr_bugs": [670607, 682075, 696627, 698197, 707839],
+      "cr_bugs": [670607, 682075, 696627, 698197, 707839, 1042214],
       "gl_renderer": "Adreno \\(TM\\) 3.*",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "9.0"
+        }
+      },
       "features": [
         "force_update_scissor_state_when_binding_fbo0",
         "disable_chromium_framebuffer_multisample"
@@ -2086,22 +2069,6 @@
       "multi_gpu_style": "amd_switchable",
       "features": [
         "force_high_performance_gpu"
-      ]
-    },
-    {
-      "id": 229,
-      "description": "Overlay sizes bigger than screen aren't accelerated on some Intel drivers",
-      "cr_bugs": [720059],
-      "os": {
-        "type": "win"
-      },
-      "vendor_id": "0x8086",
-      "driver_version": {
-        "op": "<",
-        "value": "21.20.16.4542"
-      },
-      "features": [
-        "disable_larger_than_screen_overlays"
       ]
     },
     {
@@ -3438,6 +3405,9 @@
       "id": 343,
       "description": "Disable using GPU backed resource for imageBitmap from video on d3d9",
       "cr_bugs": [1098445, 1105923],
+      "os": {
+        "type": "win"
+      },
       "gl_renderer": ".*Direct3D9.*",
       "features": [
         "disable_imagebitmap_from_video_using_gpu"
@@ -3482,7 +3452,8 @@
         "type": "win"
       },
       "intel_gpu_series": [
-        "icelake"
+        "icelake",
+        "tigerlake"
       ],
       "features": [
         "force_rgb10a2_overlay_support_flags"
@@ -3639,6 +3610,67 @@
       },
       "features": [
         "force_enable_color_buffer_float_except_rgb32f"
+      ]
+    },
+    {
+      "id": 359,
+      "comment": "Corresponds to software rendering list #140",
+      "description": "Disable depth textures on Adreno 3xx Qualcomm GPUs pre-Android 9 (legacy blocklist entry, original problem unclear)",
+      "cr_bugs": [682075, 1042214],
+      "gl_renderer": "Adreno \\(TM\\) 3.*",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "9.0"
+        }
+      },
+      "features": [
+        "disable_depth_texture"
+      ],
+      "disabled_extensions": [
+        "GL_OES_depth_texture"
+      ]
+    },
+    {
+      "id": 360,
+      "description": "8x MSAA for WebGL contexts is slow on Win Intel",
+      "cr_bugs": [1145793],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "max_msaa_sample_count_4"
+      ]
+    },
+    {
+      "id": 361,
+      "description": "VP9 Profile 2 decoding doesn't work on ChromeOS AMDs",
+      "cr_bugs": [1147466],
+      "os": {
+        "type": "chromeos"
+      },
+      "vendor_id": "0x1002",
+      "driver_vendor": "Mesa",
+      "features": [
+        "disable_accelerated_vp9_profile2_decode"
+      ]
+    },
+    {
+      "id": 363,
+      "description": "VP9 decoding is too slow on Intel Broadwell, Skylake, and CherryTrail",
+      "cr_bugs": [616318, 1163111],
+      "os": {
+        "type": "macosx"
+      },
+      "intel_gpu_series": [
+        "broadwell",
+        "skylake",
+        "cherrytrail"
+      ],
+      "features": [
+        "disable_accelerated_vp9_decode"
       ]
     }
   ]

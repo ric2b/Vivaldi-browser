@@ -372,6 +372,30 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="AdsIntervention.LastIntervention" singular="True">
+  <owner>yaoxia@google.com</owner>
+  <owner>chrome-ads-core@google.com</owner>
+  <summary>
+    Recorded after computing the subresource filter activation for a page at
+    process response time during navigation. This is only recorded when there
+    has previously been an ads intervention triggered on the page within the
+    site data's lifetime (currently 7 days). Clearing site data will reset
+    intervention information.
+  </summary>
+  <metric name="InterventionStatus" enum="AdsInterventionStatus">
+    <summary>
+      Records the status of the ads intervention, whether the intervention lead
+      to subresource filter activation, measured during page load.
+    </summary>
+  </metric>
+  <metric name="InterventionType" enum="AdsViolations">
+    <summary>
+      Records the last measured intervention recorded for the page, measured
+      during page load.
+    </summary>
+  </metric>
+</event>
+
 <event name="AmpPageLoad" singular="True">
   <owner>sullivan@chromium.org</owner>
   <metric name="MainFrameAmpPageLoad">
@@ -442,6 +466,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SubFrame.PaintTiming.NavigationToExperimentalLargestContentfulPaint">
+    <obsolete>
+      Replaced by SubFrame.PaintTiming.NavigationToLargestContentfulPaint2 on
+      Oct 2020.
+    </obsolete>
     <summary>
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints the experimental largest
@@ -469,7 +497,19 @@ be describing additional metrics about the same event.
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints the largest content (text or
       image) within viewport, in the AMP subframe. See
-      http://bit.ly/largest_contentful_paint_explainer for more details.
+      http://bit.ly/largest_contentful_paint_explainer for more details. Note:
+      Will be replaced by
+      SubFrame.PaintTiming.NavigationToLargestContentfulPaint2.
+    </summary>
+  </metric>
+  <metric name="SubFrame.PaintTiming.NavigationToLargestContentfulPaint2">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the experimental largest
+      content (text or image) within viewport, in the AMP subframe. See
+      http://bit.ly/largest_contentful_paint_explainer for more details. Differs
+      from SubFrame.PaintTiming.NavigationToLargestContentfulPaint in that
+      removed content is still considered a valid candidate.
     </summary>
   </metric>
   <metric name="SubFrame.PaintTiming.NavigationToLargestContentPaint">
@@ -1961,6 +2001,12 @@ be describing additional metrics about the same event.
       First Contentful Paint, in microseconds.
     </summary>
   </metric>
+  <metric name="DisplayLockIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for
+      DisplayLockDocumentState, in microseconds.
+    </summary>
+  </metric>
   <metric name="ForcedStyleAndLayout">
     <summary>
       The time spent in forced style recalc and layouts, between navigation and
@@ -1992,16 +2038,34 @@ be describing additional metrics about the same event.
       and First Contentful Paint, in microseconds.
     </summary>
   </metric>
+  <metric name="JavascriptIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for javascript observers, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="Layout">
     <summary>
       The time spent in layout document lifecycle work, between navigation and
       First Contentful Paint, in microseconds.
     </summary>
   </metric>
+  <metric name="LazyLoadIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for lazy loading, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="MainFrame">
     <summary>
       The time spent in ProxyMain::BeginMainFrame, between navigation and First
       Contentful Paint, in microseconds.
+    </summary>
+  </metric>
+  <metric name="MediaIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for media elements, in
+      microseconds.
     </summary>
   </metric>
   <metric name="Paint">
@@ -2027,6 +2091,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ScrollingCoordinator">
+    <obsolete>
+      Merged into CompositingCommit in http://crrev.com/815947 in M88.
+    </obsolete>
     <summary>
       The time spent in ScrollingCoordinator, between navigation and First
       Contentful Paint, in microseconds.
@@ -2062,6 +2129,21 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Blink.PaintTiming" singular="True">
+  <owner>npm@chromium.org</owner>
+  <owner>sullivan@chromium.org</owner>
+  <summary>
+    Paint timing metrics recorded in Blink, usually used as debugging metrics
+    for PaintTiming metrics in the PageLoad event.
+  </summary>
+  <metric name="LCPDebugging.HasViewportImage" enum="Boolean">
+    <summary>
+      Records whether a page has an image whose size equals the full viewport.
+      Recorded when the LCP algorithm has stopped.
+    </summary>
+  </metric>
+</event>
+
 <event name="Blink.Script.AsyncScripts" singular="True">
   <owner>dom@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2082,8 +2164,11 @@ be describing additional metrics about the same event.
   <owner>paint-dev@chromium.org</owner>
   <summary>
     Metrics that measure various update times in Blink. This includes paint,
-    compositing, and layout update times. The metrics are recorded at first
-    lifecycle update and then a random frame with mean interval of 2000 frames.
+    compositing, and layout update times. This event is reported once in the
+    first main frame update after First Contentful Paint, with data from a
+    randomly chosen frame up to and including First Contentful Paint, and once
+    on LocalFrameView destruction with data from a random frame between
+    FirstContentfulPaint and shutdown.
 
     This event is not recorded on machines with low-resolution clocks.
   </summary>
@@ -2146,7 +2231,16 @@ be describing additional metrics about the same event.
       within the sample window. An int in the range [0,100].
     </summary>
   </metric>
+  <metric name="AnimateBeginMainFrame">
+    <summary>
+      The total main frame time used by by main thread animations, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="AnimatePercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with AnimateBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by main thread animations. An
       int in the range [0,100].
@@ -2228,7 +2322,17 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="CompositingAssignmentsBeginMainFrame">
+    <summary>
+      The total main frame time used by the compositing assignments phase, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="CompositingAssignmentsPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with
+      CompositingAssignmentsBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by the compositing assignments
       phase. An int in the range [0,100].
@@ -2294,7 +2398,15 @@ be describing additional metrics about the same event.
       int in the range [0,100].
     </summary>
   </metric>
+  <metric name="CompositingCommitBeginMainFrame">
+    <summary>
+      The total main frame time used by the compositing commit, in microseconds.
+    </summary>
+  </metric>
   <metric name="CompositingCommitPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with CompositingCommitBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by the compositing commit. An
       int in the range [0,100].
@@ -2314,17 +2426,48 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="CompositingInputsBeginMainFrame">
+    <summary>
+      The total main frame time used by the compositing inputs phase, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="CompositingInputsPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with CompositingInputsBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by the compositing inputs
       phase. An int in the range [0,100].
     </summary>
   </metric>
   <metric name="CompositingPercentage">
+    <obsolete>
+      Obsolete as of http://crrev.com/794384.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by the compositing phase. An
-      int in the range [0,100]. This is being replaced soon by
-      CompositingInputsPercentage and CompositingAssignmentsPercentage.
+      int in the range [0,100].
+    </summary>
+  </metric>
+  <metric name="DisplayLockIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for
+      DisplayLockDocumentState, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="DisplayLockIntersectionObserverBeginMainFrame">
+    <summary>
+      The total main frame time used to compute IntersectionObservations for
+      DisplayLockDocumentState, in microseconds.
     </summary>
   </metric>
   <metric name="ForcedStyleAndLayout">
@@ -2388,7 +2531,18 @@ be describing additional metrics about the same event.
       frame. An int in the range [0,100].
     </summary>
   </metric>
+  <metric name="ForcedStyleAndLayoutBeginMainFrame">
+    <summary>
+      The total main frame time used by forced style updates and layouts, in
+      microseconds. This metric may include time that is also included in the
+      AnimateBeginMainFrame metric.
+    </summary>
+  </metric>
   <metric name="ForcedStyleAndLayoutPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with
+      ForcedStyleAndLayoutBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by forced style updates and
       layouts during the main frame update (not including time outside of the
@@ -2456,7 +2610,16 @@ be describing additional metrics about the same event.
       range [0,100].
     </summary>
   </metric>
+  <metric name="HandleInputEventsBeginMainFrame">
+    <summary>
+      The total main frame time used in processing rAF-aligned input, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="HandleInputEventsPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with HandleInputEventsBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in processing rAF-aligned
       input. An int in the range [0,100].
@@ -2478,7 +2641,17 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="HitTestDocumentUpdateBeginMainFrame">
+    <summary>
+      The total main frame time used in performing hit test document updates, in
+      microseconds.
+    </summary>
+  </metric>
   <metric name="HitTestDocumentUpdatePercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with
+      HitTestDocumentUpdateBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in performing hit test document
       updates. An int in the range [0,100].
@@ -2498,7 +2671,18 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="ImplCompositorCommitBeginMainFrame">
+    <summary>
+      The total main frame time spent committing layer tree impl data in the
+      compositor thread, in microseconds. This should always match
+      ImplCompositorCommit and serves as a check.
+    </summary>
+  </metric>
   <metric name="ImplCompositorCommitPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with
+      ImplCompositorCommitBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time spent committing layer tree impl
       data in the compositor thread. An int in the range [0,100].
@@ -2564,10 +2748,40 @@ be describing additional metrics about the same event.
       range [0,100].
     </summary>
   </metric>
+  <metric name="IntersectionObservationBeginMainFrame">
+    <summary>
+      The total main frame time used to compute IntersectionObserver
+      observations, in microseconds.
+    </summary>
+  </metric>
   <metric name="IntersectionObservationPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with
+      IntersectionObservationBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in computing intersection
       observer state. An int in the range [0,100].
+    </summary>
+  </metric>
+  <metric name="JavascriptIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for javascript observers, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="JavascriptIntersectionObserverBeginMainFrame">
+    <summary>
+      The total main frame time used to compute IntersectionObservations for
+      Javascript observers, in microseconds.
     </summary>
   </metric>
   <metric name="Layout">
@@ -2584,10 +2798,38 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="LayoutBeginMainFrame">
+    <summary>
+      The total main frame time used in layout, in microseconds.
+    </summary>
+  </metric>
   <metric name="LayoutPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with LayoutBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in layout work. An int in the
       range [0,100].
+    </summary>
+  </metric>
+  <metric name="LazyLoadIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for lazy loading, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="LazyLoadIntersectionObserverBeginMainFrame">
+    <summary>
+      The total main frame time used to compute IntersectionObservations for
+      lazy loading, in microseconds.
     </summary>
   </metric>
   <metric name="MainFrame">
@@ -2643,6 +2885,26 @@ be describing additional metrics about the same event.
       the following values to determine if a reason was present:
       CompositorAnimation: 1, MainThreadAnimation: 2, PinchZoom: 4, RAF: 8,
       TouchScroll: 16, Universal: 32, Video: 64 and WheelScroll: 128.
+    </summary>
+  </metric>
+  <metric name="MediaIntersectionObserver">
+    <summary>
+      Time spent computing IntersectionObservations for media elements, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="MediaIntersectionObserverBeginMainFrame">
+    <summary>
+      The total main frame time used to compute IntersectionObservations for
+      media elements, in microseconds.
     </summary>
   </metric>
   <metric name="Paint">
@@ -2704,7 +2966,15 @@ be describing additional metrics about the same event.
       sample window. An int in the range [0,100].
     </summary>
   </metric>
+  <metric name="PaintBeginMainFrame">
+    <summary>
+      The total main frame time used in paint, in microseconds.
+    </summary>
+  </metric>
   <metric name="PaintPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with PaintBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in paint. An int in the range
       [0,100].
@@ -2769,7 +3039,15 @@ be describing additional metrics about the same event.
       the sample window. An int in the range [0,100].
     </summary>
   </metric>
+  <metric name="PrePaintBeginMainFrame">
+    <summary>
+      The total main frame time used in pre-paint, in microseconds.
+    </summary>
+  </metric>
   <metric name="PrePaintPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with PrePaintBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in pre-paint. An int in the
       range [0,100].
@@ -2804,6 +3082,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ScrollingCoordinator">
+    <obsolete>
+      Merged into Blink.MainFrame.CompositingCommitRatio in
+      http://crrev.com/815947 in M88.
+    </obsolete>
     <summary>
       The time taken for scrolling coordinator for the main frame in
       microseconds during the sampled frame.
@@ -2864,6 +3146,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ScrollingCoordinatorPercentage">
+    <obsolete>
+      Merged into Blink.MainFrame.CompositingCommitRatio in
+      http://crrev.com/815947 in M88.
+    </obsolete>
     <summary>
       The percentage of the main frame time used in scrolling coordinator. An
       int in the range [0,100].
@@ -2954,6 +3240,12 @@ be describing additional metrics about the same event.
       int in the range [0,100].
     </summary>
   </metric>
+  <metric name="StyleBeginMainFrame">
+    <summary>
+      The total main frame time spent updating style information and and
+      building the layout tree, in microseconds.
+    </summary>
+  </metric>
   <metric name="StylePercentage">
     <summary>
       The percentage of the main frame time used in style work. An int in the
@@ -2974,7 +3266,16 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="UpdateLayersBeginMainFrame">
+    <summary>
+      The total main frame time spent in LayerTreeHost::UpdateLayer, in
+      microseconds. This should always match UpdateLayers and serves as a check.
+    </summary>
+  </metric>
   <metric name="UpdateLayersPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with UpdateLayersBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time used by LayerTreeHost::UpdateLayers.
       An int in the range [0,100].
@@ -2994,7 +3295,17 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="WaitForCommitBeginMainFrame">
+    <summary>
+      The total main frame time spent waiting for the compositor thread to begin
+      processing a commit, in microseconds. This should always match
+      WaitForCommit and serves as a check.
+    </summary>
+  </metric>
   <metric name="WaitForCommitPercentage">
+    <obsolete>
+      Deprecated as of 11/2020. Replaced with WaitForCommitBeginMainFrame.
+    </obsolete>
     <summary>
       The percentage of the main frame time spent waiting for the compositor
       thread to begin processing a commit. An int in the range [0,100].
@@ -3078,6 +3389,52 @@ be describing additional metrics about the same event.
       The count of the largest burst of click inputs for a page load. Only
       recorded if it meets a minimum threshold to be considered a burst.
     </summary>
+  </metric>
+</event>
+
+<event name="ClientRenderingAPI">
+  <owner>aaronhk@chromium.org</owner>
+  <owner>cwallez@chromium.org</owner>
+  <owner>enga@chromium.org</owner>
+  <owner>fserb@chromium.org</owner>
+  <owner>jdarpinian@chromium.org</owner>
+  <owner>juanmihd@chromium.org</owner>
+  <owner>kainino@chromium.org</owner>
+  <owner>kbr@chromium.org</owner>
+  <owner>shrekshao@google.com</owner>
+  <summary>
+    Metrics collecting types of rendering context created with
+    canvas/offscreencanvas. It also collects requests of GPU device via WebGPU
+    API.
+  </summary>
+  <metric name="Canvas.RenderingContext" enum="CanvasRenderingAPI">
+    <summary>
+      Type of rendering context created for HTMLCanvasElement.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="GPUDevice">
+    <summary>
+      Event fired when a GPUDevice from the WebGPU API is created.
+    </summary>
+  </metric>
+  <metric name="OffscreenCanvas.RenderingContext" enum="CanvasRenderingAPI">
+    <summary>
+      Type of rendering context created for OffscreenCanvas.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -3215,14 +3572,20 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="SearchWithGoogleLens" enum="Boolean">
     <summary>
-      Recorded when the context menu is constructed and logged if the lens
+      Recorded when the context menu is constructed and logged if the Lens
       option was displayed.
     </summary>
   </metric>
   <metric name="ShopWithGoogleLens" enum="Boolean">
     <summary>
-      Recorded when the context menu is constructed and logged if the lens
+      Recorded when the context menu is constructed and logged if the Lens
       shopping option was displayed.
+    </summary>
+  </metric>
+  <metric name="ShopWithGoogleLensChip" enum="Boolean">
+    <summary>
+      Recorded when the context menu is constructed and logged if the Lens chip
+      was displayed.
     </summary>
   </metric>
 </event>
@@ -4044,6 +4407,19 @@ be describing additional metrics about the same event.
     Whether and how keepalive requests are blocked. Recorded when a keepalive
     request finishes.
   </summary>
+  <metric name="NumRedirects">
+    <summary>
+      The number of redirects the request experienced. This is up to 21, as
+      specified at https://fetch.spec.whatwg.org/#http-redirect-fetch .
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="State" enum="ExtensionInProgressRequestState">
     <summary>
       The final state of the request.
@@ -4452,6 +4828,11 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="CanvasAnimation" enum="Boolean">
+    <summary>
+      True when a canvas animation was active this frame.
+    </summary>
+  </metric>
   <metric name="Commit">
     <summary>
       The duration of the commit stage.&quot;
@@ -4497,6 +4878,11 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+  <metric name="JSAnimation" enum="Boolean">
+    <summary>
+      True when a inline style animation was active this frame.
+    </summary>
   </metric>
   <metric name="MainThreadAnimation" enum="Boolean">
     <summary>
@@ -4877,9 +5263,19 @@ be describing additional metrics about the same event.
       interactions.
     </summary>
   </metric>
+  <metric name="MainThread.CanvasAnimation">
+    <summary>
+      The throughput of the main thread during canvas animation.
+    </summary>
+  </metric>
   <metric name="MainThread.CompositorAnimation">
     <summary>
       The throughput of the main thread during a compositor animation.
+    </summary>
+  </metric>
+  <metric name="MainThread.JSAnimation">
+    <summary>
+      The throughput of the main thread during inline style animation.
     </summary>
   </metric>
   <metric name="MainThread.MainThreadAnimation">
@@ -5416,6 +5812,20 @@ be describing additional metrics about the same event.
     //third_party/blink/public/common/privacy_budget/identifiability/identifiability_metric_builder.h
     for details on how the metrics hash is determined.
   </summary>
+  <metric name="GeneratorVersion.926">
+    <summary>
+      An integer identifying the &quot;generator&quot; version for this record.
+      Some identifiability study samples are derived from multiple factors which
+      are run though a digest function to derive the int64_t value. If the set
+      of factors change or the method of combining them changes, then the
+      resulting statistics cannot be aggregated with those from a prior version.
+
+      The name suffix (.926) was chosen so that the resulting metric hash as
+      determined by base::HashMetricName() has all 8 LSBs set to 0. Such a
+      metric hash does not collide with any other metric hash generated by
+      blink::IdentifiabilityMetricBuilder().
+    </summary>
+  </metric>
   <metric name="StudyGeneration.626">
     <summary>
       An integer identifying the study &quot;generation.&quot; In case the study
@@ -5697,6 +6107,55 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="LoadCountsPerTopLevelDocument">
+  <owner>fdoray@chromium.org</owner>
+  <owner>chrome-catan@google.com</owner>
+  <summary>
+    Counts loads of each type that occured on a top-level document. Recorded
+    when a top-level document is unloaded. This can be used to diagnose changes
+    to the &quot;Total pageloads&quot; shown on stability dashboard.
+
+    Exponential bucketing is applied to all counts. The bucketing function
+    preserves exact count up until 20.
+  </summary>
+  <metric name="NumMainFrameSameDocumentLoads_Hidden">
+    <summary>
+      Number of main frame same-document loads that occurred while the page was
+      hidden.
+    </summary>
+  </metric>
+  <metric name="NumMainFrameSameDocumentLoads_Visible">
+    <summary>
+      Number of main frame same-document loads that occurred while the page was
+      visible.
+    </summary>
+  </metric>
+  <metric name="NumSubFrameDifferentDocumentLoads_Hidden">
+    <summary>
+      Number of sub frame different-document loads that occurred while the page
+      was hidden.
+    </summary>
+  </metric>
+  <metric name="NumSubFrameDifferentDocumentLoads_Visible">
+    <summary>
+      Number of sub frame different-document loads that occurred while the page
+      was visible.
+    </summary>
+  </metric>
+  <metric name="NumSubFrameSameDocumentLoads_Hidden">
+    <summary>
+      Number of sub frame same-document loads that occurred while the page was
+      hidden.
+    </summary>
+  </metric>
+  <metric name="NumSubFrameSameDocumentLoads_Visible">
+    <summary>
+      Number of sub frame same-document loads that occurred while the page was
+      visible.
+    </summary>
+  </metric>
+</event>
+
 <event name="LoadingPredictor" singular="true">
   <owner>sophiechang@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
@@ -5860,6 +6319,21 @@ be describing additional metrics about the same event.
       resources within a different reserved IP space than the loaded private
       page, 8 for resources requested by public pages that are suspected to be
       routers, and 16 for localhost resources.
+    </summary>
+  </metric>
+</event>
+
+<event name="LoginDetection" singular="True">
+  <owner>rajendrant@chromium.org</owner>
+  <owner>mcrouse@chromium.org</owner>
+  <summary>
+    Records the info about login detected for sites based on different
+    heuristics.
+  </summary>
+  <metric name="Page.LoginType" enum="LoginDetectionType">
+    <summary>
+      An enum for representing the different ways of user login to a site, such
+      as via passwords, via OAuth, etc. Recorded for every page load.
     </summary>
   </metric>
 </event>
@@ -6587,6 +7061,21 @@ be describing additional metrics about the same event.
     <summary>
       The action of the button that was pressed (e.g. play, pause, next track,
       picture-in-picture).
+    </summary>
+  </metric>
+</event>
+
+<event name="Media.Kaleidoscope.Navigation">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Kaleidoscope is a media recommendations feature in Chrome. This event is
+    recorded when a user selects a media recommendation and there is a
+    navigation to the new site from Kaleidoscope.
+  </summary>
+  <metric name="WasFromKaleidoscope">
+    <summary>
+      Whether the navigation was from Kaleiodscope.
     </summary>
   </metric>
 </event>
@@ -7704,6 +8193,31 @@ be describing additional metrics about the same event.
   <metric name="Status">
     <summary>
       An enum with 0 representing started, 1 failed, and 2 response received.
+    </summary>
+  </metric>
+</event>
+
+<event name="MobileFriendliness">
+  <owner>kumagi@chromium.org</owner>
+  <metric name="AllowUserZoom" enum="Boolean">
+    <summary>
+      Whether the page allows the user to zoom in/out.
+    </summary>
+  </metric>
+  <metric name="ViewportDeviceWidth" enum="Boolean">
+    <summary>
+      Whether the width of the viewport specified as device-width or not.
+    </summary>
+  </metric>
+  <metric name="ViewportHardcodedWidth">
+    <summary>
+      Specified hardcoded viewport width in CSS pixels.
+    </summary>
+  </metric>
+  <metric name="ViewportInitialScaleX10">
+    <summary>
+      Specified initial viewport scaling multipled by 10. 1 means 0.1, 100 means
+      10. [1-100].
     </summary>
   </metric>
 </event>
@@ -8931,6 +9445,16 @@ be describing additional metrics about the same event.
       Set to 1 if the main resource is an inner response of a signed exchange.
     </summary>
   </metric>
+  <metric
+      name="LayoutInstability.AverageCumulativeShiftScore.SessionWindow.Gap5000ms">
+    <summary>
+      Measures the average cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window. The gap between two consecutive shifts
+      in a window is not bigger than 5000ms. This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
+    </summary>
+  </metric>
   <metric name="LayoutInstability.CumulativeShiftScore">
     <summary>
       Measures the cumulative layout shift (bit.ly/lsm-explainer) that has
@@ -8953,6 +9477,15 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="LayoutInstability.CumulativeShiftScore.BeforeInputOrScroll">
+    <summary>
+      Measures the cumulative layout shift (bit.ly/lsm-explainer) that has
+      occurred on the page (including all subframes) during the session, before
+      any user input or scroll (in any frame). This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
+    </summary>
+  </metric>
   <metric name="LayoutInstability.CumulativeShiftScore.MainFrame">
     <summary>
       Measures the cumulative layout shift (bit.ly/lsm-explainer) that has
@@ -8966,8 +9499,46 @@ be describing additional metrics about the same event.
     <summary>
       Measures the cumulative layout shift (bit.ly/lsm-explainer) that has
       occurred in the main frame during the session, before any user input or
-      document scroll. This metric's integral value is 100x the fractional
-      cumulative layout shift score described in the explainer.
+      scroll. This metric's integral value is 100x the fractional cumulative
+      layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="LayoutInstability.MaxCumulativeShiftScore.SessionWindow.Gap1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window. The gap between two consecutive shifts
+      in a window is not bigger than 1000ms. This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
+    </summary>
+  </metric>
+  <metric
+      name="LayoutInstability.MaxCumulativeShiftScore.SessionWindow.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window. The gap between two consecutive shifts
+      in a window is not bigger than 1000ms and the maximum window size is
+      5000ms. This metric's integral value is 100x the fractional cumulative
+      layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="LayoutInstability.MaxCumulativeShiftScore.SlidingWindow.Duration1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 1000ms sliding window. This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
+    </summary>
+  </metric>
+  <metric
+      name="LayoutInstability.MaxCumulativeShiftScore.SlidingWindow.Duration300ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 300ms sliding window. This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
     </summary>
   </metric>
   <metric name="LayoutStability.JankScore">
@@ -9251,6 +9822,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="PaintTiming.NavigationToExperimentalLargestContentfulPaint">
+    <obsolete>
+      Replaced by PaintTiming.NavigationToLargestContentfulPaint2 on Oct 2020.
+    </obsolete>
     <summary>
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints the largest content (text or
@@ -9273,6 +9847,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="PaintTiming.NavigationToExperimentalLargestContentfulPaint.MainFrame">
+    <obsolete>
+      Replaced by PaintTiming.NavigationToLargestContentfulPaint2.MainFrame on
+      Oct 2020.
+    </obsolete>
     <summary>
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints the largest content (text or
@@ -9324,7 +9902,8 @@ be describing additional metrics about the same event.
       image) within viewport, across all frames. See http://bit.ly/fcp_plus_plus
       for more details. Stable since M79; previous versions are experimental and
       subject to fluctuation between releases. Log of major changes:
-      http://bit.ly/chrome-speed-metrics-changelog
+      http://bit.ly/chrome-speed-metrics-changelog Note: Will be replaced by
+      PaintTiming.NavigationToLargestContentfulPaint2.
     </summary>
     <aggregation>
       <history>
@@ -9344,7 +9923,39 @@ be describing additional metrics about the same event.
       Measures the time in milliseconds from navigation timing's navigation
       start to the time when the page first paints the largest content (text or
       image) within viewport, in the main frame. See http://bit.ly/fcp_plus_plus
-      for more details.
+      for more details. Note: Will be replaced by
+      PaintTiming.NavigationToLargestContentfulPaint2.MainFrame.
+    </summary>
+  </metric>
+  <metric name="PaintTiming.NavigationToLargestContentfulPaint2">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the largest content (text or
+      image) within viewport, across all frames. See http://bit.ly/fcp_plus_plus
+      for more details. Log of major changes:
+      http://bit.ly/chrome-speed-metrics-changelog. Version 2 differs from the
+      first version in that it includes content that has been removed from the
+      page.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="PaintTiming.NavigationToLargestContentfulPaint2.MainFrame">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the largest content (text or
+      image) within viewport, in the main frame. Includes content that has been
+      removed from the page. See http://bit.ly/fcp_plus_plus for more details.
     </summary>
   </metric>
   <metric name="ParseTiming.NavigationToParseStart">
@@ -9421,11 +10032,10 @@ be describing additional metrics about the same event.
     <summary>
       Records whether the page's experimental version of largest contentful
       paint, whose timestamp is measured by
-      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint, comes
-      from text or image. This value is sampled and not on the PageLoad event,
-      so it is not always recorded whenever
-      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint is
-      recorded.
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint, comes from text
+      or image. This value is sampled and not on the PageLoad event, so it is
+      not always recorded whenever
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint is recorded.
     </summary>
   </metric>
   <metric
@@ -9434,22 +10044,22 @@ be describing additional metrics about the same event.
     <summary>
       Records the state of the experimental largest contentful paint algorithm
       at the time in which the browser attempts to record
-      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint. This
-      state depends on whether there was an experimental largest contentful
-      paint candidate or not and the foreground state of the page. This value is
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint. This state
+      depends on whether there was an experimental largest contentful paint
+      candidate or not and the foreground state of the page. This value is
       sampled and not on the PageLoad event, so it is not always recorded
       whenever the browser attempts to record
-      PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint.
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint.
     </summary>
   </metric>
   <metric name="PaintTiming.LargestContentfulPaint.ContentType"
       enum="LargestContentType">
     <summary>
       Records whether the page's largest contentful paint, whose timestamp is
-      measured by PageLoad.PaintTiming.NavigationToLargestContentfulPaint, comes
-      from text or image. This value is sampled and not on the PageLoad event,
-      so it is not always recorded whenever
-      PageLoad.PaintTiming.NavigationToLargestContentfulPaint is recorded.
+      measured by PageLoad.PaintTiming.NavigationToLargestContentfulPaint2,
+      comes from text or image. This value is sampled and not on the PageLoad
+      event, so it is not always recorded whenever
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint2 is recorded.
     </summary>
   </metric>
   <metric name="PaintTiming.LargestContentfulPaint.TerminationState"
@@ -9457,11 +10067,11 @@ be describing additional metrics about the same event.
     <summary>
       Records the state of the largest contentful paint algorithm at the time in
       which the browser attempts to record
-      PageLoad.PaintTiming.NavigationToLargestContentfulPaint. This state
+      PageLoad.PaintTiming.NavigationToLargestContentfulPaint2. This state
       depends on whether there was a largest contentful paint candidate or not
       and the foreground state of the page. This value is sampled and not on the
       PageLoad event, so it is not always recorded whenever the browser attempts
-      to record PageLoad.PaintTiming.NavigationToLargestContentfulPaint.
+      to record PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.
     </summary>
   </metric>
 </event>
@@ -10136,6 +10746,14 @@ be describing additional metrics about the same event.
       An enum of type ContentSettingsType.
     </summary>
   </metric>
+  <metric name="PredictionsApiResponse.GrantLikelihood"
+      enum="PredictionGrantLikelihood">
+    <summary>
+      An enum of type PermissionUmaUtil::PredictionGrantLikelihood describing
+      the likelihood returned by the Web Permission Predictions Service, if the
+      service was successfully queried.
+    </summary>
+  </metric>
   <metric name="PriorDismissals">
     <summary>
       The number of dismissed prompts for the given (origin, permission) pair,
@@ -10152,6 +10770,13 @@ be describing additional metrics about the same event.
     <summary>
       An enum of type PermissionPromptDisposition. The UI used to display a
       permission prompt, if any.
+    </summary>
+  </metric>
+  <metric name="PromptDispositionReason"
+      enum="PermissionPromptDispositionReason">
+    <summary>
+      An enum of type PermissionPromptDispositionReason. The reason why the
+      particular prompt disposition was used, if any.
     </summary>
   </metric>
   <metric name="SatisfiedAdaptiveTriggers">
@@ -10207,6 +10832,13 @@ be describing additional metrics about the same event.
       is capped at 100. See IsUserInteractionInputType in web_contents_impl for
       what an interaction is. Currently it is a mouse, scroll begin, touch
       start, or raw key down event.
+    </summary>
+  </metric>
+  <metric name="RedirectCount">
+    <summary>
+      The number of redirects taken by the pop-up's initial navigation. This
+      does not include javascript navigations initiated by the opening document
+      for the pop-up.
     </summary>
   </metric>
   <metric name="SafeBrowsingStatus" enum="PopupSafeBrowsingStatus">
@@ -10374,12 +11006,12 @@ be describing additional metrics about the same event.
       when a probe was required.
     </summary>
   </metric>
-  <metric name="SRPClickPrefetchStatus" enum="IsolatedPrerenderPrefetchStatus">
+  <metric name="SRPClickPrefetchStatus" enum="PrefetchProxyPrefetchStatus">
     <summary>
       The outcome of the prefetch eligibility check and possible attempt to
       prefetch the resource. The prefetched url is always the committed URL of
-      the page. See |IsolatedPrerenderPrefetchStatus| for a mapping of enum
-      values and their meanings.
+      the page. See |PrefetchProxyPrefetchStatus| for a mapping of enum values
+      and their meanings.
     </summary>
   </metric>
   <metric name="SRPPrefetchEligibleCount">
@@ -10444,12 +11076,12 @@ be describing additional metrics about the same event.
       Always set when the event is recorded.
     </summary>
   </metric>
-  <metric name="Status" enum="IsolatedPrerenderPrefetchStatus">
+  <metric name="Status" enum="PrefetchProxyPrefetchStatus">
     <summary>
       The outcome of the prefetch eligibility check and possible attempt to
-      prefetch the resource and reuse it. See |IsolatedPrerenderPrefetchStatus|
-      for a mapping of enum values and their meanings. Always set when the event
-      is recorded.
+      prefetch the resource and reuse it. See |PrefetchProxyPrefetchStatus| for
+      a mapping of enum values and their meanings. Always set when the event is
+      recorded.
     </summary>
   </metric>
 </event>
@@ -11301,6 +11933,51 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="SharedHighlights.LinkGenerated">
+  <owner>seblalancette@chromium.org</owner>
+  <owner>chrome-creation@google.com</owner>
+  <summary>
+    Event representing the user action of selecting a piece of text on a page
+    and selection the option to create a link which would contain the necessary
+    text fragment information to link back to this specific part of the page.
+  </summary>
+  <metric name="Error" enum="LinkGenerationError">
+    <summary>
+      Record the type of error which prevented a successful link generation.
+      Only recorded if the link creation failed.
+    </summary>
+  </metric>
+  <metric name="Success" enum="Boolean">
+    <summary>
+      Whether the generation of a link with text fragments was successful or
+      not.
+    </summary>
+  </metric>
+</event>
+
+<event name="SharedHighlights.LinkOpened" singular="true">
+  <owner>seblalancette@chromium.org</owner>
+  <owner>chrome-creation@google.com</owner>
+  <summary>
+    Event representing the browser action of highlighting (incl. scroll-to) text
+    fragments that were part of the URL. This happens only once during page
+    load.
+  </summary>
+  <metric name="Source" enum="TextFragmentLinkOpenSource">
+    <summary>
+      Record the type of source for the current navigation, which has text
+      fragments. At the moment, this maps to identifying whether the source is a
+      known search engine or not.
+    </summary>
+  </metric>
+  <metric name="Success" enum="Boolean">
+    <summary>
+      Whether the highlighting of a set of text fragments was a complete success
+      or not.
+    </summary>
+  </metric>
+</event>
+
 <event name="Sharing.ClickToCall">
   <owner>knollr@chromium.org</owner>
   <summary>
@@ -11513,13 +12190,12 @@ be describing additional metrics about the same event.
 <event name="SMSReceiver">
   <owner>goto@chromium.org</owner>
   <owner>reillyg@chromium.org</owner>
-  <owner>juncai@chromium.org</owner>
   <owner>ayui@chromium.org</owner>
   <owner>yigu@chromium.org</owner>
   <summary>
     Records performance metrics for SMSReceiver API.
   </summary>
-  <metric name="Outcome" enum="SMSReceiverOutcome">
+  <metric name="Outcome" enum="WebOTPServiceOutcome">
     <summary>
       Records the result of a call to the SmsReceiver API.
     </summary>
@@ -11541,6 +12217,12 @@ be describing additional metrics about the same event.
       Records the duration from when the API is called to when the user presses
       &quot;Allow&quot; to pass the incoming SMS to the site and proceed with
       the SMS verification flow.
+    </summary>
+  </metric>
+  <metric name="TimeUserCancelMs">
+    <summary>
+      Records the duration from when the API is called to when the user presses
+      &quot;Deny&quot; to terminate the SMS verification flow.
     </summary>
   </metric>
 </event>
@@ -12558,6 +13240,28 @@ be describing additional metrics about the same event.
       A boolean signaling that the event has occurred (typically only records
       true values).
     </summary>
+  </metric>
+</event>
+
+<event name="TrustedWebActivity.QualityEnforcementViolation" singular="True">
+  <owner>eirage@chromium.org</owner>
+  <owner>peconn@chromium.org</owner>
+  <summary>
+    Records when Trusted Web Activity launches or navigates to a site that
+    violates the quality criteria.
+  </summary>
+  <metric name="ViolationType"
+      enum="TrustedWebActivityQualityEnforcementViolationType">
+    <summary>
+      An enum that records the type of the quality criteria.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -13807,9 +14511,13 @@ be describing additional metrics about the same event.
 <event name="Worker.ClientAdded">
   <owner>cfredric@google.com</owner>
   <summary>
-    Recorded when a client connects to an existing SharedWorker; records the
-    source IDs of the client (which may be a document or another worker), and
-    the type of the worker being connected to.
+    Recorded when a client connects to an existing SharedWorker or
+    ServiceWorker; records the source IDs of the client (which may be a document
+    or another worker), and the type of the worker being connected to. In the
+    case of a ServiceWorker, this is recorded for each worker-client pair that
+    could communicate (whether or not they actually do) and this is only
+    recorded once the client is execution ready. Note also that emission can be
+    caused by the creation of a new ServiceWorker or a new ServiceWorker client.
   </summary>
   <metric name="ClientSourceId">
     <summary>

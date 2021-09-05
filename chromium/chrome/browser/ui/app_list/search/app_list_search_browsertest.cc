@@ -7,7 +7,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/profiles/profile.h"
@@ -116,25 +116,6 @@ class AppListSearchBrowserTest : public InProcessBrowserTest {
   Profile* GetProfile() { return browser()->profile(); }
 };
 
-// Test fixture for Release notes search. This subclass exists because changing
-// a feature flag has to be done in the constructor. Otherwise, it could use
-// AppListSearchBrowserTest directly.
-class ReleaseNotesSearchBrowserTest : public AppListSearchBrowserTest {
- public:
-  ReleaseNotesSearchBrowserTest() : AppListSearchBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kHelpAppReleaseNotes}, {});
-  }
-  ~ReleaseNotesSearchBrowserTest() override = default;
-
-  ReleaseNotesSearchBrowserTest(const ReleaseNotesSearchBrowserTest&) = delete;
-  ReleaseNotesSearchBrowserTest& operator=(
-      const ReleaseNotesSearchBrowserTest&) = delete;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Simply tests that neither zero-state nor query-based search cause a crash.
 IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, SearchDoesntCrash) {
   // This won't catch everything, because not all providers run on all queries,
@@ -149,40 +130,56 @@ IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, SearchDoesntCrash) {
 
 // Test that Help App shows up as Release notes if pref shows we have some times
 // left to show it.
-IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest,
-                       DISABLED_AppListSearchHasSuggestionChip) {
+IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest,
+                       AppListSearchHasReleaseNotesSuggestionChip) {
   web_app::WebAppProvider::Get(GetProfile())
       ->system_web_app_manager()
       .InstallSystemAppsForTesting();
   GetProfile()->GetPrefs()->SetInteger(
-      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 1);
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 3);
 
-  SearchAndWaitForProviders("",
-                            {ResultType::kInstalledApp, ResultType::kLauncher});
+  SearchAndWaitForProviders("", {ResultType::kHelpApp});
 
-  auto* result = FindResult(chromeos::default_web_apps::kHelpAppId);
+  auto* result = FindResult("help-app://updates");
   ASSERT_TRUE(result);
   // Has Release notes title.
   EXPECT_EQ(base::UTF16ToASCII(result->title()),
             "See what's new on your Chrome device");
   // Displayed in first position.
   EXPECT_EQ(result->position_priority(), 1.0f);
-  // Has override url defined for updates tab.
-  EXPECT_EQ(result->query_url(), GURL("chrome://help-app/updates"));
   EXPECT_EQ(result->display_type(), DisplayType::kChip);
 }
 
-// Test that Help App shows up normally if pref shows we should no longer show
-// as suggestion chip.
-IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest, AppListSearchHasApp) {
+// Test that the number of times the suggestion chip should show decreases when
+// the chip is shown.
+IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest,
+                       ReleaseNotesDecreasesTimesShownOnAppListOpen) {
   web_app::WebAppProvider::Get(GetProfile())
       ->system_web_app_manager()
       .InstallSystemAppsForTesting();
   GetProfile()->GetPrefs()->SetInteger(
-      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 0);
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 3);
 
-  SearchAndWaitForProviders("",
-                            {ResultType::kInstalledApp, ResultType::kLauncher});
+  // ShowAppList actually opens the app list and triggers |AppListShown| which
+  // is where we decrease |kReleaseNotesSuggestionChipTimesLeftToShow|.
+  GetClient()->ShowAppList();
+  SearchAndWaitForProviders("", {ResultType::kHelpApp});
+
+  const int times_left_to_show = GetProfile()->GetPrefs()->GetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow);
+  EXPECT_EQ(times_left_to_show, 2);
+}
+
+// Test that Help App shows up normally even when suggestion chip should show.
+IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, AppListSearchHasApp) {
+  web_app::WebAppProvider::Get(GetProfile())
+      ->system_web_app_manager()
+      .InstallSystemAppsForTesting();
+  GetProfile()->GetPrefs()->SetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 3);
+
+  SearchAndWaitForProviders("", {ResultType::kInstalledApp,
+                                 ResultType::kLauncher, ResultType::kHelpApp});
 
   auto* result = FindResult(chromeos::default_web_apps::kHelpAppId);
   ASSERT_TRUE(result);

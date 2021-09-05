@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Не надруковано.</translation>
 <translation id="1125564390852150847">Створити вкладку.</translation>
 <translation id="1145536944570833626">Видалити наявні дані.</translation>
+<translation id="1147031633655575115">Ви ввійшли як <ph name="USER" /></translation>
 <translation id="1154690515305205900">Помилка створення посилання на виділений текст.</translation>
+<translation id="1157749421655780457">Дозволити доступ до геоданих…</translation>
 <translation id="1165039591588034296">Помилка</translation>
 <translation id="1172898394251786223">Наступне поле</translation>
 <translation id="1176932207622159128">Помилка збереження</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Сховати пароль</translation>
 <translation id="145015347812617860">Закладок: <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Двічі торкніться, щоб змінити налаштування</translation>
+<translation id="1492417797159476138">Ви вже зберегли це ім'я користувача для цього сайту</translation>
 <translation id="1509486075633541495">Увійдіть в обліковий запис на веб-сайті</translation>
 <translation id="1509960214886564027">Функції на багатьох сайтах можуть не працювати</translation>
 <translation id="152234381334907219">Ніколи не зберігалося</translation>
@@ -197,7 +200,7 @@
 <translation id="3153862085237805241">Зберегти картку</translation>
 <translation id="3157684681743766797">Позначити всі…</translation>
 <translation id="3161291298470460782">Ваш сеанс в обліковому записі буде завершено, синхронізацію – вимкнено, а всі дані Chrome на пристрої – видалено. Синхронізовані дані залишаться у вашому обліковому записі Google.</translation>
-<translation id="3169472444629675720">Discover</translation>
+<translation id="3169472444629675720">Рекомендації</translation>
 <translation id="3175081911749765310">Веб-служби</translation>
 <translation id="3178650076442119961">У мережі сьогодні</translation>
 <translation id="3181954750937456830">Безпечний перегляд (захищає вас і ваш пристрій від небезпечних сайтів)</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">Назад</translation>
 <translation id="3892144330757387737">Тут відображатиметься ваша історія</translation>
 <translation id="3897092660631435901">Меню</translation>
+<translation id="3913386780052199712">Ви ввійшли в Chrome</translation>
 <translation id="3915450441834151894">Інформація про сайт</translation>
 <translation id="3922310737605261887">Шукати скопійований текст</translation>
 <translation id="3928666092801078803">Об’єднати мої дані</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">Нова анонімна вкладка</translation>
 <translation id="4758977202923349869">Розмістіть кредитну картку в цьому фреймі</translation>
 <translation id="4775879719735953715">Веб-переглядач за умовчанням</translation>
+<translation id="4778644898150334464">Ввести інший пароль</translation>
 <translation id="4802417911091824046">Парольна фраза не стосується способів оплати й адрес із Google Pay.
 
 Щоб змінити це налаштування, <ph name="BEGIN_LINK" />скиньте параметри синхронізації<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Установити Google Диск</translation>
 <translation id="5083464117946352670">Невідомий розмір файлу.</translation>
+<translation id="5090832849094901128">Якщо видалити цей пароль, ваш обліковий запис на сайті <ph name="WEBSITE" /> залишиться.</translation>
 <translation id="5094827893301452931">Твіт опубліковано.</translation>
 <translation id="5118764316110575523">Вимк.</translation>
 <translation id="5127805178023152808">Синхронізацію вимкнено</translation>
@@ -511,6 +517,9 @@
 <translation id="6476800141292307438">Сторінка перекладається такою мовою: <ph name="LANGUAGE" />. Параметри розташовано внизу екрана.</translation>
 <translation id="648164694371393720">Помилка автентифікації</translation>
 <translation id="6482629121755362506">Видалено елементів: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
+<translation id="6497772452874122664">Якщо ви довіряєте сайту <ph name="TIME" />, то можете скористатися збереженим паролем з іншого сайту.
+
+Намагайтеся використовувати для кожного сайту унікальний пароль.</translation>
 <translation id="651505212789431520">Скасувати синхронізацію? Ви можете будь-коли ввімкнути синхронізацію в налаштуваннях.</translation>
 <translation id="6561262006871132942">Наблизити</translation>
 <translation id="6585618849026997638">Щоб повернутися на важливу сторінку пізніше, додайте закладку</translation>
@@ -590,6 +599,7 @@
 <translation id="739941347996872055">Попередня вкладка</translation>
 <translation id="7400418766976504921">URL-адреса</translation>
 <translation id="7409985198648820906">Непрочитаних статей: <ph name="UNREAD_COUNT" />.</translation>
+<translation id="7412027924265291969">Продовжити</translation>
 <translation id="7425346204213733349">Зміни в закладках, історії, паролях та інших налаштуваннях більше не синхронізуватимуться з вашим обліковим записом Google. Однак наявні дані залишаться у вашому обліковому записі.</translation>
 <translation id="7435356471928173109">Вимкнено адміністратором</translation>
 <translation id="7454057999980797137">Область</translation>
@@ -600,6 +610,7 @@
 <translation id="7472734401283673885">Назва компанії</translation>
 <translation id="7473891865547856676">Ні, дякую</translation>
 <translation id="7481312909269577407">Переслати</translation>
+<translation id="7483467499335917849">Використовуйте свої поточні геодані</translation>
 <translation id="750493650310597496">Вибрано 0</translation>
 <translation id="7514365320538308">Завантажити</translation>
 <translation id="7537586195939242955">Не вдалося внести дані в Passbook.</translation>
@@ -733,6 +744,7 @@
 <translation id="9094033019050270033">Оновити пароль</translation>
 <translation id="9100610230175265781">Потрібно вказати парольну фразу</translation>
 <translation id="9107664647686727385">Перевіряйте, чи були ваші паролі зламані</translation>
+<translation id="9137526406337347448">Служби Google</translation>
 <translation id="9148126808321036104">Увійти знову</translation>
 <translation id="9152539721251340337">Створити QR-код</translation>
 <translation id="9157836665414082580">Заблокувати діалогові вікна</translation>

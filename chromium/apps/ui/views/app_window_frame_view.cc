@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/grit/theme_resources.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -64,6 +65,7 @@ void AppWindowFrameView::Init() {
     close_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_CLOSE_P).ToImageSkia());
+    close_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     close_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
     close_button_ = AddChildView(std::move(close_button));
@@ -80,6 +82,7 @@ void AppWindowFrameView::Init() {
     maximize_button->SetImage(
         views::Button::STATE_DISABLED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_MAXIMIZE_D).ToImageSkia());
+    maximize_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     maximize_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MAXIMIZE));
     maximize_button_ = AddChildView(std::move(maximize_button));
@@ -92,6 +95,7 @@ void AppWindowFrameView::Init() {
     restore_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_RESTORE_P).ToImageSkia());
+    restore_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     restore_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_RESTORE));
     restore_button_ = AddChildView(std::move(restore_button));
@@ -104,6 +108,7 @@ void AppWindowFrameView::Init() {
     minimize_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_MINIMIZE_P).ToImageSkia());
+    minimize_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     minimize_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
     minimize_button_ = AddChildView(std::move(minimize_button));
@@ -132,7 +137,9 @@ gfx::Rect AppWindowFrameView::GetBoundsForClientView() const {
 gfx::Rect AppWindowFrameView::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {
   gfx::Rect window_bounds = client_bounds;
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Get the difference between the widget's client area bounds and window
   // bounds, and grow |window_bounds| by that amount.
   gfx::Insets native_frame_insets =

@@ -25,28 +25,33 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskObserverForTest;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorObserverForTest;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorTextField;
+import org.chromium.chrome.browser.payments.ChromePaymentRequestFactory.ChromePaymentRequestDelegateImpl;
+import org.chromium.chrome.browser.payments.ChromePaymentRequestFactory.ChromePaymentRequestDelegateImplObserverForTest;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection.OptionRow;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestObserverForTest;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.payments.AbortReason;
-import org.chromium.components.payments.ComponentPaymentRequestImpl;
-import org.chromium.components.payments.ComponentPaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
+import org.chromium.components.payments.PaymentAppFactoryDelegate;
+import org.chromium.components.payments.PaymentAppFactoryInterface;
+import org.chromium.components.payments.PaymentAppService;
 import org.chromium.components.payments.PaymentFeatureList;
+import org.chromium.components.payments.PaymentRequestService;
+import org.chromium.components.payments.PaymentRequestService.PaymentRequestServiceObserverForTest;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
@@ -73,7 +78,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         implements PaymentRequestObserverForTest, PaymentRequestServiceObserverForTest,
-                   CardUnmaskObserverForTest, EditorObserverForTest {
+                   ChromePaymentRequestDelegateImplObserverForTest, CardUnmaskObserverForTest,
+                   EditorObserverForTest {
     @IntDef({AppPresence.NO_APPS, AppPresence.HAVE_APPS})
     @Retention(RetentionPolicy.SOURCE)
     public @interface AppPresence {
@@ -145,7 +151,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     final CallbackHelper mPaymentResponseReady;
     final CallbackHelper mCompleteReplied;
     final CallbackHelper mRendererClosedMojoConnection;
-    ComponentPaymentRequestImpl mComponentPaymentRequest;
+    private ChromePaymentRequestDelegateImpl mChromePaymentRequestDelegateImpl;
     PaymentRequestUI mUI;
 
     private final boolean mDelayStartActivity;
@@ -158,12 +164,59 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     private final MainActivityStartCallback mCallback;
 
+    /**
+     * Creates an instance of PaymentRequestTestRule.
+     * @param testFileName The file name of an test page in //components/test/data/payments,
+     *         'about:blank', or a data url which starts with 'data:'.
+     */
+    public PaymentRequestTestRule(String testFileName) {
+        this(testFileName, null);
+    }
+
+    /**
+     * Creates an instance of PaymentRequestTestRule.
+     * @param testFileName The file name of an test page in //components/test/data/payments,
+     *         'about:blank', or a data url which starts with 'data:'.
+     * @param callback A callback that is invoked on the start of the main activity.
+     */
     public PaymentRequestTestRule(String testFileName, MainActivityStartCallback callback) {
         this(testFileName, callback, false);
     }
 
+    /**
+     * Creates an instance of PaymentRequestTestRule.
+     * @param testFileName The file name of an test page in //components/test/data/payments,
+     *         'about:blank', or a data url which starts with 'data:'.
+     * @param callback A callback that is invoked on the start of the main activity.
+     * @param delayStartActivity Whether to delay the start of the main activity. When true, {@link
+     *         #startMainActivity()} needs to be called to start the main activity; otherwise, the
+     *         main activity would start automatically.
+     */
     public PaymentRequestTestRule(
             String testFileName, MainActivityStartCallback callback, boolean delayStartActivity) {
+        this(testFileName, /*pathPrefix=*/"components/test/data/payments/", callback,
+                delayStartActivity);
+    }
+
+    /**
+     * Creates an instance of PaymentRequestTestRule with a test page, which is specified by
+     * pathPrefix and testFileName combined into a path relative to the repository root. For
+     * example, if testFileName is "merchant.html", pathPrefix is "components/test/data/payments/",
+     * the method would look for a test page at "components/test/data/payments/merchant.html".
+     * This method is used by the //clank tests.
+     * @param testFileName The file name of the test page.
+     * @param pathPrefix The prefix path to testFileName.
+     * @param delayStartActivity Whether to delay the start of the main activity.
+     * @return The created instance.
+     */
+    public static PaymentRequestTestRule createWithPathPrefix(
+            String testFileName, String pathPrefix, boolean delayStartActivity) {
+        assert pathPrefix.endsWith("/");
+        return new PaymentRequestTestRule(testFileName, pathPrefix, null, delayStartActivity);
+    }
+
+    private PaymentRequestTestRule(String testFilePath, String pathPrefix,
+            MainActivityStartCallback callback, boolean delayStartActivity) {
         super();
         mReadyForInput = new PaymentsCallbackHelper<>();
         mReadyToPay = new PaymentsCallbackHelper<>();
@@ -187,29 +240,35 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         mCompleteReplied = new CallbackHelper();
         mRendererClosedMojoConnection = new CallbackHelper();
         mWebContentsRef = new AtomicReference<>();
-        mTestFilePath = testFileName.equals("about:blank") || testFileName.startsWith("data:")
-                ? testFileName
-                : UrlUtils.getIsolatedTestFilePath(
-                        String.format("components/test/data/payments/%s", testFileName));
+        if (testFilePath.equals("about:blank") || testFilePath.startsWith("data:")) {
+            mTestFilePath = testFilePath;
+        } else {
+            mTestFilePath = UrlUtils.getIsolatedTestFilePath(pathPrefix + testFilePath);
+        }
         mCallback = callback;
         mDelayStartActivity = delayStartActivity;
     }
 
-    public PaymentRequestTestRule(String testFileName) {
-        this(testFileName, null);
-    }
-
     public void startMainActivity() {
         startMainActivityWithURL(mTestFilePath);
+        try {
+            // TODO(crbug.com/1144303): Figure out what these tests need to wait on to not be flaky
+            // instead of sleeping.
+            Thread.sleep(2000);
+        } catch (Exception ex) {
+        }
     }
 
-    protected void openPage() throws TimeoutException {
+    // public is used so as to be visible to the payment tests in //clank.
+    public void openPage() throws TimeoutException {
         onMainActivityStarted();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mWebContentsRef.set(getActivity().getCurrentWebContents());
             PaymentRequestUI.setEditorObserverForTest(PaymentRequestTestRule.this);
             PaymentRequestUI.setPaymentRequestObserverForTest(PaymentRequestTestRule.this);
-            ComponentPaymentRequestImpl.setObserverForTest(PaymentRequestTestRule.this);
+            PaymentRequestService.setObserverForTest(PaymentRequestTestRule.this);
+            ChromePaymentRequestFactory.setChromePaymentRequestDelegateImplObserverForTest(
+                    PaymentRequestTestRule.this);
             CardUnmaskPrompt.setObserverForTest(PaymentRequestTestRule.this);
         });
         assertWaitForPageScaleFactorMatch(1);
@@ -325,6 +384,11 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     protected String executeJavaScriptAndWaitForResult(String script) throws TimeoutException {
         return JavaScriptUtils.executeJavaScriptAndWaitForResult(mWebContentsRef.get(), script);
+    }
+
+    // public is used so as to be visible to the payment tests in //clank.
+    public String runJavascriptWithAsyncResult(String script) throws TimeoutException {
+        return JavaScriptUtils.runJavascriptWithAsyncResult(mWebContentsRef.get(), script);
     }
 
     /** Clicks on an HTML node. */
@@ -951,7 +1015,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /** Allows to skip UI into paymenthandler for"basic-card". */
     protected void enableSkipUIForBasicCard() {
         ThreadUtils.runOnUiThreadBlocking(
-                () -> mComponentPaymentRequest.setSkipUiForNonUrlPaymentMethodIdentifiersForTest());
+                () -> mChromePaymentRequestDelegateImpl.setSkipUiForBasicCard());
     }
 
     @Override
@@ -1009,9 +1073,10 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     @Override
-    public void onPaymentRequestCreated(ComponentPaymentRequestImpl paymentRequest) {
+    public void onCreatedChromePaymentRequestDelegateImpl(
+            ChromePaymentRequestDelegateImpl delegateImpl) {
         ThreadUtils.assertOnUiThread();
-        mComponentPaymentRequest = paymentRequest;
+        mChromePaymentRequestDelegateImpl = delegateImpl;
     }
 
     @Override

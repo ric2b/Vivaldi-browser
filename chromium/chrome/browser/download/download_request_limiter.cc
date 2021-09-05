@@ -259,7 +259,7 @@ void DownloadRequestLimiter::TabDownloadState::SetContentSetting(
     return;
   settings->SetContentSettingDefaultScope(
       request_origin.GetURL(), GURL(), ContentSettingsType::AUTOMATIC_DOWNLOADS,
-      std::string(), setting);
+      setting);
 }
 
 void DownloadRequestLimiter::TabDownloadState::Cancel(
@@ -337,8 +337,7 @@ void DownloadRequestLimiter::TabDownloadState::OnUserInteraction() {
 void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   if (content_type != ContentSettingsType::AUTOMATIC_DOWNLOADS)
     return;
 
@@ -348,7 +347,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
   GURL origin = origin_.GetURL();
   // Analogous to PageSpecificContentSettings::OnContentSettingChanged:
   const ContentSettingsDetails details(primary_pattern, secondary_pattern,
-                                       content_type, resource_identifier);
+                                       content_type);
 
   // Check if the settings change affects the most recent origin passed
   // to SetDownloadStatusAndNotify(). If so, we need to update the omnibox
@@ -372,7 +371,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
     return;
 
   ContentSetting setting = content_settings->GetContentSetting(
-      origin, origin, ContentSettingsType::AUTOMATIC_DOWNLOADS, std::string());
+      origin, origin, ContentSettingsType::AUTOMATIC_DOWNLOADS);
 
   // Update the internal state to match if necessary.
   SetDownloadStatusAndNotifyImpl(origin_, GetDownloadStatusFromSetting(setting),
@@ -577,7 +576,7 @@ ContentSetting DownloadRequestLimiter::GetAutoDownloadContentSetting(
   if (content_settings) {
     setting = content_settings->GetContentSetting(
         request_initiator, request_initiator,
-        ContentSettingsType::AUTOMATIC_DOWNLOADS, std::string());
+        ContentSettingsType::AUTOMATIC_DOWNLOADS);
   }
   return setting;
 }

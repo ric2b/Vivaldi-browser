@@ -7,6 +7,7 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/linux/pangocairo/pangocairo.gni")
+import("//build/config/ozone.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/util/branding.gni")
@@ -14,7 +15,6 @@ import("//components/system_media_controls/linux/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//ui/base/ui_features.gni")
-import("//ui/ozone/ozone.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -96,6 +96,8 @@ component("base") {
     "dragdrop/os_exchange_data.h",
     "dragdrop/os_exchange_data_provider_factory.cc",
     "dragdrop/os_exchange_data_provider_factory.h",
+    "ime/utf_offset.cc",
+    "ime/utf_offset.h",
     "l10n/formatter.cc",
     "l10n/formatter.h",
     "l10n/l10n_font_util.cc",
@@ -221,6 +223,8 @@ component("base") {
       "win/message_box_win.h",
       "win/mouse_wheel_util.cc",
       "win/mouse_wheel_util.h",
+      "win/power_setting_change_listener.cc",
+      "win/power_setting_change_listener.h",
       "win/scoped_ole_initializer.cc",
       "win/scoped_ole_initializer.h",
       "win/session_change_observer.cc",
@@ -305,10 +309,6 @@ component("base") {
       "l10n/l10n_util_mac.mm",
       "resource/resource_bundle_mac.mm",
     ]
-  }
-
-  if (is_posix) {
-    sources += [ "l10n/l10n_util_posix.cc" ]
   }
 
   if (is_ios) {
@@ -409,10 +409,7 @@ component("base") {
   }
 
   if (is_fuchsia) {
-    sources += [
-      "l10n/l10n_util_posix.cc",
-      "resource/resource_bundle_fuchsia.cc",
-    ]
+    sources += [ "resource/resource_bundle_fuchsia.cc" ]
   }
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -447,6 +444,7 @@ component("base") {
     "//ui/display",
     "//ui/events",
     "//ui/events/devices",
+    "//ui/resources:webui_generated_resources_grd",
     "//ui/resources:webui_resources_grd",
     "//ui/strings",
     "//url",
@@ -481,7 +479,7 @@ component("base") {
     deps += [ "//ui/events" ]
   }
 
-  if ((is_desktop_linux || is_chromeos) && (use_x11 || ozone_platform_x11)) {
+  if ((is_linux || is_chromeos) && (use_x11 || ozone_platform_x11)) {
     public_deps += [ "//ui/base/x" ]
 
     # X11 drag and drop wants to use common drag and drop types.
@@ -614,6 +612,8 @@ component("data_exchange") {
     "//ui/gfx/geometry",
     "//url",
   ]
+
+  public_deps = [ "//ui/base/data_transfer_policy" ]
 }
 
 component("features") {
@@ -645,6 +645,7 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     ]
     deps = [
       "//base",
+      "//base/test:test_config",
       "//testing/gtest",
       "//ui/gfx",
       "//ui/snapshot",
@@ -856,6 +857,7 @@ test("ui_base_unittests") {
 
   sources = [
     "class_property_unittest.cc",
+    "ime/utf_offset_unittest.cc",
     "l10n/l10n_util_unittest.cc",
     "l10n/time_format_unittest.cc",
     "layout_unittest.cc",

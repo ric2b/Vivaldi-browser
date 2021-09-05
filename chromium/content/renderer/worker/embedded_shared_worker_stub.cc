@@ -10,12 +10,10 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "content/public/common/network_service_util.h"
-#include "content/renderer/loader/child_url_loader_factory_bundle.h"
 #include "content/renderer/loader/web_worker_fetch_context_impl.h"
 #include "content/renderer/worker/fetch_client_settings_object_helpers.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
 #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/message_port_descriptor.h"
@@ -23,6 +21,7 @@
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom.h"
+#include "third_party/blink/public/platform/child_url_loader_factory_bundle.h"
 #include "third_party/blink/public/platform/web_fetch_client_settings_object.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_shared_worker.h"
@@ -38,7 +37,7 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
     const blink::UserAgentMetadata& ua_metadata,
     bool pause_on_start,
     const base::UnguessableToken& devtools_worker_token,
-    const blink::mojom::RendererPreferences& renderer_preferences,
+    const blink::RendererPreferences& renderer_preferences,
     mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
         preference_watcher_receiver,
     mojo::PendingRemote<blink::mojom::WorkerContentSettingsProxy>
@@ -92,14 +91,14 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
   // Initialize the subresource loader factory bundle passed by the browser
   // process.
   subresource_loader_factory_bundle_ =
-      base::MakeRefCounted<ChildURLLoaderFactoryBundle>(
-          std::make_unique<ChildPendingURLLoaderFactoryBundle>(
+      base::MakeRefCounted<blink::ChildURLLoaderFactoryBundle>(
+          std::make_unique<blink::ChildPendingURLLoaderFactoryBundle>(
               std::move(pending_subresource_loader_factory_bundle)));
 
   if (service_worker_container_info) {
     service_worker_provider_context_ =
         base::MakeRefCounted<ServiceWorkerProviderContext>(
-            blink::mojom::ServiceWorkerContainerType::kForDedicatedWorker,
+            blink::mojom::ServiceWorkerContainerType::kForSharedWorker,
             std::move(service_worker_container_info->client_receiver),
             std::move(service_worker_container_info->host_remote),
             std::move(controller_info), subresource_loader_factory_bundle_);
@@ -141,7 +140,7 @@ void EmbeddedSharedWorkerStub::WorkerContextDestroyed() {
 scoped_refptr<blink::WebWorkerFetchContext>
 EmbeddedSharedWorkerStub::CreateWorkerFetchContext(
     const GURL& url,
-    const blink::mojom::RendererPreferences& renderer_preferences,
+    const blink::RendererPreferences& renderer_preferences,
     mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
         preference_watcher_receiver,
     const std::vector<std::string>& cors_exempt_header_list) {
@@ -154,8 +153,7 @@ EmbeddedSharedWorkerStub::CreateWorkerFetchContext(
   // |pending_resource_load_info_notifier| are not used for shared workers.
   scoped_refptr<WebWorkerFetchContextImpl> worker_fetch_context =
       WebWorkerFetchContextImpl::Create(
-          service_worker_provider_context_.get(),
-          std::move(renderer_preferences),
+          service_worker_provider_context_.get(), renderer_preferences,
           std::move(preference_watcher_receiver),
           subresource_loader_factory_bundle_->Clone(),
           std::move(fallback_factory),

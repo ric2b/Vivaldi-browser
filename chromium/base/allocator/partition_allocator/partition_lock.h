@@ -9,14 +9,10 @@
 #include <type_traits>
 
 #include "base/allocator/buildflags.h"
-#include "base/no_destructor.h"
+#include "base/allocator/partition_allocator/spinning_mutex.h"
 #include "base/thread_annotations.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
-
-#if defined(OS_LINUX) || defined(OS_ANDROID)
-#include "base/allocator/partition_allocator/spinning_futex_linux.h"
-#endif
 
 namespace base {
 namespace internal {
@@ -57,25 +53,26 @@ class SCOPED_LOCKABLE ScopedUnlockGuard {
   MaybeSpinLock<thread_safe>& lock_;
 };
 
+#if !defined(PA_HAS_SPINNING_MUTEX)
 // Spinlock. Do not use, to be removed. crbug.com/1061437.
-class BASE_EXPORT SpinLock {
+class LOCKABLE BASE_EXPORT SpinLock {
  public:
-  SpinLock() = default;
+  constexpr SpinLock() = default;
   ~SpinLock() = default;
 
-  ALWAYS_INLINE void Acquire() {
+  ALWAYS_INLINE void Acquire() EXCLUSIVE_LOCK_FUNCTION() {
     if (LIKELY(!lock_.exchange(true, std::memory_order_acquire)))
       return;
     AcquireSlow();
   }
 
-  ALWAYS_INLINE bool Try() {
+  ALWAYS_INLINE bool Try() EXCLUSIVE_TRYLOCK_FUNCTION(true) {
     // Faster than simple CAS.
     return !lock_.load(std::memory_order_relaxed) &&
            !lock_.exchange(true, std::memory_order_acquire);
   }
 
-  ALWAYS_INLINE void Release() {
+  ALWAYS_INLINE void Release() UNLOCK_FUNCTION() {
     lock_.store(false, std::memory_order_release);
   }
 
@@ -89,11 +86,12 @@ class BASE_EXPORT SpinLock {
 
   std::atomic_int lock_{0};
 };
+#endif  // !defined(PA_HAS_SPINNING_MUTEX)
 
 template <>
 class LOCKABLE MaybeSpinLock<true> {
  public:
-  MaybeSpinLock() : lock_() {}
+  constexpr MaybeSpinLock() : lock_() {}
   void Lock() EXCLUSIVE_LOCK_FUNCTION() {
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && DCHECK_IS_ON()
     // When PartitionAlloc is malloc(), it can easily become reentrant. For
@@ -104,7 +102,7 @@ class LOCKABLE MaybeSpinLock<true> {
     //
     // To avoid that, crash quickly when the code becomes reentrant.
     PlatformThreadRef current_thread = PlatformThread::CurrentRef();
-    if (!lock_->Try()) {
+    if (!lock_.Try()) {
       // The lock wasn't free when we tried to acquire it. This can be because
       // another thread or *this* thread was holding it.
       //
@@ -117,46 +115,45 @@ class LOCKABLE MaybeSpinLock<true> {
       // Note that we don't rely on a DCHECK() in base::Lock(), as it would
       // itself allocate. Meaning that without this code, a reentrancy issue
       // hangs on Linux.
-      if (UNLIKELY(TS_UNCHECKED_READ(owning_thread_ref_.load(
-                       std::memory_order_relaxed)) == current_thread)) {
+      if (UNLIKELY(TS_UNCHECKED_READ(owning_thread_ref_) == current_thread)) {
         // Trying to acquire lock while it's held by this thread: reentrancy
         // issue.
         IMMEDIATE_CRASH();
       }
-      lock_->Acquire();
+      lock_.Acquire();
     }
-    owning_thread_ref_.store(current_thread, std::memory_order_relaxed);
+    owning_thread_ref_ = current_thread;
 #else
-    lock_->Acquire();
+    lock_.Acquire();
 #endif
   }
 
   void Unlock() UNLOCK_FUNCTION() {
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && DCHECK_IS_ON()
-    owning_thread_ref_.store(PlatformThreadRef(), std::memory_order_relaxed);
+    owning_thread_ref_ = PlatformThreadRef();
 #endif
-    lock_->Release();
+    lock_.Release();
   }
   void AssertAcquired() const ASSERT_EXCLUSIVE_LOCK() {
-    lock_->AssertAcquired();
+    lock_.AssertAcquired();
   }
 
  private:
-#if defined(OS_LINUX) || defined(OS_ANDROID)
-  base::NoDestructor<SpinningFutex> lock_;
+#if defined(PA_HAS_SPINNING_MUTEX)
+  SpinningMutex lock_;
 #else
-  // base::Lock is slower on the fast path than SpinLock, hence we still use it
-  // on non-DCHECK() builds. crbug.com/1125999
-  base::NoDestructor<SpinLock> lock_;
-  // base::NoDestructor is here to use the same code elsewhere, we are not
-  // leaking anything.
-  static_assert(std::is_trivially_destructible<SpinLock>::value, "");
-#endif
+  // base::Lock is slower on the fast path than SpinLock, hence we still use
+  // SpinLock. crbug.com/1125999
+  SpinLock lock_;
+#endif  // defined(PA_HAS_SPINNING_MUTEX)
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && DCHECK_IS_ON()
-  std::atomic<PlatformThreadRef> owning_thread_ref_ GUARDED_BY(lock_);
+  PlatformThreadRef owning_thread_ref_ GUARDED_BY(lock_);
 #endif
 };
+// We want PartitionRoot to not have a global destructor, so this should not
+// have one.
+static_assert(std::is_trivially_destructible<MaybeSpinLock<true>>::value, "");
 
 template <>
 class LOCKABLE MaybeSpinLock<false> {
@@ -170,7 +167,10 @@ class LOCKABLE MaybeSpinLock<false> {
 
 static_assert(
     sizeof(MaybeSpinLock<true>) == sizeof(MaybeSpinLock<false>),
-    "Sizes should be equal to enseure identical layout of PartitionRoot");
+    "Sizes should be equal to ensure identical layout of PartitionRoot");
+
+using PartitionLock = MaybeSpinLock<true>;
+using PartitionAutoLock = ScopedGuard<true>;
 
 }  // namespace internal
 }  // namespace base

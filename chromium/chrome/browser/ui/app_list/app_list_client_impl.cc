@@ -144,13 +144,12 @@ void AppListClientImpl::OpenSearchResult(const std::string& result_id,
 }
 
 void AppListClientImpl::InvokeSearchResultAction(const std::string& result_id,
-                                                 int action_index,
-                                                 int event_flags) {
+                                                 int action_index) {
   if (!search_controller_)
     return;
   ChromeSearchResult* result = search_controller_->FindSearchResult(result_id);
   if (result)
-    search_controller_->InvokeResultAction(result, action_index, event_flags);
+    search_controller_->InvokeResultAction(result, action_index);
 }
 
 void AppListClientImpl::GetSearchResultContextMenuModel(
@@ -281,12 +280,6 @@ void AppListClientImpl::OnPageBreakItemDeleted(int profile_id,
   if (!requested_model_updater)
     return;
   requested_model_updater->OnPageBreakItemDeleted(id);
-}
-
-void AppListClientImpl::GetNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  if (profile_)
-    profile_->BindNavigableContentsFactory(std::move(receiver));
 }
 
 void AppListClientImpl::OnSearchResultVisibilityChanged(const std::string& id,

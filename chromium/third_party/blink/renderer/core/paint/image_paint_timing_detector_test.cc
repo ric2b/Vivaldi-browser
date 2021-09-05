@@ -8,6 +8,8 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/trace_event_analyzer.h"
 #include "build/build_config.h"
+#include "components/ukm/test_ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/web/web_performance.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
@@ -50,6 +52,8 @@ namespace blink {
   "oIRn/wsGUQIIy4Vr9TH6SYFCNzw4nALn5627K4vIttOUOwfa5YnrDYzt/9OLv9I5l8kk5hZ3XL" \
   "O20b7tbR7zHLy/BX8G0IeBEM7ZN1NGIaFUaKLgAAAAAElFTkSuQmCC"
 
+using UkmPaintTiming = ukm::builders::Blink_PaintTiming;
+
 class ImagePaintTimingDetectorTest : public testing::Test,
                                      public PaintTestConfigurations {
  public:
@@ -67,7 +71,7 @@ class ImagePaintTimingDetectorTest : public testing::Test,
         .SetAcceleratedCompositingEnabled(true);
 
     WebLocalFrameImpl& frame_impl = *web_view_helper_.LocalMainFrame();
-    frame_impl.ViewImpl()->MainFrameWidget()->Resize(WebSize(640, 480));
+    frame_impl.ViewImpl()->MainFrameViewWidget()->Resize(gfx::Size(640, 480));
 
     frame_test_helpers::LoadFrame(
         web_view_helper_.GetWebView()->MainFrameImpl(), "about:blank");
@@ -182,7 +186,7 @@ class ImagePaintTimingDetectorTest : public testing::Test,
   }
 
   void UpdateAllLifecyclePhases() {
-    GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+    GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   }
 
   void UpdateAllLifecyclePhasesAndInvokeCallbackIfAny() {
@@ -259,6 +263,10 @@ class ImagePaintTimingDetectorTest : public testing::Test,
     GetPaintTimingDetector().NotifyScroll(mojom::blink::ScrollType::kUser);
   }
 
+  void SimulateKeyDown() {
+    GetPaintTimingDetector().NotifyInputEvent(WebInputEvent::Type::kKeyDown);
+  }
+
   void SimulateKeyUp() {
     GetPaintTimingDetector().NotifyInputEvent(WebInputEvent::Type::kKeyUp);
   }
@@ -305,6 +313,7 @@ TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_NoImage) {
 }
 
 TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_OneImage) {
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
   SetBodyInnerHTML(R"HTML(
     <img id="target"></img>
   )HTML");
@@ -315,6 +324,13 @@ TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_OneImage) {
   EXPECT_EQ(record->first_size, 25ul);
   EXPECT_TRUE(record->loaded);
   EXPECT_EQ(ExperimentalLargestPaintSize(), 25ul);
+  // Simulate some input event to force StopRecordEntries().
+  SimulateKeyDown();
+  auto entries = test_ukm_recorder.GetEntriesByName(UkmPaintTiming::kEntryName);
+  EXPECT_EQ(1ul, entries.size());
+  auto* entry = entries[0];
+  test_ukm_recorder.ExpectEntryMetric(
+      entry, UkmPaintTiming::kLCPDebugging_HasViewportImageName, false);
 }
 
 TEST_P(ImagePaintTimingDetectorTest, InsertionOrderIsSecondaryRankingKey) {
@@ -395,8 +411,9 @@ TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_TraceEvent_NoCandidate) {
     UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
     GetDocument().getElementById("target")->remove();
     UpdateAllLifecyclePhases();
-    // Experimental size still 25, not affected by removal.
-    EXPECT_EQ(ExperimentalLargestPaintSize(), 25ul);
+    // LCP size still 25, not affected by removal.
+    EXPECT_EQ(LargestPaintSize(), 25ul);
+    EXPECT_EQ(ExperimentalLargestPaintSize(), 0ul);
   }
   auto analyzer = trace_analyzer::Stop();
   trace_analyzer::TraceEventVector events;
@@ -481,11 +498,11 @@ TEST_P(ImagePaintTimingDetectorTest, UpdatePerformanceTimingToZero) {
   EXPECT_GT(GetPerformanceTiming().ExperimentalLargestImagePaint(), 0u);
   GetDocument().body()->RemoveChild(GetDocument().getElementById("target"));
   UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
-  EXPECT_EQ(GetPerformanceTiming().LargestImagePaintSize(), 0u);
-  EXPECT_EQ(GetPerformanceTiming().LargestImagePaint(), 0u);
-  // Experimental values are not reset.
-  EXPECT_EQ(GetPerformanceTiming().ExperimentalLargestImagePaintSize(), 25u);
-  EXPECT_GT(GetPerformanceTiming().ExperimentalLargestImagePaint(), 0u);
+  EXPECT_EQ(GetPerformanceTiming().LargestImagePaintSize(), 25u);
+  EXPECT_GT(GetPerformanceTiming().LargestImagePaint(), 0u);
+  // Experimental values are reset.
+  EXPECT_EQ(GetPerformanceTiming().ExperimentalLargestImagePaintSize(), 0u);
+  EXPECT_EQ(GetPerformanceTiming().ExperimentalLargestImagePaint(), 0u);
 }
 
 TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_OpacityZero) {
@@ -625,11 +642,11 @@ TEST_P(ImagePaintTimingDetectorTest,
   UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
   record = FindLargestPaintCandidate();
   EXPECT_FALSE(record);
-  EXPECT_EQ(LargestPaintTime(), base::TimeTicks());
-  EXPECT_EQ(LargestPaintSize(), 0u);
-  // Experimental values not reset after removal.
-  EXPECT_NE(ExperimentalLargestPaintTime(), base::TimeTicks());
-  EXPECT_EQ(ExperimentalLargestPaintSize(), 25ul);
+  // Only experimental values reset after removal.
+  EXPECT_NE(LargestPaintTime(), base::TimeTicks());
+  EXPECT_EQ(LargestPaintSize(), 25u);
+  EXPECT_EQ(ExperimentalLargestPaintTime(), base::TimeTicks());
+  EXPECT_EQ(ExperimentalLargestPaintSize(), 0ul);
 }
 
 TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_UpdateOnRemoving) {
@@ -661,10 +678,10 @@ TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_UpdateOnRemoving) {
   UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
   ImageRecord* record1_2 = FindLargestPaintCandidate();
   EXPECT_EQ(record1, record1_2);
-  EXPECT_EQ(first_largest_image_paint, LargestPaintTime());
-  EXPECT_EQ(LargestPaintSize(), 25u);
-  EXPECT_EQ(second_largest_image_paint, ExperimentalLargestPaintTime());
-  EXPECT_EQ(ExperimentalLargestPaintSize(), 100u);
+  EXPECT_EQ(second_largest_image_paint, LargestPaintTime());
+  EXPECT_EQ(LargestPaintSize(), 100u);
+  EXPECT_EQ(first_largest_image_paint, ExperimentalLargestPaintTime());
+  EXPECT_EQ(ExperimentalLargestPaintSize(), 25u);
 }
 
 TEST_P(ImagePaintTimingDetectorTest,
@@ -1232,6 +1249,25 @@ TEST_P(ImagePaintTimingDetectorTest, OpacityZeroHTML2) {
                                                 "opacity: 1");
   UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
   EXPECT_EQ(CountVisibleImageRecords(), 0u);
+}
+
+TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_FullViewportImage) {
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  SetBodyInnerHTML(R"HTML(
+    <style>body {margin: 0px;}</style>
+    <img id="target"></img>
+  )HTML");
+  SetImageAndPaint("target", 3000, 3000);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  ImageRecord* record = FindLargestPaintCandidate();
+  EXPECT_FALSE(record);
+  // Simulate some input event to force StopRecordEntries().
+  SimulateKeyDown();
+  auto entries = test_ukm_recorder.GetEntriesByName(UkmPaintTiming::kEntryName);
+  EXPECT_EQ(1ul, entries.size());
+  auto* entry = entries[0];
+  test_ukm_recorder.ExpectEntryMetric(
+      entry, UkmPaintTiming::kLCPDebugging_HasViewportImageName, true);
 }
 
 }  // namespace blink

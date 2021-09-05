@@ -7,8 +7,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom.h"
 #include "ui/base/ui_base_switches_util.h"
 
 namespace {
@@ -89,6 +91,7 @@ WebPreferences::WebPreferences()
       should_print_backgrounds(false),
       should_clear_document_background(true),
       enable_scroll_animator(false),
+      threaded_scrolling_enabled(true),
       prefers_reduced_motion(false),
       touch_event_feature_detection_enabled(false),
       pointer_events_max_touch_points(0),
@@ -100,33 +103,33 @@ WebPreferences::WebPreferences()
       sync_xhr_in_documents_enabled(true),
       number_of_cpu_cores(1),
 #if defined(OS_MAC)
-      editing_behavior(web_pref::kEditingMacBehavior),
+      editing_behavior(mojom::EditingBehavior::kEditingMacBehavior),
 #elif defined(OS_WIN)
-      editing_behavior(web_pref::kEditingWindowsBehavior),
+      editing_behavior(mojom::EditingBehavior::kEditingWindowsBehavior),
 #elif defined(OS_ANDROID)
-      editing_behavior(web_pref::kEditingAndroidBehavior),
-#elif defined(OS_CHROMEOS)
+      editing_behavior(mojom::EditingBehavior::kEditingAndroidBehavior),
+#elif BUILDFLAG(IS_ASH)
       editing_behavior(
           base::FeatureList::IsEnabled(blink::features::kCrOSAutoSelect)
-              ? web_pref::kEditingChromeOSBehavior
-              : web_pref::kEditingUnixBehavior),
+              ? mojom::EditingBehavior::kEditingChromeOSBehavior
+              : mojom::EditingBehavior::kEditingUnixBehavior),
 #elif defined(OS_POSIX)
-      editing_behavior(web_pref::kEditingUnixBehavior),
+      editing_behavior(mojom::EditingBehavior::kEditingUnixBehavior),
 #else
-      editing_behavior(web_pref::kEditingMacBehavior),
+      editing_behavior(mojom::EditingBehavior::kEditingMacBehavior),
 #endif
       supports_multiple_windows(true),
       viewport_enabled(false),
 #if defined(OS_ANDROID)
       viewport_meta_enabled(true),
       shrinks_viewport_contents_to_fit(true),
-      viewport_style(web_pref::ViewportStyle::kMobile),
+      viewport_style(mojom::ViewportStyle::kMobile),
       always_show_context_menu_on_touch(false),
       smooth_scroll_for_find_enabled(true),
 #else
       viewport_meta_enabled(false),
       shrinks_viewport_contents_to_fit(false),
-      viewport_style(web_pref::ViewportStyle::kDefault),
+      viewport_style(mojom::ViewportStyle::kDefault),
       always_show_context_menu_on_touch(true),
       smooth_scroll_for_find_enabled(false),
 #endif
@@ -143,7 +146,8 @@ WebPreferences::WebPreferences()
       record_whole_document(false),
       cookie_enabled(true),
       accelerated_video_decode_enabled(false),
-      animation_policy(kImageAnimationPolicyAllowed),
+      animation_policy(
+          blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyAllowed),
       user_gesture_required_for_presentation(true),
       text_tracks_enabled(false),
       text_track_margin_percentage(0.0f),
@@ -181,7 +185,6 @@ WebPreferences::WebPreferences()
       scroll_top_left_interop_enabled(true),
       disable_features_depending_on_viz(false),
       disable_accelerated_small_canvases(false),
-      reenable_web_components_v0(false),
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),
@@ -198,7 +201,7 @@ WebPreferences::WebPreferences()
       media_controls_enabled(true),
       do_not_update_selection_on_mutating_selection_range(false),
       autoplay_policy(
-          web_pref::AutoplayPolicy::kDocumentUserActivationRequired),
+          blink::mojom::AutoplayPolicy::kDocumentUserActivationRequired),
       low_priority_iframes_threshold(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
       picture_in_picture_enabled(true),
       translate_service_available(false),

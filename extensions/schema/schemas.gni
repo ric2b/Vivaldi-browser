@@ -26,6 +26,7 @@ schema_sources = [
   "menubar_menu.json",
   "mousegestures.json",
   "notes.json",
+  "page_actions.json",
   "pip_private.json",
   "prefs.json",
   "runtime_private.json",

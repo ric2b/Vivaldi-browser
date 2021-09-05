@@ -23,7 +23,12 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
+#include "chrome/browser/chromeos/login/test/device_state_mixin.h"
+#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
@@ -33,6 +38,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -913,6 +919,33 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, HardwareKeysGetRewritten) {
   sm_.Replay();
 }
 
+// Tests basic behavior of the tutorial when signed in.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, Tutorial) {
+  EnableChromeVox();
+  sm_.Call([this]() {
+    ui_test_utils::NavigateToURL(
+        browser(), GURL("data:text/html,<button autofocus>Testing</button>"));
+  });
+  sm_.Call([this]() {
+    SendKeyPressWithSearch(ui::VKEY_O);
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_T, false, false, false, false));
+  });
+  sm_.ExpectSpeech("ChromeVox tutorial");
+  sm_.ExpectSpeech(
+      "Press Search plus Right Arrow, or Search plus Left Arrow to browse "
+      "topics");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Quick orientation");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("Essential keys");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_B); });
+  sm_.ExpectSpeech("Exit tutorial");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_SPACE); });
+  sm_.ExpectSpeech("Testing");
+  sm_.Replay();
+}
+
 //
 // Spoken feedback tests of the out-of-box experience.
 //
@@ -926,7 +959,8 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
     OobeBaseTest::SetUpCommandLine(command_line);
     // Many bots don't have keyboard/mice which triggers the HID detection
     // dialog in the OOBE.  Avoid confusing the tests with that.
-    command_line->AppendSwitch(chromeos::switches::kDisableHIDDetectionOnOOBE);
+    command_line->AppendSwitch(
+        chromeos::switches::kDisableHIDDetectionOnOOBEForTesting);
   }
 
   SpeechMonitor sm_;
@@ -935,16 +969,22 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
   DISALLOW_COPY_AND_ASSIGN(OobeSpokenFeedbackTest);
 };
 
-#if defined(MEMORY_SANITIZER)
-// Times out under MSan: https://crbug.com/1071693
-#define MAYBE_SpokenFeedbackInOobe DISABLED_SpokenFeedbackInOobe
-#else
-#define MAYBE_SpokenFeedbackInOobe SpokenFeedbackInOobe
-#endif
-IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, MAYBE_SpokenFeedbackInOobe) {
+IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, SpokenFeedbackInOobe) {
   ui_controls::EnableUIControls();
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
+
+  // If ChromeVox is started in OOBE, the tutorial is automatically opened.
+  sm_.ExpectSpeech("Welcome to ChromeVox!");
+  sm_.ExpectSpeechPattern(
+      "Welcome to the ChromeVox tutorial*When you're ready, use the spacebar "
+      "to move to the next lesson.");
+
+  // The tutorial can be exited by pressing Escape.
+  sm_.Call([]() {
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_ESCAPE, false, false, false, false));
+  });
 
   // The Let's go button gets initial focus.
   sm_.ExpectSpeech("Let's go");
@@ -956,6 +996,71 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, MAYBE_SpokenFeedbackInOobe) {
   sm_.ExpectSpeech("Shut down");
   sm_.ExpectSpeech("Button");
 
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, SpokenFeedbackTutorialInOobe) {
+  ui_controls::EnableUIControls();
+  ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  sm_.ExpectSpeech("Welcome to ChromeVox!");
+  sm_.ExpectSpeechPattern(
+      "Welcome to the ChromeVox tutorial*When you're ready, use the spacebar "
+      "to move to the next lesson.");
+  // Press space to move to the next lesson.
+  sm_.Call([]() {
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_SPACE, false, false, false, false));
+  });
+  sm_.ExpectSpeech("Essential Keys: Control");
+  sm_.ExpectSpeechPattern("*To continue, press the Control key.*");
+  // Press control to move to the next lesson.
+  sm_.Call([]() {
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_CONTROL, false, false, false, false));
+  });
+  sm_.ExpectSpeechPattern("*To continue, press the left Shift key.");
+  sm_.Replay();
+}
+
+class SigninToUserProfileSwitchTest : public OobeSpokenFeedbackTest {
+ public:
+  // OobeSpokenFeedbackTest:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    OobeSpokenFeedbackTest::SetUpCommandLine(command_line);
+    // Force the help app to launch in the background.
+    command_line->AppendSwitch(switches::kForceFirstRunUI);
+  }
+
+ protected:
+  LoginManagerMixin login_manager_{&mixin_host_};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
+};
+
+// Verifies that spoken feedback correctly handles profile switch (signin ->
+// user) and announces the sync consent screen correctly.
+IN_PROC_BROWSER_TEST_F(SigninToUserProfileSwitchTest, LoginAsNewUser) {
+  // Force sync screen.
+  auto reset = SyncConsentScreen::ForceBrandedBuildForTesting(true);
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  sm_.ExpectSpeechPattern("*");
+
+  sm_.Call([this]() {
+    ASSERT_EQ(chromeos::AccessibilityManager::Get()->profile(),
+              ProfileHelper::GetSigninProfile());
+    login_manager_.LoginAsNewRegularUser();
+  });
+
+  std::string button_title =
+      features::IsSplitSettingsSyncEnabled() ? "Got it" : "Accept and continue";
+  sm_.ExpectSpeech(button_title);
+
+  // Check that profile switched to the active user.
+  sm_.Call([]() {
+    ASSERT_EQ(chromeos::AccessibilityManager::Get()->profile(),
+              ProfileManager::GetActiveUserProfile());
+  });
   sm_.Replay();
 }
 

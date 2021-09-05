@@ -5,7 +5,7 @@
 #include "chrome/browser/extensions/chrome_extensions_browser_interface_binders.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/media/router/media_router_feature.h"       // nogncheck
 #include "chrome/browser/media/router/mojo/media_router_desktop.h"  // nogncheck
@@ -22,11 +22,11 @@
 #include "chrome/browser/chromeos/remote_apps/remote_apps_manager.h"
 #include "chrome/browser/chromeos/remote_apps/remote_apps_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
+#include "chrome/browser/speech/extension_api/tts_engine_extension_observer_chromeos.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chromeos/components/camera_app_ui/camera_app_ui.h"
+#include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"
 #include "chromeos/components/remote_apps/mojom/remote_apps.mojom.h"
-#include "chromeos/services/cfm/public/buildflags/buildflags.h"
 #include "chromeos/services/media_perception/public/mojom/media_perception.mojom.h"
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -44,10 +44,10 @@
 #endif
 
 #if BUILDFLAG(PLATFORM_CFM)
-#include "chromeos/services/cfm/public/cpp/appid_util.h"
-#include "chromeos/services/cfm/public/cpp/service_connection.h"
-#include "chromeos/services/cfm/public/features/features.h"
-#include "chromeos/services/cfm/public/mojom/cfm_service_manager.mojom.h"
+#include "chromeos/components/chromebox_for_meetings/features/features.h"
+#include "chromeos/services/chromebox_for_meetings/public/cpp/appid_util.h"
+#include "chromeos/services/chromebox_for_meetings/public/cpp/service_connection.h"
+#include "chromeos/services/chromebox_for_meetings/public/mojom/cfm_service_manager.mojom.h"
 #endif
 #endif  // definied(OS_CHROMEOS)
 
@@ -79,7 +79,7 @@ void BindHandwritingRecognizerRequestor(
 void BindTtsStream(
     content::RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<chromeos::tts::mojom::TtsStream> receiver) {
-  TtsEngineExtensionObserver::GetInstance(
+  TtsEngineExtensionObserverChromeOS::GetInstance(
       Profile::FromBrowserContext(render_frame_host->GetBrowserContext()))
       ->BindTtsStream(std::move(receiver));
 }
@@ -128,7 +128,7 @@ void PopulateChromeFrameBindersForExtension(
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 #if BUILDFLAG(PLATFORM_CFM)
-  if (base::FeatureList::IsEnabled(chromeos::cfm::features::kCfmMojoServices) &&
+  if (chromeos::cfm::features::IsCfmMojoEnabled() &&
       chromeos::cfm::IsChromeboxForMeetingsAppId(extension->id())) {
     binder_map->Add<chromeos::cfm::mojom::CfmServiceContext>(
         base::BindRepeating(

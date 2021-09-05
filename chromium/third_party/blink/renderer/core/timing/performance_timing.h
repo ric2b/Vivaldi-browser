@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_TIMING_H_
 
 #include "base/time/time.h"
+#include "third_party/blink/public/web/web_performance.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -46,7 +47,6 @@ class DocumentLoader;
 class DocumentParserTiming;
 class DocumentTiming;
 class InteractiveDetector;
-class LocalFrame;
 class PaintTiming;
 class PaintTimingDetector;
 class ResourceLoadTiming;
@@ -62,13 +62,17 @@ class CORE_EXPORT PerformanceTiming final : public ScriptWrappable,
   struct BackForwardCacheRestoreTiming {
     uint64_t navigation_start;
     uint64_t first_paint;
+    std::array<uint64_t,
+               WebPerformance::
+                   kRequestAnimationFramesToRecordAfterBackForwardCacheRestore>
+        request_animation_frames;
     base::Optional<base::TimeDelta> first_input_delay;
   };
 
   using BackForwardCacheRestoreTimings =
       WTF::Vector<BackForwardCacheRestoreTiming>;
 
-  explicit PerformanceTiming(LocalFrame*);
+  explicit PerformanceTiming(ExecutionContext*);
 
   uint64_t navigationStart() const;
   uint64_t inputStart() const;

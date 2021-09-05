@@ -48,6 +48,7 @@ public class ChipView extends LinearLayout {
     private final int mEndIconHeight;
     private final int mEndIconStartPadding;
     private final int mEndIconEndPadding;
+    private final int mCornerRadius;
 
     private ViewGroup mEndIconWrapper;
     private TextView mSecondaryText;
@@ -72,18 +73,27 @@ public class ChipView extends LinearLayout {
         TypedArray a = getContext().obtainStyledAttributes(
                 attrs, R.styleable.ChipView, R.attr.chipStyle, 0);
 
-        @Px
-        int leadingElementPadding = a.getDimensionPixelSize(R.styleable.ChipView_leadingPadding,
-                getResources().getDimensionPixelSize(R.dimen.chip_element_leading_padding));
-        @Px
-        int endPadding = a.getDimensionPixelSize(R.styleable.ChipView_endPadding,
-                getResources().getDimensionPixelSize(R.dimen.chip_end_padding));
+        boolean extendLateralPadding =
+                a.getBoolean(R.styleable.ChipView_extendLateralPadding, false);
 
-        mEndIconStartPadding = a.getDimensionPixelSize(R.styleable.ChipView_endIconStartPadding,
-                getResources().getDimensionPixelSize(R.dimen.chip_end_icon_margin_start));
+        @Px
+        int leadingElementPadding = extendLateralPadding
+                ? getResources().getDimensionPixelSize(
+                        R.dimen.chip_element_extended_leading_padding)
+                : getResources().getDimensionPixelSize(R.dimen.chip_element_leading_padding);
 
-        mEndIconEndPadding = a.getDimensionPixelSize(R.styleable.ChipView_endIconEndPadding,
-                getResources().getDimensionPixelSize(R.dimen.chip_end_padding_with_end_icon));
+        // End padding is already longer so no need to adjust in the 'extendLateralPadding' case.
+        @Px
+        int endPadding = getResources().getDimensionPixelSize(R.dimen.chip_end_padding);
+
+        mEndIconStartPadding = extendLateralPadding
+                ? getResources().getDimensionPixelSize(R.dimen.chip_end_icon_extended_margin_start)
+                : getResources().getDimensionPixelSize(R.dimen.chip_end_icon_margin_start);
+
+        mEndIconEndPadding = extendLateralPadding
+                ? getResources().getDimensionPixelSize(
+                        R.dimen.chip_extended_end_padding_with_end_icon)
+                : getResources().getDimensionPixelSize(R.dimen.chip_end_padding_with_end_icon);
 
         boolean solidColorChip = a.getBoolean(R.styleable.ChipView_solidColorChip, false);
         int chipBorderWidthId =
@@ -92,7 +102,7 @@ public class ChipView extends LinearLayout {
                 a.getResourceId(R.styleable.ChipView_chipColor, R.color.chip_background_color);
         int rippleColorId =
                 a.getResourceId(R.styleable.ChipView_rippleColor, R.color.chip_ripple_color);
-        int cornerRadius = a.getDimensionPixelSize(R.styleable.ChipView_cornerRadius,
+        mCornerRadius = a.getDimensionPixelSize(R.styleable.ChipView_cornerRadius,
                 getContext().getResources().getDimensionPixelSize(R.dimen.chip_corner_radius));
         int iconWidth = a.getDimensionPixelSize(R.styleable.ChipView_iconWidth,
                 getResources().getDimensionPixelSize(R.dimen.chip_icon_size));
@@ -152,7 +162,7 @@ public class ChipView extends LinearLayout {
 
         // Reset icon and background:
         mRippleBackgroundHelper = new RippleBackgroundHelper(this, chipColorId, rippleColorId,
-                cornerRadius, R.color.chip_stroke_color, chipBorderWidthId, verticalInset);
+                mCornerRadius, R.color.chip_stroke_color, chipBorderWidthId, verticalInset);
         setIcon(INVALID_ICON_ID, false);
     }
 
@@ -275,5 +285,12 @@ public class ChipView extends LinearLayout {
         } else {
             ApiCompatibilityUtils.setImageTintList(mStartIcon, null);
         }
+    }
+
+    /**
+     * @return The corner radius in pixels of this ChipView.
+     */
+    public @Px int getCornerRadius() {
+        return mCornerRadius;
     }
 }

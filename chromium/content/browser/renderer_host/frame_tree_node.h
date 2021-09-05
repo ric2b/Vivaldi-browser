@@ -298,6 +298,9 @@ class CONTENT_EXPORT FrameTreeNode {
   // Returns true if this node is in a loading state.
   bool IsLoading() const;
 
+  // Returns true if this node has a cross-document navigation in progress.
+  bool HasPendingCrossDocumentNavigation() const;
+
   // Returns this node's loading progress.
   double loaded_bytes() const { return loaded_bytes_; }
   double loaded_elements() const { return loaded_elements_; }

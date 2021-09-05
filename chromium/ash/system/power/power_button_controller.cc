@@ -78,10 +78,9 @@ std::unique_ptr<views::Widget> CreateMenuWidget() {
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
   menu_widget->SetBounds(widget_bounds);
 
-  // Enable arrow key in FocusManager. Arrow right/left and down/up triggers
-  // the same focus movement as tab/shift+tab.
-  menu_widget->GetFocusManager()->set_arrow_key_traversal_enabled_for_widget(
-      true);
+  // Enable arrow key - arrow right/left and down/up triggers the same focus
+  // movement as tab/shift+tab.
+  menu_widget->widget_delegate()->SetEnableArrowKeyTraversal(true);
   return menu_widget;
 }
 
@@ -388,11 +387,15 @@ void PowerButtonController::OnGetSwitchStates(
 
 void PowerButtonController::OnAccelerometerUpdated(
     scoped_refptr<const AccelerometerUpdate> update) {
-  // When ChromeOS EC lid angle driver is present, there's always tablet mode
+  if (ec_lid_angle_driver_status_ == ECLidAngleDriverStatus::UNKNOWN) {
+    ec_lid_angle_driver_status_ =
+        AccelerometerReader::GetInstance()->GetECLidAngleDriverStatus();
+  }
+
+  // When ChromeOS EC lid angle driver is supported, there's always tablet mode
   // switch in device, so PowerButtonController doesn't need to listens to
   // accelerometer events.
-  if (update->HasLidAngleDriver(ACCELEROMETER_SOURCE_SCREEN) ||
-      update->HasLidAngleDriver(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD)) {
+  if (ec_lid_angle_driver_status_ == ECLidAngleDriverStatus::SUPPORTED) {
     AccelerometerReader::GetInstance()->RemoveObserver(this);
     return;
   }

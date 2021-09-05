@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/values.h"
@@ -130,10 +129,9 @@ void UserNetworkConfigurationUpdater::Observe(
   Profile* profile = content::Source<Profile>(source).ptr();
 
   GetNSSCertDatabaseForProfile(
-      profile, base::AdaptCallbackForRepeating(
-                   base::BindOnce(&UserNetworkConfigurationUpdater::
-                                      CreateAndSetClientCertificateImporter,
-                                  weak_factory_.GetWeakPtr())));
+      profile, base::BindOnce(&UserNetworkConfigurationUpdater::
+                                  CreateAndSetClientCertificateImporter,
+                              weak_factory_.GetWeakPtr()));
 }
 
 void UserNetworkConfigurationUpdater::CreateAndSetClientCertificateImporter(

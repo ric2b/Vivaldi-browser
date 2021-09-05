@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">列印失敗。</translation>
 <translation id="1125564390852150847">新增分頁。</translation>
 <translation id="1145536944570833626">刪除現有資料。</translation>
+<translation id="1147031633655575115">已使用「<ph name="USER" />」的身分登入</translation>
 <translation id="1154690515305205900">無法建立已標示文字的連結。</translation>
+<translation id="1157749421655780457">允許存取位置資訊...</translation>
 <translation id="1165039591588034296">錯誤</translation>
 <translation id="1172898394251786223">下一個欄位</translation>
 <translation id="1176932207622159128">無法儲存圖片</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">隱藏密碼</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> 個項目</translation>
 <translation id="1491277525950327607">輕觸兩下即可切換設定</translation>
+<translation id="1492417797159476138">你已在這個網站上儲存此使用者名稱</translation>
 <translation id="1509486075633541495">登入網站</translation>
 <translation id="1509960214886564027">許多網站的功能可能無法正常運作</translation>
 <translation id="152234381334907219">永不儲存</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">返回</translation>
 <translation id="3892144330757387737">這裡會顯示你的歷史記錄</translation>
 <translation id="3897092660631435901">選單</translation>
+<translation id="3913386780052199712">已登入 Chrome</translation>
 <translation id="3915450441834151894">網站資訊</translation>
 <translation id="3922310737605261887">搜尋複製的文字</translation>
 <translation id="3928666092801078803">合併我的資料</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">新無痕式分頁</translation>
 <translation id="4758977202923349869">請將信用卡置於此方框內</translation>
 <translation id="4775879719735953715">預設瀏覽器</translation>
+<translation id="4778644898150334464">使用其他密碼</translation>
 <translation id="4802417911091824046">通關密語加密保護的資料不包括 Google Pay 的付款方式和地址。
 
 如要變更這項設定，請<ph name="BEGIN_LINK" />重設同步功能<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">確定</translation>
 <translation id="5062321486222145940">安裝 Google 雲端硬碟</translation>
 <translation id="5083464117946352670">無法確定檔案大小。</translation>
+<translation id="5090832849094901128">刪除這組密碼並不會刪除你的 <ph name="WEBSITE" /> 帳戶。</translation>
 <translation id="5094827893301452931">已順利發布到 Twitter。</translation>
 <translation id="5118764316110575523">關閉</translation>
 <translation id="5127805178023152808">同步功能已停用</translation>
@@ -511,6 +517,9 @@
 <translation id="6476800141292307438">將網頁翻譯成<ph name="LANGUAGE" />。翻譯選項位於靠近畫面底部的位置。</translation>
 <translation id="648164694371393720">驗證錯誤</translation>
 <translation id="6482629121755362506">已刪除 <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> 個項目</translation>
+<translation id="6497772452874122664">如果你信任 <ph name="TIME" />，可以使用已在其他網站儲存的密碼。
+
+建議你為每個網站設定專屬的密碼。</translation>
 <translation id="651505212789431520">確定要取消同步處理嗎？你隨時可以在「設定」中開啟同步功能。</translation>
 <translation id="6561262006871132942">放大</translation>
 <translation id="6585618849026997638">你可以將重要網頁加入書籤，以便再次造訪</translation>
@@ -590,6 +599,7 @@
 <translation id="739941347996872055">上一個分頁</translation>
 <translation id="7400418766976504921">網址</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> 篇未讀文章。</translation>
+<translation id="7412027924265291969">繼續</translation>
 <translation id="7425346204213733349">你更改過的書籤、歷史記錄、密碼和其他設定不會繼續與 Google 帳戶中的資料保持同步，但是 Google 帳戶現有的資料仍會保留。</translation>
 <translation id="7435356471928173109">已由系統管理員停用</translation>
 <translation id="7454057999980797137">州/縣</translation>
@@ -600,6 +610,7 @@
 <translation id="7472734401283673885">公司名稱</translation>
 <translation id="7473891865547856676">不用了，謝謝</translation>
 <translation id="7481312909269577407">往前</translation>
+<translation id="7483467499335917849">使用你目前所在的位置</translation>
 <translation id="750493650310597496">已選取 0 個項目</translation>
 <translation id="7514365320538308">下載</translation>
 <translation id="7537586195939242955">很抱歉，目前無法將您的通行票證加到 Passbook。</translation>
@@ -733,6 +744,7 @@
 <translation id="9094033019050270033">更新密碼</translation>
 <translation id="9100610230175265781">請提供通關密語</translation>
 <translation id="9107664647686727385">檢查是否有遭外洩的密碼</translation>
+<translation id="9137526406337347448">Google 服務</translation>
 <translation id="9148126808321036104">重新登入</translation>
 <translation id="9152539721251340337">建立 QR 圖碼</translation>
 <translation id="9157836665414082580">禁止顯示對話方塊</translation>

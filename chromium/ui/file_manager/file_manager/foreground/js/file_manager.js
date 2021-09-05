@@ -702,6 +702,7 @@ class FileManager extends cr.EventTarget {
     this.document_.addEventListener(
         'command',
         this.ui_.listContainer.clearHover.bind(this.ui_.listContainer));
+    CommandHandler.registerUndoDeleteToast(this);
   }
 
   /**
@@ -793,6 +794,10 @@ class FileManager extends cr.EventTarget {
       this.document_.documentElement.classList.remove('files-ng');
       this.dialogDom_.classList.remove('files-ng');
     }
+
+    this.dialogDom_.classList.toggle(
+        'camera-folder-enabled', util.isFilesCameraFolderEnabled());
+
     this.initEssentialUI_();
     this.initAdditionalUI_();
     await this.initSettingsPromise_;
@@ -1060,7 +1065,7 @@ class FileManager extends cr.EventTarget {
         this.launchParams_.showAndroidPickerApps,
         this.launchParams_.includeAllFiles, this.launchParams_.typeList);
 
-    this.recentEntry_ = new FakeEntry(
+    this.recentEntry_ = new FakeEntryImpl(
         str('RECENT_ROOT_LABEL'), VolumeManagerCommon.RootType.RECENT,
         this.getSourceRestriction_());
 
@@ -1272,6 +1277,7 @@ class FileManager extends cr.EventTarget {
     // query, and select it if exists.
     const searchQuery = this.launchParams_.searchQuery;
     if (searchQuery) {
+      metrics.startInterval('Load.ProcessInitialSearchQuery');
       this.searchController_.setSearchQuery(searchQuery);
       // Show a spinner, as the crossover search function call could be slow.
       const hideSpinnerCallback = this.spinnerController_.show();
@@ -1282,6 +1288,7 @@ class FileManager extends cr.EventTarget {
         nextCurrentDirEntry = queryMatchedDirEntry;
       }
       hideSpinnerCallback();
+      metrics.recordInterval('Load.ProcessInitialSearchQuery');
     }
 
     // Resolve the currentDirectoryURL to currentDirectoryEntry (if not done by
@@ -1542,7 +1549,7 @@ class FileManager extends cr.EventTarget {
             if (!this.fakeDriveItem_) {
               this.fakeDriveItem_ = new NavigationModelFakeItem(
                   str('DRIVE_DIRECTORY_LABEL'), NavigationModelItemType.DRIVE,
-                  new FakeEntry(
+                  new FakeEntryImpl(
                       str('DRIVE_DIRECTORY_LABEL'),
                       VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT));
             }

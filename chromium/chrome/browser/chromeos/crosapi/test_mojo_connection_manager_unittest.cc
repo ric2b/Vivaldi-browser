@@ -16,7 +16,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
@@ -54,6 +54,9 @@ class TestLacrosChromeService : public crosapi::mojom::LacrosChromeService {
   }
 
   void NewWindow(NewWindowCallback callback) override {}
+  void GetFeedbackData(GetFeedbackDataCallback callback) override {}
+  void GetHistograms(GetHistogramsCallback callback) override {}
+  void GetActiveTabUrl(GetActiveTabUrlCallback callback) override {}
 
   bool init_is_called() { return init_is_called_; }
 

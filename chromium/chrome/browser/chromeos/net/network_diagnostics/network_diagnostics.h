@@ -31,12 +31,14 @@ class NetworkDiagnostics : public mojom::NetworkDiagnosticsRoutines {
   void SignalStrength(SignalStrengthCallback callback) override;
   void GatewayCanBePinged(GatewayCanBePingedCallback callback) override;
   void HttpFirewall(HttpFirewallCallback callback) override;
+  void HttpsFirewall(HttpsFirewallCallback callback) override;
   void HasSecureWiFiConnection(
       HasSecureWiFiConnectionCallback callback) override;
   void DnsResolverPresent(DnsResolverPresentCallback callback) override;
   void DnsLatency(DnsLatencyCallback callback) override;
   void DnsResolution(DnsResolutionCallback callback) override;
   void CaptivePortal(CaptivePortalCallback callback) override;
+  void HttpsLatency(HttpsLatencyCallback callback) override;
 
  private:
   // An unowned pointer to the DebugDaemonClient instance.

@@ -43,7 +43,7 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
     web_view_helper_ = std::make_unique<frame_test_helpers::WebViewHelper>();
     web_view_helper_->Initialize(nullptr, nullptr, &web_widget_client_,
                                  &ConfigureCompositingWebView);
-    web_view_helper_->Resize(WebSize(200, 200));
+    web_view_helper_->Resize(gfx::Size(200, 200));
 
     // The paint artifact compositor should have been created as part of the
     // web view helper setup.
@@ -55,8 +55,7 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
   // Both sets the inner html and runs the document lifecycle.
   void InitializeWithHTML(LocalFrame& frame, const String& html_content) {
     frame.GetDocument()->body()->setInnerHTML(html_content);
-    frame.GetDocument()->View()->UpdateAllLifecyclePhases(
-        DocumentUpdateReason::kTest);
+    frame.GetDocument()->View()->UpdateAllLifecyclePhasesForTest();
   }
 
   WebLocalFrame* LocalMainFrame() { return web_view_helper_->LocalMainFrame(); }
@@ -99,16 +98,28 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
         layer->transform_tree_index());
   }
 
- private:
   PaintArtifactCompositor* paint_artifact_compositor() {
     return GetLocalFrameView()->GetPaintArtifactCompositor();
   }
 
+ private:
   frame_test_helpers::TestWebWidgetClient web_widget_client_;
   std::unique_ptr<frame_test_helpers::WebViewHelper> web_view_helper_;
 };
 
 INSTANTIATE_PAINT_TEST_SUITE_P(CompositingTest);
+
+TEST_P(CompositingTest, DisableAndEnableAcceleratedCompositing) {
+  auto* settings = GetLocalFrameView()->GetFrame().GetSettings();
+  size_t num_layers = RootCcLayer()->children().size();
+  EXPECT_GT(num_layers, 1u);
+  settings->SetAcceleratedCompositingEnabled(false);
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(paint_artifact_compositor());
+  settings->SetAcceleratedCompositingEnabled(true);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(num_layers, RootCcLayer()->children().size());
+}
 
 TEST_P(CompositingTest, DidScrollCallbackAfterScrollableAreaChanges) {
   InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(),
@@ -130,8 +141,7 @@ TEST_P(CompositingTest, DidScrollCallbackAfterScrollableAreaChanges) {
   Document* document = WebView()->MainFrameImpl()->GetFrame()->GetDocument();
   Element* scrollable = document->getElementById("scrollable");
 
-  auto* scrollable_area =
-      ToLayoutBox(scrollable->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = scrollable->GetLayoutBox()->GetScrollableArea();
   EXPECT_NE(nullptr, scrollable_area);
 
   CompositorElementId scroll_element_id = scrollable_area->GetScrollElementId();
@@ -164,8 +174,7 @@ TEST_P(CompositingTest, DidScrollCallbackAfterScrollableAreaChanges) {
       WebScriptSource("var forceLayoutFromScript = scrollable.offsetTop;"));
   EXPECT_EQ(document->Lifecycle().GetState(), DocumentLifecycle::kLayoutClean);
 
-  EXPECT_EQ(nullptr,
-            ToLayoutBox(scrollable->GetLayoutObject())->GetScrollableArea());
+  EXPECT_EQ(nullptr, scrollable->GetLayoutBox()->GetScrollableArea());
 
   // The web scroll layer has not been deleted yet and we should be able to
   // apply impl-side offsets without crashing.
@@ -327,7 +336,7 @@ TEST_P(CompositingTest, BackgroundColorInScrollingContentsLayer) {
 
   LayoutView* layout_view = GetLocalFrameView()->GetLayoutView();
   Element* scroller = GetElementById("scroller");
-  LayoutBox* scroller_box = ToLayoutBox(scroller->GetLayoutObject());
+  LayoutBox* scroller_box = scroller->GetLayoutBox();
   ASSERT_TRUE(layout_view->GetBackgroundPaintLocation() ==
               kBackgroundPaintInScrollingContents);
   ASSERT_TRUE(scroller_box->GetBackgroundPaintLocation() ==
@@ -385,7 +394,7 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
 
   LayoutView* layout_view = GetLocalFrameView()->GetLayoutView();
   Element* scroller = GetElementById("scroller");
-  LayoutBox* scroller_box = ToLayoutBox(scroller->GetLayoutObject());
+  LayoutBox* scroller_box = scroller->GetLayoutBox();
   ASSERT_TRUE(layout_view->GetBackgroundPaintLocation() ==
               kBackgroundPaintInGraphicsLayer);
   ASSERT_TRUE(scroller_box->GetBackgroundPaintLocation() ==
@@ -495,7 +504,7 @@ class CompositingSimTest : public PaintTestConfigurations, public SimTest {
   void SetUp() override {
     SimTest::SetUp();
     // Ensure a non-empty size so painting does not early-out.
-    WebView().Resize(WebSize(800, 600));
+    WebView().Resize(gfx::Size(800, 600));
   }
 };
 

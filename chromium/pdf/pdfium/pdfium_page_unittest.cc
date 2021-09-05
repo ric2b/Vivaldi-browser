@@ -147,7 +147,7 @@ TEST_F(PDFiumPageLinkTest, TestLinkGeneration) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  bool is_chromeos = IsRunningOnChromeOS();
+  bool using_test_fonts = UsingTestFonts();
 
   const std::vector<PDFiumPage::Link>& links = GetLinks(*engine, 0);
   ASSERT_EQ(3u, links.size());
@@ -157,7 +157,7 @@ TEST_F(PDFiumPageLinkTest, TestLinkGeneration) {
   EXPECT_EQ(7, link.start_char_index);
   EXPECT_EQ(16, link.char_count);
   ASSERT_EQ(1u, link.bounding_rects.size());
-  if (is_chromeos) {
+  if (using_test_fonts) {
     EXPECT_EQ(gfx::Rect(75, 192, 110, 15), link.bounding_rects[0]);
   } else {
     EXPECT_EQ(gfx::Rect(75, 191, 110, 16), link.bounding_rects[0]);
@@ -168,7 +168,7 @@ TEST_F(PDFiumPageLinkTest, TestLinkGeneration) {
   EXPECT_EQ(52, second_link.start_char_index);
   EXPECT_EQ(15, second_link.char_count);
   ASSERT_EQ(1u, second_link.bounding_rects.size());
-  if (is_chromeos) {
+  if (using_test_fonts) {
     EXPECT_EQ(gfx::Rect(131, 120, 138, 22), second_link.bounding_rects[0]);
   } else {
     EXPECT_EQ(gfx::Rect(131, 121, 138, 20), second_link.bounding_rects[0]);
@@ -200,7 +200,7 @@ TEST_F(PDFiumPageLinkTest, TestAnnotLinkGeneration) {
        {{242, 455, 1, 18}, {242, 472, 1, 15}},
        "https://cs.chromium.org"},
       {-1, 0, {{58, 926, 28, 27}}, "https://www.google.com"}};
-  if (IsRunningOnChromeOS()) {
+  if (UsingTestFonts()) {
     expected_links[0].bounding_rects[0] = {99, 436, 236, 14};
   }
   static constexpr size_t kExpectedLinkCount = base::size(expected_links);
@@ -391,7 +391,7 @@ TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
       {17, gfx::RectF(77.333336f, 64.0f, 160.0f, 20.0f),
        PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2}};
 
-  if (IsRunningOnChromeOS()) {
+  if (UsingTestFonts()) {
     expected_text_runs[4].bounds =
         gfx::RectF(126.66666f, 117.33334f, 137.33334f, 21.33334f);
     expected_text_runs[5].bounds =
@@ -445,7 +445,7 @@ TEST_F(PDFiumPageTextTest, TestHighlightTextRunInfo) {
       {2, gfx::RectF(198.66667f, 202.66667f, 21.333328f, 10.666672f),
        PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle}};
 
-  if (IsRunningOnChromeOS()) {
+  if (UsingTestFonts()) {
     expected_text_runs[2].bounds =
         gfx::RectF(106.66666f, 198.66667f, 73.333336f, 19.999985f);
     expected_text_runs[4].bounds =

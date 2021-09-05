@@ -51,8 +51,7 @@ enum class ActivationSource {
 // a close icon and a back icon for different functionalities. This class
 // provides common functions for the search box view across Chrome OS.
 class SearchBoxViewBase : public views::WidgetDelegateView,
-                          public views::TextfieldController,
-                          public views::ButtonListener {
+                          public views::TextfieldController {
  public:
   explicit SearchBoxViewBase(SearchBoxViewDelegate* delegate);
   ~SearchBoxViewBase() override;
@@ -96,9 +95,6 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
   // Overridden from views::WidgetDelegate:
   ax::mojom::Role GetAccessibleWindowRole() override;
 
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // Used only in the tests to get the current search icon.
   views::ImageView* get_search_icon_for_test() { return search_icon_; }
 
@@ -118,8 +114,8 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
 
   virtual void ClearSearch();
 
-  // Returns selected view in contents view.
-  virtual views::View* GetSelectedViewInContentsView();
+  // Called when the search box active state changes.
+  virtual void OnSearchBoxActiveChanged(bool active);
 
  protected:
   // Fires query change notification.

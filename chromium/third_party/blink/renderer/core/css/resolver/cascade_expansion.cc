@@ -24,6 +24,8 @@ CascadeFilter AddValidPropertiesFilter(
       return filter.Add(CSSProperty::kValidForFirstLetter, false);
     case ValidPropertyFilter::kMarker:
       return filter.Add(CSSProperty::kValidForMarker, false);
+    case ValidPropertyFilter::kHighlight:
+      return filter.Add(CSSProperty::kValidForHighlight, false);
   }
 }
 
@@ -184,6 +186,10 @@ CSSPropertyValueSet::PropertyReference CascadeExpansion::PropertyAt(
     size_t index) const {
   DCHECK(!AtEnd());
   return matched_properties_.properties->PropertyAt(index_);
+}
+
+uint16_t CascadeExpansion::TreeOrder() const {
+  return matched_properties_.types_.tree_order;
 }
 
 }  // namespace blink

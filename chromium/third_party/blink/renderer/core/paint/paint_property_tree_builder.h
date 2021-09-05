@@ -56,6 +56,7 @@ struct PaintPropertyTreeBuilderFragmentContext {
     //   * A scroll translation
     //   * A replaced contents transform
     //   * A transform isolation node
+    //   * A sticky translation
     // The offset plus paint_offset is the offset for layout shift tracking.
     // It doesn't include transforms because we need to ignore transform changes
     // for layout shift tracking, see
@@ -141,6 +142,12 @@ struct PaintPropertyTreeBuilderFragmentContext {
   PhysicalOffset repeating_paint_offset_adjustment;
 
   PhysicalOffset old_paint_offset;
+
+  // An additional offset that applies to the current fragment, but is detected
+  // *before* the ContainingBlockContext is updated for it. Once the
+  // ContainingBlockContext is set, this value should be added to
+  // ContainingBlockContext::additional_offset_to_layout_shift_root_delta.
+  PhysicalOffset pending_additional_offset_to_layout_shift_root_delta;
 };
 
 struct PaintPropertyTreeBuilderContext {

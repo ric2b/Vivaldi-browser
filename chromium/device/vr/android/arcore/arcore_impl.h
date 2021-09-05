@@ -106,10 +106,15 @@ class ArCoreImpl : public ArCore {
   ArCoreImpl();
   ~ArCoreImpl() override;
 
-  bool Initialize(
+  base::Optional<ArCore::InitializeResult> Initialize(
       base::android::ScopedJavaLocalRef<jobject> application_context,
       const std::unordered_set<device::mojom::XRSessionFeature>&
-          enabled_features) override;
+          required_features,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          optional_features,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images)
+      override;
+  MinMaxRange GetTargetFramerateRange() override;
   void SetDisplayGeometry(const gfx::Size& frame_size,
                           display::Display::Rotation display_rotation) override;
   void SetCameraTexture(uint32_t camera_texture_id) override;
@@ -172,11 +177,17 @@ class ArCoreImpl : public ArCore {
 
   mojom::XRDepthDataPtr GetDepthData() override;
 
+  mojom::XRTrackedImagesDataPtr GetTrackedImages() override;
+
  protected:
   std::vector<float> TransformDisplayUvCoords(
       const base::span<const float> uvs) const override;
 
  private:
+  void BuildImageDatabase(
+      const ArSession*,
+      ArAugmentedImageDatabase*,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images);
   bool IsOnGlThread() const;
   base::WeakPtr<ArCoreImpl> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -190,6 +201,9 @@ class ArCoreImpl : public ArCore {
   internal::ScopedArCoreObject<ArSession*> arcore_session_;
   internal::ScopedArCoreObject<ArFrame*> arcore_frame_;
 
+  // Target framerate reflecting the current camera configuration.
+  MinMaxRange target_framerate_range_ = {30.f, 30.f};
+
   // ArCore light estimation data
   internal::ScopedArCoreObject<ArLightEstimate*> arcore_light_estimate_;
 
@@ -197,6 +211,16 @@ class ArCoreImpl : public ArCore {
   std::unique_ptr<ArCorePlaneManager> plane_manager_;
   // Anchor manager. Valid after a call to Initialize.
   std::unique_ptr<ArCoreAnchorManager> anchor_manager_;
+
+  // For each image in the input list of images to track, store a true/false
+  // score to indicate if it's trackable by ARCore or not. These are sent
+  // to Blink only once, for the first frame, and the boolean tracks that.
+  std::vector<bool> image_trackable_scores_;
+  bool image_trackable_scores_sent_ = false;
+
+  // Map from ARCore's internal image IDs to the index position in the input
+  // list of images. The index values are needed for blink communication.
+  std::unordered_map<int32_t, uint64_t> tracked_image_arcore_id_to_index_;
 
   uint64_t next_id_ = 1;
 
@@ -291,7 +315,20 @@ class ArCoreImpl : public ArCore {
   // Helper, attempts to configure ArSession's camera for use. Note that this is
   // happening during initialization, before arcore_session_ is set.
   // Returns true if configuration succeeded, false otherwise.
-  bool ConfigureCamera(ArSession* ar_session) const;
+  bool ConfigureCamera(ArSession* ar_session);
+
+  // Helper, attempts to configure ArSession's features based on required and
+  // optional features. Note that this is happening during initialization,
+  // before arcore_session_ is set. Returns a collection of features that were
+  // successfully enabled on a session or a nullopt on failure.
+  base::Optional<std::unordered_set<device::mojom::XRSessionFeature>>
+  ConfigureFeatures(
+      ArSession* ar_session,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          required_features,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          optional_features,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images);
 
   // Must be last.
   base::WeakPtrFactory<ArCoreImpl> weak_ptr_factory_{this};

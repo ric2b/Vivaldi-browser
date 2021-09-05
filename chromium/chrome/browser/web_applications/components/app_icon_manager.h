@@ -10,10 +10,9 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace web_app {
@@ -37,6 +36,8 @@ struct IconBitmaps {
 class AppIconManager {
  public:
   AppIconManager() = default;
+  AppIconManager(const AppIconManager&) = delete;
+  AppIconManager& operator=(const AppIconManager&) = delete;
   virtual ~AppIconManager() = default;
 
   virtual void Start() = 0;
@@ -126,6 +127,8 @@ class AppIconManager {
                                      SquareSizePx min_icon_size,
                                      ReadCompressedIconCallback callback) const;
 
+  // Returns a square icon of gfx::kFaviconSize px, or an empty bitmap if not
+  // found.
   virtual SkBitmap GetFavicon(const AppId& app_id) const = 0;
 
  protected:
@@ -134,8 +137,6 @@ class AppIconManager {
       IconPurpose purpose,
       const SkBitmap& bitmap);
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(AppIconManager);
 };
 
 }  // namespace web_app

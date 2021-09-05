@@ -232,12 +232,14 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
 HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser,
                                  Document& document,
                                  ParserContentPolicy parser_content_policy,
-                                 const HTMLParserOptions& options)
+                                 const HTMLParserOptions& options,
+                                 bool allow_shadow_root)
     : frameset_ok_(true),
       tree_(parser->ReentryPermit(), document, parser_content_policy),
       insertion_mode_(kInitialMode),
       original_insertion_mode_(kInitialMode),
       should_skip_leading_newline_(false),
+      allow_shadow_root_(allow_shadow_root),
       parser_(parser),
       script_to_process_start_position_(UninitializedPositionValue1()),
       options_(options) {}
@@ -246,11 +248,13 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser,
                                  DocumentFragment* fragment,
                                  Element* context_element,
                                  ParserContentPolicy parser_content_policy,
-                                 const HTMLParserOptions& options)
+                                 const HTMLParserOptions& options,
+                                 bool allow_shadow_root)
     : HTMLTreeBuilder(parser,
                       fragment->GetDocument(),
                       parser_content_policy,
-                      options) {
+                      options,
+                      allow_shadow_root) {
   DCHECK(IsMainThread());
   DCHECK(context_element);
   tree_.InitFragmentParsing(fragment, context_element);
@@ -900,7 +904,8 @@ void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
   DeclarativeShadowRootType declarative_shadow_root_type(
       DeclarativeShadowRootType::kNone);
   if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
-          tree_.CurrentNode()->GetExecutionContext())) {
+          tree_.CurrentNode()->GetExecutionContext()) &&
+      allow_shadow_root_) {
     if (Attribute* type_attribute =
             token->GetAttributeItem(html_names::kShadowrootAttr)) {
       String shadow_mode = type_attribute->Value();

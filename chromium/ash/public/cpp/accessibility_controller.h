@@ -66,6 +66,13 @@ class ASH_PUBLIC_EXPORT AccessibilityController {
   virtual void SetSelectToSpeakEventHandlerDelegate(
       SelectToSpeakEventHandlerDelegate* delegate) = 0;
 
+  // Displays the Select-to-Speak panel.
+  virtual void ShowSelectToSpeakPanel(const gfx::Rect& anchor,
+                                      bool is_paused) = 0;
+
+  // Hides the Select-to-Speak panel.
+  virtual void HideSelectToSpeakPanel() = 0;
+
   // Hides the Switch Access back button.
   virtual void HideSwitchAccessBackButton() = 0;
 
@@ -79,6 +86,9 @@ class ASH_PUBLIC_EXPORT AccessibilityController {
   virtual void ShowSwitchAccessMenu(
       const gfx::Rect& bounds,
       std::vector<std::string> actions_to_show) = 0;
+
+  // Activate point scanning in Switch Access.
+  virtual void ActivatePointScan() = 0;
 
   // Set whether dictation is active.
   virtual void SetDictationActive(bool is_active) = 0;

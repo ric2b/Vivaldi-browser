@@ -32,7 +32,7 @@ import {SyncBrowserProxyImpl, SyncStatus} from '../people_page/sync_browser_prox
 import {PrefsBehavior} from '../prefs/prefs_behavior.m.js';
 import {routes} from '../route.js';
 import {RouteObserverBehavior, Router} from '../router.m.js';
-import {ChooserType, ContentSettingsTypes, CookieControlsMode} from '../site_settings/constants.js';
+import {ChooserType, ContentSettingsTypes, CookieControlsMode, NotificationSetting} from '../site_settings/constants.js';
 import {SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.m.js';
@@ -191,21 +191,20 @@ Polymer({
       },
     },
 
+    /**
+     * Expose NotificationSetting enum to HTML bindings.
+     * @private
+     */
+    notificationSettingEnum_: {
+      type: Object,
+      value: NotificationSetting,
+    },
+
     /** @private */
     searchFilter_: String,
 
     /** @private */
     siteDataFilter_: String,
-
-    /**
-     * Boolean which keeps a track if any of the displayed lists has discarded
-     * content setting patterns and hides the warning message accordingly.
-     * @private
-     */
-    pluginsHasDiscardedExceptions_: {
-      type: Boolean,
-      value: false,
-    },
   },
 
   /** @private {?PrivacyPageBrowserProxy} */

@@ -10,12 +10,19 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/media_export.h"
 #include "media/media_buildflags.h"
 
 #if defined(OS_WIN)
 #include <wrl/client.h>
 struct IMFCdmProxy;
+#endif
+
+#if BUILDFLAG(IS_ASH)
+namespace chromeos {
+class ChromeOsCdmContext;
+}
 #endif
 
 namespace media {
@@ -113,6 +120,12 @@ class MEDIA_EXPORT CdmContext {
   // Returns FuchsiaCdmContext interface when the context is backed by Fuchsia
   // CDM. Otherwise returns nullptr.
   virtual FuchsiaCdmContext* GetFuchsiaCdmContext();
+#endif
+
+#if BUILDFLAG(IS_ASH)
+  // Returns a ChromeOsCdmContext interface when the context is backed by the
+  // ChromeOS CdmFactoryDaemon. Otherwise return nullptr.
+  virtual chromeos::ChromeOsCdmContext* GetChromeOsCdmContext();
 #endif
 
  protected:

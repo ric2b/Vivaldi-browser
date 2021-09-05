@@ -5,7 +5,6 @@
 #include <chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_launcher.h>
 #include <memory>
 
-#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/web_applications/components/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_app_install_task.h"
+#include "chromeos/ui/base/window_pin_type.h"
 #include "components/account_id/account_id.h"
 #include "ui/aura/window.h"
 #include "ui/base/page_transition_types.h"
@@ -56,7 +56,8 @@ void WebKioskAppLauncher::ContinueWithNetworkReady() {
   DCHECK(!is_installed_);
   install_task_.reset(new web_app::WebAppInstallTask(
       profile_, /*os_integration_manager=*/nullptr,
-      /*install_finalizer=*/nullptr, data_retriever_factory_.Run()));
+      /*install_finalizer=*/nullptr, data_retriever_factory_.Run(),
+      /*registrar=*/nullptr));
   install_task_->LoadAndRetrieveWebApplicationInfoWithIcons(
       WebKioskAppManager::Get()->GetAppByAccountId(account_id_)->install_url(),
       url_loader_.get(),

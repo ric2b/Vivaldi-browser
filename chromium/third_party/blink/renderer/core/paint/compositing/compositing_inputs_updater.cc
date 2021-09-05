@@ -38,10 +38,15 @@ CompositingInputsUpdater::~CompositingInputsUpdater() = default;
 
 bool CompositingInputsUpdater::LayerOrDescendantShouldBeComposited(
     PaintLayer* layer) {
-  if (layer->GetLayoutObject().IsLayoutView() &&
-      layer->GetLayoutObject().AdditionalCompositingReasons()) {
-    return true;
+  if (auto* layout_view = DynamicTo<LayoutView>(layer->GetLayoutObject())) {
+    if (layout_view->AdditionalCompositingReasons())
+      return true;
+    // The containing frame may call this function for the root layer of a
+    // throttled frame. Return the current compositing status.
+    if (layout_view->GetFrameView()->ShouldThrottleRendering())
+      return layout_view->UsesCompositing();
   }
+  DCHECK(!layer->GetLayoutObject().GetFrameView()->ShouldThrottleRendering());
   PaintLayerCompositor* compositor =
       layer->GetLayoutObject().View()->Compositor();
   return layer->DescendantHasDirectOrScrollingCompositingReason() ||
@@ -204,7 +209,7 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
   if (!descendant_has_direct_compositing_reason &&
       layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
     if (LayoutView* embedded_layout_view =
-            ToLayoutEmbeddedContent(layer->GetLayoutObject())
+            To<LayoutEmbeddedContent>(layer->GetLayoutObject())
                 .ChildLayoutView()) {
       descendant_has_direct_compositing_reason |=
           LayerOrDescendantShouldBeComposited(embedded_layout_view->Layer());

@@ -11,7 +11,6 @@
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/content/browser/bad_message.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
 #include "components/password_manager/core/browser/password_manager.h"
@@ -209,10 +208,9 @@ void ContentPasswordManagerDriver::AnnotateFieldsWithParsingResult(
 }
 
 void ContentPasswordManagerDriver::GeneratePassword(
-    autofill::mojom::PasswordGenerationAgent::
-        UserTriggeredGeneratePasswordCallback callback) {
-  GetPasswordGenerationAgent()->UserTriggeredGeneratePassword(
-      std::move(callback));
+    autofill::mojom::PasswordGenerationAgent::TriggeredGeneratePasswordCallback
+        callback) {
+  GetPasswordGenerationAgent()->TriggeredGeneratePassword(std::move(callback));
 }
 
 void ContentPasswordManagerDriver::PasswordFormsParsed(
@@ -272,6 +270,11 @@ void ContentPasswordManagerDriver::SameDocumentNavigation(
   GetPasswordManager()->OnPasswordFormSubmittedNoChecks(
       this, submission_indication_event);
   LogSiteIsolationMetricsForSubmittedForm(render_frame_host_);
+}
+
+void ContentPasswordManagerDriver::PasswordFormCleared(
+    const autofill::FormData& form_data) {
+  GetPasswordManager()->OnPasswordFormCleared(this, form_data);
 }
 
 void ContentPasswordManagerDriver::RecordSavePasswordProgress(

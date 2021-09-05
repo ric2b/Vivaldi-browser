@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 #define COMPONENTS_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -15,8 +16,11 @@
 #include "base/observer_list.h"
 #include "components/permissions/notification_permission_ui_selector.h"
 #include "components/permissions/permission_prompt.h"
+#include "components/permissions/permission_uma_util.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+
+class GURL;
 
 namespace content {
 class RenderFrameHost;
@@ -30,6 +34,7 @@ namespace permissions {
 class PermissionRequest;
 enum class PermissionAction;
 enum class PermissionPromptDisposition;
+enum class PermissionPromptDispositionReason;
 
 // The message to be printed in the Developer Tools console when the quiet
 // notification permission prompt UI is shown on sites with abusive permission
@@ -130,8 +135,10 @@ class PermissionRequestManager
 
   // PermissionPrompt::Delegate:
   const std::vector<PermissionRequest*>& Requests() override;
+  GURL GetRequestingOrigin() const override;
   GURL GetEmbeddingOrigin() const override;
   void Accept() override;
+  void AcceptThisTime() override;
   void Deny() override;
   void Closing() override;
   bool WasCurrentRequestAlreadyDisplayed() override;
@@ -142,10 +149,24 @@ class PermissionRequestManager
         web_contents_supports_permission_requests;
   }
 
-  // For testing only, used to override the default UI selector.
+  // For testing only, used to override the default UI selectors and instead use
+  // a new one.
   void set_notification_permission_ui_selector_for_testing(
       std::unique_ptr<NotificationPermissionUiSelector> selector) {
-    notification_permission_ui_selector_ = std::move(selector);
+    clear_notification_permission_ui_selector_for_testing();
+    add_notification_permission_ui_selector_for_testing(std::move(selector));
+  }
+
+  // For testing only, used to add a new selector without overriding the
+  // existing ones.
+  void add_notification_permission_ui_selector_for_testing(
+      std::unique_ptr<NotificationPermissionUiSelector> selector) {
+    notification_permission_ui_selectors_.emplace_back(std::move(selector));
+  }
+
+  // For testing only, clear the existing ui selectors.
+  void clear_notification_permission_ui_selector_for_testing() {
+    notification_permission_ui_selectors_.clear();
   }
 
   void set_view_factory_for_testing(PermissionPrompt::Factory view_factory) {
@@ -179,9 +200,12 @@ class PermissionRequestManager
   // Delete the view object
   void DeleteBubble();
 
+  // Finalize request.
+  void ResetViewStateForCurrentRequest();
+
   // Delete the view object, finalize requests, asynchronously show a queued
   // request if present.
-  void FinalizeBubble(PermissionAction permission_action);
+  void FinalizeCurrentRequests(PermissionAction permission_action);
 
   // Cancel all pending or active requests and destroy the PermissionPrompt if
   // one exists. This is called if the WebContents is destroyed or navigates its
@@ -195,7 +219,8 @@ class PermissionRequestManager
   PermissionRequest* GetExistingRequest(PermissionRequest* request);
 
   // Calls PermissionGranted on a request and all its duplicates.
-  void PermissionGrantedIncludingDuplicates(PermissionRequest* request);
+  void PermissionGrantedIncludingDuplicates(PermissionRequest* request,
+                                            bool is_one_time);
   // Calls PermissionDenied on a request and all its duplicates.
   void PermissionDeniedIncludingDuplicates(PermissionRequest* request);
   // Calls Cancelled on a request and all its duplicates.
@@ -206,15 +231,16 @@ class PermissionRequestManager
   void NotifyBubbleAdded();
   void NotifyBubbleRemoved();
 
-  void OnSelectedUiToUseForNotifications(const UiDecision& decision);
+  void OnNotificationPermissionUiSelectorDone(size_t selector_index,
+                                              const UiDecision& decision);
 
   PermissionPromptDisposition DetermineCurrentRequestUIDispositionForUMA();
+  PermissionPromptDispositionReason
+  DetermineCurrentRequestUIDispositionReasonForUMA();
 
   void LogWarningToConsole(const char* message);
 
   void DoAutoResponseForTesting();
-
-  int CountQueuedPermissionRequests(PermissionRequest* request);
 
   // Factory to be used to create views when needed.
   PermissionPrompt::Factory view_factory_;
@@ -232,19 +258,28 @@ class PermissionRequestManager
   // tab is visible.
   std::vector<PermissionRequest*> requests_;
 
-  struct RequestAndSource {
+  struct PermissionRequestSource {
     int render_process_id;
     int render_frame_id;
-    PermissionRequest* request;
 
     bool IsSourceFrameInactiveAndDisallowReactivation() const;
   };
 
-  base::circular_deque<RequestAndSource> queued_requests_;
+  base::circular_deque<PermissionRequest*> queued_requests_;
+
+  PermissionRequest* PeekNextQueuedRequest();
+
+  PermissionRequest* PopNextQueuedRequest();
+
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>
       duplicate_requests_;
+
+  // Maps each PermissionRequest currently in |requests_| or |queued_requests_|
+  // to which RenderFrameHost it originated from. Note that no date is stored
+  // for |duplicate_requests_|.
+  std::map<PermissionRequest*, PermissionRequestSource> request_sources_map_;
 
   base::ObserverList<Observer>::Unchecked observer_list_;
   AutoResponseType auto_response_for_test_;
@@ -253,10 +288,17 @@ class PermissionRequestManager
   // origin requesting the permission.
   bool is_notification_prompt_cooldown_active_ = false;
 
-  // Decides if the quiet prompt UI should be used to display notification
-  // permission requests.
-  std::unique_ptr<NotificationPermissionUiSelector>
-      notification_permission_ui_selector_;
+  // A vector of selectors which decide if the quiet prompt UI should be used
+  // to display notification permission requests. Sorted from the highest
+  // priority to the lowest priority selector.
+  std::vector<std::unique_ptr<NotificationPermissionUiSelector>>
+      notification_permission_ui_selectors_;
+
+  // Holds the decisions returned by selectors. Needed in case a lower priority
+  // selector returns a decision first and we need to wait for the decisions of
+  // higher priority selectors before making use of it.
+  std::vector<base::Optional<NotificationPermissionUiSelector::Decision>>
+      selector_decisions_;
 
   // Whether the view for the current |requests_| has been shown to the user at
   // least once.
@@ -264,8 +306,13 @@ class PermissionRequestManager
 
   // Whether to use the normal or quiet UI to display the current permission
   // |requests_|, and whether to show warnings. This will be nullopt if we are
-  // still waiting on the result from |notification_permission_ui_selector_|.
+  // still waiting on the result from |notification_permission_ui_selectors_|.
   base::Optional<UiDecision> current_request_ui_to_use_;
+
+  // The likelihood value returned by the Web Permission Predictions Service,
+  // to be recoreded in UKM.
+  base::Optional<PermissionUmaUtil::PredictionGrantLikelihood>
+      prediction_grant_likelihood_;
 
   // Whether the bubble is being destroyed by this class, rather than in
   // response to a UI event. In this case, callbacks from the bubble itself

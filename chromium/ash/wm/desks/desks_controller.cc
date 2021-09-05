@@ -27,15 +27,18 @@
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
+#include "ash/wm/switchable_windows.h"
 #include "ash/wm/window_cycle_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
+#include "base/timer/timer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -57,6 +60,16 @@ constexpr char kNumberOfWindowsOnDesk_3_HistogramName[] =
     "Ash.Desks.NumberOfWindowsOnDesk_3";
 constexpr char kNumberOfWindowsOnDesk_4_HistogramName[] =
     "Ash.Desks.NumberOfWindowsOnDesk_4";
+
+constexpr char kNumberOfDeskTraversalsHistogramName[] =
+    "Ash.Desks.NumberOfDeskTraversals";
+constexpr int kDeskTraversalsMaxValue = 20;
+
+// After an desk activation animation starts,
+// |kNumberOfDeskTraversalsHistogramName| will be recorded after this time
+// interval.
+constexpr base::TimeDelta kDeskTraversalsTimeout =
+    base::TimeDelta::FromSeconds(5);
 
 // Appends the given |windows| to the end of the currently active overview mode
 // session such that the most-recently used window is added first. If
@@ -135,10 +148,76 @@ void MaybeUpdateShelfItems(
   shelf_model->UpdateItemsForDeskChange(shelf_items_updates);
 }
 
+bool IsParentSwitchableContainer(const aura::Window* window) {
+  DCHECK(window);
+  return window->parent() && IsSwitchableContainer(window->parent());
+}
+
 }  // namespace
 
+// Helper class which wraps around a OneShotTimer and used for recording how
+// many times the user has traversed desks. Here traversal means the amount of
+// times the user has seen a visual desk change. This differs from desk
+// activation as a desk is only activated as needed for a screenshot during an
+// animation. The user may bounce back and forth on two desks that already
+// have screenshots, and each bounce is recorded as a traversal. For touchpad
+// swipes, the amount of traversals in one animation depends on the amount of
+// changes in the most visible desk have been seen. For other desk changes,
+// the amount of traversals in one animation is 1 + number of Replace() calls.
+// Multiple animations may be recorded before the timer stops.
+class DesksController::DeskTraversalsMetricsHelper {
+ public:
+  explicit DeskTraversalsMetricsHelper(DesksController* controller)
+      : controller_(controller) {}
+  DeskTraversalsMetricsHelper(const DeskTraversalsMetricsHelper&) = delete;
+  DeskTraversalsMetricsHelper& operator=(const DeskTraversalsMetricsHelper&) =
+      delete;
+  ~DeskTraversalsMetricsHelper() = default;
+
+  // Starts |timer_| unless it is already running.
+  void MaybeStart() {
+    if (timer_.IsRunning())
+      return;
+
+    count_ = 0;
+    timer_.Start(FROM_HERE, kDeskTraversalsTimeout,
+                 base::BindOnce(&DeskTraversalsMetricsHelper::OnTimerStop,
+                                base::Unretained(this)));
+  }
+
+  // Called when a desk animation is finished. Adds all observed
+  // |visible_desk_changes| to |count_|.
+  void OnAnimationFinished(int visible_desk_changes) {
+    if (timer_.IsRunning())
+      count_ += visible_desk_changes;
+  }
+
+ private:
+  void OnTimerStop() {
+    // If an animation is still running, add its current visible desk change
+    // count to |count_|.
+    DeskAnimationBase* current_animation = controller_->animation();
+    if (current_animation)
+      count_ += current_animation->visible_desk_changes();
+
+    base::UmaHistogramExactLinear(kNumberOfDeskTraversalsHistogramName, count_,
+                                  kDeskTraversalsMaxValue);
+  }
+
+  // Pointer to the DesksController that owns this. Guaranteed to be not
+  // nullptr for the lifetime of |this|.
+  DesksController* const controller_;
+
+  base::OneShotTimer timer_;
+
+  // Tracks the amount of traversals that have happened since |timer_| has
+  // started.
+  int count_ = 0;
+};
+
 DesksController::DesksController()
-    : is_enhanced_desk_animations_(features::IsEnhancedDeskAnimations()) {
+    : is_enhanced_desk_animations_(features::IsEnhancedDeskAnimations()),
+      metrics_helper_(std::make_unique<DeskTraversalsMetricsHelper>(this)) {
   Shell::Get()->activation_client()->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
 
@@ -169,6 +248,20 @@ const Desk* DesksController::GetTargetActiveDesk() const {
   return active_desk();
 }
 
+void DesksController::RestorePrimaryUserActiveDeskIndex(int active_desk_index) {
+  DCHECK_GE(active_desk_index, 0);
+  DCHECK_LT(active_desk_index, int{desks_.size()});
+  user_to_active_desk_index_[Shell::Get()
+                                 ->session_controller()
+                                 ->GetPrimaryUserSession()
+                                 ->user_info.account_id] = active_desk_index;
+  // Following |OnActiveUserSessionChanged| approach, restoring uses
+  // DesksSwitchSource::kUserSwitch as a desk switch source.
+  // TODO(crbug.com/1145404): consider adding an UMA metric for desks
+  // restoring to change the source to kDeskRestored.
+  ActivateDesk(desks_[active_desk_index].get(), DesksSwitchSource::kUserSwitch);
+}
+
 void DesksController::Shutdown() {
   animation_.reset();
 }
@@ -190,14 +283,14 @@ bool DesksController::CanCreateDesks() const {
 }
 
 Desk* DesksController::GetNextDesk() const {
-  int next_index = GetDeskIndex(active_desk_);
+  int next_index = GetDeskIndex(GetTargetActiveDesk());
   if (++next_index >= static_cast<int>(desks_.size()))
     return nullptr;
   return desks_[next_index].get();
 }
 
 Desk* DesksController::GetPreviousDesk() const {
-  int previous_index = GetDeskIndex(active_desk_);
+  int previous_index = GetDeskIndex(GetTargetActiveDesk());
   if (--previous_index < 0)
     return nullptr;
   return desks_[previous_index].get();
@@ -300,10 +393,24 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
     return;
   }
 
+  // When switching desks we want to update window activation when leaving
+  // overview or if nothing was active prior to switching desks. This will
+  // ensure that after switching desks, we will try to focus a candidate window.
+  // We will also update window activation if the currently active window is one
+  // in a switchable container. Otherwise, do not update the window activation.
+  // This will prevent some system UI windows like the app list from closing
+  // when switching desks.
+  aura::Window* active_window = window_util::GetActiveWindow();
+  const bool update_window_activation =
+      in_overview || !active_window ||
+      IsParentSwitchableContainer(active_window);
   const int starting_desk_index = GetDeskIndex(active_desk());
   animation_ = std::make_unique<DeskActivationAnimation>(
-      this, starting_desk_index, target_desk_index, source);
+      this, starting_desk_index, target_desk_index, source,
+      update_window_activation);
   animation_->Launch();
+
+  metrics_helper_->MaybeStart();
 }
 
 bool DesksController::ActivateAdjacentDesk(bool going_left,
@@ -432,6 +539,16 @@ void DesksController::OnRootWindowClosing(aura::Window* root_window) {
     desk->OnRootWindowClosing(root_window);
 }
 
+int DesksController::GetDeskIndex(const Desk* desk) const {
+  for (size_t i = 0; i < desks_.size(); ++i) {
+    if (desk == desks_[i].get())
+      return i;
+  }
+
+  NOTREACHED();
+  return -1;
+}
+
 bool DesksController::BelongsToActiveDesk(aura::Window* window) {
   return desks_util::BelongsToActiveDesk(window);
 }
@@ -458,16 +575,15 @@ void DesksController::OnWindowActivated(ActivationReason reason,
 
 void DesksController::OnActiveUserSessionChanged(const AccountId& account_id) {
   // TODO(afakhry): Remove this when multi-profile support goes away.
-  if (!current_account_id_.is_valid()) {
-    // This is the login of the first primary user. No need to switch any desks.
-    current_account_id_ = account_id;
+  DCHECK(current_account_id_.is_valid());
+  if (current_account_id_ == account_id) {
     return;
   }
 
   user_to_active_desk_index_[current_account_id_] = GetDeskIndex(active_desk_);
   current_account_id_ = account_id;
 
-  // Note the following constraints:
+  // Note the following constraints for secondary users:
   // - Simultaneously logged-in users share the same number of desks.
   // - We don't sync and restore the number of desks nor the active desk
   //   position from previous login sessions.
@@ -490,11 +606,14 @@ void DesksController::OnActiveUserSessionChanged(const AccountId& account_id) {
 }
 
 void DesksController::OnFirstSessionStarted() {
+  current_account_id_ =
+      Shell::Get()->session_controller()->GetActiveAccountId();
   desks_restore_util::RestorePrimaryUserDesks();
 }
 
 void DesksController::OnAnimationFinished(DeskAnimationBase* animation) {
   DCHECK_EQ(animation_.get(), animation);
+  metrics_helper_->OnAnimationFinished(animation->visible_desk_changes());
   animation_.reset();
 }
 
@@ -503,16 +622,6 @@ bool DesksController::HasDesk(const Desk* desk) const {
       desks_.begin(), desks_.end(),
       [desk](const std::unique_ptr<Desk>& d) { return d.get() == desk; });
   return iter != desks_.end();
-}
-
-int DesksController::GetDeskIndex(const Desk* desk) const {
-  for (size_t i = 0; i < desks_.size(); ++i) {
-    if (desk == desks_[i].get())
-      return i;
-  }
-
-  NOTREACHED();
-  return -1;
 }
 
 void DesksController::ActivateDeskInternal(const Desk* desk,
@@ -539,13 +648,21 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
 
   // If in the middle of a window cycle gesture, reset the window cycle list
   // contents so it contains the new active desk's windows.
+  auto* shell = Shell::Get();
   if (features::IsAltTabLimitedToActiveDesk()) {
-    auto* window_cycle_controller = Shell::Get()->window_cycle_controller();
+    auto* window_cycle_controller = shell->window_cycle_controller();
     window_cycle_controller->MaybeResetCycleList();
   }
 
   for (auto& observer : observers_)
     observer.OnDeskActivationChanged(active_desk_, old_active);
+
+  // Only update active desk prefs when a primary user switches a desk.
+  if (features::IsDesksRestoreEnabled() &&
+      shell->session_controller()->IsUserPrimary()) {
+    desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
+        GetDeskIndex(active_desk_));
+  }
 }
 
 void DesksController::RemoveDeskInternal(const Desk* desk,

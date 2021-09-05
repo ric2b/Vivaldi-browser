@@ -115,15 +115,15 @@ void SigninCreateProfileHandler::DoCreateProfile(const base::string16& name,
 
   profile_path_being_created_ = ProfileManager::CreateMultiProfileAsync(
       name, icon_url,
-      base::Bind(&SigninCreateProfileHandler::OnProfileCreated,
-                 weak_ptr_factory_.GetWeakPtr(), create_shortcut));
+      base::BindRepeating(&SigninCreateProfileHandler::OnProfileCreated,
+                          weak_ptr_factory_.GetWeakPtr(), create_shortcut));
 }
 
 void SigninCreateProfileHandler::RequestDefaultProfileIcons(
     const base::ListValue* args) {
   web_ui()->CallJavascriptFunctionUnsafe(
       "cr.webUIListenerCallback", base::Value("profile-icons-received"),
-      *profiles::GetDefaultProfileAvatarIconsAndLabels());
+      *profiles::GetCustomProfileAvatarIconsAndLabels());
 }
 
 void SigninCreateProfileHandler::CreateProfile(const base::ListValue* args) {

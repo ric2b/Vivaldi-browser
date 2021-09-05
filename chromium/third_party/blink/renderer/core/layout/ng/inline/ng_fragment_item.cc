@@ -150,8 +150,8 @@ NGFragmentItem::NGFragmentItem(NGLogicalLineItem&& line_item,
                                WritingMode writing_mode) {
   DCHECK(line_item.CanCreateFragmentItem());
 
-  if (line_item.fragment) {
-    new (this) NGFragmentItem(*line_item.fragment);
+  if (line_item.text_fragment) {
+    new (this) NGFragmentItem(*line_item.text_fragment);
     return;
   }
 
@@ -365,13 +365,13 @@ void NGFragmentItem::LayoutObjectWillBeMoved() const {
 
 inline const LayoutBox* NGFragmentItem::InkOverflowOwnerBox() const {
   if (Type() == kBox)
-    return ToLayoutBoxOrNull(GetLayoutObject());
+    return DynamicTo<LayoutBox>(GetLayoutObject());
   return nullptr;
 }
 
 inline LayoutBox* NGFragmentItem::MutableInkOverflowOwnerBox() {
   if (Type() == kBox)
-    return ToLayoutBoxOrNull(const_cast<LayoutObject*>(layout_object_));
+    return DynamicTo<LayoutBox>(const_cast<LayoutObject*>(layout_object_));
   return nullptr;
 }
 
@@ -619,7 +619,17 @@ PositionWithAffinity NGFragmentItem::PositionForPointInText(
   DCHECK_EQ(cursor.CurrentItem(), this);
   if (IsGeneratedText())
     return PositionWithAffinity();
-  const unsigned text_offset = TextOffsetForPoint(point, cursor.Items());
+  return PositionForPointInText(TextOffsetForPoint(point, cursor.Items()),
+                                cursor);
+}
+
+PositionWithAffinity NGFragmentItem::PositionForPointInText(
+    unsigned text_offset,
+    const NGInlineCursor& cursor) const {
+  DCHECK_EQ(Type(), kText);
+  DCHECK_EQ(cursor.CurrentItem(), this);
+  DCHECK(!IsGeneratedText());
+  DCHECK_LE(text_offset, EndOffset());
   const NGCaretPosition unadjusted_position{
       cursor, NGCaretPositionType::kAtTextOffset, text_offset};
   if (RuntimeEnabledFeatures::BidiCaretAffinityEnabled())

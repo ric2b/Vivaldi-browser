@@ -41,6 +41,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/color_tracking_icon_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_config.h"
@@ -111,23 +112,6 @@ void BuildColumnSet(views::GridLayout* layout) {
                         views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 }
 
-// An image view that shows a vector icon and tracks changes in the theme.
-class VectorIconView : public views::ImageView {
- public:
-  explicit VectorIconView(const gfx::VectorIcon& icon) : icon_(icon) {}
-
-  // views::ImageView
-  void OnThemeChanged() override {
-    ImageView::OnThemeChanged();
-    const SkColor color = GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_DefaultIconColor);
-    SetImage(gfx::CreateVectorIcon(icon_, gfx::kFaviconSize, color));
-  }
-
- private:
-  const gfx::VectorIcon& icon_;
-};
-
 std::unique_ptr<views::ImageView> ImageViewFromImageSkia(
     const gfx::ImageSkia& image_skia) {
   if (image_skia.isNull())
@@ -139,7 +123,8 @@ std::unique_ptr<views::ImageView> ImageViewFromImageSkia(
 
 std::unique_ptr<views::ImageView> ImageViewFromVectorIcon(
     const gfx::VectorIcon& vector_icon) {
-  return std::make_unique<VectorIconView>(vector_icon);
+  return std::make_unique<views::ColorTrackingIconView>(vector_icon,
+                                                        gfx::kFaviconSize);
 }
 
 std::unique_ptr<views::ImageView> GetIconImageViewByName(
@@ -1192,7 +1177,8 @@ void AutofillPopupViewNativeViews::CreateChildViews() {
     }
 
     scroll_view_ = new views::ScrollView();
-    scroll_view_->SetHideHorizontalScrollBar(true);
+    scroll_view_->SetHorizontalScrollBarMode(
+        views::ScrollView::ScrollBarMode::kDisabled);
     body_container_ = scroll_view_->SetContents(std::move(body_container));
     scroll_view_->SetDrawOverflowIndicator(false);
     scroll_view_->ClipHeightTo(0, body_container_->GetPreferredSize().height());

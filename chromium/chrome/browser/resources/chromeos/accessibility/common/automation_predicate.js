@@ -20,22 +20,44 @@ const Role = chrome.automation.RoleType;
 const State = chrome.automation.StateType;
 
 /**
- * A helper to find any actionable children.
+ * A helper to check if |node| or any descendant is actionable.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+const isActionableOrHasActionableDescendant = function(node) {
+  // DefaultActionVerb does not have value 'none' even though it gets set.
+  // Static text nodes are never actionable for the purposes of navigation even
+  // if they have default action verb set.
+  if (node.role !== Role.STATIC_TEXT && node.defaultActionVerb !== 'none') {
+    return true;
+  }
+
+  if (node.clickable) {
+    return true;
+  }
+
+  for (let i = 0; i < node.children.length; i++) {
+    if (isActionableOrHasActionableDescendant(node.children[i])) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * A helper to check if any descendants of |node| are actionable.
  * @param {!AutomationNode} node
  * @return {boolean}
  */
 const hasActionableDescendant = function(node) {
-  // DefaultActionVerb does not have value 'none' even though it gets set.
-  if (node.defaultActionVerb != 'none') {
-    return true;
-  }
-
-  let result = false;
   for (let i = 0; i < node.children.length; i++) {
-    result = hasActionableDescendant(node.children[i]);
+    if (isActionableOrHasActionableDescendant(node.children[i])) {
+      return true;
+    }
   }
 
-  return result;
+  return false;
 };
 
 /**
@@ -54,10 +76,10 @@ const nodeNameContainedInStaticTextChildren = function(node) {
   }
   let nameIndex = 0;
   do {
-    if (child.role != Role.STATIC_TEXT) {
+    if (child.role !== Role.STATIC_TEXT) {
       return false;
     }
-    if (name.substring(nameIndex, nameIndex + child.name.length) !=
+    if (name.substring(nameIndex, nameIndex + child.name.length) !==
         child.name) {
       return false;
     }
@@ -65,7 +87,7 @@ const nodeNameContainedInStaticTextChildren = function(node) {
     // Either space or empty (i.e. end of string).
     const char = name.substring(nameIndex, nameIndex + 1);
     child = child.nextSibling;
-    if ((child && char != ' ') || char != '') {
+    if ((child && char !== ' ') || char !== '') {
       return false;
     }
     nameIndex++;
@@ -98,7 +120,7 @@ AutomationPredicate = class {
     const anyAttribute = params.anyAttribute || {};
     return function(node) {
       return anyRole.some(function(role) {
-        return role == node.role;
+        return role === node.role;
       }) ||
           anyPredicate.some(function(p) {
             return p(node);
@@ -122,7 +144,7 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static editText(node) {
-    return node.role == Role.TEXT_FIELD ||
+    return node.role === Role.TEXT_FIELD ||
         (node.state[State.EDITABLE] && !!node.parent &&
          !node.parent.state[State.EDITABLE]);
   }
@@ -132,7 +154,7 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static image(node) {
-    return node.role == Role.IMAGE && !!(node.name || node.url);
+    return node.role === Role.IMAGE && !!(node.name || node.url);
   }
 
   /**
@@ -158,10 +180,12 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static touchLeaf(node) {
-    return !!(!node.firstChild && node.name) || node.role == Role.BUTTON ||
-        node.role == Role.POP_UP_BUTTON || node.role == Role.PORTAL ||
-        node.role == Role.SLIDER || node.role == Role.TEXT_FIELD ||
-        (node.role == Role.MENU_ITEM && !hasActionableDescendant(node));
+    return !!(!node.firstChild && node.name) || node.role === Role.BUTTON ||
+        node.role === Role.CHECK_BOX || node.role === Role.POP_UP_BUTTON ||
+        node.role === Role.PORTAL || node.role === Role.RADIO_BUTTON ||
+        node.role === Role.SLIDER || node.role === Role.SWITCH ||
+        node.role === Role.TEXT_FIELD ||
+        (node.role === Role.MENU_ITEM && !hasActionableDescendant(node));
   }
 
   /**
@@ -173,9 +197,9 @@ AutomationPredicate = class {
         // A node acting as a label should be a leaf if it has no actionable
         // controls.
         (!!node.labelFor && node.labelFor.length > 0 &&
-         !hasActionableDescendant(node)) ||
+         !isActionableOrHasActionableDescendant(node)) ||
         (!!node.descriptionFor && node.descriptionFor.length > 0 &&
-         !hasActionableDescendant(node)) ||
+         !isActionableOrHasActionableDescendant(node)) ||
         (node.activeDescendantFor && node.activeDescendantFor.length > 0) ||
         node.state[State.INVISIBLE] || node.children.every(function(n) {
           return n.state[State.INVISIBLE];
@@ -197,7 +221,7 @@ AutomationPredicate = class {
    */
   static leafWithWordStop(node) {
     function hasWordStop(node) {
-      if (node.role == Role.INLINE_TEXT_BOX) {
+      if (node.role === Role.INLINE_TEXT_BOX) {
         return node.wordStarts && node.wordStarts.length;
       }
 
@@ -206,7 +230,7 @@ AutomationPredicate = class {
     }
     // Do not include static text leaves, which occur for an en end-of-line.
     return AutomationPredicate.leaf(node) && !node.state[State.INVISIBLE] &&
-        node.role != Role.STATIC_TEXT && hasWordStop(node);
+        node.role !== Role.STATIC_TEXT && hasWordStop(node);
   }
 
   /**
@@ -217,7 +241,7 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static leafOrStaticText(node) {
-    return AutomationPredicate.leaf(node) || node.role == Role.STATIC_TEXT;
+    return AutomationPredicate.leaf(node) || node.role === Role.STATIC_TEXT;
   }
 
   /**
@@ -237,6 +261,12 @@ AutomationPredicate = class {
       return false;
     }
 
+    // Things explicitly marked clickable (used only on ARC++) should be
+    // visited.
+    if (node.clickable) {
+      return true;
+    }
+
     // Given no other information, ChromeVox wants to visit focusable
     // (e.g. tabindex=0) nodes only when it has a name or is a control.
     if (node.state[State.FOCUSABLE] &&
@@ -247,11 +277,11 @@ AutomationPredicate = class {
 
     // Containers who have name from contents should be treated like objects if
     // the contents is all static text and not large.
-    if (node.name && node.nameFrom == 'contents') {
+    if (node.name && node.nameFrom === 'contents') {
       let onlyStaticText = true;
       let textLength = 0;
       for (let i = 0, child; child = node.children[i]; i++) {
-        if (child.role != Role.STATIC_TEXT) {
+        if (child.role !== Role.STATIC_TEXT) {
           onlyStaticText = false;
           break;
         }
@@ -269,8 +299,8 @@ AutomationPredicate = class {
     // cases where an author might make a link with a name of ' '.
     return AutomationPredicate.leafOrStaticText(node) &&
         (/\S+/.test(node.name) ||
-         (node.role != Role.LINE_BREAK && node.role != Role.STATIC_TEXT &&
-          node.role != Role.INLINE_TEXT_BOX));
+         (node.role !== Role.LINE_BREAK && node.role !== Role.STATIC_TEXT &&
+          node.role !== Role.INLINE_TEXT_BOX));
   }
 
   /**
@@ -293,13 +323,13 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static linebreak(first, second) {
-    if (first.nextOnLine == second) {
+    if (first.nextOnLine === second) {
       return false;
     }
 
     const fl = first.unclippedLocation;
     const sl = second.unclippedLocation;
-    return fl.top != sl.top || (fl.top + fl.height != sl.top + sl.height);
+    return fl.top !== sl.top || (fl.top + fl.height !== sl.top + sl.height);
   }
 
   /**
@@ -322,6 +352,14 @@ AutomationPredicate = class {
       return false;
     }
 
+    // Always try to dive into subtrees with actionable descendants for some
+    // roles even if these roles are not naturally containers.
+    if ((node.role === Role.BUTTON || node.role === Role.CHECK_BOX ||
+         node.role === Role.RADIO_BUTTON || node.role === Role.SWITCH) &&
+        hasActionableDescendant(node)) {
+      return true;
+    }
+
     return AutomationPredicate.match({
       anyRole: [
         Role.GENERIC_CONTAINER, Role.DOCUMENT, Role.GROUP, Role.LIST,
@@ -331,8 +369,8 @@ AutomationPredicate = class {
         AutomationPredicate.landmark, AutomationPredicate.structuralContainer,
         function(node) {
           // For example, crosh.
-          return node.role == Role.TEXT_FIELD &&
-              node.restriction == Restriction.READ_ONLY;
+          return node.role === Role.TEXT_FIELD &&
+              node.restriction === Restriction.READ_ONLY;
         },
         function(node) {
           return (
@@ -350,25 +388,29 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static root(node) {
+    if (node.modal) {
+      return true;
+    }
+
     switch (node.role) {
       case Role.WINDOW:
         return true;
       case Role.DIALOG:
-        if (node.root.role != Role.DESKTOP) {
+        if (node.root.role !== Role.DESKTOP) {
           return !!node.modal;
         }
 
         // The below logic handles nested dialogs properly in the desktop tree
         // like that found in a bubble view.
-        return !!node.parent && node.parent.role == Role.WINDOW &&
+        return !!node.parent && node.parent.role === Role.WINDOW &&
             node.parent.children.every(function(child) {
-              return node.role == Role.WINDOW || node.role == Role.DIALOG;
+              return node.role === Role.WINDOW || node.role === Role.DIALOG;
             });
       case Role.TOOLBAR:
-        return node.root.role == Role.DESKTOP &&
+        return node.root.role === Role.DESKTOP &&
             !(node.nextFocus || !node.previousFocus);
       case Role.ROOT_WEB_AREA:
-        if (node.parent && node.parent.role == Role.WEB_VIEW &&
+        if (node.parent && node.parent.role === Role.WEB_VIEW &&
             !node.parent.state[State.FOCUSED]) {
           // If parent web view is not focused, we should allow this root web
           // area to be crossed when performing traversals up the ancestry
@@ -376,10 +418,10 @@ AutomationPredicate = class {
           return false;
         }
         return !node.parent || !node.parent.root ||
-            (node.parent.root.role == Role.DESKTOP &&
-             node.parent.role == Role.WEB_VIEW);
+            (node.parent.root.role === Role.DESKTOP &&
+             node.parent.role === Role.WEB_VIEW);
       default:
-        return !!node.modal;
+        return false;
     }
   }
 
@@ -406,7 +448,7 @@ AutomationPredicate = class {
   static shouldIgnoreNode(node) {
     // Ignore invisible nodes.
     if (node.state[State.INVISIBLE] ||
-        (node.location.height == 0 && node.location.width == 0)) {
+        (node.location.height === 0 && node.location.width === 0)) {
       return true;
     }
 
@@ -418,13 +460,13 @@ AutomationPredicate = class {
     // Ignore nodes acting as labels for another control, that don't
     // have actionable descendants.
     if (node.labelFor && node.labelFor.length > 0 &&
-        !hasActionableDescendant(node)) {
+        !isActionableOrHasActionableDescendant(node)) {
       return true;
     }
 
     // Similarly, ignore nodes acting as descriptions.
     if (node.descriptionFor && node.descriptionFor.length > 0 &&
-        !hasActionableDescendant(node)) {
+        !isActionableOrHasActionableDescendant(node)) {
       return true;
     }
 
@@ -501,16 +543,16 @@ AutomationPredicate = class {
         throw 'Unsupported option.';
       }
 
-      if (dir == Dir.FORWARD) {
+      if (dir === Dir.FORWARD) {
         return function(node) {
           return AutomationPredicate.cellLike(node) &&
-              node.tableCellColumnIndex == colIndex &&
+              node.tableCellColumnIndex === colIndex &&
               node.tableCellRowIndex >= 0;
         };
       } else {
         return function(node) {
           return AutomationPredicate.cellLike(node) &&
-              node.tableCellColumnIndex == colIndex &&
+              node.tableCellColumnIndex === colIndex &&
               node.tableCellRowIndex < tableNode.tableRowCount;
         };
       }
@@ -518,16 +560,16 @@ AutomationPredicate = class {
 
     // Adjust for the next/previous row/col.
     if (opts.row) {
-      rowIndex = dir == Dir.FORWARD ? rowIndex + 1 : rowIndex - 1;
+      rowIndex = dir === Dir.FORWARD ? rowIndex + 1 : rowIndex - 1;
     }
     if (opts.col) {
-      colIndex = dir == Dir.FORWARD ? colIndex + 1 : colIndex - 1;
+      colIndex = dir === Dir.FORWARD ? colIndex + 1 : colIndex - 1;
     }
 
     return function(node) {
       return AutomationPredicate.cellLike(node) &&
-          node.tableCellColumnIndex == colIndex &&
-          node.tableCellRowIndex == rowIndex;
+          node.tableCellColumnIndex === colIndex &&
+          node.tableCellRowIndex === rowIndex;
     };
   }
 
@@ -539,7 +581,7 @@ AutomationPredicate = class {
    */
   static makeHeadingPredicate(level) {
     return function(node) {
-      return node.role == Role.HEADING && node.hierarchicalLevel == level;
+      return node.role === Role.HEADING && node.hierarchicalLevel === level;
     };
   }
 
@@ -551,8 +593,9 @@ AutomationPredicate = class {
    */
   static contextualBraille(node) {
     return node.parent != null &&
-        ((node.parent.role == Role.ROW && AutomationPredicate.cellLike(node)) ||
-         (node.parent.role == Role.TREE &&
+        ((node.parent.role === Role.ROW &&
+          AutomationPredicate.cellLike(node)) ||
+         (node.parent.role === Role.TREE &&
           node.parent.state[State.HORIZONTAL]));
   }
 
@@ -576,8 +619,8 @@ AutomationPredicate = class {
              chrome.automation.ActionType.SCROLL_FORWARD) ||
          node.standardActions.includes(
              chrome.automation.ActionType.SCROLL_BACKWARD)) &&
-        (node.role == Role.GRID || node.role == Role.LIST ||
-         node.role == Role.POP_UP_BUTTON || node.role == Role.SCROLL_VIEW);
+        (node.role === Role.GRID || node.role === Role.LIST ||
+         node.role === Role.POP_UP_BUTTON || node.role === Role.SCROLL_VIEW);
   }
 
   /**
@@ -585,7 +628,7 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static math(node) {
-    return node.role == Role.MATH || !!node.htmlAttributes['data-mathml'];
+    return node.role === Role.MATH || !!node.htmlAttributes['data-mathml'];
   }
 
   /**
@@ -597,7 +640,7 @@ AutomationPredicate = class {
    */
   static shouldOnlyOutputSelectionChangeInBraille(node) {
     return node.state[State.RICHLY_EDITABLE] && node.state[State.FOCUSED] &&
-        node.role == Role.LOG;
+        node.role === Role.LOG;
   }
 
   /**
@@ -606,8 +649,8 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static ignoreDuringJump(node) {
-    return node.role == Role.GENERIC_CONTAINER ||
-        node.role == Role.STATIC_TEXT || node.role == Role.INLINE_TEXT_BOX;
+    return node.role === Role.GENERIC_CONTAINER ||
+        node.role === Role.STATIC_TEXT || node.role === Role.INLINE_TEXT_BOX;
   }
 
   /**
@@ -741,7 +784,7 @@ AutomationPredicate.clickable = AutomationPredicate.match({
   anyPredicate: [
     AutomationPredicate.button, AutomationPredicate.link,
     (node) => {
-      return node.defaultActionVerb ==
+      return node.defaultActionVerb ===
           chrome.automation.DefaultActionVerb.CLICK;
     }
   ],

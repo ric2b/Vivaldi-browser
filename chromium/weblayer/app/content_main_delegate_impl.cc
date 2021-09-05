@@ -144,10 +144,6 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
   // TODO(crbug.com/1025610): make notifications work with WebLayer.
   // This also turns off Push messaging.
   cl->AppendSwitch(::switches::kDisableNotifications);
-  // TODO(crbug.com/1057099): make presentation-api work with WebLayer.
-  cl->AppendSwitch(::switches::kDisablePresentationAPI);
-  // TODO(crbug.com/1057100): make remote-playback-api work with WebLayer.
-  cl->AppendSwitch(::switches::kDisableRemotePlaybackAPI);
 
   std::vector<base::Feature> enabled_features = {};
   std::vector<base::Feature> disabled_features = {
@@ -177,8 +173,8 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
     ::features::kDisableDeJelly,
     ::features::kDynamicColorGamut,
 #else
-    // TODO(crbug.com/1131021): Support SMS Receiver on WebLayer.
-    ::features::kSmsReceiver,
+    // TODO(crbug.com/1131021): Support WebOTP Service on WebLayer.
+    ::features::kWebOTP,
 #endif
   };
 

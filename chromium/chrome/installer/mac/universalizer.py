@@ -218,7 +218,8 @@ def _universalize(input_paths, output_path, root):
     if type == 'file':
         identical = True
         for index in range(1, len(input_paths)):
-            if not filecmp.cmp(input_paths[0], input_paths[index]):
+            if (not filecmp.cmp(input_paths[0], input_paths[index]) and
+                os.path.basename(input_paths[index]).find('Sparkle') == -1):
                 identical = False
                 if (os.path.basename(output_path) == 'Info.plist' or
                         os.path.basename(output_path).endswith('-Info.plist')):

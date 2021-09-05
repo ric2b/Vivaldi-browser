@@ -25,32 +25,17 @@ class Widget;
 // survey to users. The webpage has additional logic to provide information to
 // this dialog via URL fragments, such as whether a survey is ready to be shown
 // to the user.
-class HatsNextWebDialog : public ui::WebDialogDelegate,
-                          public views::BubbleDialogDelegateView,
+class HatsNextWebDialog : public views::BubbleDialogDelegateView,
                           public content::WebContentsDelegate,
                           public ProfileObserver {
  public:
-  HatsNextWebDialog(Browser* browser, const std::string& trigger_id);
+  HatsNextWebDialog(Browser* browser,
+                    const std::string& trigger_id,
+                    base::OnceClosure success_callback,
+                    base::OnceClosure failure_callback);
   ~HatsNextWebDialog() override;
   HatsNextWebDialog(const HatsNextWebDialog&) = delete;
   HatsNextWebDialog& operator=(const HatsNextWebDialog&) = delete;
-
-  // ui::WebDialogDelegate:
-  ui::ModalType GetDialogModalType() const override;
-  base::string16 GetDialogTitle() const override;
-  GURL GetDialogContentURL() const override;
-  void GetWebUIMessageHandlers(
-      std::vector<content::WebUIMessageHandler*>* handlers) const override;
-  void GetDialogSize(gfx::Size* size) const override;
-  std::string GetDialogArgs() const override;
-  void OnDialogClosed(const std::string& json_retval) override;
-  void OnCloseContents(content::WebContents* source,
-                       bool* out_close_dialog) override;
-  bool ShouldShowCloseButton() const override;
-  bool ShouldShowDialogTitle() const override;
-  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
-                         const content::ContextMenuParams& params) override;
-  ui::WebDialogDelegate::FrameKind GetWebDialogFrameKind() const override;
 
   // BubbleDialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
@@ -61,18 +46,25 @@ class HatsNextWebDialog : public ui::WebDialogDelegate,
  protected:
   friend class MockHatsNextWebDialog;
   FRIEND_TEST_ALL_PREFIXES(HatsNextWebDialogBrowserTest, SurveyLoaded);
+  FRIEND_TEST_ALL_PREFIXES(HatsNextWebDialogBrowserTest, DialogResize);
+  FRIEND_TEST_ALL_PREFIXES(HatsNextWebDialogBrowserTest, MaximumSize);
 
   HatsNextWebDialog(Browser* browser,
                     const std::string& trigger_id,
                     const GURL& hats_survey_url_,
-                    const base::TimeDelta& timeout);
+                    const base::TimeDelta& timeout,
+                    base::OnceClosure success_callback,
+                    base::OnceClosure failure_callback);
 
-  class WebContentsDelegate;
-  class WebContentsObserver;
+  class HatsWebView;
 
-  // Closes the HaTS Next widget and informs the service that the dialog was
-  // shut.
-  void CloseWidgetAndInformService();
+  // Returns the URL for the HaTS wrapper website, with the appropriate query
+  // parameters to request the triggered survey.
+  GURL GetParameterizedHatsURL() const;
+
+  // Called by |loading_timer_| after |timeout_| time has passed without getting
+  // an appropriate response from the HaTS service after creating the widget.
+  void LoadTimedOut();
 
   // Fired by the observer when the survey page has pushed state to the window
   // via URL fragments.
@@ -90,9 +82,9 @@ class HatsNextWebDialog : public ui::WebDialogDelegate,
   // closed. Virtual to allow mocking in tests.
   virtual void CloseWidget();
 
-  // Updates dialog size, provided via state update by the webpage. Virtual to
-  // allow mocking in tests.
-  virtual void UpdateWidgetSize(gfx::Size size);
+  // Updates dialog size to desired contents size. Virtual to allow mocking in
+  // tests.
+  virtual void UpdateWidgetSize();
 
   // Returns whether the dialog is still waiting for the survey to load.
   bool IsWaitingForSurveyForTesting();
@@ -109,19 +101,26 @@ class HatsNextWebDialog : public ui::WebDialogDelegate,
   // The HaTS Next survey trigger ID that is provided to the HaTS webpage.
   const std::string trigger_id_;
 
-  // The size of the dialog. Desired dimensions are provided by the site loaded
-  // in the web contents. Initialised to arbitrary non-zero value as creation
-  // of 0 sized windows is disallowed on OSX.
-  gfx::Size size_ = gfx::Size(10, 10);
+  // Whether the web contents has communicated a loaded state.
+  bool received_survey_loaded_ = false;
 
-  views::WebDialogView* web_view_ = nullptr;
+  // The maximum size of the dialog should never exceed the dummy window size
+  // provided to the HaTS library by the wrapper website. This is defined
+  // in the website source at google3/chrome/hats/website/www/index.html. The
+  // minimum size is set at an arbitrary non-zero size as creation of zero sized
+  // windows is disallowed on OSX.
+  static constexpr gfx::Size kMinSize = gfx::Size(10, 10);
+  static constexpr gfx::Size kMaxSize = gfx::Size(800, 600);
+
+  views::WebView* web_view_ = nullptr;
   views::Widget* widget_ = nullptr;
 
-  std::unique_ptr<WebContentsDelegate> web_contents_delegate_;
-  std::unique_ptr<WebContentsObserver> web_contents_observer_;
   GURL hats_survey_url_;
 
   base::TimeDelta timeout_;
+
+  base::OnceClosure success_callback_;
+  base::OnceClosure failure_callback_;
 
   base::WeakPtrFactory<HatsNextWebDialog> weak_factory_{this};
 };

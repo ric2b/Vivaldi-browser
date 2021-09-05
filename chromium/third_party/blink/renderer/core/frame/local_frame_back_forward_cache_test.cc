@@ -41,7 +41,9 @@ class TestLocalFrameBackForwardCacheClient
 
   ~TestLocalFrameBackForwardCacheClient() override = default;
 
-  void EvictFromBackForwardCache() override { quit_closure_.Run(); }
+  void EvictFromBackForwardCache(mojom::RendererEvictionReason) override {
+    quit_closure_.Run();
+  }
 
   void WaitUntilEvictedFromBackForwardCache() {
     base::RunLoop run_loop;
@@ -79,7 +81,7 @@ TEST_F(LocalFrameBackForwardCacheTest, EvictionOnV8ExecutionAtMicrotask) {
   web_view_helper.Initialize(
       &web_frame_client, nullptr, nullptr,
       [](WebSettings* settings) { settings->SetJavaScriptEnabled(true); });
-  web_view_helper.Resize(WebSize(640, 480));
+  web_view_helper.Resize(gfx::Size(640, 480));
 
   LocalFrame* frame = web_view_helper.GetWebView()->MainFrameImpl()->GetFrame();
 
@@ -100,7 +102,7 @@ TEST_F(LocalFrameBackForwardCacheTest, EvictionOnV8ExecutionAtMicrotask) {
       [](LocalFrame* frame) {
         ClassicScript::CreateUnspecifiedScript(
             ScriptSourceCode("console.log('hi');"))
-            ->RunScript(frame);
+            ->RunScript(frame->DomWindow());
       },
       frame));
   frame_host.WaitUntilEvictedFromBackForwardCache();

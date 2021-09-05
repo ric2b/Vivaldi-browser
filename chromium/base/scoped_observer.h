@@ -7,12 +7,16 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <vector>
 
 #include "base/check.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 
+// This class is DEPRECATED. Instead please use one of:
+// - base::ScopedObservation for observing a single source.
+// - base::ScopedMultiSourceObservation for observing multiple sources.
+//
 // ScopedObserver is used to keep track of the set of sources an object has
 // attached itself to as an observer. When ScopedObserver is destroyed it
 // removes the object as an observer from all sources it has been added to.
@@ -56,7 +60,7 @@ class ScopedObserver {
 
   // Remove the object passed to the constructor as an observer from |source|.
   void Remove(Source* source) {
-    auto it = std::find(sources_.begin(), sources_.end(), source);
+    auto it = base::ranges::find(sources_, source);
     DCHECK(it != sources_.end());
     sources_.erase(it);
     (source->*RemoveObsFn)(observer_);

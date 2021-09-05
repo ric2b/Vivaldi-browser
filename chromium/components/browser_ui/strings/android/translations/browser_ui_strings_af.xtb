@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Werf <ph name="SITE_NAME" /> bygevoeg</translation>
 <translation id="1383876407941801731">Soek</translation>
 <translation id="1384959399684842514">Aflaai is onderbreek</translation>
+<translation id="1415402041810619267">URL is afgekap</translation>
 <translation id="1431402976894535801">Keer dat werwe weet wanneer jy teenwoordig is</translation>
 <translation id="1446450296470737166">Laat vol MIDI-toestelbeheer toe</translation>
 <translation id="1509960214886564027">Kenmerke op baie werwe kan breek</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Toegang tot jou kamera</translation>
 <translation id="1660204651932907780">Laat werwe toe om klank te speel (aanbeveel)</translation>
 <translation id="1677097821151855053">Webkoekies en ander werfdata word gebruik om jou te onthou, byvoorbeeld om jou aan te meld of om advertensies te personaliseer. Sien <ph name="BEGIN_LINK" />Instellings<ph name="END_LINK" /> om webkoekies vir alle werwe te bestuur.</translation>
 <translation id="1688867105868176567">Vee werfdata uit?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Werf-URL</translation>
 <translation id="2025115093177348061">Aangevulde realiteit</translation>
 <translation id="2030769033451695672">Tik om na <ph name="URL_OF_THE_CURRENT_TAB" /> terug te keer</translation>
+<translation id="2054665754582400095">Jou teenwoordigheid</translation>
 <translation id="2079545284768500474">Ontdoen</translation>
 <translation id="2091887806945687916">Klank</translation>
 <translation id="2107397443965016585">Vra voordat jy werwe toelaat om beskermde inhoud te speel (aanbeveel)</translation>
 <translation id="2146738493024040262">Maak kitsprogram oop</translation>
 <translation id="2148716181193084225">Vandag</translation>
 <translation id="2182457891543959921">Vra voordat werwe toegelaat word om 'n 3D-kaart van jou omgewing te skep of kameraposisie na te spoor (aanbeveel)</translation>
-<translation id="2187243482123994665">Gebruikerteenwoordigheid</translation>
 <translation id="2212565012507486665">Laat webkoekies toe</translation>
 <translation id="2228071138934252756">Om <ph name="APP_NAME" /> toegang tot jou kamera te gee, moet jy kamera ook in <ph name="BEGIN_LINK" />Android-instellings<ph name="END_LINK" /> aanskakel.</translation>
 <translation id="2241634353105152135">Net een keer</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" /> word toegelaat}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" /> word toegelaat}}</translation>
 <translation id="2434158240863470628">Aflaai is voltooi <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Liggingtoegang</translation>
 <translation id="2482878487686419369">Kennisgewings</translation>
 <translation id="2490684707762498678">Bestuur deur <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Hulp en terugvoer</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="3277252321222022663">Laat werwe toegang tot sensors toe (aanbeveel)</translation>
 <translation id="3295602654194328831">Versteek inligting</translation>
+<translation id="3328801116991980348">Werfinligting</translation>
 <translation id="3333961966071413176">Alle kontakte</translation>
 <translation id="3386292677130313581">Vra voordat werwe toegelaat word om jou ligging te ken (aanbeveel)</translation>
 <translation id="3538390592868664640">Verhoed werwe om 'n 3D-kaart van jou omgewing te skep of kameraposisie na te spoor</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Laat werwe toe om beskermde inhoud te speel</translation>
 <translation id="4468959413250150279">Demp klank vir 'n spesifieke werf.</translation>
 <translation id="4479647676395637221">Vra eers voordat werwe toegelaat word om jou kamera te gebruik (aanbeveel)</translation>
+<translation id="4505788138578415521">URL is uitgevou</translation>
 <translation id="4534723447064627427">Om <ph name="APP_NAME" /> toegang tot jou mikrofoon te gee, moet jy mikrofoon ook in <ph name="BEGIN_LINK" />Android-instellings<ph name="END_LINK" /> aanskakel.</translation>
 <translation id="4570913071927164677">Besonderhede</translation>
 <translation id="4645575059429386691">Deur jou ouer bestuur</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289">Skakel toestemmings vir <ph name="APP_NAME" /> in <ph name="BEGIN_LINK" />Android-instellings<ph name="END_LINK" /> aan.</translation>
-<translation id="945632385593298557">Toegang tot jou mikrofoon</translation>
 <translation id="965817943346481315">Blokkeer as werf indringerige of misleidende advertensies wys (aanbeveel)</translation>
 <translation id="967624055006145463">Data geberg</translation>
 </translationbundle>

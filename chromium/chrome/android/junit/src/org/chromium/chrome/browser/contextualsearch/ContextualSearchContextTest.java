@@ -84,13 +84,13 @@ public class ContextualSearchContextTest {
 
     private void setupResolvingTapInBarak() {
         setupTapInBarack();
-        mContext.setResolveProperties(HOME_COUNTRY, true, 0, 0, "", "", false);
+        mContext.setResolveProperties(HOME_COUNTRY, true, 0, 0, "", "");
     }
 
     private void setupResolvingTapInObama() {
         int obamaBeforeMOffset = "Now Barack Oba".length();
         mContext.setSurroundingText(SAMPLE_TEXT, obamaBeforeMOffset, obamaBeforeMOffset);
-        mContext.setResolveProperties(HOME_COUNTRY, true, 0, 0, "", "", false);
+        mContext.setResolveProperties(HOME_COUNTRY, true, 0, 0, "", "");
     }
 
     @Test
@@ -225,14 +225,6 @@ public class ContextualSearchContextTest {
         assertEquals("Clinton", mContext.getWordPreviousToTap());
         assertEquals("is", mContext.getWordTapped());
         assertEquals("ambiguous", mContext.getWordFollowingTap());
-    }
-
-    @Test
-    @Feature({"ContextualSearch", "Context"})
-    public void testAllowInsertionPointSelection() {
-        String sample = "sample";
-        mContext.setSurroundingText(UTF_8, sample, sample.length(), sample.length(), true, false);
-        assertTrue(mContext.hasValidSelection());
     }
 
     @Test

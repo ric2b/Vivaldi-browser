@@ -25,7 +25,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -63,6 +63,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -630,7 +631,7 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
   Profile* incognito_profile = incognito_browser->profile();
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory;
   url_loader_factory.Bind(extensions::CreateExtensionNavigationURLLoaderFactory(
-      incognito_profile, base::kInvalidUkmSourceId,
+      incognito_profile, ukm::kInvalidSourceIdObj,
       false /* is_web_view_request */));
 
   // Verify that the factory works fine while the profile is still alive.
@@ -909,8 +910,65 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
   Profile* otr_profile =
       browser()->profile()->GetOffTheRecordProfile(otr_profile_id);
 
-  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
-                         otr_profile, /* user_gesture = */ true)));
-  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
-                         otr_profile, /* user_gesture = */ false)));
+  EXPECT_EQ(Browser::BrowserCreationStatus::kErrorProfileUnsuitable,
+            Browser::GetBrowserCreationStatusForProfile(otr_profile));
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+class EphemeralGuestProfileBrowserTest : public ProfileBrowserTest {
+ public:
+  EphemeralGuestProfileBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kEnableEphemeralGuestProfilesOnDesktop);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests profile type functions on an ephemeral Guest profile.
+IN_PROC_BROWSER_TEST_F(EphemeralGuestProfileBrowserTest, TestProfileType) {
+  Profile* guest_profile = CreateGuestBrowser()->profile();
+
+  EXPECT_TRUE(guest_profile->IsRegularProfile());
+  EXPECT_FALSE(guest_profile->IsOffTheRecord());
+  EXPECT_FALSE(guest_profile->IsGuestSession());
+  EXPECT_TRUE(guest_profile->IsEphemeralGuestProfile());
+}
+
+// Tests if ephemeral Guest profile paths are persistent as long as one does not
+// close all Guest browsers.
+IN_PROC_BROWSER_TEST_F(EphemeralGuestProfileBrowserTest,
+                       TestProfilePathIsStableWhileNotClosed) {
+  Browser* guest1 = CreateGuestBrowser();
+  base::FilePath guest_path1 = guest1->profile()->GetPath();
+
+  Browser* guest2 = CreateGuestBrowser();
+  base::FilePath guest_path2 = guest2->profile()->GetPath();
+
+  EXPECT_EQ(guest_path1, guest_path2);
+
+  CloseBrowserSynchronously(guest1);
+
+  Browser* guest3 = CreateGuestBrowser();
+  base::FilePath guest_path3 = guest3->profile()->GetPath();
+
+  EXPECT_EQ(guest_path1, guest_path3);
+}
+
+// Tests if closing all ephemeral Guest profiles will result in a new path for
+// the next ephemeral Guest profile.
+IN_PROC_BROWSER_TEST_F(EphemeralGuestProfileBrowserTest,
+                       TestGuestGetsNewPathAfterClosing) {
+  Browser* guest1 = CreateGuestBrowser();
+  base::FilePath guest_path1 = guest1->profile()->GetPath();
+
+  CloseBrowserSynchronously(guest1);
+
+  Browser* guest2 = CreateGuestBrowser();
+  base::FilePath guest_path2 = guest2->profile()->GetPath();
+
+  EXPECT_NE(guest_path1, guest_path2);
+}
+
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)

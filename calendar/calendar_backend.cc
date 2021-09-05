@@ -317,7 +317,7 @@ void CalendarBackend::CreateCalendarEvent(
 
     result->success = true;
     EventResult res = FillEvent(id);
-    result->createdEvent = res;
+    result->event = res;
     NotifyEventCreated(res);
   } else {
     result->success = false;
@@ -362,7 +362,7 @@ void CalendarBackend::CreateRecurrenceException(
       NotifyEventModified(event_row);
     }
     result->success = true;
-    result->createdEvent = event_row;
+    result->event = event_row;
   } else {
     result->success = false;
   }
@@ -532,7 +532,7 @@ void CalendarBackend::GetAllCalendars(
 
 void CalendarBackend::UpdateEvent(EventID event_id,
                                   const EventRow& event,
-                                  std::shared_ptr<UpdateEventResult> result) {
+                                  std::shared_ptr<EventResultCB> result) {
   if (!db_) {
     result->success = false;
     return;
@@ -665,6 +665,9 @@ void CalendarBackend::UpdateEvent(EventID event_id,
     }
 
     result->success = db_->UpdateEventRow(event_row);
+
+    EventResult updatedEvent = FillEvent(event_id);
+    result->event = updatedEvent;
 
     if (result->success) {
       EventRow changed_row;

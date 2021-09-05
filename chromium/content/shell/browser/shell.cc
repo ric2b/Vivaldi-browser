@@ -40,7 +40,7 @@
 #include "content/shell/common/shell_switches.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 
 namespace content {
 
@@ -494,8 +494,13 @@ blink::mojom::DisplayMode Shell::GetDisplayMode(
 void Shell::RequestToLockMouse(WebContents* web_contents,
                                bool user_gesture,
                                bool last_unlocked_by_target) {
-  web_contents->GotResponseToLockMouseRequest(
-      blink::mojom::PointerLockResult::kSuccess);
+  // Give the platform a chance to handle the lock request, if it doesn't
+  // indicate it handled it, allow the request.
+  if (!g_platform->HandleRequestToLockMouse(this, web_contents, user_gesture,
+                                            last_unlocked_by_target)) {
+    web_contents->GotResponseToLockMouseRequest(
+        blink::mojom::PointerLockResult::kSuccess);
+  }
 }
 
 void Shell::Close() {
@@ -530,25 +535,6 @@ JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
   if (!dialog_manager_)
     dialog_manager_ = std::make_unique<ShellJavaScriptDialogManager>();
   return dialog_manager_.get();
-}
-
-std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
-    RenderFrameHost* frame,
-    const BluetoothChooser::EventHandler& event_handler) {
-  return g_platform->RunBluetoothChooser(this, frame, event_handler);
-}
-
-class AlwaysAllowBluetoothScanning : public BluetoothScanningPrompt {
- public:
-  explicit AlwaysAllowBluetoothScanning(const EventHandler& event_handler) {
-    event_handler.Run(content::BluetoothScanningPrompt::Event::kAllow);
-  }
-};
-
-std::unique_ptr<BluetoothScanningPrompt> Shell::ShowBluetoothScanningPrompt(
-    RenderFrameHost* frame,
-    const BluetoothScanningPrompt::EventHandler& event_handler) {
-  return std::make_unique<AlwaysAllowBluetoothScanning>(event_handler);
 }
 
 #if defined(OS_MAC)

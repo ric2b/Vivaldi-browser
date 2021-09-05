@@ -20,10 +20,12 @@
 #include "content/browser/initiator_csp_context.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/navigation_subresource_loader_params.h"
+#include "content/browser/prerender/prerender_host.h"
 #include "content/browser/renderer_host/cross_origin_opener_policy_status.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/navigation_throttle_runner.h"
+#include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_package/web_bundle_handle.h"
 #include "content/common/content_export.h"
@@ -322,6 +324,7 @@ class CONTENT_EXPORT NavigationRequest
   void SetIsOverridingUserAgent(bool override_ua) override;
   bool GetIsOverridingUserAgent() override;
   void SetSilentlyIgnoreErrors() override;
+  network::mojom::WebSandboxFlags SandboxFlagsToCommit() override;
 
   // Called on the UI thread by the Navigator to start the navigation.
   // The NavigationRequest can be deleted while BeginNavigation() is called.
@@ -354,6 +357,10 @@ class CONTENT_EXPORT NavigationRequest
       bool did_same_site_proactive_browsing_instance_swap) {
     did_same_site_proactive_browsing_instance_swap_ =
         did_same_site_proactive_browsing_instance_swap;
+  }
+
+  void set_is_cross_browsing_instance(bool is_cross_browsing_instance) {
+    commit_params_->is_cross_browsing_instance = is_cross_browsing_instance;
   }
 
   NavigationURLLoader* loader_for_testing() const { return loader_.get(); }
@@ -393,6 +400,15 @@ class CONTENT_EXPORT NavigationRequest
     return response_head_.get();
   }
 
+  const mojo::DataPipeConsumerHandle& response_body() {
+    DCHECK_EQ(state_, WILL_PROCESS_RESPONSE);
+    return response_body_.get();
+  }
+
+  mojo::ScopedDataPipeConsumerHandle& mutable_response_body_for_testing() {
+    return response_body_;
+  }
+
   void SetWaitingForRendererResponse();
 
   // Notifies the NavigatorDelegate the navigation started. This should be
@@ -416,12 +432,10 @@ class CONTENT_EXPORT NavigationRequest
   // redirects. |post_redirect_process| is the renderer process that should
   // handle the navigation following the redirect if it can be handled by an
   // existing RenderProcessHost. Otherwise, it should be null.
-  // |is_coop_coep_cross_origin_isolated| &
-  // |coop_coep_cross_origin_isolated_origin| is the new COOP/COEP info
-  // extracted from the redirect response.
+  // |cross_origin_isolated_info| is the new COOP/COEP info extracted from the
+  // redirect response.
   void UpdateSiteInfo(
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>& coop_coep_cross_origin_isolated_origin,
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info,
       RenderProcessHost* post_redirect_process);
 
   int nav_entry_id() const { return nav_entry_id_; }
@@ -543,6 +557,11 @@ class CONTENT_EXPORT NavigationRequest
   void SetNavigationClient(
       mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client);
 
+  // Whether the new document loaded will be loaded from an MHTML archive.
+  // Contrary to IsForMhtmlSubframe(), this isn't scoped to subframe, but can't
+  // be called prior to receiving the final response.
+  bool IsLoadedFromMhtmlArchive();
+
   // Whether the new document created by this navigation will be loaded from a
   // MHTML document. In this case, the navigation will commit in the main frame
   // process without needing any network requests.
@@ -635,6 +654,11 @@ class CONTENT_EXPORT NavigationRequest
   void SetRequiredCSP(network::mojom::ContentSecurityPolicyPtr csp);
   network::mojom::ContentSecurityPolicyPtr TakeRequiredCSP();
 
+  std::unique_ptr<PolicyContainerHost> TakePolicyContainerHost();
+  PolicyContainerHost* policy_container_host() {
+    return policy_container_host_.get();
+  }
+
   CrossOriginEmbedderPolicyReporter* coep_reporter() {
     return coep_reporter_.get();
   }
@@ -656,14 +680,6 @@ class CONTENT_EXPORT NavigationRequest
   // the committed document.
   std::vector<mojo::PendingReceiver<network::mojom::CookieAccessObserver>>
   TakeCookieObservers() WARN_UNUSED_RESULT;
-
-  // The sandbox policy of the document to be loaded. This returns nullopt for
-  // navigations that haven't reached the 'ReadyToCommit' stage yet. In
-  // particular, this returns nullopt for same-document navigations.
-  //
-  // TODO(arthursonzogni): After RenderDocument, this can be computed and stored
-  // directly into the RenderDocumentHost.
-  base::Optional<network::mojom::WebSandboxFlags> SandboxFlagsToCommit();
 
   // Returns the coop status information relevant to the current navigation.
   CrossOriginOpenerPolicyStatus& coop_status() { return coop_status_; }
@@ -692,18 +708,14 @@ class CONTENT_EXPORT NavigationRequest
   // called after a response has been delivered for processing, or after the
   // navigation fails with an error page.
   //
-  // TODO(lukasza, arthursonzogni): https://crbug.com/888079: Once the browser
-  // process is able to calculate the exact origin to commit, the method below
-  // should be renamed to something like GetOriginToCommit().
+  // TODO(lukasza, arthursonzogni): https://crbug.com/888079: The browser and
+  // blink are both computing the origin to commit. This method should be
+  // renamed GetOriginToCommit() and the value pushed to blink.
   url::Origin GetOriginForURLLoaderFactory();
 
   // Add information about this NavigationRequest to |traced_value| for
   // tracing purposes.
   void AsValueInto(base::trace_event::TracedValue* traced_value);
-
-  mojo::ScopedDataPipeConsumerHandle& mutable_response_body_for_testing() {
-    return response_body_;
-  }
 
   // If this navigation fails with net::ERR_BLOCKED_BY_CLIENT, act as if it were
   // cancelled by the user and do not commit an error page.
@@ -935,13 +947,11 @@ class CONTENT_EXPORT NavigationRequest
   // no live process that can be used. In that case, a suitable renderer process
   // will be created at commit time.
   //
-  // |is_coop_coep_cross_origin_isolated| &
-  // |coop_coep_cross_origin_isolated_origin| is the new COOP/COEP info
-  // extracted from the redirect response.
+  // |cross_origin_isolated_info| is the new COOP/COEP info extracted from the
+  // redirect response.
   void WillRedirectRequest(
       const GURL& new_referrer_url,
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>& coop_coep_cross_origin_isolated_origin,
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info,
       RenderProcessHost* post_redirect_process);
 
   // Called when the URLRequest will fail.
@@ -972,9 +982,8 @@ class CONTENT_EXPORT NavigationRequest
   // Helper function that computes the SiteInfo for |common_params_.url|.
   // Note: |site_info_| should only be updated with the result of this function.
   SiteInfo GetSiteInfoForCommonParamsURL(
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>&
-          coop_coep_cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo&
+          cross_origin_isolated_origin_status);
 
   // Updates the state of the navigation handle after encountering a server
   // redirect.
@@ -1087,9 +1096,10 @@ class CONTENT_EXPORT NavigationRequest
   // NavigationRequest is in.
   NavigationControllerImpl* GetNavigationController();
 
-  // Compute the sandbox policy of the document to be loaded. Called once when
-  // reaching the 'ReadyToCommit' stage.
-  network::mojom::WebSandboxFlags ComputeSandboxFlagsToCommit();
+  // Compute the sandbox policy of the document to be loaded. This is called
+  // once the final response is known. It is based on the current FramePolicy
+  // and the response's CSP.
+  void ComputeSandboxFlagsToCommit();
 
   // DCHECK that tranistioning from the current state to |state| valid. This
   // does nothing in non-debug builds.
@@ -1106,6 +1116,11 @@ class CONTENT_EXPORT NavigationRequest
   // If appropriate, this applies (2), deletes |this|, and returns true.
   // In that case, the caller must immediately return.
   bool MaybeCancelFailedNavigation();
+
+  // Prerender2:
+  // Returns true if this navigation will activate a prerendered page. It is
+  // only meaningful to call this after BeginNavigation().
+  bool IsPrerenderedPageActivation() const;
 
   // Never null. The pointee node owns this navigation request instance.
   FrameTreeNode* const frame_tree_node_;
@@ -1433,6 +1448,11 @@ class CONTENT_EXPORT NavigationRequest
   // the RenderFrameHost at DidCommitNavigation time.
   network::mojom::ContentSecurityPolicyPtr required_csp_;
 
+  // Holds the PolicyContainerHost for the new document that will be created by
+  // this navigation. It is moved into the RenderFrameHostImpl at
+  // DidCommitNavigation time.
+  std::unique_ptr<PolicyContainerHost> policy_container_host_;
+
   std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter_;
 
   std::unique_ptr<PeakGpuMemoryTracker> loading_mem_tracker_ = nullptr;
@@ -1465,16 +1485,23 @@ class CONTENT_EXPORT NavigationRequest
   // net::ERR_BLOCKED_BY_CLIENT.
   bool silently_ignore_blocked_by_client_ = false;
 
+  // Whether the new document will be loaded from an MHTML archive.
+  bool is_loaded_from_mhtml_archive_ = false;
+
   // Observers listening to cookie access notifications for the network requests
   // made by this navigation.
   mojo::ReceiverSet<network::mojom::CookieAccessObserver> cookie_observers_;
 
-  // The sandbox flags of the document to be loaded. This is computed at
-  // 'ReadyToCommit' time.
+  // The sandbox flags of the document to be loaded.
   base::Optional<network::mojom::WebSandboxFlags> sandbox_flags_to_commit_;
 
   OptInOriginIsolationEndResult origin_isolation_end_result_ =
       OptInOriginIsolationEndResult::kNotRequestedAndNotIsolated;
+
+  // Prerender2:
+  // This is valid only when this navigation will activate the prerendered
+  // page.
+  std::unique_ptr<PrerenderHost> prerender_host_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 

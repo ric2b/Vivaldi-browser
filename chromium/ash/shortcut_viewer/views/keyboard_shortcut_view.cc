@@ -32,6 +32,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -184,8 +185,8 @@ views::Widget* KeyboardShortcutView::Toggle(aura::Window* context) {
 
     // Set frame view Active and Inactive colors, both are SK_ColorWHITE.
     aura::Window* window = g_ksv_view->GetWidget()->GetNativeWindow();
-    window->SetProperty(ash::kFrameActiveColorKey, SK_ColorWHITE);
-    window->SetProperty(ash::kFrameInactiveColorKey, SK_ColorWHITE);
+    window->SetProperty(chromeos::kFrameActiveColorKey, SK_ColorWHITE);
+    window->SetProperty(chromeos::kFrameInactiveColorKey, SK_ColorWHITE);
 
     // Set shelf icon.
     const ash::ShelfID shelf_id(ash::kInternalAppIdKeyboardShortcutViewer);
@@ -336,7 +337,6 @@ void KeyboardShortcutView::BackButtonPressed() {
 void KeyboardShortcutView::ActiveChanged(ash::SearchBoxViewBase* sender) {
   const bool is_search_box_active = sender->is_search_box_active();
   is_search_box_empty_ = sender->IsSearchBoxTrimmedQueryEmpty();
-  sender->ShowBackOrGoogleIcon(is_search_box_active);
   if (is_search_box_active) {
     base::RecordAction(
         base::UserMetricsAction("KeyboardShortcutViewer.Search"));

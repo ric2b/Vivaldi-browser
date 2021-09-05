@@ -117,8 +117,10 @@ WellKnownChangePasswordNavigationThrottle::
     affiliation_service_ =
         AffiliationServiceFactory::GetForProfile(Profile::FromBrowserContext(
             handle->GetWebContents()->GetBrowserContext()));
-    well_known_change_password_state_.PrefetchChangePasswordURLs(
-        affiliation_service_, {request_url_});
+    if (affiliation_service_->GetChangePasswordURL(request_url_).is_empty()) {
+      well_known_change_password_state_.PrefetchChangePasswordURLs(
+          affiliation_service_, {request_url_});
+    }
   } else {
     change_password_url_service_ =
         ChangePasswordUrlServiceFactory::GetForBrowserContext(
@@ -144,7 +146,7 @@ WellKnownChangePasswordNavigationThrottle::WillStartRequest() {
   // redirects.
   network::ResourceRequest::TrustedParams trusted_params;
   trusted_params.isolation_info = net::IsolationInfo::CreatePartial(
-      net::IsolationInfo::RedirectMode::kUpdateNothing,
+      net::IsolationInfo::RequestType::kOther,
       navigation_handle()->GetIsolationInfo().network_isolation_key());
   well_known_change_password_state_.FetchNonExistingResource(
       url_loader_factory.get(), request_url_,

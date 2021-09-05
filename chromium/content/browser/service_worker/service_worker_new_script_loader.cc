@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
-#include "content/browser/appcache/appcache_disk_cache_ops.h"
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -223,10 +222,6 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
       return;
     }
 
-    // TODO(arthursonzogni): Make the Cross-Origin-Embedder-Policy to be parsed
-    // when it reached this line, not matter what URLLoader it is coming from.
-    // The same mechanism as the one in NavigationURLLoader must be provided.
-    // Instead of being a "document", the main resource here is a "script".
     version_->set_cross_origin_embedder_policy(
         response_head->parsed_headers
             ? response_head->parsed_headers->cross_origin_embedder_policy

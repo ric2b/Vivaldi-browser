@@ -15,7 +15,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -120,8 +120,7 @@ class ConversionManagerImplTest : public testing::Test {
     test_reporter_ = reporter.get();
     conversion_manager_ = ConversionManagerImpl::CreateForTesting(
         std::move(reporter), std::make_unique<ConstantStartupDelayPolicy>(),
-        task_environment_.GetMockClock(), dir_.GetPath(),
-        base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}));
+        task_environment_.GetMockClock(), dir_.GetPath());
   }
 
   const base::Clock& clock() { return *task_environment_.GetMockClock(); }

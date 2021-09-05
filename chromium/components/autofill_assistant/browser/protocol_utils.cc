@@ -13,8 +13,8 @@
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
 #include "components/autofill_assistant/browser/actions/configure_ui_state_action.h"
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
-#include "components/autofill_assistant/browser/actions/focus_element_action.h"
 #include "components/autofill_assistant/browser/actions/generate_password_for_form_field_action.h"
+#include "components/autofill_assistant/browser/actions/get_element_status_action.h"
 #include "components/autofill_assistant/browser/actions/highlight_element_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
 #include "components/autofill_assistant/browser/actions/popup_message_action.h"
@@ -24,6 +24,7 @@
 #include "components/autofill_assistant/browser/actions/select_option_action.h"
 #include "components/autofill_assistant/browser/actions/set_attribute_action.h"
 #include "components/autofill_assistant/browser/actions/set_form_field_value_action.h"
+#include "components/autofill_assistant/browser/actions/show_cast_action.h"
 #include "components/autofill_assistant/browser/actions/show_details_action.h"
 #include "components/autofill_assistant/browser/actions/show_form_action.h"
 #include "components/autofill_assistant/browser/actions/show_generic_ui_action.h"
@@ -149,6 +150,7 @@ std::string ProtocolUtils::CreateNextScriptActionsRequest(
     const std::string& global_payload,
     const std::string& script_payload,
     const std::vector<ProcessedActionProto>& processed_actions,
+    const RoundtripTimingStats& timing_stats,
     const ClientContextProto& client_context) {
   ScriptActionRequestProto request_proto;
   request_proto.set_global_payload(global_payload);
@@ -158,6 +160,7 @@ std::string ProtocolUtils::CreateNextScriptActionsRequest(
   for (const auto& processed_action : processed_actions) {
     next_request->add_processed_actions()->MergeFrom(processed_action);
   }
+  *next_request->mutable_timing_stats() = timing_stats;
   *request_proto.mutable_client_context() = client_context;
   std::string serialized_request_proto;
   bool success = request_proto.SerializeToString(&serialized_request_proto);
@@ -173,8 +176,8 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
       return std::make_unique<ClickAction>(delegate, action);
     case ActionProto::ActionInfoCase::kTell:
       return std::make_unique<TellAction>(delegate, action);
-    case ActionProto::ActionInfoCase::kFocusElement:
-      return std::make_unique<FocusElementAction>(delegate, action);
+    case ActionProto::ActionInfoCase::kShowCast:
+      return std::make_unique<ShowCastAction>(delegate, action);
     case ActionProto::ActionInfoCase::kUseAddress:
       return std::make_unique<UseAddressAction>(delegate, action);
     case ActionProto::ActionInfoCase::kUseCard:
@@ -228,6 +231,8 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
       return std::make_unique<ConfigureUiStateAction>(delegate, action);
     case ActionProto::ActionInfoCase::kPresaveGeneratedPassword:
       return std::make_unique<PresaveGeneratedPasswordAction>(delegate, action);
+    case ActionProto::ActionInfoCase::kGetElementStatus:
+      return std::make_unique<GetElementStatusAction>(delegate, action);
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET: {
       VLOG(1) << "Encountered action with ACTION_INFO_NOT_SET";
       return std::make_unique<UnsupportedAction>(delegate, action);
@@ -278,6 +283,61 @@ bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
     ProtocolUtils::AddScript(script_proto, scripts);
   }
 
+  return true;
+}
+
+// static
+std::string ProtocolUtils::CreateGetTriggerScriptsRequest(
+    const GURL& url,
+    const ClientContextProto& client_context,
+    const std::map<std::string, std::string>& script_parameters) {
+  GetTriggerScriptsRequestProto request_proto;
+  request_proto.set_url(url.spec());
+  *request_proto.mutable_client_context() = client_context;
+  if (!script_parameters.empty()) {
+    AppendScriptParametersToRepeatedField(
+        script_parameters, request_proto.mutable_debug_script_parameters());
+  }
+
+  std::string serialized_request_proto;
+  bool success = request_proto.SerializeToString(&serialized_request_proto);
+  DCHECK(success);
+  return serialized_request_proto;
+}
+
+// static
+bool ProtocolUtils::ParseTriggerScripts(
+    const std::string& response,
+    std::vector<std::unique_ptr<TriggerScript>>* trigger_scripts,
+    std::vector<std::string>* additional_allowed_domains,
+    int* trigger_condition_check_interval_ms,
+    base::Optional<int>* timeout_ms) {
+  DCHECK(trigger_scripts);
+  DCHECK(additional_allowed_domains);
+  DCHECK(trigger_condition_check_interval_ms);
+  DCHECK(timeout_ms);
+
+  GetTriggerScriptsResponseProto response_proto;
+  if (!response_proto.ParseFromString(response)) {
+    LOG(ERROR) << "Failed to parse trigger scripts response";
+    return false;
+  }
+
+  for (const auto& trigger_script_proto : response_proto.trigger_scripts()) {
+    trigger_scripts->emplace_back(
+        std::make_unique<TriggerScript>(trigger_script_proto));
+  }
+
+  for (const auto& allowed_domain :
+       response_proto.additional_allowed_domains()) {
+    additional_allowed_domains->emplace_back(allowed_domain);
+  }
+
+  *trigger_condition_check_interval_ms =
+      response_proto.trigger_condition_check_interval_ms();
+  if (response_proto.has_timeout_ms()) {
+    *timeout_ms = response_proto.timeout_ms();
+  }
   return true;
 }
 

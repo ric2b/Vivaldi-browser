@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings.h"
@@ -182,7 +183,6 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
     return nullptr;
   }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   base::Optional<int> dpi_horizontal =
       job_settings.FindIntKey(kSettingDpiHorizontal);
   base::Optional<int> dpi_vertical =
@@ -190,7 +190,6 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
   if (!dpi_horizontal.has_value() || !dpi_vertical.has_value())
     return nullptr;
   settings->set_dpi_xy(dpi_horizontal.value(), dpi_vertical.value());
-#endif
 
   settings->set_collate(collate.value());
   settings->set_copies(copies.value());
@@ -221,7 +220,7 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
   }
 #endif  // defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(USE_CUPS))
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   bool send_user_info =
       job_settings.FindBoolKey(kSettingSendUserInfo).value_or(false);
   settings->set_send_user_info(send_user_info);
@@ -234,7 +233,7 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
   const std::string* pin_value = job_settings.FindStringKey(kSettingPinValue);
   if (pin_value)
     settings->set_pin_value(*pin_value);
-#endif
+#endif  // BUILDFLAG(IS_ASH)
 
   return settings;
 }

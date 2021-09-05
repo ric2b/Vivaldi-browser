@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/string_compare.h"
@@ -192,7 +191,7 @@ bool CalendarService::Init(
 
 base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
     EventRow ev,
-    const CreateEventCallback& callback,
+    const EventResultCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -227,14 +226,14 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvents(
 base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
     EventID event_id,
     EventRow event,
-    const UpdateEventCallback& callback,
+    const EventResultCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<UpdateEventResult> update_results =
-      std::shared_ptr<UpdateEventResult>(new UpdateEventResult());
+  std::shared_ptr<EventResultCB> update_results =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -416,7 +415,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteEventType(
 
 base::CancelableTaskTracker::TaskId CalendarService::CreateRecurrenceException(
     RecurrenceExceptionRow ev,
-    const CreateRecurrenceExceptionCallback& callback,
+    const EventResultCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());

@@ -118,6 +118,7 @@
 -keep @interface org.chromium.base.annotations.DoNotInline
 -keep @interface org.chromium.base.annotations.RemovableInRelease
 -keep @interface org.chromium.base.annotations.UsedByReflection
+-keep @interface org.chromium.base.annotations.IdentifierNameString
 
 # Android support library annotations will get converted to androidx ones
 # which we want to keep.
@@ -196,6 +197,11 @@
 # for the reason for this. Also, see http://crbug.com/248037.
 -keepclassmembers enum org.chromium.** {
     public static **[] values();
+}
+
+# Mark members annotated with IdentifierNameString as identifier name strings
+-identifiernamestring class * {
+    @org.chromium.base.annotations.IdentifierNameString *;
 }
 
 # File: ../../build/android/dcheck_is_off.flags
@@ -285,6 +291,12 @@
   public <init>();
   public <clinit>();
   *** build() return null;
+}
+
+# Keep implementation classes needed for split compat. These will be accessed by
+# reflection.
+-keep,allowobfuscation public class ** extends org.chromium.chrome.browser.base.SplitCompat*$Impl {
+  public <init>();
 }
 
 # File: ../../third_party/gvr-android-sdk/proguard-gvr-chromium.txt
@@ -428,6 +440,29 @@
   public int getMinApkVersion();
   public boolean requiresSignIn();
 }
+
+# File: obj/third_party/android_deps/androidx_annotation_annotation_experimental_java/proguard.txt
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Ignore missing Kotlin meta-annotations so that this library can be used
+# without adding a compileOnly dependency on the Kotlin standard library.
+-dontwarn kotlin.Metadata
+-dontwarn kotlin.annotation.AnnotationRetention
+-dontwarn kotlin.annotation.AnnotationTarget
+-dontwarn kotlin.annotation.Retention
+-dontwarn kotlin.annotation.Target
 
 # File: obj/third_party/android_deps/androidx_appcompat_appcompat_java/proguard.txt
 # Copyright (C) 2018 The Android Open Source Project
@@ -653,6 +688,16 @@
 }
 
 # Keep the classes/members we need for client functionality.
+-keep @interface android.support.annotation.Keep
+-keep @androidx.annotation.Keep class *
+-keepclasseswithmembers class * {
+  @androidx.annotation.Keep <fields>;
+}
+-keepclasseswithmembers class * {
+  @androidx.annotation.Keep <methods>;
+}
+
+# Keep androidX equivalent of above android.support to allow Jetification.
 -keep @interface androidx.annotation.Keep
 -keep @androidx.annotation.Keep class *
 -keepclasseswithmembers class * {

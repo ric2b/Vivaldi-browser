@@ -5,6 +5,7 @@
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//build/config/linux/gtk/gtk.gni")
+import("//build/config/ozone.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
@@ -16,7 +17,6 @@ import("//ppapi/buildflags/buildflags.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
-import("//ui/ozone/ozone.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
 } else if (is_mac) {
@@ -27,13 +27,6 @@ if (is_android) {
   import("//ui/gl/features.gni")
   import("//v8/gni/v8.gni")
 }
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 declare_args() {
   content_shell_product_name = "Content Shell"
@@ -53,8 +46,11 @@ support_web_tests = !is_android
 
 source_set("android_shell_descriptors") {
   testonly = true
-  sources = [ "android/shell_descriptors.h" ]
+  sources = []
   public_deps = [ "//content/public/common:content_descriptors" ]
+  if (is_android) {
+    sources += [ "android/shell_descriptors.h" ]
+  }
 }
 
 # This component provides a ContentMainDelegate for Content Shell and derived
@@ -72,14 +68,10 @@ source_set("android_shell_descriptors") {
 static_library("content_shell_app") {
   testonly = true
   sources = [
-    "app/paths_mac.h",
-    "app/paths_mac.mm",
     "app/shell_crash_reporter_client.cc",
     "app/shell_crash_reporter_client.h",
     "app/shell_main_delegate.cc",
     "app/shell_main_delegate.h",
-    "app/shell_main_delegate_mac.h",
-    "app/shell_main_delegate_mac.mm",
   ]
   deps = [
     ":content_shell_lib",
@@ -100,6 +92,14 @@ static_library("content_shell_app") {
       "//components/crash/core/app:test_support",
     ]
   }
+  if (is_mac) {
+    sources += [
+      "app/paths_mac.h",
+      "app/paths_mac.mm",
+      "app/shell_main_delegate_mac.h",
+      "app/shell_main_delegate_mac.mm",
+    ]
+  }
   defines = [
     "CONTENT_SHELL_VERSION=\"$content_shell_version\"",
     "CONTENT_SHELL_MAJOR_VERSION=\"$content_shell_major_version\"",
@@ -109,19 +109,12 @@ static_library("content_shell_app") {
 static_library("content_shell_lib") {
   testonly = true
   sources = [
-    "android/shell_manager.cc",
-    "android/shell_manager.h",
-    "browser/renderer_host/shell_render_widget_host_view_mac_delegate.h",
-    "browser/renderer_host/shell_render_widget_host_view_mac_delegate.mm",
     "browser/shell.cc",
     "browser/shell.h",
-    "browser/shell_application_mac.h",
-    "browser/shell_application_mac.mm",
     "browser/shell_browser_context.cc",
     "browser/shell_browser_context.h",
     "browser/shell_browser_main_parts.cc",
     "browser/shell_browser_main_parts.h",
-    "browser/shell_browser_main_parts_mac.mm",
     "browser/shell_content_browser_client.cc",
     "browser/shell_content_browser_client.h",
     "browser/shell_content_index_provider.cc",
@@ -135,26 +128,20 @@ static_library("content_shell_lib") {
     "browser/shell_download_manager_delegate.cc",
     "browser/shell_download_manager_delegate.h",
     "browser/shell_javascript_dialog.h",
-    "browser/shell_javascript_dialog_mac.mm",
     "browser/shell_javascript_dialog_manager.cc",
     "browser/shell_javascript_dialog_manager.h",
-    "browser/shell_javascript_dialog_win.cc",
     "browser/shell_permission_manager.cc",
     "browser/shell_permission_manager.h",
     "browser/shell_platform_data_aura.cc",
     "browser/shell_platform_data_aura.h",
     "browser/shell_platform_delegate.cc",
     "browser/shell_platform_delegate.h",
-    "browser/shell_platform_delegate_android.cc",
-    "browser/shell_platform_delegate_mac.mm",
     "browser/shell_quota_permission_context.cc",
     "browser/shell_quota_permission_context.h",
     "browser/shell_speech_recognition_manager_delegate.cc",
     "browser/shell_speech_recognition_manager_delegate.h",
     "browser/shell_web_contents_view_delegate.h",
-    "browser/shell_web_contents_view_delegate_android.cc",
     "browser/shell_web_contents_view_delegate_creator.h",
-    "browser/shell_web_contents_view_delegate_mac.mm",
     "common/power_monitor_test_impl.cc",
     "common/power_monitor_test_impl.h",
     "common/shell_content_client.cc",
@@ -172,6 +159,32 @@ static_library("content_shell_lib") {
     "utility/shell_content_utility_client.cc",
     "utility/shell_content_utility_client.h",
   ]
+
+  if (is_android) {
+    sources += [
+      "android/shell_manager.cc",
+      "android/shell_manager.h",
+      "browser/shell_platform_delegate_android.cc",
+      "browser/shell_web_contents_view_delegate_android.cc",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "browser/renderer_host/shell_render_widget_host_view_mac_delegate.h",
+      "browser/renderer_host/shell_render_widget_host_view_mac_delegate.mm",
+      "browser/shell_application_mac.h",
+      "browser/shell_application_mac.mm",
+      "browser/shell_browser_main_parts_mac.mm",
+      "browser/shell_javascript_dialog_mac.mm",
+      "browser/shell_platform_delegate_mac.mm",
+      "browser/shell_web_contents_view_delegate_mac.mm",
+    ]
+  }
+
+  if (is_win) {
+    sources += [ "browser/shell_javascript_dialog_win.cc" ]
+  }
 
   configs += [
     ":content_shell_lib_warnings",
@@ -277,10 +290,6 @@ static_library("content_shell_lib") {
       "common/v8_crashpad_support_win.h",
     ]
     deps += [ "//gin" ]
-  }
-
-  if (is_linux || is_chromeos) {
-    deps += [ "//services/service_manager/tests:sandbox_status_service" ]
   }
 
   if (use_gtk) {
@@ -395,6 +404,7 @@ repack("pak") {
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/content/dev_ui_content_resources.pak",
     "$root_gen_dir/content/shell/shell_resources.pak",
+    "$root_gen_dir/content/test/web_ui_mojo_test_resources.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
     "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
@@ -402,6 +412,7 @@ repack("pak") {
     "$root_gen_dir/third_party/blink/public/resources/inspector_overlay_resources.pak",
     "$root_gen_dir/third_party/blink/public/strings/blink_strings_en-US.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/webui_generated_resources.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
     "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
@@ -415,6 +426,7 @@ repack("pak") {
     "//content/browser/resources/media:media_internals_resources",
     "//content/browser/tracing:resources",
     "//content/browser/webrtc/resources",
+    "//content/test:web_ui_mojo_test_resources",
     "//mojo/public/js:resources",
     "//net:net_resources",
     "//third_party/blink/public:devtools_inspector_resources",

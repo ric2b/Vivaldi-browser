@@ -9,6 +9,7 @@
 
 #include "ash/drag_drop/drag_drop_tracker.h"
 #include "ash/drag_drop/drag_image_view.h"
+#include "ash/drag_drop/toplevel_window_drag_delegate.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
@@ -200,6 +201,11 @@ int DragDropController::StartDragAndDrop(
   for (aura::client::DragDropClientObserver& observer : observers_)
     observer.OnDragStarted();
 
+  if (toplevel_window_drag_delegate_) {
+    toplevel_window_drag_delegate_->OnToplevelWindowDragStarted(
+        gfx::PointF(start_location_), source);
+  }
+
   if (TabDragDropDelegate::IsChromeTabDrag(*drag_data_)) {
     DCHECK(!tab_drag_drop_delegate_);
     tab_drag_drop_delegate_.emplace(root_window, drag_source_window_,
@@ -321,6 +327,10 @@ void DragDropController::OnMouseEvent(ui::MouseEvent* event) {
       // (aura::RootWindow::PostMouseMoveEventAfterWindowChange).
       break;
   }
+
+  if (toplevel_window_drag_delegate_)
+    toplevel_window_drag_delegate_->OnToplevelWindowDragEvent(event);
+
   event->StopPropagation();
 }
 
@@ -520,6 +530,11 @@ void DragDropController::Drop(aura::Window* target,
       gfx::Point location_in_screen = event.root_location();
       ::wm::ConvertPointToScreen(target->GetRootWindow(), &location_in_screen);
       tab_drag_drop_delegate_->Drop(location_in_screen, copied_data);
+      // Override the drag event's drop effect as a move to inform the front-end
+      // that the tab or group was moved. Otherwise, the WebUI tab strip does
+      // not know that a drop resulted in a tab being moved and will temporarily
+      // visually return the tab to its original position. (crbug.com/1081905)
+      drag_operation_ = ui::DragDropTypes::DragOperation::DRAG_MOVE;
       StartCanceledAnimation(kCancelAnimationDuration);
     } else if (drag_operation_ == 0) {
       StartCanceledAnimation(kCancelAnimationDuration);
@@ -528,6 +543,11 @@ void DragDropController::Drop(aura::Window* target,
     }
   } else {
     drag_image_widget_.reset();
+  }
+
+  if (toplevel_window_drag_delegate_) {
+    drag_operation_ =
+        toplevel_window_drag_delegate_->OnToplevelWindowDragDropped();
   }
 
   Cleanup();
@@ -570,6 +590,9 @@ void DragDropController::DoDragCancel(
       drag_window_ ? aura::client::GetDragDropDelegate(drag_window_) : nullptr;
   if (delegate)
     delegate->OnDragExited();
+
+  if (toplevel_window_drag_delegate_)
+    toplevel_window_drag_delegate_->OnToplevelWindowDragCancelled();
 
   Cleanup();
   drag_operation_ = 0;

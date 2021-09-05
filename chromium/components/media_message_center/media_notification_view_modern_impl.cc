@@ -249,8 +249,11 @@ MediaNotificationViewModernImpl::MediaNotificationViewModernImpl(
       {
         // The picture-in-picture button appears directly under the media
         // labels.
-        auto picture_in_picture_button =
-            views::CreateVectorToggleImageButton(this);
+        auto picture_in_picture_button = views::CreateVectorToggleImageButton(
+            views::Button::PressedCallback());
+        picture_in_picture_button->SetCallback(base::BindRepeating(
+            &MediaNotificationViewModernImpl::ButtonPressed,
+            base::Unretained(this), picture_in_picture_button.get()));
         picture_in_picture_button->set_tag(
             static_cast<int>(MediaSessionAction::kEnterPictureInPicture));
         picture_in_picture_button->SetPreferredSize(kPipButtonSize);
@@ -261,7 +264,7 @@ MediaNotificationViewModernImpl::MediaNotificationViewModernImpl(
         picture_in_picture_button->SetToggledTooltipText(
             l10n_util::GetStringUTF16(
                 IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_EXIT_PIP));
-        picture_in_picture_button->EnableCanvasFlippingForRTLUI(false);
+        picture_in_picture_button->SetFlipCanvasOnPaintForRTLUI(false);
         views::SetImageFromVectorIconWithColor(
             picture_in_picture_button.get(),
             *GetVectorIconForMediaAction(
@@ -321,7 +324,11 @@ MediaNotificationViewModernImpl::MediaNotificationViewModernImpl(
             IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_SEEK_BACKWARD));
 
     {
-      auto play_pause_button = views::CreateVectorToggleImageButton(this);
+      auto play_pause_button = views::CreateVectorToggleImageButton(
+          views::Button::PressedCallback());
+      play_pause_button->SetCallback(
+          base::BindRepeating(&MediaNotificationViewModernImpl::ButtonPressed,
+                              base::Unretained(this), play_pause_button.get()));
       play_pause_button->set_tag(static_cast<int>(MediaSessionAction::kPlay));
       play_pause_button->SetPreferredSize(kMediaButtonSize);
       play_pause_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
@@ -329,7 +336,7 @@ MediaNotificationViewModernImpl::MediaNotificationViewModernImpl(
           IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_PLAY));
       play_pause_button->SetToggledTooltipText(l10n_util::GetStringUTF16(
           IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_PAUSE));
-      play_pause_button->EnableCanvasFlippingForRTLUI(false);
+      play_pause_button->SetFlipCanvasOnPaintForRTLUI(false);
       play_pause_button_ =
           media_controls_container->AddChildView(std::move(play_pause_button));
     }
@@ -374,13 +381,6 @@ void MediaNotificationViewModernImpl::GetAccessibleNodeData(
 
   if (!accessible_name_.empty())
     node_data->SetName(accessible_name_);
-}
-
-void MediaNotificationViewModernImpl::ButtonPressed(views::Button* sender,
-                                                    const ui::Event& event) {
-  if (item_) {
-    item_->OnMediaSessionActionButtonPressed(GetActionFromButtonTag(*sender));
-  }
 }
 
 void MediaNotificationViewModernImpl::UpdateWithMediaSessionInfo(
@@ -523,13 +523,17 @@ void MediaNotificationViewModernImpl::CreateMediaButton(
     views::View* parent_view,
     MediaSessionAction action,
     const base::string16& accessible_name) {
-  auto button = views::CreateVectorImageButton(this);
+  auto button =
+      views::CreateVectorImageButton(views::Button::PressedCallback());
+  button->SetCallback(
+      base::BindRepeating(&MediaNotificationViewModernImpl::ButtonPressed,
+                          base::Unretained(this), button.get()));
   button->set_tag(static_cast<int>(action));
   button->SetPreferredSize(kMediaButtonSize);
   button->SetAccessibleName(accessible_name);
   button->SetTooltipText(accessible_name);
   button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  button->EnableCanvasFlippingForRTLUI(false);
+  button->SetFlipCanvasOnPaintForRTLUI(false);
   parent_view->AddChildView(std::move(button));
 }
 
@@ -590,6 +594,11 @@ void MediaNotificationViewModernImpl::UpdateForegroundColor() {
 
   SchedulePaint();
   container_->OnColorsChanged(foreground, background);
+}
+
+void MediaNotificationViewModernImpl::ButtonPressed(views::Button* button) {
+  if (item_)
+    item_->OnMediaSessionActionButtonPressed(GetActionFromButtonTag(*button));
 }
 
 }  // namespace media_message_center

@@ -65,6 +65,8 @@ class CONTENT_EXPORT TtsControllerImpl : public TtsController,
   void SetTtsEngineDelegate(TtsEngineDelegate* delegate) override;
   TtsEngineDelegate* GetTtsEngineDelegate() override;
 
+  void Shutdown();
+
   // Called directly by ~BrowserContext, because a raw BrowserContext pointer
   // is stored in an Utterance.
   void OnBrowserContextDestroyed(BrowserContext* browser_context);
@@ -82,12 +84,23 @@ class CONTENT_EXPORT TtsControllerImpl : public TtsController,
   TtsControllerImpl();
   ~TtsControllerImpl() override;
 
+  // Exposed for unittest.
+  bool IsPausedForTesting() const { return paused_; }
+
  private:
   friend class TestTtsControllerImpl;
   friend struct base::DefaultSingletonTraits<TtsControllerImpl>;
 
   // Get the platform TTS implementation (or injected mock).
   TtsPlatform* GetTtsPlatform();
+
+  // Whether the platform implementation is supported and completed its
+  // initialization.
+  bool TtsPlatformReady();
+
+  // Whether the platform implementation is supported, but still being
+  // initialized.
+  bool TtsPlatformLoading();
 
   // Start speaking the given utterance. Will either take ownership of
   // |utterance| or delete it if there's an error. Returns true on success.

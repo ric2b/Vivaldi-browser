@@ -26,10 +26,10 @@ class KSVSearchBoxView : public ash::SearchBoxViewBase {
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnKeyEvent(ui::KeyEvent* event) override;
 
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   void SetAccessibleValue(const base::string16& value);
+
+  // SearchBoxViewBase:
+  void OnSearchBoxActiveChanged(bool active) override;
 
  private:
   // SearchBoxViewBase:
@@ -37,6 +37,7 @@ class KSVSearchBoxView : public ash::SearchBoxViewBase {
   void UpdateSearchBoxBorder() override;
   void SetupCloseButton() override;
   void SetupBackButton() override;
+  void SetPlaceholderTextAttributes();
 
   // Accessibility data value. Used to pronounce the number of search results.
   base::string16 accessible_value_;

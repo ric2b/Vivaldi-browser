@@ -18,13 +18,13 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "pdf/document_layout.h"
 #include "ppapi/c/dev/pp_cursor_type_dev.h"
 #include "ppapi/c/dev/ppp_printing_dev.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/private/pdf.h"
 #include "ppapi/cpp/url_loader.h"
-#include "ppapi/cpp/var_array.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
@@ -51,10 +51,6 @@ class Size;
 class SizeF;
 class Vector2d;
 }  // namespace gfx
-
-namespace pp {
-class VarDictionary;
-}  // namespace pp
 
 namespace chrome_pdf {
 
@@ -277,6 +273,18 @@ class PDFEngine {
 
     // Notifies the client about focus changes for the document.
     virtual void DocumentFocusChanged(bool document_has_focus) {}
+
+    // Sets selected text.
+    virtual void SetSelectedText(const std::string& selected_text) = 0;
+
+    // Sets the link under cursor.
+    virtual void SetLinkUnderCursor(const std::string& link_under_cursor) = 0;
+
+    // If the link cannot be converted to JS payload struct, then it is not
+    // possible to pass it to JS. In this case, ignore the link like other PDF
+    // viewers.
+    // See https://crbug.com/312882 for an example.
+    virtual bool IsValidLink(const std::string& url) = 0;
   };
 
   struct AccessibilityLinkInfo {
@@ -457,13 +465,13 @@ class PDFEngine {
   // Returns true if all the pages are the same size.
   virtual bool GetPageSizeAndUniformity(gfx::Size* size) = 0;
 
-  // Returns a VarArray of Bookmarks. Each Bookmark is a VarDictionary
+  // Returns a list of Values of Bookmarks. Each Bookmark is a dictionary Value
   // which contains the following key/values:
-  // - "title" - a string Var.
-  // - "page" - an int Var.
-  // - "children" - a VarArray(), with each entry containing a VarDictionary of
-  //   the same structure.
-  virtual pp::VarArray GetBookmarks() = 0;
+  // - "title" - a string Value.
+  // - "page" - an int Value.
+  // - "children" - a list of Values, with each entry containing
+  //   a dictionary Value of the same structure.
+  virtual base::Value GetBookmarks() = 0;
 
   // Append blank pages to make a 1-page document to a |num_pages| document.
   // Always retain the first page data.
@@ -533,11 +541,11 @@ class PDFEngineExports {
 
   static PDFEngineExports* Get();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   // See the definition of CreateFlattenedPdf in pdf.cc for details.
   virtual std::vector<uint8_t> CreateFlattenedPdf(
       base::span<const uint8_t> input_buffer) = 0;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
 #if defined(OS_WIN)
   // See the definition of RenderPDFPageToDC in pdf.cc for details.

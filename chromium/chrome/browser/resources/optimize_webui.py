@@ -148,12 +148,6 @@ def _update_dep_file(in_folder, args, manifest):
   deps = [_undo_mapping(url_mappings, u) for u in request_list]
   deps = map(os.path.normpath, deps)
 
-  # If the input was a folder holding an unpacked .pak file, the generated
-  # depfile should not list files already in the .pak file.
-  if args.input.endswith('unpak'):
-    filter_url = args.input
-    deps = [d for d in deps if not d.startswith(filter_url)]
-
   out_file_name = args.html_out_files[0] if args.html_out_files else \
                   args.js_out_files[0]
 
@@ -165,7 +159,7 @@ def _update_dep_file(in_folder, args, manifest):
 # pass it information about the location of the directories and files to exclude
 # from the bundle.
 def _generate_rollup_config(tmp_out_dir, path_to_plugin, in_path, host,
-                            excludes):
+                            excludes, gen_dir_relpath):
   rollup_config_file = os.path.join(tmp_out_dir, 'rollup.config.js')
   excludes_string = '[\'' + '\', \''.join(excludes) + '\']'
   with open(rollup_config_file, 'w') as f:
@@ -174,7 +168,7 @@ def _generate_rollup_config(tmp_out_dir, path_to_plugin, in_path, host,
     f.write('export default({\n')
     f.write('  plugins: [ plugin(\'%s\', \'%s\', \'%s\', \'%s\', %s) ]\n' % (
         _SRC_PATH.replace('\\', '/'),
-        os.path.join(_CWD, 'gen').replace('\\', '/'),
+        os.path.join(_CWD, gen_dir_relpath).replace('\\', '/'),
         in_path.replace('\\', '/'), host, excludes_string))
     f.write('});')
     f.close()
@@ -213,7 +207,8 @@ def _bundle_v3(tmp_out_dir, in_path, out_path, manifest_out_path, args,
   path_to_plugin = os.path.join(
       os.path.abspath(_HERE_PATH), 'tools', 'rollup_plugin.js')
   rollup_config_file = _generate_rollup_config(tmp_out_dir, path_to_plugin,
-                                               in_path, args.host, excludes)
+                                               in_path, args.host, excludes,
+                                               args.gen_dir_relpath)
   rollup_args = [os.path.join(in_path, f) for f in args.js_module_in_files]
 
   # Confirm names are as expected. This is necessary to avoid having to replace
@@ -346,6 +341,8 @@ def _optimize(in_folder, args):
       bundled_paths = _bundle_v3(tmp_out_dir, in_path, out_path,
                                  manifest_out_path, args, excludes)
     else:
+      # Ensure Polymer 2 and Polymer 3 request lists don't collide.
+      manifest_out_path = _request_list_path(out_path, args.host + '-v2')
       pcb_out_paths = [os.path.join(out_path, f) for f in args.html_out_files]
       bundled_paths = _bundle_v2(tmp_out_dir, in_path, out_path,
                                  manifest_out_path, args, excludes)
@@ -359,7 +356,7 @@ def _optimize(in_folder, args):
     # Pass the JS files through Uglify and write the output to its final
     # destination.
     for index, js_out_file in enumerate(args.js_out_files):
-      node.RunNode([node_modules.PathToUglify(),
+      node.RunNode([node_modules.PathToTerser(),
                     os.path.join(tmp_out_dir, js_out_file),
                     '--comments', '/Copyright|license|LICENSE|\<\/?if/',
                     '--output', os.path.join(out_path, js_out_file)])
@@ -379,6 +376,10 @@ def main(argv):
   parser.add_argument('--js_out_files', nargs='*', required=True)
   parser.add_argument('--out_folder', required=True)
   parser.add_argument('--js_module_in_files', nargs='*')
+  parser.add_argument('--out-manifest')
+  parser.add_argument('--gen_dir_relpath', default='gen', help='Path of the '
+      'gen directory relative to the out/. If running in the default '
+      'toolchain, the path is gen, otherwise $toolchain_name/gen')
   args = parser.parse_args(argv)
 
   # Either JS module input files (for Polymer 3) or HTML input and output files
@@ -406,6 +407,19 @@ def main(argv):
     raise Exception(
         'polymer-bundler could not find files for the following URLs:\n' +
         '\n'.join(manifest['_missing']))
+
+
+  # Output a manifest file that will be used to auto-generate a grd file later.
+  if args.out_manifest:
+    manifest_data = {}
+    manifest_data['base_dir'] = '%s' % args.out_folder
+    if (is_polymer3):
+      manifest_data['files'] = manifest.keys()
+    else:
+      manifest_data['files'] = args.html_out_files + args.js_out_files
+    manifest_file = open(
+        os.path.normpath(os.path.join(_CWD, args.out_manifest)), 'wb')
+    json.dump(manifest_data, manifest_file)
 
   _update_dep_file(args.input, args, manifest)
 

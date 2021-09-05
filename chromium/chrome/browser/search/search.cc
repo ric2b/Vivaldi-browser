@@ -11,12 +11,12 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "components/google/core/common/google_util.h"
+#include "components/search/ntp_features.h"
 #include "components/search/search.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_service.h"
@@ -172,9 +172,11 @@ struct NewTabURLDetails {
       : url(url), state(state) {}
 
   static NewTabURLDetails ForProfile(Profile* profile) {
-    // Incognito has its own New Tab.
-    if (profile->IsOffTheRecord())
+    // Incognito and Guest profiles have their own New Tab.
+    if (profile->IsIncognitoProfile() || profile->IsGuestSession() ||
+        profile->IsEphemeralGuestProfile()) {
       return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);
+    }
 
 #if defined(OS_ANDROID)
     const GURL local_url(chrome::kChromeSearchLocalNtpUrl);
@@ -235,19 +237,6 @@ bool IsRenderedInInstantProcess(content::WebContents* contents,
 bool DefaultSearchProviderIsGoogle(Profile* profile) {
   return DefaultSearchProviderIsGoogle(
       TemplateURLServiceFactory::GetForProfile(profile));
-}
-
-bool DefaultSearchProviderIsGoogle(
-    const TemplateURLService* template_url_service) {
-  if (!template_url_service)
-    return false;
-  const TemplateURL* default_provider =
-      template_url_service->GetDefaultSearchProvider();
-  if (!default_provider)
-    return false;
-  return default_provider->GetEngineType(
-             template_url_service->search_terms_data()) ==
-         SearchEngineType::SEARCH_ENGINE_GOOGLE;
 }
 
 bool IsNTPOrRelatedURL(const GURL& url, Profile* profile) {

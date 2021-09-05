@@ -8,10 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -21,6 +21,7 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/model/data_type_activation_request.h"
+#include "components/sync/model/type_entities_count.h"
 #include "components/sync_bookmarks/switches.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -98,9 +99,23 @@ sync_pb::ModelTypeState CreateDummyModelTypeState() {
   return model_type_state;
 }
 
+// |node| must not be nullptr.
+sync_pb::BookmarkMetadata CreateNodeMetadata(
+    const bookmarks::BookmarkNode* node,
+    const std::string& server_id) {
+  sync_pb::BookmarkMetadata bookmark_metadata;
+  bookmark_metadata.set_id(node->id());
+  bookmark_metadata.mutable_metadata()->set_server_id(server_id);
+  bookmark_metadata.mutable_metadata()->set_client_tag_hash(
+      syncer::ClientTagHash::FromUnhashed(syncer::BOOKMARKS, node->guid())
+          .value());
+  return bookmark_metadata;
+}
+
 void AssertState(const BookmarkModelTypeProcessor* processor,
                  const std::vector<BookmarkInfo>& bookmarks) {
   const SyncedBookmarkTracker* tracker = processor->GetTrackerForTest();
+  ASSERT_THAT(tracker, NotNull());
 
   // Make sure the tracker contains all bookmarks in |bookmarks| + the
   // 3 permanent nodes.
@@ -153,7 +168,7 @@ void InitWithSyncedBookmarks(const std::vector<BookmarkInfo>& bookmarks,
 
 class MockCommitQueue : public syncer::CommitQueue {
  public:
-  MOCK_METHOD0(NudgeForCommit, void());
+  MOCK_METHOD(void, NudgeForCommit, (), (override));
 };
 
 class ProxyCommitQueue : public syncer::CommitQueue {
@@ -437,9 +452,8 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldDecodeSyncMetadata) {
   bookmark_metadata->mutable_metadata()->set_server_id(kMobileBookmarksId);
 
   // Add an entry for the bookmark node.
-  bookmark_metadata = model_metadata.add_bookmarks_metadata();
-  bookmark_metadata->set_id(bookmarknode->id());
-  bookmark_metadata->mutable_metadata()->set_server_id(kNodeId);
+  *model_metadata.add_bookmarks_metadata() =
+      CreateNodeMetadata(bookmarknode, kNodeId);
 
   // Create a new processor and init it with the metadata str.
   BookmarkModelTypeProcessor new_processor(bookmark_undo_service());
@@ -629,16 +643,15 @@ TEST_F(BookmarkModelTypeProcessorTest,
        ShouldReportNoCountersWhenModelIsNotLoaded) {
   SimulateOnSyncStarting();
   ASSERT_THAT(processor()->GetTrackerForTest(), IsNull());
-  syncer::StatusCounters status_counters;
-  // Assign an arbitrary non-zero number to the |num_entries| to be able to
-  // check that actually a 0 has been written to it later.
-  status_counters.num_entries = 1000;
-  processor()->GetStatusCountersForDebugging(
-      base::BindLambdaForTesting([&](syncer::ModelType model_type,
-                                     const syncer::StatusCounters& counters) {
-        status_counters = counters;
+  syncer::TypeEntitiesCount count(syncer::BOOKMARKS);
+  // Assign an arbitrary non-zero number of entities to be able to check that
+  // actually a 0 has been written to it later.
+  count.non_tombstone_entities = 1000;
+  processor()->GetTypeEntitiesCountForDebugging(base::BindLambdaForTesting(
+      [&](const syncer::TypeEntitiesCount& returned_count) {
+        count = returned_count;
       }));
-  EXPECT_EQ(0u, status_counters.num_entries);
+  EXPECT_EQ(0, count.non_tombstone_entities);
 }
 
 TEST_F(BookmarkModelTypeProcessorTest,
@@ -677,8 +690,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   // Add an entry for the bookmark node.
   bookmark_metadata = model_metadata.add_bookmarks_metadata();
-  bookmark_metadata->set_id(node->id());
-  bookmark_metadata->mutable_metadata()->set_server_id(kNodeId);
+  *bookmark_metadata = CreateNodeMetadata(node, kNodeId);
   // Mark the entity as unsynced.
   bookmark_metadata->mutable_metadata()->set_sequence_number(2);
   bookmark_metadata->mutable_metadata()->set_acked_sequence_number(1);
@@ -700,7 +712,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_EQ(0u, bookmark_client()->GetTasksCount());
   EXPECT_CALL(callback, Run(_));
-  processor()->GetLocalChanges(/*max_entities=*/10, callback.Get());
+  processor()->GetLocalChanges(/*max_entries=*/10, callback.Get());
   EXPECT_TRUE(callback_result.empty());
   EXPECT_TRUE(node->is_favicon_loading());
 
@@ -708,7 +720,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
                                            GURL(kIconUrl));
   ASSERT_TRUE(node->is_favicon_loaded());
   EXPECT_CALL(callback, Run(_));
-  processor()->GetLocalChanges(/*max_entities=*/10, callback.Get());
+  processor()->GetLocalChanges(/*max_entries=*/10, callback.Get());
   EXPECT_FALSE(callback_result.empty());
 }
 

@@ -46,6 +46,7 @@ struct DocumentSpec {
   bool supports_delete;
   bool supports_rename;
   bool dir_supports_create;
+  bool supports_thumbnail;
 };
 
 // Fake file system hierarchy:
@@ -70,17 +71,17 @@ constexpr DocumentSpec kDirSpec{"dir-id", kRootSpec.document_id,
                                 "dir",    kAndroidDirectoryMimeType,
                                 -1,       22,
                                 true,     true,
-                                true};
+                                true,     false};
 constexpr DocumentSpec kPhotoSpec{"photo-id",  kDirSpec.document_id,
                                   "photo.jpg", "image/jpeg",
                                   3,           33,
                                   true,        true,
-                                  true};
+                                  true,        true};
 constexpr DocumentSpec kMusicSpec{"music-id",  kDirSpec.document_id,
                                   "music.bin", "audio/mp3",
                                   4,           44,
                                   true,        true,
-                                  true};
+                                  true,        false};
 constexpr DocumentSpec kNoDeleteSpec{"no-delete-id",
                                      kDirSpec.document_id,
                                      "no-delete.jpg",
@@ -88,6 +89,7 @@ constexpr DocumentSpec kNoDeleteSpec{"no-delete-id",
                                      3,
                                      45,
                                      false,
+                                     true,
                                      true,
                                      true};
 constexpr DocumentSpec kNoRenameSpec{"no-rename-id",
@@ -98,29 +100,38 @@ constexpr DocumentSpec kNoRenameSpec{"no-rename-id",
                                      46,
                                      true,
                                      false,
+                                     true,
                                      true};
 constexpr DocumentSpec kDupsSpec{"dups-id", kRootSpec.document_id,
                                  "dups",    kAndroidDirectoryMimeType,
                                  -1,        55,
                                  true,      true,
-                                 true};
-constexpr DocumentSpec kDup1Spec{
-    "dup1-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 6, 66, true, true,
-    true};
-constexpr DocumentSpec kDup2Spec{
-    "dup2-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 7, 77, true, true,
-    true};
-constexpr DocumentSpec kDup3Spec{
-    "dup3-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 8, 88, true, true,
-    true};
-constexpr DocumentSpec kDup4Spec{
-    "dup4-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 9, 99, true, true,
-    true};
+                                 true,      false};
+constexpr DocumentSpec kDup1Spec{"dup1-id", kDupsSpec.document_id,
+                                 "dup.mp4", "video/mp4",
+                                 6,         66,
+                                 true,      true,
+                                 true,      false};
+constexpr DocumentSpec kDup2Spec{"dup2-id", kDupsSpec.document_id,
+                                 "dup.mp4", "video/mp4",
+                                 7,         77,
+                                 true,      true,
+                                 true,      false};
+constexpr DocumentSpec kDup3Spec{"dup3-id", kDupsSpec.document_id,
+                                 "dup.mp4", "video/mp4",
+                                 8,         88,
+                                 true,      true,
+                                 true,      false};
+constexpr DocumentSpec kDup4Spec{"dup4-id", kDupsSpec.document_id,
+                                 "dup.mp4", "video/mp4",
+                                 9,         99,
+                                 true,      true,
+                                 true,      false};
 constexpr DocumentSpec kRoDirSpec{"ro-dir-id", kRootSpec.document_id,
                                   "ro-dir",    kAndroidDirectoryMimeType,
                                   -1,          56,
                                   false,       false,
-                                  false};
+                                  false,       false};
 
 // The order is intentionally shuffled here so that
 // FileSystemInstance::GetChildDocuments() returns documents in shuffled order.
@@ -130,10 +141,10 @@ constexpr DocumentSpec kAllSpecs[] = {
     kDupsSpec, kDup2Spec, kDup1Spec,  kDup4Spec,  kDup3Spec,     kRoDirSpec};
 
 Document ToDocument(const DocumentSpec& spec) {
-  return Document(kAuthority, spec.document_id, spec.parent_document_id,
-                  spec.display_name, spec.mime_type, spec.size,
-                  spec.last_modified, spec.supports_delete,
-                  spec.supports_rename, spec.dir_supports_create);
+  return Document(
+      kAuthority, spec.document_id, spec.parent_document_id, spec.display_name,
+      spec.mime_type, spec.size, spec.last_modified, spec.supports_delete,
+      spec.supports_rename, spec.dir_supports_create, spec.supports_thumbnail);
 }
 
 void ExpectMatchesSpec(const base::File::Info& info, const DocumentSpec& spec) {
@@ -1168,7 +1179,7 @@ TEST_F(ArcDocumentsProviderRootTest, MoveFileOnReadOnlyRoot) {
 
 TEST_F(ArcDocumentsProviderRootTest, WatchChanged) {
   int num_called = 0;
-  auto watcher_callback = base::Bind(
+  auto watcher_callback = base::BindRepeating(
       [](int* num_called, ChangeType type) {
         EXPECT_EQ(ChangeType::CHANGED, type);
         ++(*num_called);
@@ -1218,7 +1229,7 @@ TEST_F(ArcDocumentsProviderRootTest, WatchChanged) {
 
 TEST_F(ArcDocumentsProviderRootTest, WatchDeleted) {
   int num_called = 0;
-  auto watcher_callback = base::Bind(
+  auto watcher_callback = base::BindRepeating(
       [](int* num_called, ChangeType type) {
         EXPECT_EQ(ChangeType::DELETED, type);
         ++(*num_called);
@@ -1326,7 +1337,7 @@ TEST_F(ArcDocumentsProviderRootTest, ResolveToContentUrlDups) {
 
 TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonDeletable) {
   base::RunLoop run_loop;
-  root_->GetMetadata(
+  root_->GetExtraFileMetadata(
       base::FilePath(FILE_PATH_LITERAL("dir/no-delete.jpg")),
       base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
@@ -1336,6 +1347,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonDeletable) {
             EXPECT_FALSE(metadata.supports_delete);
             EXPECT_TRUE(metadata.supports_rename);
             EXPECT_TRUE(metadata.dir_supports_create);
+            EXPECT_TRUE(metadata.supports_thumbnail);
+            EXPECT_EQ(metadata.size, 3);
+            EXPECT_EQ(metadata.last_modified, base::Time::FromJavaTime(45));
           },
           &run_loop));
   run_loop.Run();
@@ -1343,7 +1357,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonDeletable) {
 
 TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonRenamable) {
   base::RunLoop run_loop;
-  root_->GetMetadata(
+  root_->GetExtraFileMetadata(
       base::FilePath(FILE_PATH_LITERAL("dir/no-rename.jpg")),
       base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
@@ -1353,6 +1367,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonRenamable) {
             EXPECT_TRUE(metadata.supports_delete);
             EXPECT_FALSE(metadata.supports_rename);
             EXPECT_TRUE(metadata.dir_supports_create);
+            EXPECT_TRUE(metadata.supports_thumbnail);
+            EXPECT_EQ(metadata.size, 3);
+            EXPECT_EQ(metadata.last_modified, base::Time::FromJavaTime(46));
           },
           &run_loop));
   run_loop.Run();
@@ -1360,7 +1377,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonRenamable) {
 
 TEST_F(ArcDocumentsProviderRootTest, GetMetadataReadOnlyDirectory) {
   base::RunLoop run_loop;
-  root_->GetMetadata(
+  root_->GetExtraFileMetadata(
       base::FilePath(FILE_PATH_LITERAL("ro-dir")),
       base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
@@ -1370,6 +1387,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataReadOnlyDirectory) {
             EXPECT_FALSE(metadata.supports_delete);
             EXPECT_FALSE(metadata.supports_rename);
             EXPECT_FALSE(metadata.dir_supports_create);
+            EXPECT_FALSE(metadata.supports_thumbnail);
+            EXPECT_EQ(metadata.size, -1);
+            EXPECT_EQ(metadata.last_modified, base::Time::FromJavaTime(56));
           },
           &run_loop));
   run_loop.Run();
@@ -1377,7 +1397,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataReadOnlyDirectory) {
 
 TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonExist) {
   base::RunLoop run_loop;
-  root_->GetMetadata(
+  root_->GetExtraFileMetadata(
       base::FilePath(FILE_PATH_LITERAL("dir/no-exist-file")),
       base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
@@ -1387,6 +1407,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetMetadataNonExist) {
             EXPECT_FALSE(metadata.supports_delete);
             EXPECT_FALSE(metadata.supports_rename);
             EXPECT_FALSE(metadata.dir_supports_create);
+            EXPECT_FALSE(metadata.supports_thumbnail);
+            EXPECT_EQ(metadata.size, 0);
+            EXPECT_EQ(metadata.last_modified, base::Time{});
           },
           &run_loop));
   run_loop.Run();

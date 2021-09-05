@@ -136,7 +136,7 @@ void SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem(
     return;
   }
 
-  Respond(OneArgument(std::make_unique<base::Value>(true)));
+  Respond(OneArgument(base::Value(true)));
 }
 
 ExtensionFunction::ResponseAction
@@ -191,7 +191,7 @@ void SyncFileSystemRequestFileSystemFunction::DidOpenFileSystem(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("name", file_system_name);
   dict->SetString("root", root_url.spec());
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusFunction::Run() {
@@ -312,7 +312,8 @@ void SyncFileSystemGetFileStatusesFunction::DidGetFileStatus(
 
     status_array->Append(std::move(dict));
   }
-  Respond(OneArgument(std::move(status_array)));
+  Respond(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(status_array))));
 }
 
 ExtensionFunction::ResponseAction
@@ -386,9 +387,8 @@ SyncFileSystemSetConflictResolutionPolicyFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SyncFileSystemGetConflictResolutionPolicyFunction::Run() {
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(sync_file_system::ToString(
-          sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN))));
+  return RespondNow(OneArgument(base::Value(sync_file_system::ToString(
+      sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN))));
 }
 
 ExtensionFunction::ResponseAction

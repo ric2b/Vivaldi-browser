@@ -1,5 +1,4 @@
-Chromium for arm Macs
-=====================
+# Chromium for arm Macs
 
 Apple is planning on selling Macs with arm chips by the end of 2020.
 This document describes the state of native binaries for these Macs.
@@ -11,23 +10,15 @@ There's also a [tester
 bot](https://ci.chromium.org/p/chromium/builders/ci/mac-arm64-rel-tests)
 that continuously runs tests. Most tests pass.
 
-Building _for_ arm Macs
------------------------
+## Building _for_ arm Macs
 
 You can build Chrome for arm macs on an Intel Mac. To build for arm64, you have
 to do 2 things:
 
-1. use the `MacOSX11.0.sdk` that comes with
-   Xcode 12 beta. If you're on Google's corporate network, edit your `.gclient`
-   file and add this `custom_vars`:
-
-       "custom_vars": { "mac_xcode_version": "xcode_12_beta" },
-
-   Then just run `gclient sync` and you'll automatically get that SDK and will
-   build with it.
-
-   Otherwise, manually download and install the current Xcode 12 beta and make
-   it the active Xcode with `xcode-select`.
+1. use the `MacOSX11.0.sdk` that comes with Xcode 12.2. If you're on Google's
+   corporate network, this SDK is part of the hermetic toolchain and will be
+   used automatically. Otherwise, manually download and install this version of
+   Xcode and, if necessary, make it the active Xcode with `xcode-select`.
 
 2. Add `target_cpu = "arm64"` to your `args.gn`.
 
@@ -59,8 +50,37 @@ available for Googlers to run tests on.
 You can follow the [Mac-ARM64 label](https://crbug.com/?q=label%3Amac-arm64) to
 get updates on progress.
 
-Building _on_ arm Macs
------------------------
+### Universal Builds
+
+A “universal” (or “fat”) `.app` can be created from distinct x86_64 and arm64
+builds produced from the same source version. Chromium has a `universalizer.py`
+tool that can then be used to merge the two builds into a single universal
+`.app`.
+
+    % ninja -C out/release_x86_64 chrome
+    % ninja -C out/release_arm64 chrome
+    % mkdir out/release_universal
+    % chrome/installer/mac/universalizer.py \
+          out/release_x86_64/Chromium.app \
+          out/release_arm64/Chromium.app \
+          out/release_universal/Chromium.app
+
+The universal build is produced in this way rather than having a single
+all-encompassing `gn` configuration because:
+
+ - Chromium builds tend to take a long time, even maximizing the parallelism
+   capabilities of a single machine. This split allows an additional dimension
+   of parallelism by delegating the x86_64 and arm64 build tasks to different
+   machines.
+ - During the mac-arm64 bring-up, the x86_64 and arm64 versions were built using
+   different SDK and toolchain versions. When using the hermetic SDK and
+   toolchain, a single version of this package must be shared by an entire
+   source tree, because it’s managed by `gclient`, not `gn`. However, as of
+   November 2020, Chromium builds for the two architectures converged and are
+   expected to remain on the same version indefinitely, so this is now more of a
+   historical artifact.
+
+## Building _on_ arm Macs
 
 Building _on_ arm Macs means that all the tools we use to build chrome need
 to either work under Rosetta or have a native arm binary.

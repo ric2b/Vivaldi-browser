@@ -74,8 +74,7 @@ class ReadOnlyOriginView : public views::View {
                      const SkBitmap* icon_bitmap,
                      Profile* profile,
                      security_state::SecurityLevel security_level,
-                     SkColor background_color,
-                     views::ButtonListener* site_settings_listener) {
+                     SkColor background_color) {
     auto title_origin_container = std::make_unique<views::View>();
     SkColor foreground = color_utils::GetColorWithMaxContrast(background_color);
     views::GridLayout* title_origin_layout =
@@ -108,6 +107,9 @@ class ReadOnlyOriginView : public views::View {
     columns = origin_layout->AddColumnSet(0);
     columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
                        1.0, views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+    if (PaymentsExperimentalFeatures::IsEnabled(
+            features::kPaymentHandlerSecurityIcon))
+      columns->AddPaddingColumn(views::GridLayout::kFixedSize, 4);
     columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
                        1.0, views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
     origin_layout->StartRow(views::GridLayout::kFixedSize, 0);
@@ -261,6 +263,10 @@ void PaymentHandlerWebFlowViewController::FillContentView(
       gfx::Size(0, dialog()->GetActualPaymentHandlerDialogHeight() - 75));
 }
 
+bool PaymentHandlerWebFlowViewController::ShouldShowPrimaryButton() {
+  return false;
+}
+
 bool PaymentHandlerWebFlowViewController::ShouldShowSecondaryButton() {
   return false;
 }
@@ -278,7 +284,7 @@ PaymentHandlerWebFlowViewController::CreateHeaderContentView(
       state()->selected_app()->icon_bitmap(), profile_,
       web_contents() ? SslValidityChecker::GetSecurityLevel(web_contents())
                      : security_state::NONE,
-      background->get_color(), this);
+      background->get_color());
 }
 
 std::unique_ptr<views::Background>

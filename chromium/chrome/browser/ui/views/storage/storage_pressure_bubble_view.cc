@@ -53,7 +53,7 @@ void ShowStoragePressureBubble(const url::Origin origin) {
 
 void StoragePressureBubbleView::ShowBubble(const url::Origin origin) {
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (!browser || !base::FeatureList::IsEnabled(features::kStoragePressureUI))
+  if (!browser)
     return;
   views::View* vivaldi_anchor_view = nullptr;
   if (vivaldi::IsVivaldiRunning()) {
@@ -136,8 +136,7 @@ void StoragePressureBubbleView::Init() {
   text_label->SetLineHeight(20);
   text_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   text_label->SizeToFit(
-      provider->GetDistanceMetric(
-          ChromeDistanceMetric::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+      provider->GetDistanceMetric(views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
       margins().width());
   AddChildView(std::move(text_label));
 }

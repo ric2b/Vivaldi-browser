@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -27,6 +27,8 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
@@ -192,8 +194,14 @@ SafeBrowsingService::GetURLLoaderFactory(Profile* profile) {
   if (!base::FeatureList::IsEnabled(kSafeBrowsingSeparateNetworkContexts))
     return GetURLLoaderFactory();
 
-  return services_delegate_->GetSafeBrowsingNetworkContext(profile)
-      ->GetURLLoaderFactory();
+  safe_browsing::SafeBrowsingNetworkContext* network_context =
+      services_delegate_->GetSafeBrowsingNetworkContext(profile);
+
+  // |network_context| may be null in tests
+  if (!network_context)
+    return nullptr;
+
+  return network_context->GetURLLoaderFactory();
 }
 
 void SafeBrowsingService::FlushNetworkInterfaceForTesting() {
@@ -240,8 +248,8 @@ SafeBrowsingService::CreatePreferenceValidationDelegate(
 }
 
 void SafeBrowsingService::RegisterDelayedAnalysisCallback(
-    const DelayedAnalysisCallback& callback) {
-  services_delegate_->RegisterDelayedAnalysisCallback(callback);
+    DelayedAnalysisCallback callback) {
+  services_delegate_->RegisterDelayedAnalysisCallback(std::move(callback));
 }
 
 void SafeBrowsingService::AddDownloadManager(
@@ -355,17 +363,17 @@ void SafeBrowsingService::OnProfileAdded(Profile* profile) {
   std::unique_ptr<PrefChangeRegistrar> registrar =
       std::make_unique<PrefChangeRegistrar>();
   registrar->Init(pref_service);
-  registrar->Add(
-      prefs::kSafeBrowsingEnabled,
-      base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
+  registrar->Add(prefs::kSafeBrowsingEnabled,
+                 base::BindRepeating(&SafeBrowsingService::RefreshState,
+                                     base::Unretained(this)));
   // ClientSideDetectionService will need to be refresh the models
   // renderers have if extended-reporting changes.
-  registrar->Add(
-      prefs::kSafeBrowsingScoutReportingEnabled,
-      base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
-  registrar->Add(
-      prefs::kSafeBrowsingEnhanced,
-      base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
+  registrar->Add(prefs::kSafeBrowsingScoutReportingEnabled,
+                 base::BindRepeating(&SafeBrowsingService::RefreshState,
+                                     base::Unretained(this)));
+  registrar->Add(prefs::kSafeBrowsingEnhanced,
+                 base::BindRepeating(&SafeBrowsingService::RefreshState,
+                                     base::Unretained(this)));
   prefs_map_[pref_service] = std::move(registrar);
   RefreshState();
 
@@ -380,6 +388,8 @@ void SafeBrowsingService::OnProfileAdded(Profile* profile) {
   // Extended Reporting metrics are handled together elsewhere.
   RecordExtendedReportingMetrics(*pref_service);
 
+  SafeBrowsingMetricsCollectorFactory::GetForProfile(profile)->StartLogging();
+
   CreateServicesForProfile(profile);
 }
 
@@ -393,6 +403,10 @@ void SafeBrowsingService::OnProfileWillBeDestroyed(Profile* profile) {
   services_delegate_->RemovePasswordProtectionService(profile);
   services_delegate_->RemoveTelemetryService(profile);
   services_delegate_->RemoveSafeBrowsingNetworkContext(profile);
+
+  PrefService* pref_service = profile->GetPrefs();
+  DCHECK(pref_service);
+  prefs_map_.erase(pref_service);
 }
 
 void SafeBrowsingService::CreateServicesForProfile(Profile* profile) {
@@ -404,7 +418,7 @@ void SafeBrowsingService::CreateServicesForProfile(Profile* profile) {
 
 std::unique_ptr<SafeBrowsingService::StateSubscription>
 SafeBrowsingService::RegisterStateCallback(
-    const base::Callback<void(void)>& callback) {
+    const base::RepeatingClosure& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return state_callback_list_.Add(callback);
 }

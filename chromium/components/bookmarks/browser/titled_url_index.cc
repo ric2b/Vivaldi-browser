@@ -60,60 +60,33 @@ void TitledUrlIndex::SetNodeSorter(
 }
 
 void TitledUrlIndex::Add(const TitledUrlNode* node) {
-  std::vector<base::string16> terms =
-      ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    RegisterNode(terms[i], node);
-  terms = ExtractQueryWords(
-      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), nullptr));
-  for (size_t i = 0; i < terms.size(); ++i)
-    RegisterNode(terms[i], node);
-#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
-  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    RegisterNode(terms[i], node);
-  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    RegisterNode(terms[i], node);
-#endif
+  for (const base::string16& term : ExtractIndexTerms(node))
+    RegisterNode(term, node);
 }
 
 void TitledUrlIndex::Remove(const TitledUrlNode* node) {
-  std::vector<base::string16> terms =
-      ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    UnregisterNode(terms[i], node);
-  terms = ExtractQueryWords(
-      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), nullptr));
-  for (size_t i = 0; i < terms.size(); ++i)
-    UnregisterNode(terms[i], node);
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
-  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    UnregisterNode(terms[i], node);
-  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()));
-  for (size_t i = 0; i < terms.size(); ++i)
-    UnregisterNode(terms[i], node);
-#endif
+  for (const base::string16& term : ExtractIndexTerms(node))
+    UnregisterNode(term, node);
 }
 
-void TitledUrlIndex::GetResultsMatching(
+std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
     const base::string16& input_query,
     size_t max_count,
     query_parser::MatchingAlgorithm matching_algorithm,
-    std::vector<TitledUrlMatch>* results) {
+    bool match_ancestor_titles) {
   const base::string16 query = Normalize(input_query);
   std::vector<base::string16> terms = ExtractQueryWords(query);
-  if (terms.empty())
-    return;
 
-  TitledUrlNodeSet matches;
-  for (size_t i = 0; i < terms.size(); ++i) {
-    if (!GetResultsMatchingTerm(terms[i], i == 0, matching_algorithm,
-                                &matches)) {
-      return;
-    }
-  }
+  // When |match_ancestor_titles| is true, |matches| shouldn't exclude nodes
+  // that don't match every query term, as the query terms may match in the
+  // ancestors. |MatchTitledUrlNodeWithQuery()| below will filter out nodes that
+  // neither match nor ancestor-match every query term.
+  TitledUrlNodeSet matches =
+      match_ancestor_titles
+          ? RetrieveNodesMatchingAnyTerms(terms, matching_algorithm)
+          : RetrieveNodesMatchingAllTerms(terms, matching_algorithm);
+  if (matches.empty())
+    return {};
 
   TitledUrlNodes sorted_nodes;
   SortMatches(matches, &sorted_nodes);
@@ -130,14 +103,19 @@ void TitledUrlIndex::GetResultsMatching(
   // that calculates result relevance in HistoryContentsProvider::ConvertResults
   // will run backwards to assure higher relevance will be attributed to the
   // best matches.
+  std::vector<TitledUrlMatch> results;
   for (TitledUrlNodes::const_iterator i = sorted_nodes.begin();
-       i != sorted_nodes.end() && results->size() < max_count;
-       ++i)
-    AddMatchToResults(*i, &parser, query_nodes, results);
+       i != sorted_nodes.end() && results.size() < max_count; ++i) {
+    base::Optional<TitledUrlMatch> match = MatchTitledUrlNodeWithQuery(
+        *i, &parser, query_nodes, match_ancestor_titles);
+    if (match)
+      results.push_back(match.value());
+  }
+  return results;
 }
 
 void TitledUrlIndex::SortMatches(const TitledUrlNodeSet& matches,
-                                TitledUrlNodes* sorted_nodes) const {
+                                 TitledUrlNodes* sorted_nodes) const {
   if (sorter_) {
     sorter_->SortMatches(matches, sorted_nodes);
   } else {
@@ -145,20 +123,20 @@ void TitledUrlIndex::SortMatches(const TitledUrlNodeSet& matches,
   }
 }
 
-void TitledUrlIndex::AddMatchToResults(
+base::Optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
     const TitledUrlNode* node,
     query_parser::QueryParser* parser,
     const query_parser::QueryNodeVector& query_nodes,
-    std::vector<TitledUrlMatch>* results) {
+    bool match_ancestor_titles) {
   if (!node) {
-    return;
+    return base::nullopt;
   }
   // Check that the result matches the query.  The previous search
   // was a simple per-word search, while the more complex matching
   // of QueryParser may filter it out.  For example, the query
   // ["thi"] will match the title [Thinking], but since
   // ["thi"] is quoted we don't want to do a prefix match.
-  query_parser::QueryWordVector title_words, url_words;
+  query_parser::QueryWordVector title_words, url_words, ancestor_words;
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
   query_parser::QueryWordVector description_words, nickname_words;
 #endif
@@ -169,6 +147,14 @@ void TitledUrlIndex::AddMatchToResults(
   parser->ExtractQueryWords(
       CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments),
       &url_words);
+  if (match_ancestor_titles) {
+    for (auto ancestor : node->GetTitledUrlNodeAncestorTitles()) {
+      parser->ExtractQueryWords(
+          base::i18n::ToLower(Normalize(base::string16(ancestor))),
+          &ancestor_words);
+    }
+  }
+
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
   const base::string16 lower_description =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
@@ -176,30 +162,36 @@ void TitledUrlIndex::AddMatchToResults(
   const base::string16 lower_nickname =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
   parser->ExtractQueryWords(lower_nickname, &nickname_words);
-#endif
-  query_parser::Snippet::MatchPositions title_matches, url_matches;
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+
   query_parser::Snippet::MatchPositions description_matches, nickname_matches;
 #endif
+  query_parser::Snippet::MatchPositions title_matches, url_matches;
+  bool query_has_ancestor_matches = false;
   for (const auto& node : query_nodes) {
     const bool has_title_matches =
         node->HasMatchIn(title_words, &title_matches);
     const bool has_url_matches = node->HasMatchIn(url_words, &url_matches);
+    const bool has_ancestor_matches =
+        match_ancestor_titles && node->HasMatchIn(ancestor_words);
+    query_has_ancestor_matches =
+        query_has_ancestor_matches || has_ancestor_matches;
+    if (!has_title_matches && !has_url_matches && !has_ancestor_matches)
+      return base::nullopt;
+
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
     const bool has_description_matches =
         node->HasMatchIn(description_words, &description_matches);
     const bool has_nickname_matches =
         node->HasMatchIn(nickname_words, &nickname_matches);
-#endif
-    if (!has_title_matches && !has_url_matches
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+    if (!has_title_matches && !has_url_matches && !has_ancestor_matches
         && !has_description_matches && !has_nickname_matches
-#endif
         )
-      return;
+      return base::nullopt;
+#endif
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
   }
+
   TitledUrlMatch match;
   if (lower_title.length() == node->GetTitledUrlNodeTitle().length()) {
     // Only use title matches if the lowercase string is the same length
@@ -216,53 +208,75 @@ void TitledUrlIndex::AddMatchToResults(
   url_matches =
       TitledUrlMatch::ReplaceOffsetsInMatchPositions(url_matches, offsets);
   match.url_match_positions.swap(url_matches);
+  match.has_ancestor_match = query_has_ancestor_matches;
   match.node = node;
-  results->push_back(match);
+  return match;
 }
 
-bool TitledUrlIndex::GetResultsMatchingTerm(
+TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAllTerms(
+    const std::vector<base::string16>& terms,
+    query_parser::MatchingAlgorithm matching_algorithm) const {
+  if (terms.empty())
+    return {};
+
+  TitledUrlNodeSet matches =
+      RetrieveNodesMatchingTerm(terms[0], matching_algorithm);
+  for (size_t i = 1; i < terms.size() && !matches.empty(); ++i) {
+    TitledUrlNodeSet term_matches =
+        RetrieveNodesMatchingTerm(terms[i], matching_algorithm);
+    // Compute intersection between the two sets.
+    base::EraseIf(matches, base::IsNotIn<TitledUrlNodeSet>(term_matches));
+  }
+
+  return matches;
+}
+
+TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAnyTerms(
+    const std::vector<base::string16>& terms,
+    query_parser::MatchingAlgorithm matching_algorithm) const {
+  if (terms.empty())
+    return {};
+
+  TitledUrlNodes matches =
+      RetrieveNodesMatchingTerm(terms[0], matching_algorithm);
+  for (size_t i = 1; i < terms.size(); ++i) {
+    TitledUrlNodes term_matches =
+        RetrieveNodesMatchingTerm(terms[i], matching_algorithm);
+    std::copy(term_matches.begin(), term_matches.end(),
+              std::back_inserter(matches));
+  }
+
+  return TitledUrlNodeSet(matches);
+}
+
+TitledUrlIndex::TitledUrlNodes TitledUrlIndex::RetrieveNodesMatchingTerm(
     const base::string16& term,
-    bool first_term,
-    query_parser::MatchingAlgorithm matching_algorithm,
-    TitledUrlNodeSet* matches) {
+    query_parser::MatchingAlgorithm matching_algorithm) const {
   Index::const_iterator i = index_.lower_bound(term);
   if (i == index_.end())
-    return false;
+    return {};
 
   if (!query_parser::QueryParser::IsWordLongEnoughForPrefixSearch(
       term, matching_algorithm)) {
     // Term is too short for prefix match, compare using exact match.
     if (i->first != term)
-      return false;  // No title/URL pairs with this term.
-
-    if (first_term) {
-      (*matches) = i->second;
-      return true;
-    }
-    base::EraseIf(*matches, base::IsNotIn<TitledUrlNodeSet>(i->second));
-  } else {
-    // Loop through index adding all entries that start with term to
-    // |prefix_matches|.
-    TitledUrlNodeSet tmp_prefix_matches;
-    // If this is the first term, then store the result directly in |matches|
-    // to avoid calling stl intersection (which requires a copy).
-    TitledUrlNodeSet* prefix_matches =
-        first_term ? matches : &tmp_prefix_matches;
-    while (i != index_.end() &&
-           i->first.size() >= term.size() &&
-           term.compare(0, term.size(), i->first, 0, term.size()) == 0) {
-      for (auto n = i->second.begin(); n != i->second.end(); ++n) {
-        prefix_matches->insert(prefix_matches->end(), *n);
-      }
-      ++i;
-    }
-    if (!first_term) {
-      base::EraseIf(*matches, base::IsNotIn<TitledUrlNodeSet>(*prefix_matches));
-    }
+      return {};  // No title/URL pairs with this term.
+    return TitledUrlNodes(i->second.begin(), i->second.end());
   }
-  return !matches->empty();
+
+  // Loop through index adding all entries that start with term to
+  // |prefix_matches|.
+  TitledUrlNodes prefix_matches;
+  while (i != index_.end() && i->first.size() >= term.size() &&
+         term.compare(0, term.size(), i->first, 0, term.size()) == 0) {
+    prefix_matches.insert(prefix_matches.end(), i->second.begin(),
+                          i->second.end());
+    ++i;
+  }
+  return prefix_matches;
 }
 
+// static
 std::vector<base::string16> TitledUrlIndex::ExtractQueryWords(
     const base::string16& query) {
   std::vector<base::string16> terms;
@@ -272,6 +286,35 @@ std::vector<base::string16> TitledUrlIndex::ExtractQueryWords(
   parser.ParseQueryWords(base::i18n::ToLower(query),
                          query_parser::MatchingAlgorithm::DEFAULT,
                          &terms);
+  return terms;
+}
+
+// static
+std::vector<base::string16> TitledUrlIndex::ExtractIndexTerms(
+    const TitledUrlNode* node) {
+  std::vector<base::string16> terms;
+
+  for (const base::string16& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
+    terms.push_back(term);
+  }
+
+  for (const base::string16& term : ExtractQueryWords(CleanUpUrlForMatching(
+           node->GetTitledUrlNodeUrl(), /*adjustments=*/nullptr))) {
+    terms.push_back(term);
+  }
+
+#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
+  for (const base::string16& term : ExtractQueryWords(
+           Normalize(node->GetTitledUrlNodeDescription()))) {
+    terms.push_back(term);
+  }
+  for (const base::string16& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
+    terms.push_back(term);
+  }
+#endif
+
   return terms;
 }
 

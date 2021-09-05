@@ -25,14 +25,45 @@ namespace reporting {
 // It ensures that all ReportQueues are created with the same storage settings.
 //
 // Example Usage:
-// Status SendMessage(google::protobuf::ImportantMessage important_message,
-//                    base::OnceCallback<void(Status)> callback) {
-//   ASSIGN_OR_RETURN(std::unique_ptr<ReportQueueConfiguration> config,
-//                  ReportQueueConfiguration::Create(...));
-//   ASSIGN_OR_RETURN(std::unique_ptr<ReportQueue> report_queue,
-//                  ReportingClient::CreateReportQueue(config));
-//   return report_queue->Enqueue(important_message, callback);
+// void SendMessage(google::protobuf::ImportantMessage important_message,
+//                  reporting::ReportQueue::EnqueueCallback done_cb) {
+//   // Create configuration.
+//   auto config_result = reporting::ReportQueueConfiguration::Create(...);
+//   // Bail out if configuration failed to create.
+//   if (!config_result.ok()) {
+//     std::move(done_cb).Run(config_result.status());
+//     return;
+//   }
+//   // Asynchronously create ReportingQueue.
+//   base::ThreadPool::PostTask(
+//       FROM_HERE,
+//       base::BindOnce(
+//           [](google::protobuf::ImportantMessage important_message,
+//              reporting::ReportQueue::EnqueueCallback done_cb,
+//              std::unique_ptr<reporting::ReportQueueConfiguration> config) {
+//             // Asynchronously create ReportingQueue.
+//             reporting::ReportingClient::CreateReportQueue(
+//                 std::move(config),
+//                 base::BindOnce(
+//                     [](base::StringPiece data,
+//                        reporting::ReportQueue::EnqueueCallback done_cb,
+//                        reporting::StatusOr<std::unique_ptr<
+//                            reporting::ReportQueue>> report_queue_result) {
+//                       // Bail out if queue failed to create.
+//                       if (!report_queue_result.ok()) {
+//                         std::move(done_cb).Run(report_queue_result.status());
+//                         return;
+//                       }
+//                       // Queue created successfully, enqueue the message.
+//                       report_queue_result.ValueOrDie()->Enqueue(
+//                           important_message, std::move(done_cb));
+//                     },
+//                     important_message, std::move(done_cb)));
+//           },
+//           important_message, std::move(done_cb),
+//           std::move(config_result.ValueOrDie())))
 // }
+
 class ReportingClient {
  public:
   struct Configuration {
@@ -151,6 +182,20 @@ class ReportingClient {
     std::unique_ptr<Configuration> client_config_;
   };
 
+  // RAII class for testing ReportingClient - substitutes a cloud policy client
+  // builder to return given client and resets it when destructed.
+  class TestEnvironment {
+   public:
+    explicit TestEnvironment(std::unique_ptr<policy::CloudPolicyClient> client);
+    TestEnvironment(const TestEnvironment& other) = delete;
+    TestEnvironment& operator=(const TestEnvironment& other) = delete;
+    ~TestEnvironment();
+
+   private:
+    ReportingClient::BuildCloudPolicyClientCallback
+        saved_build_cloud_policy_client_cb_;
+  };
+
   ~ReportingClient();
   ReportingClient(const ReportingClient& other) = delete;
   ReportingClient& operator=(const ReportingClient& other) = delete;
@@ -164,12 +209,6 @@ class ReportingClient {
   static void CreateReportQueue(
       std::unique_ptr<ReportQueueConfiguration> config,
       CreateReportQueueCallback create_cb);
-
-  // Sets up the ReportingClient for testing with a specified CloudPolicyClient.
-  static void Setup_test(std::unique_ptr<policy::CloudPolicyClient> client);
-  // Resets the singleton object. Should only be used in tests when the current
-  // TaskEnvironment will be invalidated.
-  static void Reset_test();
 
  private:
   // Uploader is passed to Storage in order to upload messages using the
@@ -186,8 +225,11 @@ class ReportingClient {
     Uploader(const Uploader& other) = delete;
     Uploader& operator=(const Uploader& other) = delete;
 
-    void ProcessRecord(StatusOr<EncryptedRecord> data,
+    void ProcessRecord(EncryptedRecord data,
                        base::OnceCallback<void(bool)> processed_cb) override;
+    void ProcessGap(SequencingInformation start,
+                    uint64_t count,
+                    base::OnceCallback<void(bool)> processed_cb) override;
 
     void Completed(Status final_status) override;
 
@@ -222,8 +264,11 @@ class ReportingClient {
   };
 
   friend struct base::DefaultSingletonTraits<ReportingClient>;
+  friend class TestEnvironment;
 
   ReportingClient();
+
+  // Access to singleton instance of ReportingClient.
   static ReportingClient* GetInstance();
 
   void OnPushComplete();
@@ -249,7 +294,6 @@ class ReportingClient {
   std::unique_ptr<UploadClient> upload_client_;
   std::unique_ptr<Configuration> config_;
 };
-
 }  // namespace reporting
 
 #endif  // CHROME_BROWSER_POLICY_MESSAGING_LAYER_PUBLIC_REPORT_CLIENT_H_

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/time/time.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
@@ -34,12 +35,14 @@ class MockActionDelegate : public ActionDelegate {
 
   void ShortWaitForElement(
       const Selector& selector,
-      base::OnceCallback<void(const ClientStatus&)> callback) override {
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback)
+      override {
     OnShortWaitForElement(selector, callback);
   }
-  MOCK_METHOD2(OnShortWaitForElement,
-               void(const Selector& selector,
-                    base::OnceCallback<void(const ClientStatus&)>&));
+  MOCK_METHOD2(
+      OnShortWaitForElement,
+      void(const Selector& selector,
+           base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>&));
 
   void WaitForDom(
       base::TimeDelta max_wait_time,
@@ -47,16 +50,18 @@ class MockActionDelegate : public ActionDelegate {
       base::RepeatingCallback<
           void(BatchElementChecker*,
                base::OnceCallback<void(const ClientStatus&)>)> check_elements,
-      base::OnceCallback<void(const ClientStatus&)> callback) override {
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback)
+      override {
     OnWaitForDom(max_wait_time, allow_interrupt, check_elements, callback);
   }
-  MOCK_METHOD4(OnWaitForDom,
-               void(base::TimeDelta,
-                    bool,
-                    base::RepeatingCallback<
-                        void(BatchElementChecker*,
-                             base::OnceCallback<void(const ClientStatus&)>)>&,
-                    base::OnceCallback<void(const ClientStatus&)>&));
+  MOCK_METHOD4(
+      OnWaitForDom,
+      void(base::TimeDelta,
+           bool,
+           base::RepeatingCallback<
+               void(BatchElementChecker*,
+                    base::OnceCallback<void(const ClientStatus&)>)>&,
+           base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>&));
 
   MOCK_METHOD1(SetStatusMessage, void(const std::string& message));
 
@@ -66,19 +71,29 @@ class MockActionDelegate : public ActionDelegate {
 
   MOCK_METHOD0(GetBubbleMessage, std::string());
 
-  MOCK_METHOD2(FindElement,
-               void(const Selector& selector, ElementFinder::Callback));
+  MOCK_CONST_METHOD2(FindElement,
+                     void(const Selector& selector, ElementFinder::Callback));
+
+  MOCK_CONST_METHOD2(FindAllElements,
+                     void(const Selector& selector,
+                          ElementFinder::Callback callback));
 
   MOCK_METHOD3(ClickOrTapElement,
                void(ClickType click_type,
                     const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  MOCK_METHOD2(WaitForDocumentToBecomeInteractive,
+  MOCK_METHOD2(ScrollIntoView,
                void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  MOCK_METHOD2(ScrollIntoView,
+  MOCK_METHOD4(WaitUntilElementIsStable,
+               void(int,
+                    base::TimeDelta,
+                    const ElementFinder::Result& element,
+                    base::OnceCallback<void(const ClientStatus&)> callback));
+
+  MOCK_METHOD2(CheckOnTop,
                void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
@@ -91,7 +106,7 @@ class MockActionDelegate : public ActionDelegate {
 
   MOCK_METHOD0(CleanUpAfterPrompt, void());
 
-  MOCK_METHOD1(SetBrowseDomainsWhitelist,
+  MOCK_METHOD1(SetBrowseDomainsAllowlist,
                void(std::vector<std::string> domains));
 
   void FillAddressForm(
@@ -141,16 +156,17 @@ class MockActionDelegate : public ActionDelegate {
                     const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  MOCK_METHOD3(FocusElement,
+  MOCK_METHOD4(ScrollToElementPosition,
                void(const Selector& selector,
                     const TopPadding& top_padding,
+                    const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
   MOCK_METHOD1(SetTouchableElementArea,
                void(const ElementAreaProto& touchable_element_area));
 
   MOCK_METHOD2(HighlightElement,
-               void(const Selector& selector,
+               void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
   MOCK_METHOD1(CollectUserData,
@@ -178,42 +194,34 @@ class MockActionDelegate : public ActionDelegate {
            base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
                                    const base::string16& cvc)>& callback));
 
-  void GetFieldValue(const Selector& selector,
-                     base::OnceCallback<void(const ClientStatus&,
-                                             const std::string&)> callback) {
-    OnGetFieldValue(selector, callback);
-  }
-  MOCK_METHOD2(OnGetFieldValue,
-               void(const Selector& selector,
+  MOCK_METHOD2(GetFieldValue,
+               void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&,
-                                            const std::string&)>& callback));
+                                            const std::string&)> callback));
 
-  void SetFieldValue(const std::string& value,
-                     KeyboardValueFillStrategy fill_strategy,
-                     int key_press_delay_in_millisecond,
-                     const ElementFinder::Result& element,
-                     base::OnceCallback<void(const ClientStatus&)> callback) {
-    OnSetFieldValue(value, element, callback);
-    OnSetFieldValue(value,
-                    fill_strategy == SIMULATE_KEY_PRESSES ||
-                        fill_strategy == SIMULATE_KEY_PRESSES_SELECT_VALUE,
-                    key_press_delay_in_millisecond, element, callback);
-  }
-  MOCK_METHOD3(OnSetFieldValue,
+  MOCK_METHOD3(GetStringAttribute,
+               void(const std::vector<std::string>& attributes,
+                    const ElementFinder::Result& element,
+                    base::OnceCallback<void(const ClientStatus&,
+                                            const std::string&)> callback));
+
+  MOCK_METHOD3(SetValueAttribute,
                void(const std::string& value,
                     const ElementFinder::Result& element,
-                    base::OnceCallback<void(const ClientStatus&)>& callback));
-  MOCK_METHOD5(OnSetFieldValue,
-               void(const std::string& value,
-                    bool simulate_key_presses,
-                    int delay_in_millisecond,
-                    const ElementFinder::Result& element,
-                    base::OnceCallback<void(const ClientStatus&)>& callback));
+                    base::OnceCallback<void(const ClientStatus&)> callback));
 
   MOCK_METHOD4(SetAttribute,
                void(const std::vector<std::string>& attribute,
                     const std::string& value,
                     const ElementFinder::Result& element,
+                    base::OnceCallback<void(const ClientStatus&)> callback));
+
+  MOCK_METHOD2(SelectFieldValue,
+               void(const ElementFinder::Result& element,
+                    base::OnceCallback<void(const ClientStatus&)> callback));
+
+  MOCK_METHOD2(FocusField,
+               void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
   void SendKeyboardInput(
@@ -230,9 +238,15 @@ class MockActionDelegate : public ActionDelegate {
                     base::OnceCallback<void(const ClientStatus&)>& callback));
 
   MOCK_METHOD2(GetOuterHtml,
-               void(const Selector& selector,
+               void(const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&,
                                             const std::string&)> callback));
+
+  MOCK_METHOD2(
+      GetOuterHtmls,
+      void(const ElementFinder::Result& elements,
+           base::OnceCallback<void(const ClientStatus&,
+                                   const std::vector<std::string>&)> callback));
 
   MOCK_METHOD2(GetElementTag,
                void(const ElementFinder::Result& element,
@@ -293,29 +307,39 @@ class MockActionDelegate : public ActionDelegate {
 
   MOCK_METHOD2(
       OnGetDocumentReadyState,
-      void(const Selector&,
+      void(const ElementFinder::Result&,
            base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>&));
 
   void GetDocumentReadyState(
-      const Selector& frame,
+      const ElementFinder::Result& optional_frame_element,
       base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>
           callback) override {
-    OnGetDocumentReadyState(frame, callback);
+    OnGetDocumentReadyState(optional_frame_element, callback);
   }
 
-  MOCK_METHOD3(
-      OnWaitForDocumentReadyState,
-      void(const Selector&,
-           DocumentReadyState min_ready_state,
-           base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>&));
+  MOCK_METHOD3(OnWaitForDocumentReadyState,
+               void(DocumentReadyState,
+                    const ElementFinder::Result&,
+                    base::OnceCallback<void(const ClientStatus&,
+                                            DocumentReadyState,
+                                            base::TimeDelta)>&));
 
   void WaitForDocumentReadyState(
-      const Selector& frame,
+      base::TimeDelta max_wait_time,
       DocumentReadyState min_ready_state,
-      base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>
-          callback) override {
-    OnWaitForDocumentReadyState(frame, min_ready_state, callback);
+      const ElementFinder::Result& optional_frame_element,
+      base::OnceCallback<void(const ClientStatus&,
+                              DocumentReadyState,
+                              base::TimeDelta)> callback) override {
+    OnWaitForDocumentReadyState(min_ready_state, optional_frame_element,
+                                callback);
   }
+
+  MOCK_METHOD4(WaitUntilDocumentIsInReadyState,
+               void(base::TimeDelta,
+                    DocumentReadyState,
+                    const ElementFinder::Result&,
+                    base::OnceCallback<void(const ClientStatus&)>));
 
   MOCK_METHOD0(RequireUI, void());
   MOCK_METHOD0(SetExpandSheetForPromptAction, bool());
@@ -339,11 +363,13 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(SetOverlayBehavior,
                void(ConfigureUiStateProto::OverlayBehavior));
 
-  base::WeakPtr<ActionDelegate> GetWeakPtr() override {
+  base::WeakPtr<ActionDelegate> GetWeakPtr() const override {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
-  const ClientSettings& GetSettings() override { return client_settings_; }
+  const ClientSettings& GetSettings() const override {
+    return client_settings_;
+  }
 
   ClientSettings client_settings_;
 

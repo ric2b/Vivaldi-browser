@@ -38,6 +38,8 @@ import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -54,13 +56,11 @@ import org.chromium.chrome.features.start_surface.InstantStartTest;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiDisableIf;
@@ -173,6 +173,7 @@ public class ReturnToChromeTest {
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/100000"
             + "/start_surface_variation/single/open_ntp_instead_of_start/true"})
     @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.O_MR1) // See https://crbug.com/1091268.
+    @DisabledTest(message="https://crbug.com/1144184")
     public void testTabSwitcherModeNotTriggeredWithinThreshold_NTP() throws Exception {
         // clang-format on
         InstantStartTest.createTabStateFile(new int[] {0, 1});
@@ -294,11 +295,12 @@ public class ReturnToChromeTest {
         assertEquals(3, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
 
         // Trigger hide and resume.
-        ApplicationTestUtils.fireHomeScreenIntent(InstrumentationRegistry.getTargetContext());
-        mActivityTestRule.startMainActivityFromLauncher();
+        ChromeApplicationTestUtils.fireHomeScreenIntent(InstrumentationRegistry.getTargetContext());
+        mActivityTestRule.resumeMainActivityFromLauncher();
 
-        Assert.assertFalse(
-                mActivityTestRule.getActivity().getTabModelSelector().isIncognitoSelected());
+        CriteriaHelper.pollUiThread(() -> {
+            return !mActivityTestRule.getActivity().getTabModelSelector().isIncognitoSelected();
+        });
         assertEquals(3, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
         Assert.assertTrue(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
     }
@@ -330,8 +332,8 @@ public class ReturnToChromeTest {
         assertEquals(3, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
 
         // Trigger hide and resume.
-        ApplicationTestUtils.fireHomeScreenIntent(InstrumentationRegistry.getTargetContext());
-        mActivityTestRule.startMainActivityFromLauncher();
+        ChromeApplicationTestUtils.fireHomeScreenIntent(InstrumentationRegistry.getTargetContext());
+        mActivityTestRule.resumeMainActivityFromLauncher();
 
         Assert.assertTrue(
                 mActivityTestRule.getActivity().getTabModelSelector().isIncognitoSelected());
@@ -413,6 +415,8 @@ public class ReturnToChromeTest {
     // clang-format off
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0"
             + "/start_surface_variation/omniboxonly"})
+    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.Q, sdk_is_greater_than = VERSION_CODES.O,
+            message = "crbug.com/1134361")
     public void testTabSwitcherModeTriggeredBeyondThreshold_WarmStart() throws Exception {
         // clang-format on
         testTabSwitcherModeTriggeredBeyondThreshold();

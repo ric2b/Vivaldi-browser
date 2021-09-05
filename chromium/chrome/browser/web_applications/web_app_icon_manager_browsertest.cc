@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/bind.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -20,8 +18,8 @@
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/test/browser_test.h"
@@ -36,10 +34,10 @@ namespace web_app {
 
 class WebAppIconManagerBrowserTest : public InProcessBrowserTest {
  public:
-  WebAppIconManagerBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsWithoutExtensions}, {});
-  }
+  WebAppIconManagerBrowserTest() = default;
+  WebAppIconManagerBrowserTest(const WebAppIconManagerBrowserTest&) = delete;
+  WebAppIconManagerBrowserTest& operator=(const WebAppIconManagerBrowserTest&) =
+      delete;
 
   ~WebAppIconManagerBrowserTest() override = default;
 
@@ -59,11 +57,9 @@ class WebAppIconManagerBrowserTest : public InProcessBrowserTest {
   apps::AppServiceTest& app_service_test() { return app_service_test_; }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   net::EmbeddedTestServer https_server_;
   apps::AppServiceTest app_service_test_;
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppIconManagerBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
@@ -125,7 +121,7 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
     content::WebContents* contents =
         apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
             ->BrowserAppLauncher()
-            ->LaunchAppWithParams(params);
+            ->LaunchAppWithParams(std::move(params));
     controller = chrome::FindBrowserWithWebContents(contents)
                      ->app_controller()
                      ->AsWebAppBrowserController();

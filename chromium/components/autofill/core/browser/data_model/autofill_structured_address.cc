@@ -4,7 +4,6 @@
 
 #include "components/autofill/core/browser/data_model/autofill_structured_address.h"
 
-#include <iostream>
 #include <utility>
 #include "base/i18n/case_conversion.h"
 #include "base/strings/strcat.h"
@@ -136,7 +135,8 @@ void StreetAddress::ParseValueAndAssignSubcomponentsByFallbackMethod() {
 bool StreetAddress::HasNewerValuePrecendenceInMerging(
     const AddressComponent& newer_component) const {
   // If the newer component has a better verification status, use the newer one.
-  if (GetVerificationStatus() < newer_component.GetVerificationStatus())
+  if (IsLessSignificantVerificationStatus(
+          GetVerificationStatus(), newer_component.GetVerificationStatus()))
     return true;
 
   // If the verification statuses are the same, do not use the newer component
@@ -353,6 +353,13 @@ Address::Address(const Address& other) : Address() {
   *this = other;
 }
 
+bool Address::WipeInvalidStructure() {
+  // For structured addresses, currently it is sufficient to wipe the structure
+  // of the street address, because this is the only directly assignable value
+  // that has a substructure.
+  return street_address_.WipeInvalidStructure();
+}
+
 // Addresses are mergeable when all of their children are mergeable.
 // Reformat the address from their children after merge.
 Address::Address(AddressComponent* parent)
@@ -367,7 +374,6 @@ Address::~Address() = default;
 void Address::MigrateLegacyStructure(bool is_verified_profile) {
   // If this component already has a verification status, no profile is regarded
   // as already verified.
-  std::cout << "APply migration" << std::endl;
   if (GetVerificationStatus() != VerificationStatus::kNoStatus)
     return;
 

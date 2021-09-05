@@ -55,12 +55,6 @@ ComponentExtensionIME::ComponentExtensionIME(
 
 ComponentExtensionIME::~ComponentExtensionIME() = default;
 
-ComponentExtensionIMEManagerDelegate::ComponentExtensionIMEManagerDelegate() =
-    default;
-
-ComponentExtensionIMEManagerDelegate::~ComponentExtensionIMEManagerDelegate() =
-    default;
-
 ComponentExtensionIMEManager::ComponentExtensionIMEManager() {
   for (const auto& input_method : input_method::kInputMethods) {
     if (input_method.is_login_keyboard)
@@ -97,16 +91,6 @@ bool ComponentExtensionIMEManager::LoadComponentExtensionIME(
     return true;
   }
   return false;
-}
-
-bool ComponentExtensionIMEManager::UnloadComponentExtensionIME(
-    Profile* profile,
-    const std::string& input_method_id) {
-  ComponentExtensionIME ime;
-  if (!FindEngineEntry(input_method_id, &ime))
-    return false;
-  delegate_->Unload(profile, ime.id, ime.path);
-  return true;
 }
 
 bool ComponentExtensionIMEManager::IsAllowlisted(

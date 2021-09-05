@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/enterprise_util.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -146,11 +146,8 @@ std::unique_ptr<PolicyBundle> PolicyLoaderMac::Load() {
   // Load policy for the registered components.
   LoadPolicyForDomain(POLICY_DOMAIN_EXTENSIONS, "extensions", bundle.get());
 
-  if (base::FeatureList::IsEnabled(
-          policy::features::kIgnoreSensitivePoliciesOnUnmanagedMac) &&
-      !ShouldHonorPolicies()) {
+  if (!ShouldHonorPolicies())
     FilterSensitivePolicies(&chrome_policy);
-  }
 
   return bundle;
 }

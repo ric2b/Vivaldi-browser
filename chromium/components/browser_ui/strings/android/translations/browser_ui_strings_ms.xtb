@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Tapak <ph name="SITE_NAME" /> telah ditambahkan</translation>
 <translation id="1383876407941801731">Carian</translation>
 <translation id="1384959399684842514">Muat turun dijeda</translation>
+<translation id="1415402041810619267">URL terpangkas</translation>
 <translation id="1431402976894535801">Sekat tapak daripada mengetahui waktu anda ada</translation>
 <translation id="1446450296470737166">Benarkan kawalan penuh peranti MIDI</translation>
 <translation id="1509960214886564027">Ciri pada banyak tapak mungkin rosak</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Akses kamera anda</translation>
 <translation id="1660204651932907780">Benarkan tapak untuk memainkan bunyi (disyorkan)</translation>
 <translation id="1677097821151855053">Kuki dan data tapak lain digunakan untuk mengingat anda, misalnya untuk log anda masuk atau memperibadikan iklan. Untuk mengurus kuki bagi semua tapak, lihat <ph name="BEGIN_LINK" />Tetapan<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Kosongkan data tapak?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">URL tapak</translation>
 <translation id="2025115093177348061">Realiti tambahan</translation>
 <translation id="2030769033451695672">Ketik untuk kembali kepada <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Kehadiran anda</translation>
 <translation id="2079545284768500474">Buat asal</translation>
 <translation id="2091887806945687916">Bunyi</translation>
 <translation id="2107397443965016585">Tanya sebelum membenarkan tapak memainkan kandungan yang dilindungi (disyorkan)</translation>
 <translation id="2146738493024040262">Buka Apl Segera</translation>
 <translation id="2148716181193084225">Hari ini</translation>
 <translation id="2182457891543959921">Tanya sebelum membenarkan tapak membuat peta 3D bagi persekitaran anda atau menjejaki kedudukan kamera (disyorkan)</translation>
-<translation id="2187243482123994665">Kehadiran pengguna</translation>
 <translation id="2212565012507486665">Benarkan kuki</translation>
 <translation id="2228071138934252756">Untuk membolehkan <ph name="APP_NAME" /> mengakses kamera anda, hidupkan juga kamera dalam <ph name="BEGIN_LINK" />Tetapan Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Hanya sekali</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> dan <ph name="NUM_MORE" /> lagi dibenarkan}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> dan <ph name="NUM_MORE" /> lagi dibenarkan}}</translation>
 <translation id="2434158240863470628">Muat turun selesai: <ph name="SEPARATOR" /><ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Akses lokasi</translation>
 <translation id="2482878487686419369">Pemberitahuan</translation>
 <translation id="2490684707762498678">Diurus oleh <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Bantuan &amp; maklum balas</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3277252321222022663">Benarkan tapak mengakses penderia (disyorkan)</translation>
 <translation id="3295602654194328831">Sembunyikan Maklumat</translation>
+<translation id="3328801116991980348">Maklumat tapak</translation>
 <translation id="3333961966071413176">Semua kenalan</translation>
 <translation id="3386292677130313581">Tanya sebelum membenarkan tapak mengetahui lokasi anda (disyorkan)</translation>
 <translation id="3538390592868664640">Sekat tapak daripada membuat peta 3D bagi persekitaran anda atau menjejaki kedudukan kamera</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Benarkan tapak memainkan kandungan yang dilindungi</translation>
 <translation id="4468959413250150279">Redam bunyi untuk tapak tertentu.</translation>
 <translation id="4479647676395637221">Tanya dahulu sebelum membenarkan tapak menggunakan kamera anda (disyorkan)</translation>
+<translation id="4505788138578415521">URL dikembangkan</translation>
 <translation id="4534723447064627427">Untuk membolehkan <ph name="APP_NAME" /> mengakses mikrofon anda, hidupkan juga mikrofon dalam <ph name="BEGIN_LINK" />Tetapan Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Butiran</translation>
 <translation id="4645575059429386691">Diurus oleh ibu bapa anda</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> dan <ph name="NUM_MORE" /> lagi}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> dan <ph name="NUM_MORE" /> lagi}}</translation>
 <translation id="913657688200966289">Hidupkan kebenaran untuk <ph name="APP_NAME" /> dalam <ph name="BEGIN_LINK" />Tetapan Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Akses mikrofon anda</translation>
 <translation id="965817943346481315">Sekat jika tapak menyiarkan iklan yang mengganggu atau mengelirukan (disyorkan)</translation>
 <translation id="967624055006145463">Data disimpan</translation>
 </translationbundle>

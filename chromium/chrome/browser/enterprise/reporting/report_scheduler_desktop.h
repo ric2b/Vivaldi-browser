@@ -7,7 +7,7 @@
 
 #include "components/enterprise/browser/reporting/report_scheduler.h"
 
-#include "chrome/browser/enterprise/reporting/notification/extension_request_observer_factory.h"
+#include "chrome/browser/enterprise/reporting/extension_request/extension_request_observer_factory.h"
 #include "chrome/browser/upgrade_detector/build_state_observer.h"
 
 class Profile;
@@ -29,10 +29,16 @@ class ReportSchedulerDesktop : public ReportScheduler::Delegate,
   void StartWatchingUpdatesIfNeeded(base::Time last_upload,
                                     base::TimeDelta upload_interval) override;
   void StopWatchingUpdates() override;
-  void SaveLastUploadVersion() override;
+  void OnBrowserVersionUploaded() override;
+
+  void StartWatchingExtensionRequestIfNeeded() override;
+  void StopWatchingExtensionRequest() override;
+  void OnExtensionRequestUploaded() override;
 
   // BuildStateObserver implementation.
   void OnUpdate(const BuildState* build_state) override;
+
+  void TriggerExtensionRequest();
 
  private:
   ExtensionRequestObserverFactory extension_request_observer_factory_;

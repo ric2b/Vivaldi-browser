@@ -22,14 +22,15 @@ public class MockPersistedTabData extends PersistedTabData {
     public MockPersistedTabData(Tab tab, int field) {
         super(tab,
                 PersistedTabDataConfiguration.get(MockPersistedTabData.class, tab.isIncognito())
-                        .storage,
+                        .getStorage(),
                 PersistedTabDataConfiguration.get(MockPersistedTabData.class, tab.isIncognito())
-                        .id);
+                        .getId());
         mField = field;
     }
 
     private MockPersistedTabData(Tab tab, byte[] data, PersistedTabDataStorage storage, String id) {
-        super(tab, data, storage, id);
+        super(tab, storage, id);
+        deserializeAndLog(data);
     }
 
     /**
@@ -39,14 +40,9 @@ public class MockPersistedTabData extends PersistedTabData {
      * @param callback callback {@link MockPersistedTabData} will be passed back in
      */
     public static void from(Tab tab, Callback<MockPersistedTabData> callback) {
-        PersistedTabData.from(tab,
-                (data, storage, id)
-                        -> { return new MockPersistedTabData(tab, data, storage, id); },
-                ()
-                        -> {
-                    return null; /** Currently unused */
-                },
-                MockPersistedTabData.class, callback);
+        PersistedTabData.from(tab, (data, storage, id) -> {
+            return new MockPersistedTabData(tab, data, storage, id);
+        }, null, MockPersistedTabData.class, callback);
     }
 
     /**
@@ -75,9 +71,6 @@ public class MockPersistedTabData extends PersistedTabData {
         mField = ByteBuffer.wrap(data).getInt();
         return true;
     }
-
-    @Override
-    public void destroy() {}
 
     @Override
     public String getUmaTag() {

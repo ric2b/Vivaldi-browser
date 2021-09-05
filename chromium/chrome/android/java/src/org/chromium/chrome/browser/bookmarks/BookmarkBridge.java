@@ -192,9 +192,13 @@ public class BookmarkBridge {
         private final boolean mIsEditable;
         private final boolean mIsManaged;
         private boolean mForceEditableForTesting;
+        private long mDateAdded;
+        private boolean mRead;
 
-        private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
-                BookmarkId parentId, boolean isEditable, boolean isManaged) {
+        @VisibleForTesting
+        public BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
+                BookmarkId parentId, boolean isEditable, boolean isManaged, long dateAdded,
+                boolean read) {
             mId = id;
             mTitle = title;
             mUrl = url;
@@ -202,6 +206,8 @@ public class BookmarkBridge {
             mParentId = parentId;
             mIsEditable = isEditable;
             mIsManaged = isManaged;
+            mDateAdded = dateAdded;
+            mRead = read;
         }
 
         /** @return Title of the bookmark item. */
@@ -254,6 +260,21 @@ public class BookmarkBridge {
             return mId;
         }
 
+        /**
+         * @return The timestamp in milliseconds since epoch that the bookmark is added.
+         */
+        public long getDateAdded() {
+            return mDateAdded;
+        }
+
+        /**
+         * @return Whether the bookmark is read. Only valid for {@link BookmarkType#READING_LIST}.
+         *         Defaults to "false" for other types.
+         */
+        public boolean isRead() {
+            return mRead;
+        }
+
         // TODO(https://crbug.com/1019217): Remove when BookmarkModel is stubbed in tests instead.
         void forceEditableForTesting() {
             mForceEditableForTesting = true;
@@ -264,18 +285,23 @@ public class BookmarkBridge {
         private String mNickName;
         private String mDescription;
         private String mThumbnailPath;
+        private long mCreated;
+        private String mGUID;
 
         /** Constructor used with Vivaldi. */
         private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
                              BookmarkId parentId, boolean isEditable, boolean isManaged,
-                             boolean isSpeedDial, String nickName, String description,
-                             String thumbnailPath) {
-            this(id, title, url, isFolder, parentId, isEditable, isManaged);
+                             long dateAdded, boolean read, boolean isSpeedDial,
+                             String nickName, String description,
+                             long created, String thumbnailPath, String guid) {
+            this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read);
             assert ChromeApplication.isVivaldi();
             mIsSpeedDial = isSpeedDial;
             mNickName = nickName;
             mDescription = description;
             mThumbnailPath = thumbnailPath;
+            mCreated = created;
+            mGUID = guid;
         }
 
         /** @return (Vivaldi) Whether this is a speed dial bookmark. */
@@ -289,6 +315,12 @@ public class BookmarkBridge {
 
         /** @return (Vivaldi) Thumbnail path of the bookmark item. */
         public String getThumbnailPath() { return mThumbnailPath; }
+
+        /** @return (Vivaldi) Created date of the bookmark item */
+        public long getCreated() { return mCreated; }
+
+        /** @return (Vivaldi) GUID of item */
+        public String getGUID() { return mGUID; }
     }
 
     /**
@@ -318,11 +350,12 @@ public class BookmarkBridge {
 
     /**
      * @param tab Tab whose current URL is checked against.
-     * @return {@code true} if the current Tab URL has a bookmark associated with it.
+     * @return {@code true} if the current Tab URL has a bookmark associated with it. If the
+     *         bookmark backend is not loaded, return {@code false}.
      */
     public boolean hasBookmarkIdForTab(Tab tab) {
         ThreadUtils.assertOnUiThread();
-        if (tab.isFrozen()) return false;
+        if (tab.isFrozen() || mNativeBookmarkBridge == 0) return false;
         return BookmarkBridgeJni.get().getBookmarkIdForWebContents(
                        mNativeBookmarkBridge, this, tab.getWebContents(), false)
                 != BookmarkId.INVALID_ID;
@@ -330,7 +363,8 @@ public class BookmarkBridge {
 
     /**
      * @param tab Tab whose current URL is checked against.
-     * @return User-editable bookmark ID.
+     * @return User-editable bookmark ID or {@link BookmarkId#INVALID_ID} if bookmark backend is
+     *         not loaded or the tab is frozen.
      */
     public long getUserBookmarkIdForTab(Tab tab) {
         ThreadUtils.assertOnUiThread();
@@ -827,6 +861,7 @@ public class BookmarkBridge {
 
     public boolean isEditBookmarksEnabled() {
         ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return false;
         return BookmarkBridgeJni.get().isEditBookmarksEnabled(mNativeBookmarkBridge);
     }
 
@@ -861,6 +896,46 @@ public class BookmarkBridge {
                 mNativeBookmarkBridge, BookmarkBridge.this, parent, newOrder);
     }
 
+    /**
+     * Adds an article to the reading list. If the article was already bookmarked, the existing
+     * bookmark ID will be returned.
+     * @param title The title to be used for the reading list item.
+     * @param url The URL of the reading list item.
+     * @return The bookmark ID created after saving the article to the reading list.
+     */
+    public BookmarkId addToReadingList(String title, String url) {
+        ThreadUtils.assertOnUiThread();
+        assert title != null;
+        assert url != null;
+        assert mIsNativeBookmarkModelLoaded;
+
+        return BookmarkBridgeJni.get().addToReadingList(
+                mNativeBookmarkBridge, BookmarkBridge.this, title, url);
+    }
+
+    /**
+     * @param url The URL of the reading list item.
+     * @return The reading list item with the URL, or null if no such reading list item.
+     */
+    public BookmarkItem getReadingListItem(String url) {
+        ThreadUtils.assertOnUiThread();
+        assert url != null;
+        assert mIsNativeBookmarkModelLoaded;
+
+        return BookmarkBridgeJni.get().getReadingListItem(
+                mNativeBookmarkBridge, BookmarkBridge.this, url);
+    }
+
+    /**
+     * Helper method to mark an article as read.
+     * @param url The URL of the reading list item.
+     * @param read Whether the article should be marked as read.
+     */
+    public void setReadStatusForReadingList(String url, boolean read) {
+        BookmarkBridgeJni.get().setReadStatus(
+                mNativeBookmarkBridge, BookmarkBridge.this, url, read);
+    }
+
     @VisibleForTesting
     BookmarkId getPartnerFolderId() {
         ThreadUtils.assertOnUiThread();
@@ -884,7 +959,7 @@ public class BookmarkBridge {
     }
 
     @CalledByNative
-    private void bookmarkModelDeleted() {
+    private void destroyFromNative() {
         destroy();
     }
 
@@ -970,9 +1045,9 @@ public class BookmarkBridge {
     @CalledByNative
     private static BookmarkItem createBookmarkItem(long id, int type, String title, String url,
             boolean isFolder, long parentId, int parentIdType, boolean isEditable,
-            boolean isManaged) {
+            boolean isManaged, long dateAdded, boolean read) {
         return new BookmarkItem(new BookmarkId(id, type), title, url, isFolder,
-                new BookmarkId(parentId, parentIdType), isEditable, isManaged);
+                new BookmarkId(parentId, parentIdType), isEditable, isManaged, dateAdded, read);
     }
 
     @CalledByNative
@@ -1084,6 +1159,12 @@ public class BookmarkBridge {
                 BookmarkId newParentId, int index);
         BookmarkId addBookmark(long nativeBookmarkBridge, BookmarkBridge caller, BookmarkId parent,
                 int index, String title, String url);
+        BookmarkId addToReadingList(
+                long nativeBookmarkBridge, BookmarkBridge caller, String title, String url);
+        BookmarkItem getReadingListItem(
+                long nativeBookmarkBridge, BookmarkBridge caller, String url);
+        void setReadStatus(
+                long nativeBookmarkBridge, BookmarkBridge caller, String url, boolean read);
         void undo(long nativeBookmarkBridge, BookmarkBridge caller);
         void startGroupingUndos(long nativeBookmarkBridge, BookmarkBridge caller);
         void endGroupingUndos(long nativeBookmarkBridge, BookmarkBridge caller);
@@ -1107,9 +1188,10 @@ public class BookmarkBridge {
                 long nativeBookmarkBridge, BookmarkBridge caller, long id, int type, String nickName);
         void setBookmarkSpeedDial(long nativeBookmarkBridge, BookmarkBridge caller,
                 long id, int type, boolean isSpeedDial);
+        void setBookmarkThumbnail(long nativeBookmarkBridge, BookmarkBridge caller,
+                long id, int type, String path);
         void getSpeedDialFolders(
                 long nativeBookmarkBridge, BookmarkBridge caller, List<BookmarkId> folderList);
-
         void getChildIDsVivaldi(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type,
                          boolean getFolders, boolean getBookmarks, boolean getSeparators,
                          List<BookmarkId> bookmarksList);
@@ -1120,11 +1202,13 @@ public class BookmarkBridge {
     private static BookmarkItem createVivaldiBookmarkItem(long id, int type,
             String title, String url, boolean isFolder, long parentId,
             int parentIdType, boolean isEditable, boolean isManaged,
+            long dateAdded, boolean read,
             boolean isSpeeddial, String nickName, String description,
-            String thumbnailPath) {
+            long created, String thumbnailPath, String guid) {
         return new BookmarkItem(new BookmarkId(id, type), title, url, isFolder,
                 new BookmarkId(parentId, parentIdType), isEditable, isManaged,
-                isSpeeddial, nickName, description, thumbnailPath);
+                dateAdded, read,
+                isSpeeddial, nickName, description, created, thumbnailPath, guid);
     }
 
     /** Vivaldi */
@@ -1171,6 +1255,15 @@ public class BookmarkBridge {
         assert mIsNativeBookmarkModelLoaded;
         BookmarkBridgeJni.get().setBookmarkSpeedDial(
                 mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), isSpeedDial);
+    }
+
+    /** Vivaldi
+     * Set as speed dial for the given (folder) bookmark.
+     */
+    public void setBookmarkThumbnail(BookmarkId id, String thumbnailPath) {
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().setBookmarkThumbnail(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), thumbnailPath);
     }
 
     /** Vivaldi

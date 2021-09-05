@@ -6,7 +6,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -376,7 +376,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   host_content_settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, std::string(),
+      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
       CONTENT_SETTING_ALLOW);
 
   // If a prompt shows up, deny it.
@@ -428,7 +428,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   host_content_settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, std::string(),
+      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
       CONTENT_SETTING_ALLOW);
 
   // If a prompt shows up, deny it.

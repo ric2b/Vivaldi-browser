@@ -11,7 +11,7 @@ option java_outer_classname = "CastLogsProtos";
 
 package metrics;  // Cast-enabled device specific log data included in ChromeUserMetricsExtension.
 
-// Next tag: 7
+// Next tag: 8
 message CastLogsProto {
   // Cast specific device information.
   // Next tag: 7
@@ -164,7 +164,7 @@ message CastLogsProto {
   repeated CastConnectionInfo cast_connection_info = 2;
 
   // Stores Cast-enabled device specific events with a various context data.
-  // Next tag: 26
+  // Next tag: 27
   message CastEventProto {
     // The name of the action, hashed by same logic used to hash user action
     // event and histogram.
@@ -243,6 +243,20 @@ message CastLogsProto {
 
     // Model version of hotword detector.
     optional string hotword_model_id = 25;
+
+    enum LaunchFrom {
+      FROM_UNKNOWN = 0;
+      // Launched by itself, or by the user interacting directly with the
+      // receiver device (e.g. use a TV remote to launch an app on Android TV).
+      FROM_LOCAL = 1;
+      // Launched by a Cast V1 sender using DIAL.
+      FROM_DIAL = 2;
+      // Launched by a Cast V2 sender device.
+      FROM_CAST_V2 = 3;
+      // Launched from the cloud.
+      FROM_CCS = 4;
+    }
+    optional LaunchFrom launch_from = 26;
   }
   repeated CastEventProto cast_event = 3;
 
@@ -331,4 +345,8 @@ message CastLogsProto {
   optional CastDeviceMutableInfo cast_device_mutable_info = 5;
 
   optional fixed64 receiver_metrics_id = 6;
+
+  // This ID is only ever recorded for Google-internal users (dogfooders). It
+  // is never recorded for external users."
+  optional uint64 ephemeral_id = 7;
 }

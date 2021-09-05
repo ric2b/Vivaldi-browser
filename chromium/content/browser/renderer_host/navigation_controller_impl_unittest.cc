@@ -18,7 +18,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -34,12 +34,10 @@
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/bindings_policy.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -55,6 +53,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 
@@ -2282,7 +2281,7 @@ TEST_F(NavigationControllerTest, SameDocument_Replace) {
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
   params.method = "GET";
-  params.page_state = PageState::CreateFromURL(url2);
+  params.page_state = blink::PageState::CreateFromURL(url2);
 
   // This should NOT generate a new entry, nor prune the list.
   LoadCommittedDetailsObserver observer(contents());
@@ -2301,7 +2300,7 @@ TEST_F(NavigationControllerTest, PushStateWithoutPreviousEntry) {
   params.nav_entry_id = 0;
   params.did_create_new_entry = true;
   params.url = url;
-  params.page_state = PageState::CreateFromURL(url);
+  params.page_state = blink::PageState::CreateFromURL(url);
   main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
   main_test_rfh()->PrepareForCommit();
   contents()->GetMainFrame()->SendNavigateWithParams(&params, true);
@@ -3003,7 +3002,7 @@ TEST_F(NavigationControllerTest,
   params.origin = file_origin;
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.gesture = NavigationGestureUser;
-  params.page_state = PageState::CreateFromURL(different_origin_url);
+  params.page_state = blink::PageState::CreateFromURL(different_origin_url);
   params.method = "GET";
   params.post_id = -1;
   main_test_rfh()->SendRendererInitiatedNavigationRequest(different_origin_url,
@@ -4050,7 +4049,7 @@ TEST_F(NavigationControllerTest, PushStateUpdatesTitleAndFavicon) {
   params.nav_entry_id = 0;
   params.did_create_new_entry = true;
   params.url = kUrl2;
-  params.page_state = PageState::CreateFromURL(kUrl2);
+  params.page_state = blink::PageState::CreateFromURL(kUrl2);
   main_test_rfh()->SendNavigateWithParams(&params, true);
 
   // The title should immediately be visible on the new NavigationEntry.
@@ -4149,74 +4148,6 @@ TEST_F(NavigationControllerTest, PostThenReplaceStateThenReload) {
   }
   EXPECT_EQ(expected_repost_form_warning_count,
             delegate->repost_form_warning_count());
-}
-
-TEST_F(NavigationControllerTest, UnreachableURLGivesErrorPage) {
-  GURL url("http://foo");
-  controller().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_TYPED,
-                       std::string());
-  FrameHostMsg_DidCommitProvisionalLoad_Params params;
-  params.nav_entry_id = 0;
-  params.did_create_new_entry = true;
-  params.url = url;
-  params.transition = ui::PAGE_TRANSITION_LINK;
-  params.gesture = NavigationGestureUser;
-  params.page_state = PageState::CreateFromURL(url);
-  params.method = "POST";
-  params.post_id = 2;
-  params.url_is_unreachable = true;
-  params.embedding_token = base::UnguessableToken::Create();
-
-  // Navigate to new page.
-  {
-    LoadCommittedDetailsObserver observer(contents());
-    main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
-    main_test_rfh()->PrepareForCommit();
-    main_test_rfh()->SendNavigateWithParams(&params, false);
-    EXPECT_EQ(PAGE_TYPE_ERROR,
-              controller_impl().GetLastCommittedEntry()->GetPageType());
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, observer.navigation_type());
-  }
-
-  // Navigate to existing page.
-  {
-    params.did_create_new_entry = false;
-    LoadCommittedDetailsObserver observer(contents());
-    main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
-    main_test_rfh()->PrepareForCommit();
-    main_test_rfh()->SendNavigateWithParams(&params, false);
-    EXPECT_EQ(PAGE_TYPE_ERROR,
-              controller_impl().GetLastCommittedEntry()->GetPageType());
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, observer.navigation_type());
-  }
-
-  // Navigate to same page.
-  // Note: The call to LoadURL() creates a pending entry in order to trigger the
-  // same-page transition.
-  controller_impl().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_TYPED,
-                            std::string());
-  params.nav_entry_id = controller_impl().GetPendingEntry()->GetUniqueID();
-  params.transition = ui::PAGE_TRANSITION_TYPED;
-  {
-    LoadCommittedDetailsObserver observer(contents());
-    main_test_rfh()->PrepareForCommit();
-    main_test_rfh()->SendNavigateWithParams(&params, false);
-    EXPECT_EQ(PAGE_TYPE_ERROR,
-              controller_impl().GetLastCommittedEntry()->GetPageType());
-    EXPECT_EQ(NAVIGATION_TYPE_SAME_PAGE, observer.navigation_type());
-  }
-
-  // Navigate without changing document.
-  params.url = GURL("http://foo#foo");
-  params.transition = ui::PAGE_TRANSITION_LINK;
-  params.embedding_token = base::nullopt;
-  {
-    LoadCommittedDetailsObserver observer(contents());
-    main_test_rfh()->SendNavigateWithParams(&params, true);
-    EXPECT_EQ(PAGE_TYPE_ERROR,
-              controller_impl().GetLastCommittedEntry()->GetPageType());
-    EXPECT_TRUE(observer.is_same_document());
-  }
 }
 
 // Tests that if a stale navigation comes back from the renderer, it is properly
@@ -4365,8 +4296,8 @@ TEST_F(NavigationControllerTest, NoURLRewriteForSubframes) {
   const GURL kSrcDoc("about:srcdoc");
 
   // First, set up a handler that will rewrite srcdoc urls.
-  BrowserURLHandlerImpl::GetInstance()->SetFixupHandlerForTesting(
-      &SrcDocRewriter);
+  BrowserURLHandlerImpl::GetInstance()->AddHandlerPair(
+      &SrcDocRewriter, BrowserURLHandler::null_handler());
 
   // Simulate navigating to a page that has a subframe.
   NavigationSimulator::NavigateAndCommitFromDocument(kUrl1, main_test_rfh());
@@ -4386,7 +4317,8 @@ TEST_F(NavigationControllerTest, NoURLRewriteForSubframes) {
       "GET", nullptr, "", nullptr, base::nullopt);
 
   // Clean up the handler.
-  BrowserURLHandlerImpl::GetInstance()->SetFixupHandlerForTesting(nullptr);
+  BrowserURLHandlerImpl::GetInstance()->RemoveHandlerForTesting(
+      &SrcDocRewriter);
 }
 
 // Test that if an empty WebContents is navigated via frame proxy with

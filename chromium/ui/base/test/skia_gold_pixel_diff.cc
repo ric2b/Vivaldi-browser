@@ -12,6 +12,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -20,7 +21,10 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/test/test_switches.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,9 +52,11 @@ const char* kBuildRevisionKey = "git-revision";
 const char* kIssueKey = "gerrit-issue";
 const char* kPatchSetKey = "gerrit-patchset";
 const char* kJobIdKey = "buildbucket-id";
+const char* kCodeReviewSystemKey = "code-review-system";
 
 const char* kNoLuciAuth = "no-luci-auth";
 const char* kBypassSkiaGoldFunctionality = "bypass-skia-gold-functionality";
+const char* kDryRun = "dryrun";
 
 namespace {
 
@@ -67,11 +73,6 @@ void AppendArgsJustAfterProgram(base::CommandLine& cmd,
                                 base::CommandLine::StringVector args) {
   base::CommandLine::StringVector& argv =
       const_cast<base::CommandLine::StringVector&>(cmd.argv());
-  int args_size = args.size();
-  argv.resize(argv.size() + args_size);
-  for (int i = argv.size() - args_size; i > 1; --i) {
-    argv[i + args_size - 1] = argv[i - 1];
-  }
   argv.insert(argv.begin() + 1, args.begin(), args.end());
 }
 
@@ -85,9 +86,40 @@ void FillInSystemEnvironment(base::Value::DictStorage& ds) {
   LOG(WARNING) << "Unknown Processor.";
 #endif
 
-  ds["system"] =
-      std::make_unique<base::Value>(SkiaGoldPixelDiff::GetPlatform());
-  ds["processor"] = std::make_unique<base::Value>(processor);
+  ds["system"] = base::Value(SkiaGoldPixelDiff::GetPlatform());
+  ds["processor"] = base::Value(processor);
+}
+
+// Returns whether image comparison failure should result in Gerrit comments.
+// In general, when a pixel test fails on CQ, Gold will make a gerrit
+// comment indicating that the cl breaks some pixel tests. However,
+// if the test is flaky and has a failure->passing pattern, we don't
+// want Gold to make gerrit comments on the first failure.
+// This function returns true iff:
+//  * it's a tryjob and no retries left.
+//  or * it's a CI job.
+bool ShouldMakeGerritCommentsOnFailures() {
+  base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+  if (!cmd->HasSwitch(kIssueKey))
+    return true;
+  if (cmd->HasSwitch(switches::kTestLauncherRetriesLeft)) {
+    int retries_left = 0;
+    bool succeed = base::StringToInt(
+        cmd->GetSwitchValueASCII(switches::kTestLauncherRetriesLeft),
+        &retries_left);
+    if (!succeed) {
+      LOG(ERROR) << switches::kTestLauncherRetriesLeft << " = "
+                 << cmd->GetSwitchValueASCII(switches::kTestLauncherRetriesLeft)
+                 << " can not convert to integer.";
+      return true;
+    }
+    if (retries_left > 0) {
+      LOG(INFO) << "Test failure will not result in Gerrit comment because"
+                   " there are more retries.";
+      return false;
+    }
+  }
+  return true;
 }
 
 // Fill in test environment to the keys_file. The format is json.
@@ -113,6 +145,12 @@ bool FillInTestEnvironment(const base::FilePath& keys_file) {
     return false;
   }
   return true;
+}
+
+bool BotModeEnabled(const base::CommandLine* command_line) {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  return command_line->HasSwitch(switches::kTestLauncherBotMode) ||
+         env->HasVar("CHROMIUM_TEST_LAUNCHER_BOT_MODE");
 }
 
 }  // namespace
@@ -180,7 +218,7 @@ void SkiaGoldPixelDiff::InitSkiaGold() {
     cmd.AppendSwitchASCII("issue", issue_);
     cmd.AppendSwitchASCII("patchset", patchset_);
     cmd.AppendSwitchASCII("jobid", job_id_);
-    cmd.AppendSwitchASCII("crs", "gerrit");
+    cmd.AppendSwitchASCII("crs", code_review_system_);
     cmd.AppendSwitchASCII("cis", "buildbucket");
   }
 
@@ -210,8 +248,12 @@ void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix,
     issue_ = cmd_line->GetSwitchValueASCII(kIssueKey);
     patchset_ = cmd_line->GetSwitchValueASCII(kPatchSetKey);
     job_id_ = cmd_line->GetSwitchValueASCII(kJobIdKey);
+    code_review_system_ = cmd_line->GetSwitchValueASCII(kCodeReviewSystemKey);
+    if (code_review_system_.empty()) {
+      code_review_system_ = "gerrit";
+    }
   }
-  if (cmd_line->HasSwitch(kNoLuciAuth)) {
+  if (cmd_line->HasSwitch(kNoLuciAuth) || !BotModeEnabled(cmd_line)) {
     luci_auth_ = false;
   }
   initialized_ = true;
@@ -238,9 +280,22 @@ bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::CommandLine cmd(GetAbsoluteSrcRelativePath(kSkiaGoldCtl));
   cmd.AppendSwitchASCII("test-name", remote_golden_image_name);
-  cmd.AppendSwitchASCII("add-test-key", "source_type:" + corpus_);
+  cmd.AppendSwitchASCII("corpus", corpus_);
   cmd.AppendSwitchPath("png-file", local_file_path);
   cmd.AppendSwitchPath("work-dir", working_dir_);
+
+  if (!BotModeEnabled(base::CommandLine::ForCurrentProcess())) {
+    cmd.AppendSwitch(kDryRun);
+  }
+
+  std::map<std::string, std::string> optional_keys;
+  if (!ShouldMakeGerritCommentsOnFailures()) {
+    optional_keys["ignore"] = "1";
+  }
+  for (auto key : optional_keys) {
+    cmd.AppendSwitchASCII("add-test-optional-key",
+                          base::StrCat({key.first, ":", key.second}));
+  }
 
   if (algorithm)
     algorithm->AppendAlgorithmToCmdline(cmd);

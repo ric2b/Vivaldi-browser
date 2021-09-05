@@ -28,7 +28,13 @@ class HoldingSpaceItemViewsContainer : public views::View,
       const HoldingSpaceItemViewsContainer& other) = delete;
   ~HoldingSpaceItemViewsContainer() override;
 
-  virtual void AddHoldingSpaceItemView(const HoldingSpaceItem* item) = 0;
+  // Resets the container. Called when the tray bubble starts closing to
+  // stop observing the holding space controller/model to ensure that no new
+  // items are created while the bubble widget is being asynchronously closed.
+  void Reset();
+
+  virtual void AddHoldingSpaceItemView(const HoldingSpaceItem* item,
+                                       bool due_to_finalization) = 0;
   virtual void RemoveAllHoldingSpaceItemViews() = 0;
   virtual void RemoveHoldingSpaceItemView(const HoldingSpaceItem* item) = 0;
 
@@ -43,6 +49,7 @@ class HoldingSpaceItemViewsContainer : public views::View,
   // HoldingSpaceModelObserver:
   void OnHoldingSpaceItemAdded(const HoldingSpaceItem* item) override;
   void OnHoldingSpaceItemRemoved(const HoldingSpaceItem* item) override;
+  void OnHoldingSpaceItemFinalized(const HoldingSpaceItem* item) override;
 
  private:
   ScopedObserver<HoldingSpaceController, HoldingSpaceControllerObserver>

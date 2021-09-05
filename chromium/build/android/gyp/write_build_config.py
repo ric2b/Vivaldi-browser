@@ -282,6 +282,10 @@ The list of all `deps_info['java_sources_file']` entries for all library
 dependencies that are chromium code. Note: this is a list of files, where each
 file contains a list of Java source files. This is used for lint.
 
+* `deps_info['lint_aars']`:
+List of all aars from transitive java dependencies. This allows lint to collect
+their custom annotations.zip and run checks like @IntDef on their annotations.
+
 * `deps_info['lint_srcjars']`:
 List of all bundled srcjars of all transitive java library targets. Excludes
 non-chromium java libraries.
@@ -654,9 +658,13 @@ def DepsOfType(wanted_type, configs):
   return [c for c in configs if c['type'] == wanted_type]
 
 
-def GetAllDepsConfigsInOrder(deps_config_paths):
+def GetAllDepsConfigsInOrder(deps_config_paths, filter_func=None):
   def GetDeps(path):
-    return GetDepConfig(path)['deps_configs']
+    config = GetDepConfig(path)
+    if filter_func and not filter_func(config):
+      return []
+    return config['deps_configs']
+
   return build_utils.GetSortedTransitiveDependencies(deps_config_paths, GetDeps)
 
 
@@ -817,6 +825,11 @@ def _DepsFromPaths(dep_paths,
     # dependencies.
     if recursive_resource_deps:
       dep_paths = GetAllDepsConfigsInOrder(dep_paths)
+      # Exclude assets if recursive_resource_deps is set. The
+      # recursive_resource_deps arg is used to pull resources into the base
+      # module to workaround bugs accessing resources in isolated DFMs, but
+      # assets should be kept in the DFMs.
+      blocklist.append('android_assets')
 
   return _DepsFromPathsWithFilters(dep_paths, blocklist, allowlist)
 
@@ -942,6 +955,7 @@ def main(argv):
       help='Consider the assets as locale paks in BuildConfig.java')
 
   # java library options
+  parser.add_option('--aar-path', help='Path to containing .aar file.')
   parser.add_option('--device-jar-path', help='Path to .jar for dexing.')
   parser.add_option('--host-jar-path', help='Path to .jar for java_binary.')
   parser.add_option('--unprocessed-jar-path',
@@ -1219,6 +1233,24 @@ def main(argv):
     # for java libraries, we only care about resources that are directly
     # reachable without going through another java_library.
     all_resources_deps = java_library_deps.All('android_resources')
+  if options.type == 'android_resources' and options.recursive_resource_deps:
+    # android_resources targets that want recursive resource deps also need to
+    # collect package_names from all library deps. This ensures the R.java files
+    # for these libraries will get pulled in along with the resources.
+    android_resources_library_deps = _DepsFromPathsWithFilters(
+        deps_configs_paths, allowlist=['java_library']).All('java_library')
+  if is_apk_or_module_target:
+    # android_resources deps which had recursive_resource_deps set should not
+    # have the manifests from the recursively collected deps added to this
+    # module. This keeps the manifest declarations in the child DFMs, since they
+    # will have the Java implementations.
+    def ExcludeRecursiveResourcesDeps(config):
+      return not config.get('includes_recursive_resources', False)
+
+    extra_manifest_deps = [
+        GetDepConfig(p) for p in GetAllDepsConfigsInOrder(
+            deps_configs_paths, filter_func=ExcludeRecursiveResourcesDeps)
+    ]
 
   base_module_build_config = None
   if options.base_module_build_config:
@@ -1341,6 +1373,8 @@ def main(argv):
   if is_java_target:
     # Classpath values filled in below (after applying tested_apk_config).
     config['javac'] = {}
+    if options.aar_path:
+      deps_info['aar_path'] = options.aar_path
     if options.unprocessed_jar_path:
       deps_info['unprocessed_jar_path'] = options.unprocessed_jar_path
       deps_info['interface_jar_path'] = options.interface_jar_path
@@ -1437,6 +1471,12 @@ def main(argv):
       extra_package_names = [
           c['package_name'] for c in all_resources_deps if 'package_name' in c
       ]
+
+      # android_resources targets which specified recursive_resource_deps may
+      # have extra_package_names.
+      for resources_dep in all_resources_deps:
+        extra_package_names.extend(resources_dep['extra_package_names'])
+
       # In final types (i.e. apks and modules) that create real R.java files,
       # they must collect package names from java_libraries as well.
       # https://crbug.com/1073476
@@ -1444,6 +1484,14 @@ def main(argv):
         extra_package_names.extend([
             c['package_name'] for c in all_library_deps if 'package_name' in c
         ])
+    elif options.recursive_resource_deps:
+      # Pull extra_package_names from library deps if recursive resource deps
+      # are required.
+      extra_package_names = [
+          c['package_name'] for c in android_resources_library_deps
+          if 'package_name' in c
+      ]
+      config['deps_info']['includes_recursive_resources'] = True
 
     # For feature modules, remove any resources that already exist in the base
     # module.
@@ -1585,6 +1633,7 @@ def main(argv):
   # de-duplicate these lint artifacts.
   if options.type in ('android_app_bundle_module', 'android_apk'):
     # Collect all sources and resources at the apk/bundle_module level.
+    lint_aars = set()
     lint_srcjars = set()
     lint_java_sources = set()
     lint_resource_sources = set()
@@ -1599,6 +1648,8 @@ def main(argv):
         if 'java_sources_file' in c:
           lint_java_sources.add(c['java_sources_file'])
         lint_srcjars.update(c['bundled_srcjars'])
+      if 'aar_path' in c:
+        lint_aars.add(c['aar_path'])
 
     if options.res_sources_path:
       lint_resource_sources.add(options.res_sources_path)
@@ -1613,6 +1664,7 @@ def main(argv):
         else:
           lint_resource_zips.add(c['resources_zip'])
 
+    deps_info['lint_aars'] = sorted(lint_aars)
     deps_info['lint_srcjars'] = sorted(lint_srcjars)
     deps_info['lint_java_sources'] = sorted(lint_java_sources)
     deps_info['lint_resource_sources'] = sorted(lint_resource_sources)
@@ -1629,6 +1681,7 @@ def main(argv):
         for c in build_utils.ParseGnList(options.module_build_configs)
     ]
     jni_all_source = set()
+    lint_aars = set()
     lint_srcjars = set()
     lint_java_sources = set()
     lint_resource_sources = set()
@@ -1644,11 +1697,13 @@ def main(argv):
       else:
         lint_extra_android_manifests.add(c['android_manifest'])
       jni_all_source.update(c['jni']['all_source'])
+      lint_aars.update(c['lint_aars'])
       lint_srcjars.update(c['lint_srcjars'])
       lint_java_sources.update(c['lint_java_sources'])
       lint_resource_sources.update(c['lint_resource_sources'])
       lint_resource_zips.update(c['lint_resource_zips'])
     deps_info['jni'] = {'all_source': sorted(jni_all_source)}
+    deps_info['lint_aars'] = sorted(lint_aars)
     deps_info['lint_srcjars'] = sorted(lint_srcjars)
     deps_info['lint_java_sources'] = sorted(lint_java_sources)
     deps_info['lint_resource_sources'] = sorted(lint_resource_sources)
@@ -1942,7 +1997,7 @@ def main(argv):
             config['uncompressed_assets'], locale_paks)
 
     config['extra_android_manifests'] = []
-    for c in all_deps:
+    for c in extra_manifest_deps:
       config['extra_android_manifests'].extend(
           c.get('mergeable_android_manifests', []))
 

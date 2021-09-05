@@ -10,6 +10,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
+#include "chrome/browser/content_settings/generated_notification_pref.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs_factory.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
@@ -52,6 +53,7 @@
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ash_pref_names.h"  // nogncheck
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -331,6 +333,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kCookieControlsMode] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[::content_settings::kGeneratedNotificationPref] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::prefs::kPluginsAlwaysOpenPdfExternally] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kEnableDRM] =
@@ -456,6 +460,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)
+      [ash::prefs::kAccessibilityScreenMagnifierFocusFollowingEnabled] =
+          settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kAccessibilityScreenMagnifierScale] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kAccessibilitySelectToSpeakEnabled] =
@@ -526,6 +533,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   // Ambient Mode.
   (*s_allowlist)[ash::ambient::prefs::kAmbientModeEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  // The following prefs are not displayed to the user but are configurable to
+  // speed up automated testing of Ambient mode.
+  (*s_allowlist)
+      [ash::ambient::prefs::kAmbientModeLockScreenInactivityTimeoutSeconds] =
+          settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)
+      [ash::ambient::prefs::kAmbientModeLockScreenBackgroundTimeoutSeconds] =
+          settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::ambient::prefs::kAmbientModePhotoRefreshIntervalSeconds] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Google Assistant.
   (*s_allowlist)[chromeos::assistant::prefs::kAssistantConsentStatus] =
@@ -574,12 +591,18 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::ash::prefs::kUserBluetoothAdapterEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::ash::prefs::kSystemBluetoothAdapterEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::ash::prefs::kVpnConfigAllowed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[arc::prefs::kAlwaysOnVpnPackage] =
       settings_api::PrefType::PREF_TYPE_STRING;
   (*s_allowlist)[arc::prefs::kAlwaysOnVpnLockdown] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Restore apps and pages on startup
+  (*s_allowlist)[chromeos::full_restore::kRestoreAppsAndPagesPrefName] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Timezone settings.
   (*s_allowlist)[chromeos::kSystemTimezone] =

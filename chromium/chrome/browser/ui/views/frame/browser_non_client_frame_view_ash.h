@@ -7,17 +7,18 @@
 
 #include <memory>
 
-#include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/ui/views/frame/browser_frame_header_ash.h"
+#include "chrome/browser/ui/views/frame/browser_frame_header_chromeos.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
+#include "ui/display/display_observer.h"
+#include "ui/display/tablet_state.h"
 
 namespace {
 class WebAppNonClientFrameViewAshTest;
@@ -26,15 +27,15 @@ class WebAppNonClientFrameViewAshTest;
 class ProfileIndicatorIcon;
 class TabIconView;
 
-namespace ash {
+namespace chromeos {
 class FrameCaptionButtonContainerView;
-}  // namespace ash
+}  // namespace chromeos
 
 // Provides the BrowserNonClientFrameView for Chrome OS.
 class BrowserNonClientFrameViewAsh
     : public BrowserNonClientFrameView,
-      public BrowserFrameHeaderAsh::AppearanceProvider,
-      public ash::TabletModeObserver,
+      public BrowserFrameHeaderChromeOS::AppearanceProvider,
+      public display::DisplayObserver,
       public TabIconViewModel,
       public aura::WindowObserver,
       public ImmersiveModeController::Observer {
@@ -74,16 +75,15 @@ class BrowserNonClientFrameViewAsh
   void OnThemeChanged() override;
   void ChildPreferredSizeChanged(views::View* child) override;
 
-  // BrowserFrameHeaderAsh::AppearanceProvider:
+  // BrowserFrameHeaderChromeOS::AppearanceProvider:
   SkColor GetTitleColor() override;
   SkColor GetFrameHeaderColor(bool active) override;
   gfx::ImageSkia GetFrameHeaderImage(bool active) override;
   int GetFrameHeaderImageYInset() override;
   gfx::ImageSkia GetFrameHeaderOverlayImage(bool active) override;
 
-  // ash::TabletModeObserver:
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
+  // display::DisplayObserver:
+  void OnDisplayTabletStateChanged(display::TabletState state) override;
 
   void OnTabletModeToggled(bool enabled);
 
@@ -130,7 +130,7 @@ class BrowserNonClientFrameViewAsh
                            ActiveStateOfButtonMatchesWidget);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            RestoreMinimizedBrowserUpdatesCaption);
-  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshWebAppBrowserTest,
+  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerChromeosWebAppBrowserTest,
                            FrameLayoutToggleTabletMode);
   FRIEND_TEST_ALL_PREFIXES(HomeLauncherBrowserNonClientFrameViewAshTest,
                            TabletModeBrowserCaptionButtonVisibility);
@@ -174,7 +174,7 @@ class BrowserNonClientFrameViewAsh
   void OnAddedToOrRemovedFromOverview();
 
   // Creates the frame header for the browser window.
-  std::unique_ptr<ash::FrameHeader> CreateFrameHeader();
+  std::unique_ptr<chromeos::FrameHeader> CreateFrameHeader();
 
   // Triggers the web-app origin and icon animations, assumes the web-app UI
   // elements exist.
@@ -202,7 +202,8 @@ class BrowserNonClientFrameViewAsh
   aura::Window* GetFrameWindow();
 
   // View which contains the window controls.
-  ash::FrameCaptionButtonContainerView* caption_button_container_ = nullptr;
+  chromeos::FrameCaptionButtonContainerView* caption_button_container_ =
+      nullptr;
 
   // For popups, the window icon.
   TabIconView* window_icon_ = nullptr;
@@ -211,7 +212,7 @@ class BrowserNonClientFrameViewAsh
   ProfileIndicatorIcon* profile_indicator_icon_ = nullptr;
 
   // Helper class for painting the header.
-  std::unique_ptr<ash::FrameHeader> frame_header_;
+  std::unique_ptr<chromeos::FrameHeader> frame_header_;
 
   ScopedObserver<aura::Window, aura::WindowObserver> window_observer_{this};
 

@@ -10,6 +10,7 @@ cr.define('device_page_tests', function() {
     Keyboard: 'keyboard',
     NightLight: 'night light',
     Pointers: 'pointers',
+    PointingStick: 'pointing stick',
     Power: 'power',
     Storage: 'storage',
     Stylus: 'stylus',
@@ -149,6 +150,9 @@ cr.define('device_page_tests', function() {
     highlightDisplay: function(id) {
       this.lastHighlightedDisplayId_ = id;
     },
+
+    /** @override */
+    updateStorageInfo: function() {},
 
     // Test interface:
     /**
@@ -585,19 +589,30 @@ cr.define('device_page_tests', function() {
           expected, devicePage.prefs.settings.touchpad.natural_scroll.value);
     }
 
+    /**
+     * Returns whether the element both exists and is visible.
+     * @param {?Element} element
+     * @return {boolean}
+     */
+    function isVisible(element) {
+      // offsetWidth and offsetHeight reflect more ways that an element could be
+      // hidden, compared to checking the hidden attribute directly.
+      return !!element && element.offsetWidth > 0 && element.offsetHeight > 0;
+    }
+
     test(assert(TestNames.DevicePage), function() {
-      expectLT(0, devicePage.$$('#pointersRow').offsetHeight);
-      expectLT(0, devicePage.$$('#keyboardRow').offsetHeight);
-      expectLT(0, devicePage.$$('#displayRow').offsetHeight);
+      expectTrue(isVisible(devicePage.$$('#pointersRow')));
+      expectTrue(isVisible(devicePage.$$('#keyboardRow')));
+      expectTrue(isVisible(devicePage.$$('#displayRow')));
 
       cr.webUIListenerCallback('has-mouse-changed', false);
-      expectLT(0, devicePage.$$('#pointersRow').offsetHeight);
+      expectTrue(isVisible(devicePage.$$('#pointersRow')));
       cr.webUIListenerCallback('has-pointing-stick-changed', false);
-      expectLT(0, devicePage.$$('#pointersRow').offsetHeight);
+      expectTrue(isVisible(devicePage.$$('#pointersRow')));
       cr.webUIListenerCallback('has-touchpad-changed', false);
-      expectEquals(0, devicePage.$$('#pointersRow').offsetHeight);
+      expectFalse(isVisible(devicePage.$$('#pointersRow')));
       cr.webUIListenerCallback('has-mouse-changed', true);
-      expectLT(0, devicePage.$$('#pointersRow').offsetHeight);
+      expectTrue(isVisible(devicePage.$$('#pointersRow')));
     });
 
     suite(assert(TestNames.Pointers), function() {
@@ -614,60 +629,58 @@ cr.define('device_page_tests', function() {
         assertEquals(
             settings.routes.POINTERS,
             settings.Router.getInstance().getCurrentRoute());
-        assertLT(0, pointersPage.$$('#mouse').offsetHeight);
-        assertLT(0, pointersPage.$$('#touchpad').offsetHeight);
-        assertLT(0, pointersPage.$$('#mouse h2').offsetHeight);
-        assertLT(0, pointersPage.$$('#touchpad h2').offsetHeight);
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertTrue(isVisible(pointersPage.$$('#mouse h2')));
+        assertTrue(isVisible(pointersPage.$$('#touchpad')));
+        assertTrue(isVisible(pointersPage.$$('#touchpad h2')));
 
         cr.webUIListenerCallback('has-touchpad-changed', false);
         assertEquals(
             settings.routes.POINTERS,
             settings.Router.getInstance().getCurrentRoute());
-        assertLT(0, pointersPage.$$('#mouse').offsetHeight);
-        assertEquals(0, pointersPage.$$('#touchpad').offsetHeight);
-        assertEquals(0, pointersPage.$$('#mouse h2').offsetHeight);
-        assertEquals(0, pointersPage.$$('#touchpad h2').offsetHeight);
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertFalse(isVisible(pointersPage.$$('#mouse h2')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad h2')));
 
         cr.webUIListenerCallback('has-pointing-stick-changed', false);
         assertEquals(
             settings.routes.POINTERS,
             settings.Router.getInstance().getCurrentRoute());
-        assertLT(0, pointersPage.$$('#mouse').offsetHeight);
-        assertEquals(0, pointersPage.$$('#touchpad').offsetHeight);
-        assertEquals(0, pointersPage.$$('#mouse h2').offsetHeight);
-        assertEquals(0, pointersPage.$$('#touchpad h2').offsetHeight);
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertFalse(isVisible(pointersPage.$$('#mouse h2')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad h2')));
 
         cr.webUIListenerCallback('has-mouse-changed', false);
         assertEquals(
             settings.routes.DEVICE,
             settings.Router.getInstance().getCurrentRoute());
-        assertEquals(0, devicePage.$$('#main #pointersRow').offsetHeight);
+        assertFalse(isVisible(devicePage.$$('#main #pointersRow')));
 
         cr.webUIListenerCallback('has-touchpad-changed', true);
-        assertLT(0, devicePage.$$('#main #pointersRow').offsetHeight);
+        assertTrue(isVisible(devicePage.$$('#main #pointersRow')));
 
         return showAndGetDeviceSubpage('pointers', settings.routes.POINTERS)
             .then(function(page) {
-              assertEquals(0, pointersPage.$$('#mouse').offsetHeight);
-              assertLT(0, pointersPage.$$('#touchpad').offsetHeight);
-              assertEquals(0, pointersPage.$$('#mouse h2').offsetHeight);
-              assertEquals(0, pointersPage.$$('#touchpad h2').offsetHeight);
+              assertFalse(isVisible(pointersPage.$$('#mouse')));
+              assertFalse(isVisible(pointersPage.$$('#mouse h2')));
+              assertTrue(isVisible(pointersPage.$$('#touchpad')));
+              assertFalse(isVisible(pointersPage.$$('#touchpad h2')));
 
               cr.webUIListenerCallback('has-mouse-changed', true);
               assertEquals(
                   settings.routes.POINTERS,
                   settings.Router.getInstance().getCurrentRoute());
-              assertLT(0, pointersPage.$$('#mouse').offsetHeight);
-              assertLT(0, pointersPage.$$('#touchpad').offsetHeight);
-              assertLT(0, pointersPage.$$('#mouse h2').offsetHeight);
-              assertLT(0, pointersPage.$$('#touchpad h2').offsetHeight);
+              assertTrue(isVisible(pointersPage.$$('#mouse')));
+              assertTrue(isVisible(pointersPage.$$('#mouse h2')));
+              assertTrue(isVisible(pointersPage.$$('#touchpad')));
+              assertTrue(isVisible(pointersPage.$$('#touchpad h2')));
             });
       });
 
       test('mouse', function() {
-        expectLT(0, pointersPage.$$('#mouse').offsetHeight);
-
-        expectFalse(pointersPage.$$('#mouse settings-toggle-button').checked);
+        expectTrue(isVisible(pointersPage.$$('#mouse')));
 
         const slider = assert(pointersPage.$$('#mouse settings-slider'));
         expectEquals(4, slider.pref.value);
@@ -680,7 +693,7 @@ cr.define('device_page_tests', function() {
       });
 
       test('touchpad', function() {
-        expectLT(0, pointersPage.$$('#touchpad').offsetHeight);
+        expectTrue(isVisible(pointersPage.$$('#touchpad')));
 
         expectTrue(pointersPage.$$('#touchpad #enableTapToClick').checked);
         expectFalse(pointersPage.$$('#touchpad #enableTapDragging').checked);
@@ -739,6 +752,85 @@ cr.define('device_page_tests', function() {
         assertEquals(
             deepLinkElement, getDeepActiveElement(),
             'Touchpad speed slider should be focused for settingId=405.');
+      });
+    });
+
+    suite(assert(TestNames.PointingStick), function() {
+      // TODO(crbug.com/1114828): merge this suite into the Pointers one when
+      // the flag is removed.
+      let pointersPage;
+
+      setup(function() {
+        // We have to set separatePointingStickSettings here so it's in effect
+        // when the template is rendered.
+        loadTimeData.overrideValues({separatePointingStickSettings: true});
+        return showAndGetDeviceSubpage('pointers', settings.routes.POINTERS)
+            .then(function(page) {
+              pointersPage = page;
+            });
+      });
+
+      test('subpage responds to pointer attach/detach', function() {
+        assertEquals(
+            settings.routes.POINTERS,
+            settings.Router.getInstance().getCurrentRoute());
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertTrue(isVisible(pointersPage.$$('#mouse h2')));
+        assertTrue(isVisible(pointersPage.$$('#pointingStick')));
+        assertTrue(isVisible(pointersPage.$$('#pointingStick h2')));
+        assertTrue(isVisible(pointersPage.$$('#touchpad')));
+        assertTrue(isVisible(pointersPage.$$('#touchpad h2')));
+
+        cr.webUIListenerCallback('has-touchpad-changed', false);
+        assertEquals(
+            settings.routes.POINTERS,
+            settings.Router.getInstance().getCurrentRoute());
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertTrue(isVisible(pointersPage.$$('#mouse h2')));
+        assertTrue(isVisible(pointersPage.$$('#pointingStick')));
+        assertTrue(isVisible(pointersPage.$$('#pointingStick h2')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad h2')));
+
+        cr.webUIListenerCallback('has-pointing-stick-changed', false);
+        assertEquals(
+            settings.routes.POINTERS,
+            settings.Router.getInstance().getCurrentRoute());
+        assertTrue(isVisible(pointersPage.$$('#mouse')));
+        assertFalse(isVisible(pointersPage.$$('#mouse h2')));
+        assertFalse(isVisible(pointersPage.$$('#pointingStick')));
+        assertFalse(isVisible(pointersPage.$$('#pointingStick h2')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad')));
+        assertFalse(isVisible(pointersPage.$$('#touchpad h2')));
+
+        cr.webUIListenerCallback('has-mouse-changed', false);
+        assertEquals(
+            settings.routes.DEVICE,
+            settings.Router.getInstance().getCurrentRoute());
+        assertFalse(isVisible(devicePage.$$('#main #pointersRow')));
+
+        cr.webUIListenerCallback('has-touchpad-changed', true);
+        assertTrue(isVisible(devicePage.$$('#main #pointersRow')));
+        return showAndGetDeviceSubpage('pointers', settings.routes.POINTERS)
+            .then(function(page) {
+              assertFalse(isVisible(page.$$('#mouse')));
+              assertFalse(isVisible(page.$$('#mouse h2')));
+              assertFalse(isVisible(page.$$('#pointingStick')));
+              assertFalse(isVisible(page.$$('#pointingStick h2')));
+              assertTrue(isVisible(page.$$('#touchpad')));
+              assertFalse(isVisible(page.$$('#touchpad h2')));
+
+              cr.webUIListenerCallback('has-mouse-changed', true);
+              assertEquals(
+                  settings.routes.POINTERS,
+                  settings.Router.getInstance().getCurrentRoute());
+              assertTrue(isVisible(page.$$('#mouse')));
+              assertTrue(isVisible(page.$$('#mouse h2')));
+              assertFalse(isVisible(page.$$('#pointingStick')));
+              assertFalse(isVisible(page.$$('#pointingStick h2')));
+              assertTrue(isVisible(page.$$('#touchpad')));
+              assertTrue(isVisible(page.$$('#touchpad h2')));
+            });
       });
     });
 
@@ -1814,14 +1906,6 @@ cr.define('device_page_tests', function() {
         return stylusPage.$$('#keep-last-note-on-lock-screen-toggle');
       }
 
-      /**
-       * @param {?Element} element
-       * @return {boolean}
-       */
-      function isVisible(element) {
-        return !!element && element.offsetWidth > 0 && element.offsetHeight > 0;
-      }
-
       test('stylus tools prefs', function() {
         // Both stylus tools prefs are intially false.
         assertFalse(devicePage.prefs.settings.enable_stylus_tools.value);
@@ -2329,15 +2413,6 @@ cr.define('device_page_tests', function() {
       }
 
       /**
-       * @param {?Element} element
-       * @return {boolean}
-       */
-      function isHidden(element) {
-        return !element ||
-            (element.offsetWidth === 0 && element.offsetHeight === 0);
-      }
-
-      /**
        * @param {string} id
        * @return {string}
        */
@@ -2361,12 +2436,6 @@ cr.define('device_page_tests', function() {
       });
 
       setup(function() {
-        // Avoid unwanted callbacks by disabling storage computations when the
-        // storage page is loaded.
-        registerMessageCallback(
-            'updateStorageInfo', null /* message handler */,
-            () => {} /* callback */);
-
         return showAndGetDeviceSubpage('storage', settings.routes.STORAGE)
             .then(function(page) {
               storagePage = page;
@@ -2380,8 +2449,8 @@ cr.define('device_page_tests', function() {
             '9.1 GB', '0.9 GB', 0.91, settings.StorageSpaceState.LOW);
         assertEquals('91%', storagePage.$.inUseLabelArea.style.width);
         assertEquals('9%', storagePage.$.availableLabelArea.style.width);
-        assertFalse(isHidden(storagePage.$$('#lowMessage')));
-        assertTrue(isHidden(storagePage.$$('#criticallyLowMessage')));
+        assertTrue(isVisible(storagePage.$$('#lowMessage')));
+        assertFalse(isVisible(storagePage.$$('#criticallyLowMessage')));
         assertTrue(!!storagePage.$$('#bar.space-low'));
         assertFalse(!!storagePage.$$('#bar.space-critically-low'));
         assertEquals(
@@ -2399,8 +2468,8 @@ cr.define('device_page_tests', function() {
             settings.StorageSpaceState.CRITICALLY_LOW);
         assertEquals('97%', storagePage.$.inUseLabelArea.style.width);
         assertEquals('3%', storagePage.$.availableLabelArea.style.width);
-        assertTrue(isHidden(storagePage.$$('#lowMessage')));
-        assertFalse(isHidden(storagePage.$$('#criticallyLowMessage')));
+        assertFalse(isVisible(storagePage.$$('#lowMessage')));
+        assertTrue(isVisible(storagePage.$$('#criticallyLowMessage')));
         assertFalse(!!storagePage.$$('#bar.space-low'));
         assertTrue(!!storagePage.$$('#bar.space-critically-low'));
         assertEquals(
@@ -2417,8 +2486,8 @@ cr.define('device_page_tests', function() {
             '2.5 GB', '7.5 GB', 0.25, settings.StorageSpaceState.NORMAL);
         assertEquals('25%', storagePage.$.inUseLabelArea.style.width);
         assertEquals('75%', storagePage.$.availableLabelArea.style.width);
-        assertTrue(isHidden(storagePage.$$('#lowMessage')));
-        assertTrue(isHidden(storagePage.$$('#criticallyLowMessage')));
+        assertFalse(isVisible(storagePage.$$('#lowMessage')));
+        assertFalse(isVisible(storagePage.$$('#criticallyLowMessage')));
         assertFalse(!!storagePage.$$('#bar.space-low'));
         assertFalse(!!storagePage.$$('#bar.space-critically-low'));
         assertEquals(
@@ -2444,7 +2513,7 @@ cr.define('device_page_tests', function() {
         // In guest mode, the system row should be hidden.
         storagePage.isGuest_ = true;
         Polymer.dom.flush();
-        assertTrue(isHidden(storagePage.$$('#systemSize')));
+        assertFalse(isVisible(storagePage.$$('#systemSize')));
       });
 
       test('apps extensions size', async function() {
@@ -2461,7 +2530,7 @@ cr.define('device_page_tests', function() {
       test('other users size', async function() {
         // The other users row is visible by default, displaying
         // "calculating...".
-        assertFalse(isHidden(storagePage.$$('#otherUsersSize')));
+        assertTrue(isVisible(storagePage.$$('#otherUsersSize')));
         assertEquals(
             'Other users', getStorageItemLabelFromId('otherUsersSize'));
         assertEquals(
@@ -2471,13 +2540,13 @@ cr.define('device_page_tests', function() {
         cr.webUIListenerCallback(
             'storage-other-users-size-changed', '0 B', true);
         Polymer.dom.flush();
-        assertTrue(isHidden(storagePage.$$('#otherUsersSize')));
+        assertFalse(isVisible(storagePage.$$('#otherUsersSize')));
 
         // Send other users callback with a size that is not null.
         cr.webUIListenerCallback(
             'storage-other-users-size-changed', '322 MB', false);
         Polymer.dom.flush();
-        assertFalse(isHidden(storagePage.$$('#otherUsersSize')));
+        assertTrue(isVisible(storagePage.$$('#otherUsersSize')));
         assertEquals('322 MB', getStorageItemSubLabelFromId('otherUsersSize'));
 
         // If the user is in Guest mode, the row is not visible.
@@ -2485,7 +2554,7 @@ cr.define('device_page_tests', function() {
         cr.webUIListenerCallback(
             'storage-other-users-size-changed', '322 MB', false);
         Polymer.dom.flush();
-        assertTrue(isHidden(storagePage.$$('#otherUsersSize')));
+        assertFalse(isVisible(storagePage.$$('#otherUsersSize')));
       });
     });
   });

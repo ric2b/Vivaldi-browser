@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "base/observer_list.h"
+#include "content/browser/coop_coep_cross_origin_isolated_info.h"
 #include "content/browser/isolation_context.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/content_export.h"
@@ -52,9 +53,8 @@ class CONTENT_EXPORT SiteInfo {
  public:
   static SiteInfo CreateForErrorPage();
   static SiteInfo CreateForDefaultSiteInstance(
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>&
-          coop_coep_cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
+  static SiteInfo CreateForGuest(const GURL& guest_site_url);
 
   // The SiteInfo constructor should take in all values needed for comparing two
   // SiteInfos, to help ensure all creation sites are updated accordingly when
@@ -63,9 +63,8 @@ class CONTENT_EXPORT SiteInfo {
   SiteInfo(const GURL& site_url,
            const GURL& process_lock_url,
            bool is_origin_keyed,
-           bool is_coop_coep_cross_origin_isolated,
-           const base::Optional<url::Origin>&
-               coop_coep_cross_origin_isolated_origin);
+           const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info,
+           bool is_guest = false);
   SiteInfo();
   SiteInfo(const SiteInfo& rhs);
   ~SiteInfo();
@@ -95,9 +94,9 @@ class CONTENT_EXPORT SiteInfo {
   //
   // NOTE: This URL is currently set even in cases where this SiteInstance's
   //       process is *not* going to be locked to it.  Callers should be careful
-  //       to consider this case when comparing lock URLs; ShouldLockProcess()
-  //       may be used to determine whether the process lock will actually be
-  //       used.
+  //       to consider this case when comparing lock URLs;
+  //       ShouldLockProcessToSite() may be used to determine whether the
+  //       process lock will actually be used.
   //
   // TODO(alexmos): See if we can clean this up and not set |process_lock_url_|
   //                if the SiteInstance's process isn't going to be locked.
@@ -114,20 +113,18 @@ class CONTENT_EXPORT SiteInfo {
   // in their site urls.
   bool is_origin_keyed() const { return is_origin_keyed_; }
 
-  // Returns true if this SiteInfo is part of a CoopCoepCrossOriginIsolated
-  // BrowsingInstance.
-  bool is_coop_coep_cross_origin_isolated() const {
-    return is_coop_coep_cross_origin_isolated_;
+  // Returns the cross-origin isolation status of pages hosted by the
+  // SiteInstance. This is deduced from the COOP and COEP headers and has
+  // implications for which pages can live in this SiteInstance as well as
+  // process allocation decisions.
+  const CoopCoepCrossOriginIsolatedInfo& coop_coep_cross_origin_isolated_info()
+      const {
+    return coop_coep_cross_origin_isolated_info_;
   }
 
-  // If is_coop_coep_cross_origin_isolated() returns true, this returns the
-  // origin shared across all top level frames in the
-  // CoopCoepCrossOriginIsolated BrowsingInstance.
-  base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin() const {
-    return coop_coep_cross_origin_isolated_origin_;
-  }
+  bool is_guest() const { return is_guest_; }
 
-  // Returns false if the site_url() is empty.
+  // Returns true if the site_url() is empty.
   bool is_empty() const { return site_url().possibly_invalid_spec().empty(); }
 
   SiteInfo& operator=(const SiteInfo& rhs);
@@ -140,6 +137,32 @@ class CONTENT_EXPORT SiteInfo {
 
   // Returns a string representation of this SiteInfo principal.
   std::string GetDebugString() const;
+
+  // Returns true if pages loaded with this SiteInfo ought to be handled only
+  // by a renderer process isolated from other sites. If --site-per-process is
+  // used, like it is on desktop platforms, then this is true for all sites. In
+  // other site isolation modes, only a subset of sites will require dedicated
+  // processes.
+  bool RequiresDedicatedProcess(
+      const IsolationContext& isolation_context) const;
+
+  // Returns true if a process for this SiteInfo should be locked to a
+  // ProcessLock whose is_locked_to_site() method returns true. Returning true
+  // here also implies that this SiteInfo requires a dedicated process. However,
+  // the converse does not hold: this might still return false for certain
+  // special cases where a site specific process lock can't be applied even when
+  // this SiteInfo requires a dedicated process (e.g., with
+  // --site-per-process). Examples of those cases include <webview> guests,
+  // single-process mode, or extensions where a process is currently allowed to
+  // be reused for different extensions.  Most of these special cases should
+  // eventually be removed, and this function should become equivalent to
+  // RequiresDedicatedProcess().
+  bool ShouldLockProcessToSite(const IsolationContext& isolation_context) const;
+
+  // Returns whether the process-per-site model is in use (globally or just for
+  // the current site), in which case we should ensure there is only one
+  // RenderProcessHost per site for the entire browser context.
+  bool ShouldUseProcessPerSite(BrowserContext* browser_context) const;
 
  private:
   static auto MakeTie(const SiteInfo& site_info);
@@ -155,16 +178,15 @@ class CONTENT_EXPORT SiteInfo {
   // isolation. In contrast, the site-level URLs that are typically used in
   // SiteInfo include subdomains, as do command-line isolated origins.
   bool is_origin_keyed_ = false;
+  // Indicates the cross-origin isolation status of pages hosted by the
+  // SiteInstance. This is deduced from the COOP and COEP headers and has
+  // implications for which pages can live in this SiteInstance as well as
+  // process allocation decisions.
+  CoopCoepCrossOriginIsolatedInfo coop_coep_cross_origin_isolated_info_ =
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated();
 
-  // Indicates if this SiteInfo is part of a CoopCoepCrossOriginIsolated
-  // BrowsingInstance. (i.e. A page that has a cross-origin-opener-policy of
-  // same-origin and a cross-origin-embedder-policy of require-corp.)
-  bool is_coop_coep_cross_origin_isolated_ = false;
-
-  // If |is_coop_coep_cross_origin_isolated_| returns true, this returns the
-  // origin shared across all top level frames in the
-  // CoopCoepCrossOriginIsolated BrowsingInstance.
-  base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin_;
+  // Indicates this SiteInfo is for a <webview> guest.
+  bool is_guest_ = false;
 };
 
 CONTENT_EXPORT std::ostream& operator<<(std::ostream& out,
@@ -222,9 +244,17 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
     // as measured by active_frame_count().
     virtual void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) {}
 
-    // Called when the renderer process of this SiteInstance has exited.
+    // Called when the renderer process of this SiteInstance has exited. Note
+    // that GetProcess() still returns the same RenderProcessHost instance. You
+    // can reinitialize it by a call to GetProcess()->Init().
     virtual void RenderProcessGone(SiteInstanceImpl* site_instance,
-                                   const ChildProcessTerminationInfo& info) = 0;
+                                   const ChildProcessTerminationInfo& info) {}
+
+    // Called when the RenderProcessHost for this SiteInstance has been
+    // destructed. After this, the underlying `process_` is cleared, and calling
+    // GetProcess() would assign a different RenderProcessHost to this
+    // SiteInstance.
+    virtual void RenderProcessHostDestroyed() {}
   };
 
   // Methods for creating new SiteInstances. The documentation for these methods
@@ -233,17 +263,15 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
       BrowserContext* browser_context);
   // |url_info| contains the GURL for which we want to create a SiteInstance,
   // along with other state relevant to making process allocation decisions.
-  // |is_coop_coep_cross_origin_isolated| is not exposed in content/public. It
-  // sets the BrowsingInstance is_coop_coep_cross_origin_isolated_ property.
+  // |cross_origin_isolated_info| is not exposed in content/public. It
+  // sets the BrowsingInstance coop_coep_cross_origin_isolated_info_ property.
   // Once this property is set it cannot be changed and is used in process
   // allocation decisions.
-  // TODO(wjmaclean): absorb |is_coop_coep_cross_origin_isolated| and related
-  // parameters into UrlInfo.
+  // TODO(wjmaclean): absorb |coop_coep_cross_origin_info| into UrlInfo.
   static scoped_refptr<SiteInstanceImpl> CreateForUrlInfo(
       BrowserContext* browser_context,
       const UrlInfo& url_info,
-      bool is_coop_coep_cross_origin_isolated);
-
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
   static scoped_refptr<SiteInstanceImpl> CreateForGuest(
       content::BrowserContext* browser_context,
       const GURL& guest_site_url);
@@ -253,11 +281,17 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   //         The <webview> guest site URL if |is_guest| is true.
   // |can_reuse_process| - Set to true if the new SiteInstance can use the
   //                       same process as the renderer for |url|.
+  // |cross_origin_isolated_info| - Indicates the cross-origin isolation state
+  //                                of the main script. ServiceWorkers are
+  //                                considered cross-origin Isolated if their
+  //                                Cross-Origin-Embedder-Policy header is set
+  //                                to "same-origin".
   // |is_guest| - Set to true if the new SiteInstance is for a <webview>
   // guest.
   static scoped_refptr<SiteInstanceImpl> CreateForServiceWorker(
       BrowserContext* browser_context,
       const GURL& url,
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info,
       bool can_reuse_process = false,
       bool is_guest = false);
 
@@ -336,6 +370,10 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
     return process_reuse_policy_;
   }
 
+  // Returns true if |has_site_| is true and |site_info_| indicates that the
+  // process-per-site model should be used.
+  bool ShouldUseProcessPerSite() const;
+
   // Checks if |current_process| can be reused for this SiteInstance, and
   // sets |process_| to |current_process| if so.
   void ReuseCurrentProcessIfPossible(RenderProcessHost* current_process);
@@ -380,6 +418,24 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // GetSiteURL().
   const SiteInfo& GetSiteInfo();
 
+  // Derives a new SiteInfo based on this SiteInstance's current state, and
+  // the information provided in |url_info|. This function is slightly different
+  // than ComputeSiteInfo() because it takes into account information specific
+  // to this SiteInstance, like whether it is a guest or not, and changes its
+  // behavior accordingly.
+  // |is_related| - Controls the SiteInfo returned for non-guest SiteInstances.
+  //  Set to true if the caller wants the SiteInfo for an existing related
+  //  SiteInstance associated with |url_info|. This is identical to what you
+  //  would get from GetRelatedSiteInstanceImpl(url_info)->GetSiteInfo(). This
+  //  may return the SiteInfo for the default SiteInstance so callers must be
+  //  prepared to deal with that. If set to false, a SiteInfo created with
+  //  ComputeSiteInfo() is returned.
+  //
+  // For guest SiteInstances, |site_info_| is returned because guests are not
+  // allowed to derive new guest SiteInfos. All guest navigations must stay in
+  // the same SiteInstance with the same SiteInfo.
+  SiteInfo DeriveSiteInfo(const UrlInfo& url_info, bool is_related = false);
+
   // Returns a ProcessLock that can be used with SetProcessLock to lock a
   // process to this SiteInstance's SiteInfo. The ProcessLock relies heavily on
   // the SiteInfo's process_lock_url() for security decisions.
@@ -405,8 +461,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   static SiteInfo ComputeSiteInfo(
       const IsolationContext& isolation_context,
       const UrlInfo& url_info,
-      bool is_coop_coep_cross_origin_isolated,
-      const base::Optional<url::Origin>& cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
 
   // Helper method for tests that don't trigger special COOP/COEP
   // functionality, or test opt-in origin isolation.
@@ -436,8 +491,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   static ProcessLock DetermineProcessLock(
       const IsolationContext& isolation_context,
       const UrlInfo& url_info,
-      bool is_coop_coep_cross_origin_isolated,
-      base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin);
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
 
   // Set the web site that this SiteInstance is rendering pages for.
   // This includes the scheme and registered domain, but not the port.  If the
@@ -519,31 +573,6 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // RenderFrameHostManager.
   static GURL GetEffectiveURL(BrowserContext* browser_context, const GURL& url);
 
-  // Returns true if pages loaded from |site_info| ought to be handled only by a
-  // renderer process isolated from other sites. If --site-per-process is used,
-  // this is true for all sites. In other site isolation modes, only a subset
-  // of sites will require dedicated processes.
-  static bool DoesSiteInfoRequireDedicatedProcess(
-      const IsolationContext& isolation_context,
-      const SiteInfo& site_info);
-
-  // Returns true if a process for a |site_info| should be locked. Returning
-  // true here also implies that |site_info| requires a dedicated process.
-  // However, the converse does not hold: this might still
-  // return false for certain special cases where an origin lock can't be
-  // applied even when |site_info| requires a dedicated process (e.g., with
-  // --site-per-process). Examples of those cases include <webview> guests,
-  // single-process mode, or extensions where a process is currently allowed to
-  // be reused for different extensions.  Most of these special cases should
-  // eventually be removed, and this function should become equivalent to
-  // DoesSiteInfoRequireDedicatedProcess().
-  //
-  // |is_guest| should be set to true if the call is being made for a <webview>
-  // guest SiteInstance(i.e. SiteInstance::IsGuest() returns true).
-  static bool ShouldLockProcess(const IsolationContext& isolation_context,
-                                const SiteInfo& site_info,
-                                const bool is_guest);
-
   // Return an ID of the next BrowsingInstance to be created.  This ID is
   // guaranteed to be higher than any ID of an existing BrowsingInstance.
   // This is useful when process model decisions need to be scoped only to
@@ -584,13 +613,14 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // RenderProcessHost (with a new ID).
   AgentSchedulingGroupHost& GetAgentSchedulingGroup();
 
-  // Returns true if the SiteInstance is part of a CoopCoepCrossOriginIsolated
-  // BrowsingInstance.
-  bool IsCoopCoepCrossOriginIsolated() const;
+  // Returns the cross-origin isolation status of the BrowsingInstance this
+  // SiteInstance is part of.
+  const CoopCoepCrossOriginIsolatedInfo& GetCoopCoepCrossOriginIsolatedInfo()
+      const;
 
-  // If IsCoopCoepCrossOriginIsolated is true, returns the origin shared across
-  // all top level frames in this BrowsingInstance.
-  base::Optional<url::Origin> CoopCoepCrossOriginIsolatedOrigin() const;
+  // Simple helper function that returns the is_isolated property of the
+  // CoopCoepCrossOriginIsolatedInfo of this BrowsingInstance.
+  bool IsCoopCoepCrossOriginIsolated() const;
 
  private:
   friend class BrowsingInstance;
@@ -747,10 +777,6 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
 
   // Whether the SiteInstance was created for a service worker.
   bool is_for_service_worker_;
-
-  // Whether the SiteInstance was created for a <webview> guest.
-  // TODO(734722): Move this into the SecurityPrincipal once it is available.
-  bool is_guest_;
 
   // How |this| was last assigned to a renderer process.
   SiteInstanceProcessAssignment process_assignment_;

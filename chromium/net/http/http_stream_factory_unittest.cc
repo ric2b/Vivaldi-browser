@@ -98,7 +98,6 @@ using net::test::IsOk;
 
 namespace base {
 class Value;
-class DictionaryValue;
 }  // namespace base
 
 namespace net {
@@ -912,25 +911,25 @@ class TestBidirectionalDelegate : public BidirectionalStreamImpl::Delegate {
  public:
   void WaitUntilDone() { loop_.Run(); }
 
-  const spdy::SpdyHeaderBlock& response_headers() const {
+  const spdy::Http2HeaderBlock& response_headers() const {
     return response_headers_;
   }
 
  private:
   void OnStreamReady(bool request_headers_sent) override {}
   void OnHeadersReceived(
-      const spdy::SpdyHeaderBlock& response_headers) override {
+      const spdy::Http2HeaderBlock& response_headers) override {
     response_headers_ = response_headers.Clone();
     loop_.Quit();
   }
   void OnDataRead(int bytes_read) override { NOTREACHED(); }
   void OnDataSent() override { NOTREACHED(); }
-  void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) override {
+  void OnTrailersReceived(const spdy::Http2HeaderBlock& trailers) override {
     NOTREACHED();
   }
   void OnFailed(int error) override { NOTREACHED(); }
   base::RunLoop loop_;
-  spdy::SpdyHeaderBlock response_headers_;
+  spdy::Http2HeaderBlock response_headers_;
 };
 
 // Helper class to encapsulate MockReads and MockWrites for QUIC.
@@ -1041,10 +1040,9 @@ int GetSocketPoolGroupCount(ClientSocketPool* pool) {
 int GetSpdySessionCount(HttpNetworkSession* session) {
   std::unique_ptr<base::Value> value(
       session->spdy_session_pool()->SpdySessionPoolInfoToValue());
-  base::ListValue* session_list;
-  if (!value || !value->GetAsList(&session_list))
+  if (!value || !value->is_list())
     return -1;
-  return session_list->GetSize();
+  return value->GetList().size();
 }
 
 // Return count of sockets handed out by a given socket pool.
@@ -1057,12 +1055,11 @@ int GetHandedOutSocketCount(ClientSocketPool* pool) {
 #if defined(OS_ANDROID)
 // Return count of distinct QUIC sessions.
 int GetQuicSessionCount(HttpNetworkSession* session) {
-  std::unique_ptr<base::DictionaryValue> dict(
-      base::DictionaryValue::From(session->QuicInfoToValue()));
-  base::ListValue* session_list;
-  if (!dict->GetList("sessions", &session_list))
+  base::Value dict(session->QuicInfoToValue());
+  base::Value* session_list = dict.FindListKey("sessions");
+  if (!session_list)
     return -1;
-  return session_list->GetSize();
+  return session_list->GetList().size();
 }
 #endif
 
@@ -2111,9 +2108,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   // TODO(https://crbug.com/1059250): Implement PRIORITY_UPDATE in
   // BidirectionalStreamQuicImpl.
   spdy::SpdyPriority priority =
-      version().UsesHttp3()
-          ? 1
-          : ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
+      ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
   size_t spdy_headers_frame_length;
   int packet_num = 1;
   if (VersionUsesHttp3(version().transport_version)) {
@@ -2248,9 +2243,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   // TODO(https://crbug.com/1059250): Implement PRIORITY_UPDATE in
   // BidirectionalStreamQuicImpl.
   spdy::SpdyPriority priority =
-      version().UsesHttp3()
-          ? 1
-          : ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
+      ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
   size_t spdy_headers_frame_length;
   int packet_num = 1;
   if (VersionUsesHttp3(version().transport_version)) {

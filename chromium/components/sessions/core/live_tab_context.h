@@ -72,7 +72,8 @@ class SESSIONS_EXPORT LiveTabContext {
       bool pin,
       bool from_last_session,
       const PlatformSpecificTabData* tab_platform_data,
-      const sessions::SerializedUserAgentOverride& user_agent_override);
+      const sessions::SerializedUserAgentOverride& user_agent_override,
+      const std::map<std::string, bool> page_action_overrides);
 
   // Note: |tab_platform_data| may be null (e.g., if |from_last_session| is
   // true, as this data is not persisted, or if the platform does not provide
@@ -84,7 +85,8 @@ class SESSIONS_EXPORT LiveTabContext {
       bool from_last_session,
       const std::string& extension_app_id,
       const PlatformSpecificTabData* tab_platform_data,
-      const sessions::SerializedUserAgentOverride& user_agent_override);
+      const sessions::SerializedUserAgentOverride& user_agent_override,
+      const std::map<std::string, bool> page_action_overrides);
 
   virtual void CloseTab() = 0;
 
@@ -103,6 +105,7 @@ class SESSIONS_EXPORT LiveTabContext {
     bool from_last_session,
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data);
 
   virtual LiveTab* ReplaceRestoredTab(
@@ -113,6 +116,7 @@ class SESSIONS_EXPORT LiveTabContext {
     const std::string& extension_app_id,
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data);
  protected:
   virtual ~LiveTabContext() {}

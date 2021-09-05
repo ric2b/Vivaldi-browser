@@ -33,12 +33,12 @@ const base::Feature kInvalidateBookmarkSyncMetadataIfMismatchingGuid{
     "InvalidateBookmarkSyncMetadataIfMismatchingGuid",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
-// TODO(crbug.com/1032052): Enable by default once UMA metric
-// Sync.BookmarkModelMetadataClientTagState suggests that most users have
-// received client tag hashes (final GUIDs).
+// TODO(crbug.com/1032052): Clean up once UMA metric
+// Sync.BookmarksModelMetadataCorruptionReason, bucket MISSING_CLIENT_TAG_HASH,
+// is verified to be small enough.
 extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagMissing{
     "InvalidateBookmarkSyncMetadataIfClientTagMissing",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 // Soft version of the above: it does treat local sync metadata as obsolete if
 // client tags are missing, but only if the local client is in sync with the
 // server, for some definition of in-sync (see implementation in
@@ -595,6 +595,10 @@ SyncedBookmarkTracker::InitEntitiesFromModelAndMetadata(
         return CorruptionReason::BOOKMARK_ID_IN_TOMBSTONE;
       }
 
+      if (!bookmark_metadata.metadata().has_client_tag_hash()) {
+        bookmark_without_client_tag_found = true;
+      }
+
       auto tombstone_entity = std::make_unique<Entity>(
           /*node=*/nullptr, std::make_unique<sync_pb::EntityMetadata>(std::move(
                                 *bookmark_metadata.mutable_metadata())));
@@ -881,17 +885,16 @@ size_t SyncedBookmarkTracker::EstimateMemoryUsage() const {
   return memory_usage;
 }
 
-size_t SyncedBookmarkTracker::TrackedEntitiesCountForTest() const {
-  return sync_id_to_entities_map_.size();
-}
-
-size_t SyncedBookmarkTracker::TrackedBookmarksCountForDebugging() const {
+size_t SyncedBookmarkTracker::TrackedBookmarksCount() const {
   return bookmark_node_to_entities_map_.size();
 }
 
-size_t SyncedBookmarkTracker::TrackedUncommittedTombstonesCountForDebugging()
-    const {
+size_t SyncedBookmarkTracker::TrackedUncommittedTombstonesCount() const {
   return ordered_local_tombstones_.size();
+}
+
+size_t SyncedBookmarkTracker::TrackedEntitiesCountForTest() const {
+  return sync_id_to_entities_map_.size();
 }
 
 void SyncedBookmarkTracker::ClearSpecificsHashForTest(const Entity* entity) {

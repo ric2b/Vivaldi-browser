@@ -4,7 +4,6 @@
 
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/core/features.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_app_interface.h"
@@ -35,6 +34,8 @@ using chrome_test_util::AddAccountButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleServicesSettingsButton;
 using chrome_test_util::SettingsDoneButton;
+using chrome_test_util::SettingsMenuBackButton;
+using chrome_test_util::SyncSettingsConfirmButton;
 
 // Integration tests using the Google services settings screen.
 @interface GoogleServicesSettingsTestCase : ChromeTestCase
@@ -44,25 +45,6 @@ using chrome_test_util::SettingsDoneButton;
 @end
 
 @implementation GoogleServicesSettingsTestCase
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-
-  // Features are enabled or disabled based on the name of the test that is
-  // running. This is done because it is inefficient to use
-  // ensureAppLaunchedWithConfiguration for each test.
-  if ([self isRunningTest:@selector(testToggleSafeBrowsing)] ||
-      [self isRunningTest:@selector
-            (testTogglePasswordLeakCheckWhenSafeBrowsingAvailable)]) {
-    config.features_enabled.push_back(
-        safe_browsing::kSafeBrowsingAvailableOnIOS);
-  } else if ([self isRunningTest:@selector
-                   (testTogglePasswordLeakCheckWhenSafeBrowsingNotAvailable)]) {
-    config.features_disabled.push_back(
-        safe_browsing::kSafeBrowsingAvailableOnIOS);
-  }
-  return config;
-}
 
 // Opens the Google services settings view, and closes it.
 - (void)testOpenGoogleServicesSettings {
@@ -221,69 +203,9 @@ using chrome_test_util::SettingsDoneButton;
                  @"Failed to toggle-on Safe Browsing");
 }
 
-// Tests that password leak detection can be toggled when Safe Browsing isn't
-// available.
-- (void)testTogglePasswordLeakCheckWhenSafeBrowsingNotAvailable {
-  // Ensure that Safe Browsing and password leak detection opt-outs start in
-  // their default (opted-in) state.
-  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kSafeBrowsingEnabled];
-  [ChromeEarlGrey
-      setBoolValue:YES
-       forUserPref:password_manager::prefs::kPasswordLeakDetectionEnabled];
-
-  // Sign in.
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
-  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
-  // Open "Google Services" settings.
-  [self openGoogleServicesSettings];
-
-  // Check that the password leak check toggle is enabled, and toggle it off.
-  [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::SettingsSwitchCell(
-                 kPasswordLeakCheckItemAccessibilityIdentifier,
-                 /*is_toggled_on=*/YES,
-                 /*enabled=*/YES)]
-      performAction:chrome_test_util::TurnSettingsSwitchOn(NO)];
-
-  // Check the underlying pref value.
-  GREYAssertFalse(
-      [ChromeEarlGrey userBooleanPref:password_manager::prefs::
-                                          kPasswordLeakDetectionEnabled],
-      @"Failed to toggle-off password leak checks");
-
-  // Toggle it back on.
-  [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::SettingsSwitchCell(
-                 kPasswordLeakCheckItemAccessibilityIdentifier,
-                 /*is_toggled_on=*/NO,
-                 /*enabled=*/YES)]
-      performAction:chrome_test_util::TurnSettingsSwitchOn(YES)];
-
-  // Check the underlying pref value.
-  GREYAssertTrue(
-      [ChromeEarlGrey userBooleanPref:password_manager::prefs::
-                                          kPasswordLeakDetectionEnabled],
-      @"Failed to toggle-on password leak checks");
-
-  // Close settings.
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
-      performAction:grey_tap()];
-
-  // Simulate the user opting out of Safe Browsing on another device.
-  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kSafeBrowsingEnabled];
-
-  // Verify that the password leak check toggle is now disabled.
-  [self openGoogleServicesSettings];
-  [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::SettingsSwitchCell(
-                 kPasswordLeakCheckItemAccessibilityIdentifier,
-                 /*is_toggled_on=*/NO,
-                 /*enabled=*/NO)] assertWithMatcher:grey_notNil()];
-}
-
-// Tests that when Safe Browsing is available, password leak detection can only
-// be toggled if Safe Browsing is enabled.
-- (void)testTogglePasswordLeakCheckWhenSafeBrowsingAvailable {
+// Tests that password leak detection can only be toggled if Safe Browsing is
+// enabled.
+- (void)testTogglePasswordLeakCheck {
   // Ensure that Safe Browsing and password leak detection opt-outs start in
   // their default (opted-in) state.
   [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kSafeBrowsingEnabled];
@@ -347,6 +269,47 @@ using chrome_test_util::SettingsDoneButton;
       [ChromeEarlGrey userBooleanPref:password_manager::prefs::
                                           kPasswordLeakDetectionEnabled],
       @"Failed to toggle-on password leak checks");
+}
+
+// Tests the following steps:
+//  + Opens sign-in from Google services
+//  + Taps on the settings link to open the advanced sign-in settings
+//  + Opens "Manage Sync" twice
+// The "Manage Sync" should not be disabled when closing "Manage Sync" view.
+- (void)testOpenManageSyncSettings {
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI
+      tapSettingsMenuButton:chrome_test_util::PrimarySignInButton()];
+  [SigninEarlGreyUI tapSettingsLink];
+  // Open "Manage Sync" settings.
+  id<GREYMatcher> manageSyncMatcher =
+      [self cellMatcherWithTitleID:IDS_IOS_MANAGE_SYNC_SETTINGS_TITLE
+                      detailTextID:0];
+  [[EarlGrey selectElementWithMatcher:manageSyncMatcher]
+      performAction:grey_tap()];
+
+  id<GREYMatcher> backButtonMatcher =
+      grey_allOf(SettingsMenuBackButton(),
+                 grey_descendant(grey_kindOfClass([UIImageView class])), nil);
+  // Back to the Google services settings view.
+  [[EarlGrey selectElementWithMatcher:backButtonMatcher]
+      performAction:grey_tap()];
+  // Open "Manage Sync" settings, again.
+  [[EarlGrey selectElementWithMatcher:manageSyncMatcher]
+      performAction:grey_tap()];
+  // Back to the Google services settings view.
+  [[EarlGrey selectElementWithMatcher:backButtonMatcher]
+      performAction:grey_tap()];
+
+  // Close the advance settings.
+  [[EarlGrey selectElementWithMatcher:SyncSettingsConfirmButton()]
+      performAction:grey_tap()];
+
+  // Test the user is signed in.
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 }
 
 #pragma mark - Helpers

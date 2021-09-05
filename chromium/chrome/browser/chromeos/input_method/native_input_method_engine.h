@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_INPUT_METHOD_NATIVE_INPUT_METHOD_ENGINE_H_
 
 #include "chrome/browser/chromeos/input_method/assistive_suggester.h"
+#include "chrome/browser/chromeos/input_method/autocorrect_manager.h"
 #include "chrome/browser/chromeos/input_method/input_method_engine.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom-forward.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -46,6 +47,15 @@ class NativeInputMethodEngine : public InputMethodEngine {
     return assistive_suggester_;
   }
 
+  AutocorrectManager* get_autocorrect_manager_for_testing() {
+    return autocorrect_manager_;
+  }
+
+  // Used to show special UI to user for interacting with autocorrected text.
+  void OnAutocorrect(std::string typed_word,
+                     std::string corrected_word,
+                     int start_index);
+
  private:
   class ImeObserver : public InputMethodEngineBase::Observer,
                       public ime::mojom::InputChannel {
@@ -53,7 +63,8 @@ class NativeInputMethodEngine : public InputMethodEngine {
     // |base_observer| is to forward events to extension during this migration.
     // It will be removed when the official extension is completely migrated.
     ImeObserver(std::unique_ptr<InputMethodEngineBase::Observer> base_observer,
-                std::unique_ptr<AssistiveSuggester> assistive_suggester);
+                std::unique_ptr<AssistiveSuggester> assistive_suggester,
+                std::unique_ptr<AutocorrectManager> autocorrect_manager);
     ~ImeObserver() override;
 
     // InputMethodEngineBase::Observer:
@@ -92,13 +103,28 @@ class NativeInputMethodEngine : public InputMethodEngine {
     // mojom::InputChannel:
     void ProcessMessage(const std::vector<uint8_t>& message,
                         ProcessMessageCallback callback) override;
-    void OnFocus() override {}
+    void OnInputMethodChanged(const std::string& engine_id) override {}
+    void OnFocus(ime::mojom::InputFieldInfoPtr input_field_info) override {}
+    void OnBlur() override {}
+    void OnSurroundingTextChanged(
+        const std::string& text,
+        uint32_t offset,
+        ime::mojom::SelectionRangePtr selection_range) override {}
+    void OnCompositionCanceled() override {}
     void ProcessKeypressForRulebased(
         ime::mojom::PhysicalKeyEventPtr event,
         ProcessKeypressForRulebasedCallback callback) override {}
+    void OnKeyEvent(ime::mojom::PhysicalKeyEventPtr event,
+                    OnKeyEventCallback callback) override {}
     void ResetForRulebased() override {}
     void GetRulebasedKeypressCountForTesting(
         GetRulebasedKeypressCountForTestingCallback callback) override {}
+    void CommitText(const std::string& text) override;
+    void SetComposition(const std::string& text) override;
+    void SetCompositionRange(uint32_t start_byte_index,
+                             uint32_t end_byte_index) override;
+    void FinishComposition() override;
+    void DeleteSurroundingText(uint32_t before, uint32_t after) override;
 
     // Flush all relevant Mojo pipes.
     void FlushForTesting();
@@ -114,8 +140,8 @@ class NativeInputMethodEngine : public InputMethodEngine {
     // Called when there's a connection error.
     void OnError(base::Time start);
 
-    // Called when a key press is processed by Mojo.
-    void OnKeyEventResponse(
+    // Called when a rule-based key press is processed by Mojo.
+    void OnRuleBasedKeyEventResponse(
         base::Time start,
         ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback,
         ime::mojom::KeypressResponseForRulebasedPtr response);
@@ -127,10 +153,13 @@ class NativeInputMethodEngine : public InputMethodEngine {
     base::Optional<std::string> active_engine_id_;
 
     std::unique_ptr<AssistiveSuggester> assistive_suggester_;
+    std::unique_ptr<AutocorrectManager> autocorrect_manager_;
   };
 
   ImeObserver* GetNativeObserver() const;
-  AssistiveSuggester* assistive_suggester_;
+
+  AssistiveSuggester* assistive_suggester_ = nullptr;
+  AutocorrectManager* autocorrect_manager_ = nullptr;
 };
 
 }  // namespace chromeos

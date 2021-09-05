@@ -11,8 +11,8 @@
 #include "base/no_destructor.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_router.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
@@ -44,6 +44,7 @@
 #error "This file requires ARC support."
 #endif
 
+using password_manager::metrics_util::PasswordType;
 using password_manager::PasswordFormManagerForUI;
 using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
@@ -74,7 +75,7 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
   log_manager_ = autofill::LogManager::Create(
       ios::PasswordManagerLogRouterFactory::GetForBrowserState(
           bridge_.browserState),
-      base::Closure());
+      base::RepeatingClosure());
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
@@ -86,7 +87,7 @@ SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
     const url::Origin& origin,
     CredentialsCallback callback) {
   NOTIMPLEMENTED();
@@ -116,7 +117,7 @@ void IOSChromePasswordManagerClient::PromptUserToMovePasswordToAccount(
 }
 
 bool IOSChromePasswordManagerClient::RequiresReauthToFill() {
-  return base::FeatureList::IsEnabled(kEnableAutofillPasswordReauthIOS);
+  return true;
 }
 
 void IOSChromePasswordManagerClient::ShowManualFallbackForSaving(
@@ -180,7 +181,7 @@ PasswordStore* IOSChromePasswordManagerClient::GetAccountPasswordStore() const {
 }
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
     const url::Origin& origin) {
   DCHECK(!local_forms.empty());
   helper_.NotifyUserAutoSignin();
@@ -188,7 +189,7 @@ void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
 }
 
 void IOSChromePasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
-    std::unique_ptr<autofill::PasswordForm> form) {
+    std::unique_ptr<password_manager::PasswordForm> form) {
   helper_.NotifyUserCouldBeAutoSignedIn(std::move(form));
 }
 
@@ -293,4 +294,25 @@ bool IOSChromePasswordManagerClient::IsNewTabPage() const {
 password_manager::FieldInfoManager*
 IOSChromePasswordManagerClient::GetFieldInfoManager() const {
   return nullptr;
+}
+
+bool IOSChromePasswordManagerClient::IsAutofillAssistantUIVisible() const {
+  return false;
+}
+
+safe_browsing::PasswordProtectionService*
+IOSChromePasswordManagerClient::GetPasswordProtectionService() const {
+  // TODO(crbug.com/1147967): This is no-op until the password protection
+  // service is enabled.
+  return nullptr;
+}
+
+void IOSChromePasswordManagerClient::CheckProtectedPasswordEntry(
+    PasswordType password_type,
+    const std::string& username,
+    const std::vector<password_manager::MatchingReusedCredential>&
+        matching_reused_credentials,
+    bool password_field_exists) {
+  // TODO(crbug.com/1147967): This is no-op until the password protection
+  // service is enabled.
 }

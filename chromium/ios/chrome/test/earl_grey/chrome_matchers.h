@@ -13,6 +13,14 @@
 
 namespace chrome_test_util {
 
+// Matcher for a window with a given number.
+// Window numbers are assigned at scene creation. Normally, each EGTest will
+// start with exactly one window with number 0. Each time a window is created,
+// it is assigned an accessibility identifier equal to the number of connected
+// scenes (stored as NSString). This means typically any windows created in a
+// test will have consecutive numbers.
+id<GREYMatcher> WindowWithNumber(int window_number);
+
 // Matcher for element with accessibility label corresponding to |message_id|
 // and accessibility trait UIAccessibilityTraitButton.
 id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id);
@@ -38,6 +46,11 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id);
 // Matcher for element with accessibility label corresponding to |label| and
 // accessibility trait UIAccessibilityTraitStaticText.
 id<GREYMatcher> StaticTextWithAccessibilityLabel(NSString* label);
+
+// Matcher for a text element (label, field, etc) whose text contains |text| as
+// a substring. (contrast with grey_text() which tests for a complete string
+// match).
+id<GREYMatcher> ContainsPartialText(NSString* text);
 
 // Matcher for element with accessibility label corresponding to |message_id|
 // and accessibility trait UIAccessibilityTraitHeader.
@@ -182,8 +195,14 @@ id<GREYMatcher> SyncSettingsConfirmButton();
 // settings menu.
 id<GREYMatcher> AutofillCreditCardTableView();
 
+// Returns matcher for the "Addresses and More" button in the settings menu.
+id<GREYMatcher> AddressesAndMoreButton();
+
 // Returns matcher for the "Payment Methods" button in the settings menu.
 id<GREYMatcher> PaymentMethodsButton();
+
+// Returns matcher for the "Languages" button in the settings menu.
+id<GREYMatcher> LanguagesButton();
 
 // Returns matcher for the "Add Credit Card" view in the Settings menu.
 id<GREYMatcher> AddCreditCardView();

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {windowController} from '../window_controller/window_controller.js';
+
 /**
  * The singleton instance of ChromeHelper. Initialized by the first
  * invocation of getInstance().
@@ -83,6 +85,32 @@ export class ChromeHelper {
   async isTabletMode() {
     const {isTabletMode} = await this.remote_.isTabletMode();
     return isTabletMode;
+  }
+
+  /**
+   * Starts camera usage monitor.
+   * @param {function()} exploitUsage
+   * @param {function()} releaseUsage
+   * @return {!Promise}
+   */
+  async initCameraUsageMonitor(exploitUsage, releaseUsage) {
+    const usageCallbackRouter =
+        new chromeosCamera.mojom.CameraUsageOwnershipMonitorCallbackRouter();
+
+    usageCallbackRouter.onCameraUsageOwnershipChanged.addListener(
+        async (hasUsage) => {
+          if (hasUsage) {
+            await exploitUsage();
+          } else {
+            await releaseUsage();
+          }
+        });
+
+    await this.remote_.setCameraUsageMonitor(
+        usageCallbackRouter.$.bindNewPipeAndPassRemote());
+
+    const {controller} = await this.remote_.getWindowStateController();
+    await windowController.bind(controller);
   }
 
   /**
@@ -204,8 +232,12 @@ export class ChromeHelper {
     });
 
     const idleManager = blink.mojom.IdleManager.getRemote();
-    // Set a large threshold since we don't care about user idle.
-    const threshold = {microseconds: 86400000000};
+    // Set a large threshold since we don't care about user idle. Note that
+    // ESLint does not yet seem to know about BigInt, so it complains about an
+    // uppercase "function" being used as something other than a constructor,
+    // and about BigInt not existing.
+    // eslint-disable-next-line new-cap, no-undef
+    const threshold = {microseconds: BigInt(86400000000)};
     const {state} = await idleManager.addMonitor(
         threshold, monitorCallbackRouter.$.bindNewPipeAndPassRemote());
     callback(state.screen === blink.mojom.ScreenIdleState.kLocked);

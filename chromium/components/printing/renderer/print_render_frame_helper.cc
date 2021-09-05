@@ -44,7 +44,10 @@
 #include "third_party/blink/public/common/css/page_orientation.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
+#include "third_party/blink/public/mojom/page/widget.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_double_size.h"
 #include "third_party/blink/public/platform/web_size.h"
@@ -671,7 +674,7 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
       /*client=*/nullptr,
       /*is_hidden=*/false, /*is_inside_portal=*/false,
       /*compositing_enabled=*/false, /*opener=*/nullptr,
-      mojo::NullAssociatedReceiver());
+      mojo::NullAssociatedReceiver(), *source_frame.GetAgentGroupScheduler());
   web_view->GetSettings()->SetJavaScriptEnabled(true);
 
   class HeaderAndFooterClient final : public blink::WebLocalFrameClient {
@@ -696,16 +699,25 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
       nullptr);
 
   blink::WebWidgetClient web_widget_client;
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+      frame_widget_receiver =
+          frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+  ignore_result(frame_widget_host.BindNewEndpointAndPassDedicatedReceiver());
+
+  mojo::AssociatedRemote<blink::mojom::Widget> widget_remote;
+  mojo::PendingAssociatedReceiver<blink::mojom::Widget> widget_receiver =
+      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host_remote;
+  ignore_result(widget_host_remote.BindNewEndpointAndPassDedicatedReceiver());
+
   blink::WebFrameWidget::CreateForMainFrame(
-      &web_widget_client, frame,
-      blink::CrossVariantMojoAssociatedRemote<
-          blink::mojom::FrameWidgetHostInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedReceiver<
-          blink::mojom::FrameWidgetInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedRemote<
-          blink::mojom::WidgetHostInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedReceiver<
-          blink::mojom::WidgetInterfaceBase>());
+      &web_widget_client, frame, frame_widget_host.Unbind(),
+      std::move(frame_widget_receiver), widget_host_remote.Unbind(),
+      std::move(widget_receiver), viz::FrameSinkId());
   web_view->DidAttachLocalMainFrame();
 
   base::Value html(
@@ -829,6 +841,7 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
   const bool should_print_backgrounds_;
   const bool should_print_selection_only_;
   bool is_printing_started_ = false;
+  blink::scheduler::WebAgentGroupScheduler& agent_group_scheduler_;
 
   base::WeakPtrFactory<PrepareFrameAndViewForPrint> weak_ptr_factory_{this};
 };
@@ -842,7 +855,8 @@ PrepareFrameAndViewForPrint::PrepareFrameAndViewForPrint(
       original_frame_(frame),
       node_to_print_(node),
       should_print_backgrounds_(params.should_print_backgrounds),
-      should_print_selection_only_(params.selection_only) {
+      should_print_selection_only_(params.selection_only),
+      agent_group_scheduler_(*frame->GetAgentGroupScheduler()) {
   TRACE_EVENT0("print", "PrepareFrameAndViewForPrint");
 
   mojom::PrintParamsPtr print_params = params.Clone();
@@ -937,21 +951,32 @@ void PrepareFrameAndViewForPrint::CopySelection(
       /*is_hidden=*/false,
       /*is_inside_portal=*/false,
       /*compositing_enabled=*/false,
-      /*opener=*/nullptr, mojo::NullAssociatedReceiver());
+      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
+      agent_group_scheduler_);
   blink::WebView::ApplyWebPreferences(prefs, web_view);
   blink::WebLocalFrame* main_frame = blink::WebLocalFrame::CreateMainFrame(
       web_view, this, nullptr, base::UnguessableToken::Create(), nullptr);
   frame_.Reset(main_frame);
+  blink::WebWidgetClient web_widget_client;
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+      frame_widget_receiver =
+          frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+  ignore_result(frame_widget_host.BindNewEndpointAndPassDedicatedReceiver());
+
+  mojo::AssociatedRemote<blink::mojom::Widget> widget_remote;
+  mojo::PendingAssociatedReceiver<blink::mojom::Widget> widget_receiver =
+      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host_remote;
+  ignore_result(widget_host_remote.BindNewEndpointAndPassDedicatedReceiver());
+
   blink::WebFrameWidget::CreateForMainFrame(
-      this, main_frame,
-      blink::CrossVariantMojoAssociatedRemote<
-          blink::mojom::FrameWidgetHostInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedReceiver<
-          blink::mojom::FrameWidgetInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedRemote<
-          blink::mojom::WidgetHostInterfaceBase>(),
-      blink::CrossVariantMojoAssociatedReceiver<
-          blink::mojom::WidgetInterfaceBase>());
+      this, main_frame, frame_widget_host.Unbind(),
+      std::move(frame_widget_receiver), widget_host_remote.Unbind(),
+      std::move(widget_receiver), viz::FrameSinkId());
   web_view->DidAttachLocalMainFrame();
   node_to_print_.Reset();
 
@@ -2167,11 +2192,10 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
   // possible.
   int cookie =
       print_pages_params_ ? print_pages_params_->params->document_cookie : 0;
-  mojom::PrintPagesParams settings;
-  settings.params = mojom::PrintParams::New();
+  mojom::PrintPagesParamsPtr settings;
   bool canceled = false;
-  Send(new PrintHostMsg_UpdatePrintSettings(routing_id(), cookie, *job_settings,
-                                            &settings, &canceled));
+  GetPrintManagerHost()->UpdatePrintSettings(cookie, job_settings->Clone(),
+                                             &settings, &canceled);
   if (canceled) {
     notify_browser_of_print_failure_ = false;
     return false;
@@ -2179,7 +2203,7 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
 
   // TODO(dhoss): Replace deprecated base::DictionaryValue::Get<Type>() calls
   if (!job_settings->GetInteger(kPreviewUIID,
-                                &settings.params->preview_ui_id)) {
+                                &settings->params->preview_ui_id)) {
     NOTREACHED();
     print_preview_context_.set_error(PREVIEW_ERROR_BAD_SETTING);
     return false;
@@ -2187,22 +2211,22 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
 
   // Validate expected print preview settings.
   if (!job_settings->GetInteger(kPreviewRequestID,
-                                &settings.params->preview_request_id) ||
+                                &settings->params->preview_request_id) ||
       !job_settings->GetBoolean(kIsFirstRequest,
-                                &settings.params->is_first_request)) {
+                                &settings->params->is_first_request)) {
     NOTREACHED();
     print_preview_context_.set_error(PREVIEW_ERROR_BAD_SETTING);
     return false;
   }
 
-  settings.params->print_to_pdf = IsPrintToPdfRequested(*job_settings);
+  settings->params->print_to_pdf = IsPrintToPdfRequested(*job_settings);
   UpdateFrameMarginsCssInfo(*job_settings);
-  settings.params->print_scaling_option = GetPrintScalingOption(
-      frame, node, source_is_html, *job_settings, *settings.params);
+  settings->params->print_scaling_option = GetPrintScalingOption(
+      frame, node, source_is_html, *job_settings, *settings->params);
 
-  SetPrintPagesParams(settings);
+  SetPrintPagesParams(*settings);
 
-  if (PrintMsg_Print_Params_IsValid(*settings.params))
+  if (PrintMsg_Print_Params_IsValid(*settings->params))
     return true;
 
   print_preview_context_.set_error(PREVIEW_ERROR_INVALID_PRINTER_SETTINGS);

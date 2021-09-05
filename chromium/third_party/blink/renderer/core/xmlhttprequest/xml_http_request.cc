@@ -347,9 +347,10 @@ void XMLHttpRequest::InitResponseDocument() {
   DocumentInit init = DocumentInit::Create()
                           .WithExecutionContext(GetExecutionContext())
                           .WithURL(response_.ResponseUrl());
-  if (is_html)
+  if (is_html) {
     response_document_ = MakeGarbageCollected<HTMLDocument>(init);
-  else
+    response_document_->setAllowDeclarativeShadowRoot(false);
+  } else
     response_document_ = MakeGarbageCollected<XMLDocument>(init);
 
   // FIXME: Set Last-Modified.
@@ -426,8 +427,8 @@ DOMArrayBuffer* XMLHttpRequest::ResponseArrayBuffer() {
       DOMArrayBuffer* buffer = DOMArrayBuffer::CreateUninitializedOrNull(
           binary_response_builder_->size(), 1);
       if (buffer) {
-        bool result = binary_response_builder_->GetBytes(
-            buffer->Data(), buffer->ByteLengthAsSizeT());
+        bool result = binary_response_builder_->GetBytes(buffer->Data(),
+                                                         buffer->ByteLength());
         DCHECK(result);
         response_array_buffer_ = buffer;
       }
@@ -922,15 +923,14 @@ void XMLHttpRequest::send(DOMArrayBuffer* body,
                           ExceptionState& exception_state) {
   NETWORK_DVLOG(1) << this << " send() ArrayBuffer " << body;
 
-  SendBytesData(body->Data(), body->ByteLengthAsSizeT(), exception_state);
+  SendBytesData(body->Data(), body->ByteLength(), exception_state);
 }
 
 void XMLHttpRequest::send(DOMArrayBufferView* body,
                           ExceptionState& exception_state) {
   NETWORK_DVLOG(1) << this << " send() ArrayBufferView " << body;
 
-  SendBytesData(body->BaseAddress(), body->byteLengthAsSizeT(),
-                exception_state);
+  SendBytesData(body->BaseAddress(), body->byteLength(), exception_state);
 }
 
 void XMLHttpRequest::SendBytesData(const void* data,
@@ -1046,7 +1046,8 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   request.SetRequestorOrigin(GetExecutionContext()->GetSecurityOrigin());
   request.SetIsolatedWorldOrigin(isolated_world_security_origin_);
   request.SetHttpMethod(method_);
-  request.SetRequestContext(mojom::RequestContextType::XML_HTTP_REQUEST);
+  request.SetRequestContext(mojom::blink::RequestContextType::XML_HTTP_REQUEST);
+  request.SetFetchLikeAPI(true);
   request.SetMode(upload_events
                       ? network::mojom::RequestMode::kCorsWithForcedPreflight
                       : network::mojom::RequestMode::kCors);

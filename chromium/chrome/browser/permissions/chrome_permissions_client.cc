@@ -4,6 +4,8 @@
 
 #include "chrome/browser/permissions/chrome_permissions_client.h"
 
+#include <vector>
+
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context.h"
@@ -18,11 +20,11 @@
 #include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/permissions/prediction_based_permission_ui_selector.h"
+#include "chrome/browser/permissions/pref_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
@@ -32,6 +34,8 @@
 #include "components/google/core/common/google_util.h"
 #include "components/permissions/features.h"
 #include "components/prefs/pref_service.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "extensions/common/constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -195,11 +199,18 @@ ChromePermissionsClient::GetOverrideIconId(ContentSettingsType type) {
   return PermissionsClient::GetOverrideIconId(type);
 }
 
-std::unique_ptr<permissions::NotificationPermissionUiSelector>
-ChromePermissionsClient::CreateNotificationPermissionUiSelector(
+std::vector<std::unique_ptr<permissions::NotificationPermissionUiSelector>>
+ChromePermissionsClient::CreateNotificationPermissionUiSelectors(
     content::BrowserContext* browser_context) {
-  return std::make_unique<ContextualNotificationPermissionUiSelector>(
-      Profile::FromBrowserContext(browser_context));
+  std::vector<std::unique_ptr<permissions::NotificationPermissionUiSelector>>
+      selectors;
+  selectors.emplace_back(
+      std::make_unique<ContextualNotificationPermissionUiSelector>());
+  selectors.emplace_back(std::make_unique<PrefNotificationPermissionUiSelector>(
+      Profile::FromBrowserContext(browser_context)));
+  selectors.emplace_back(std::make_unique<PredictionBasedPermissionUiSelector>(
+      Profile::FromBrowserContext(browser_context)));
+  return selectors;
 }
 
 void ChromePermissionsClient::OnPromptResolved(

@@ -8,8 +8,6 @@
 #include "build/build_config.h"
 #include "content/browser/find_request_manager.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/content_switches.h"
@@ -86,7 +84,7 @@ class FindRequestManagerTest : public ContentBrowserTest,
     GURL url(embedded_test_server()->GetURL(
         "b.com", child->current_url().path()));
 
-    EXPECT_TRUE(NavigateFrameToURL(child, url));
+    EXPECT_TRUE(NavigateToURLFromRenderer(child, url));
   }
 
   void Find(const std::string& search_text,
@@ -533,7 +531,8 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(NavigateFrame)) {
       GetParam() ? "b.com" : "a.com", "/find_in_simple_page.html"));
   delegate()->MarkNextReply();
   TestNavigationObserver navigation_observer(contents());
-  NavigateFrameToURL(root->child_at(0)->child_at(1)->child_at(0), url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(
+      root->child_at(0)->child_at(1)->child_at(0), url));
   EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
   delegate()->WaitForNextReply();
 
@@ -695,6 +694,37 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE(FindInPage_Issue644448)) {
 }
 
 #if defined(OS_ANDROID)
+// Tests empty active match rect when kWrapAround is false.
+IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, EmptyActiveMatchRect) {
+  LoadAndWait("/find_in_page.html");
+
+  // kWrapAround is false by default.
+  auto default_options = blink::mojom::FindOptions::New();
+  default_options->run_synchronously_for_testing = true;
+  Find("result 01", default_options.Clone());
+  delegate()->WaitForFinalReply();
+  EXPECT_EQ(1, delegate()->GetFindResults().number_of_matches);
+
+  // Request the find match rects.
+  contents()->RequestFindMatchRects(-1);
+  delegate()->WaitForMatchRects();
+  const std::vector<gfx::RectF>& rects = delegate()->find_match_rects();
+
+  // The first match should be active.
+  EXPECT_EQ(rects[0], delegate()->active_match_rect());
+
+  Find("result 00", default_options.Clone());
+  delegate()->WaitForFinalReply();
+  EXPECT_EQ(1, delegate()->GetFindResults().number_of_matches);
+
+  // Request the find match rects.
+  contents()->RequestFindMatchRects(-1);
+  delegate()->WaitForMatchRects();
+
+  // The active match rect should be empty.
+  EXPECT_EQ(gfx::RectF(), delegate()->active_match_rect());
+}
+
 // TODO(wjmaclean): This test, if re-enabled, may require work to make it
 // OOPIF-compatible.
 // Tests requesting find match rects.

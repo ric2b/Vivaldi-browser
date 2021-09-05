@@ -23,6 +23,8 @@ namespace {
 
 const base::FilePath::StringType kIndexFileName = FILE_PATH_LITERAL("Index");
 
+constexpr int kMaxIndexReadFailAllowed = 10;
+
 enum class BufferType {
   kRulesList = 0,
   kIndex,
@@ -56,7 +58,18 @@ std::string DoGetRuleBufferFromFile(const base::FilePath& buffer_path,
       base::make_span(reinterpret_cast<const uint8_t*>(buffer_contents.data()),
                       buffer_contents.size());
 
-  flatbuffers::Verifier verifier(buffer.data(), buffer.size());
+  // Copy of the default values taken by the flatbuffers::Verifier constructor
+  constexpr int kFlatBufferVerifierDefaultMaxDepth = 64;
+  constexpr int kFlatBufferVerifierDefaultMaxTables = 1000000;
+
+  // Large indexes can go a bit above the default limit. Rising the limit by two
+  // orders of magnitude for those should be safe
+  constexpr int kMaxTablesForIndex = kFlatBufferVerifierDefaultMaxTables * 100;
+
+  flatbuffers::Verifier verifier(
+      buffer.data(), buffer.size(), kFlatBufferVerifierDefaultMaxDepth,
+      buffer_type == BufferType::kIndex ? kMaxTablesForIndex
+                                        : kFlatBufferVerifierDefaultMaxTables);
   if (checksum != CalculateBufferChecksum(buffer))
     return std::string();
 
@@ -227,9 +240,12 @@ void RulesIndexManager::OnIndexRead(std::unique_ptr<std::string> index_buffer) {
   if (!new_index) {
     // Some sources changed while rebuilding or reloading or the index was
     // corrupted. Rebuild it.
-    RebuildIndex();
+    if (++index_read_fail_count_ < kMaxIndexReadFailAllowed)
+      RebuildIndex();
     return;
   }
+
+  index_read_fail_count_ = 0;
 
   rules_index_.swap(new_index);
   old_rules_buffers_.clear();
@@ -239,7 +255,7 @@ void RulesIndexManager::OnIndexRead(std::unique_ptr<std::string> index_buffer) {
   if (!uses_all_buffers) {
     // The index we loaded doesn't reference all our rule buffers. This
     // means several reads have completed since the last rebuild.
-    //We should build a new index while we use the one we just set up.
+    // We should build a new index while we use the one we just set up.
     RebuildIndex();
   }
 }

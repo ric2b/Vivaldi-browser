@@ -20,7 +20,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_photo_capabilities.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/imagecapture/image_capture_frame_grabber.h"
@@ -181,6 +181,13 @@ ScriptPromise ImageCapture::getPhotoCapabilities(ScriptState* script_state) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
+  if (TrackIsInactive(*stream_track_)) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError,
+        "The associated Track is in an invalid state."));
+    return promise;
+  }
+
   if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
@@ -206,6 +213,13 @@ ScriptPromise ImageCapture::getPhotoCapabilities(ScriptState* script_state) {
 ScriptPromise ImageCapture::getPhotoSettings(ScriptState* script_state) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+
+  if (TrackIsInactive(*stream_track_)) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError,
+        "The associated Track is in an invalid state."));
+    return promise;
+  }
 
   if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -757,8 +771,7 @@ void ImageCapture::SetPanTiltZoomSettingsFromTrack(
     media::mojom::blink::PhotoStatePtr photo_state) {
   UpdateMediaTrackCapabilities(base::DoNothing(), std::move(photo_state));
 
-  MediaStreamVideoTrack* video_track = MediaStreamVideoTrack::GetVideoTrack(
-      WebMediaStreamTrack(stream_track_->Component()));
+  auto* video_track = MediaStreamVideoTrack::From(stream_track_->Component());
   DCHECK(video_track);
 
   base::Optional<double> pan = video_track->pan();
@@ -903,10 +916,10 @@ ImageCapture::ImageCapture(ExecutionContext* context,
 
   // This object may be constructed over an ExecutionContext that has already
   // been detached. In this case the ImageCapture service will not be available.
-  if (!GetFrame())
+  if (!DomWindow())
     return;
 
-  GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+  DomWindow()->GetBrowserInterfaceBroker().GetInterface(
       service_.BindNewPipeAndPassReceiver(
           context->GetTaskRunner(TaskType::kDOMManipulation)));
 
@@ -959,6 +972,14 @@ void ImageCapture::OnMojoGetPhotoState(
   if (photo_state.is_null()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kUnknownError, "platform error"));
+    service_requests_.erase(resolver);
+    return;
+  }
+
+  if (TrackIsInactive(*stream_track_)) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kOperationError,
+        "The associated Track is in an invalid state."));
     service_requests_.erase(resolver);
     return;
   }
@@ -1200,9 +1221,7 @@ void ImageCapture::ResolveWithPhotoCapabilities(
 }
 
 bool ImageCapture::IsPageVisible() {
-  LocalFrame* frame = GetFrame();
-  Document* doc = frame ? frame->GetDocument() : nullptr;
-  return doc ? doc->IsPageVisible() : false;
+  return DomWindow() ? DomWindow()->document()->IsPageVisible() : false;
 }
 
 void ImageCapture::Trace(Visitor* visitor) const {

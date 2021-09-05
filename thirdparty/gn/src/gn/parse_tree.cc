@@ -26,6 +26,15 @@ const char kJsonNodeValue[] = "value";
 const char kJsonBeforeComment[] = "before_comment";
 const char kJsonSuffixComment[] = "suffix_comment";
 const char kJsonAfterComment[] = "after_comment";
+const char kJsonLocation[] = "location";
+const char kJsonLocationBeginLine[] = "begin_line";
+const char kJsonLocationBeginColumn[] = "begin_column";
+const char kJsonLocationEndLine[] = "end_line";
+const char kJsonLocationEndColumn[] = "end_column";
+
+// Used by Block and List.
+const char kJsonBeginToken[] = "begin_token";
+const char kJsonEnd[] = "end";
 
 namespace {
 
@@ -85,6 +94,68 @@ std::string_view GetStringRepresentation(const ParseNode* node) {
   return std::string_view();
 }
 
+void AddLocationJSONNodes(base::Value* dict, LocationRange location) {
+  base::Value loc(base::Value::Type::DICTIONARY);
+  loc.SetKey(kJsonLocationBeginLine,
+             base::Value(location.begin().line_number()));
+  loc.SetKey(kJsonLocationBeginColumn,
+             base::Value(location.begin().column_number()));
+  loc.SetKey(kJsonLocationEndLine, base::Value(location.end().line_number()));
+  loc.SetKey(kJsonLocationEndColumn,
+             base::Value(location.end().column_number()));
+  dict->SetKey(kJsonLocation, std::move(loc));
+}
+
+Location GetBeginLocationFromJSON(const base::Value& value) {
+  int line =
+      value.FindKey(kJsonLocation)->FindKey(kJsonLocationBeginLine)->GetInt();
+  int column =
+      value.FindKey(kJsonLocation)->FindKey(kJsonLocationBeginColumn)->GetInt();
+  return Location(nullptr, line, column, 0);
+}
+
+void GetCommentsFromJSON(ParseNode* node, const base::Value& value) {
+  Comments* comments = node->comments_mutable();
+
+  Location loc = GetBeginLocationFromJSON(value);
+
+  auto loc_for = [&loc](int line) {
+    return Location(nullptr, loc.line_number() + line, loc.column_number(), 0);
+  };
+
+  if (value.FindKey(kJsonBeforeComment)) {
+    int line = 0;
+    for (const auto& c : value.FindKey(kJsonBeforeComment)->GetList()) {
+      comments->append_before(
+          Token::ClassifyAndMake(loc_for(line), c.GetString()));
+      ++line;
+    }
+  }
+
+  if (value.FindKey(kJsonSuffixComment)) {
+    int line = 0;
+    for (const auto& c : value.FindKey(kJsonSuffixComment)->GetList()) {
+      comments->append_suffix(
+          Token::ClassifyAndMake(loc_for(line), c.GetString()));
+      ++line;
+    }
+  }
+
+  if (value.FindKey(kJsonAfterComment)) {
+    int line = 0;
+    for (const auto& c : value.FindKey(kJsonAfterComment)->GetList()) {
+      comments->append_after(
+          Token::ClassifyAndMake(loc_for(line), c.GetString()));
+      ++line;
+    }
+  }
+}
+
+Token TokenFromValue(const base::Value& value) {
+  return Token::ClassifyAndMake(GetBeginLocationFromJSON(value),
+                                value.FindKey(kJsonNodeValue)->GetString());
+}
+
 }  // namespace
 
 Comments::Comments() = default;
@@ -112,7 +183,7 @@ const BlockCommentNode* ParseNode::AsBlockComment() const {
 const BlockNode* ParseNode::AsBlock() const {
   return nullptr;
 }
-const ConditionNode* ParseNode::AsConditionNode() const {
+const ConditionNode* ParseNode::AsCondition() const {
   return nullptr;
 }
 const EndNode* ParseNode::AsEnd() const {
@@ -140,18 +211,22 @@ Comments* ParseNode::comments_mutable() {
   return comments_.get();
 }
 
-base::Value ParseNode::CreateJSONNode(const char* type) const {
+base::Value ParseNode::CreateJSONNode(const char* type,
+                                      LocationRange location) const {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetKey(kJsonNodeType, base::Value(type));
+  AddLocationJSONNodes(&dict, location);
   AddCommentsJSONNodes(&dict);
   return dict;
 }
 
 base::Value ParseNode::CreateJSONNode(const char* type,
-                                      const std::string_view& value) const {
+                                      const std::string_view& value,
+                                      LocationRange location) const {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetKey(kJsonNodeType, base::Value(type));
   dict.SetKey(kJsonNodeValue, base::Value(value));
+  AddLocationJSONNodes(&dict, location);
   AddCommentsJSONNodes(&dict);
   return dict;
 }
@@ -177,6 +252,33 @@ void ParseNode::AddCommentsJSONNodes(base::Value* out_value) const {
       out_value->SetKey(kJsonAfterComment, std::move(comment_values));
     }
   }
+}
+
+// static
+std::unique_ptr<ParseNode> ParseNode::BuildFromJSON(const base::Value& value) {
+  const std::string& str_type = value.FindKey(kJsonNodeType)->GetString();
+
+#define RETURN_IF_MATCHES_NAME(t)     \
+  if (str_type == t::kDumpNodeName) { \
+    return t::NewFromJSON(value);     \
+  }
+
+  RETURN_IF_MATCHES_NAME(AccessorNode);
+  RETURN_IF_MATCHES_NAME(BinaryOpNode);
+  RETURN_IF_MATCHES_NAME(BlockCommentNode);
+  RETURN_IF_MATCHES_NAME(BlockNode);
+  RETURN_IF_MATCHES_NAME(ConditionNode);
+  RETURN_IF_MATCHES_NAME(EndNode);
+  RETURN_IF_MATCHES_NAME(FunctionCallNode);
+  RETURN_IF_MATCHES_NAME(IdentifierNode);
+  RETURN_IF_MATCHES_NAME(ListNode);
+  RETURN_IF_MATCHES_NAME(LiteralNode);
+  RETURN_IF_MATCHES_NAME(UnaryOpNode);
+
+#undef RETURN_IF_MATCHES_NAME
+
+  NOTREACHED() << str_type;
+  return std::unique_ptr<ParseNode>();
 }
 
 // AccessorNode ---------------------------------------------------------------
@@ -213,14 +315,40 @@ Err AccessorNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value AccessorNode::GetJSONNode() const {
-  base::Value dict(CreateJSONNode("ACCESSOR", base_.value()));
+  base::Value dict(CreateJSONNode(kDumpNodeName, base_.value(), GetRange()));
   base::Value child(base::Value::Type::LIST);
-  if (subscript_)
+  if (subscript_) {
     child.GetList().push_back(subscript_->GetJSONNode());
-  else if (member_)
+    dict.SetKey(kDumpAccessorKind, base::Value(kDumpAccessorKindSubscript));
+  } else if (member_) {
     child.GetList().push_back(member_->GetJSONNode());
+    dict.SetKey(kDumpAccessorKind, base::Value(kDumpAccessorKindMember));
+  }
   dict.SetKey(kJsonNodeChild, std::move(child));
   return dict;
+}
+
+#define DECLARE_CHILD_AS_LIST_OR_FAIL()                     \
+  const base::Value* child = value.FindKey(kJsonNodeChild); \
+  if (!child || !child->is_list()) {                        \
+    return nullptr;                                         \
+  }
+
+// static
+std::unique_ptr<AccessorNode> AccessorNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<AccessorNode>();
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  ret->base_ = TokenFromValue(value);
+  const base::Value::ListStorage& children = child->GetList();
+  const std::string& kind = value.FindKey(kDumpAccessorKind)->GetString();
+  if (kind == kDumpAccessorKindSubscript) {
+    ret->subscript_ = ParseNode::BuildFromJSON(children[0]);
+  } else if (kind == kDumpAccessorKindMember) {
+    ret->member_ = IdentifierNode::NewFromJSON(children[0]);
+  }
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 Value AccessorNode::ExecuteSubscriptAccess(Scope* scope, Err* err) const {
@@ -377,12 +505,25 @@ Err BinaryOpNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value BinaryOpNode::GetJSONNode() const {
-  base::Value dict(CreateJSONNode("BINARY", op_.value()));
+  base::Value dict(CreateJSONNode(kDumpNodeName, op_.value(), GetRange()));
   base::Value child(base::Value::Type::LIST);
   child.GetList().push_back(left_->GetJSONNode());
   child.GetList().push_back(right_->GetJSONNode());
   dict.SetKey(kJsonNodeChild, std::move(child));
   return dict;
+}
+
+// static
+std::unique_ptr<BinaryOpNode> BinaryOpNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<BinaryOpNode>();
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  const base::Value::ListStorage& children = child->GetList();
+  ret->left_ = ParseNode::BuildFromJSON(children[0]);
+  ret->right_ = ParseNode::BuildFromJSON(children[1]);
+  ret->op_ = TokenFromValue(value);
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 // BlockNode ------------------------------------------------------------------
@@ -456,15 +597,55 @@ Err BlockNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value BlockNode::GetJSONNode() const {
-  base::Value dict(CreateJSONNode("BLOCK"));
+  base::Value dict(CreateJSONNode(kDumpNodeName, GetRange()));
   base::Value statements(base::Value::Type::LIST);
   for (const auto& statement : statements_)
     statements.GetList().push_back(statement->GetJSONNode());
-  if (end_ && end_->comments())
-    statements.GetList().push_back(end_->GetJSONNode());
+  if (end_)
+    dict.SetKey(kJsonEnd, end_->GetJSONNode());
 
-  dict.SetKey("child", std::move(statements));
+  dict.SetKey(kJsonNodeChild, std::move(statements));
+
+  if (result_mode_ == BlockNode::RETURNS_SCOPE) {
+    dict.SetKey(kDumpResultMode, base::Value(kDumpResultModeReturnsScope));
+  } else if (result_mode_ == BlockNode::DISCARDS_RESULT) {
+    dict.SetKey(kDumpResultMode, base::Value(kDumpResultModeDiscardsResult));
+  } else {
+    NOTREACHED();
+  }
+
+  dict.SetKey(kJsonBeginToken, base::Value(begin_token_.value()));
+
   return dict;
+}
+
+// static
+std::unique_ptr<BlockNode> BlockNode::NewFromJSON(const base::Value& value) {
+  const std::string& result_mode = value.FindKey(kDumpResultMode)->GetString();
+  std::unique_ptr<BlockNode> ret;
+
+  if (result_mode == kDumpResultModeReturnsScope) {
+    ret.reset(new BlockNode(BlockNode::RETURNS_SCOPE));
+  } else if (result_mode == kDumpResultModeDiscardsResult) {
+    ret.reset(new BlockNode(BlockNode::DISCARDS_RESULT));
+  } else {
+    NOTREACHED();
+  }
+
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  for (const auto& elem : child->GetList()) {
+    ret->statements_.push_back(ParseNode::BuildFromJSON(elem));
+  }
+
+  ret->begin_token_ =
+      Token::ClassifyAndMake(GetBeginLocationFromJSON(value),
+                             value.FindKey(kJsonBeginToken)->GetString());
+  if (value.FindKey(kJsonEnd)) {
+    ret->end_ = EndNode::NewFromJSON(*value.FindKey(kJsonEnd));
+  }
+
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 // ConditionNode --------------------------------------------------------------
@@ -473,7 +654,7 @@ ConditionNode::ConditionNode() = default;
 
 ConditionNode::~ConditionNode() = default;
 
-const ConditionNode* ConditionNode::AsConditionNode() const {
+const ConditionNode* ConditionNode::AsCondition() const {
   return this;
 }
 
@@ -512,7 +693,7 @@ Err ConditionNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value ConditionNode::GetJSONNode() const {
-  base::Value dict = CreateJSONNode("CONDITION");
+  base::Value dict = CreateJSONNode(kDumpNodeName, GetRange());
   base::Value child(base::Value::Type::LIST);
   child.GetList().push_back(condition_->GetJSONNode());
   child.GetList().push_back(if_true_->GetJSONNode());
@@ -521,6 +702,25 @@ base::Value ConditionNode::GetJSONNode() const {
   }
   dict.SetKey(kJsonNodeChild, std::move(child));
   return dict;
+}
+
+// static
+std::unique_ptr<ConditionNode> ConditionNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<ConditionNode>();
+
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  const base::Value::ListStorage& children = child->GetList();
+
+  ret->if_token_ =
+      Token::ClassifyAndMake(GetBeginLocationFromJSON(value), "if");
+  ret->condition_ = ParseNode::BuildFromJSON(children[0]);
+  ret->if_true_ = BlockNode::NewFromJSON(children[1]);
+  if (children.size() > 2) {
+    ret->if_false_ = ParseNode::BuildFromJSON(children[2]);
+  }
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 // FunctionCallNode -----------------------------------------------------------
@@ -551,7 +751,8 @@ Err FunctionCallNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value FunctionCallNode::GetJSONNode() const {
-  base::Value dict = CreateJSONNode("FUNCTION", function_.value());
+  base::Value dict =
+      CreateJSONNode(kDumpNodeName, function_.value(), GetRange());
   base::Value child(base::Value::Type::LIST);
   child.GetList().push_back(args_->GetJSONNode());
   if (block_) {
@@ -559,6 +760,22 @@ base::Value FunctionCallNode::GetJSONNode() const {
   }
   dict.SetKey(kJsonNodeChild, std::move(child));
   return dict;
+}
+
+// static
+std::unique_ptr<FunctionCallNode> FunctionCallNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<FunctionCallNode>();
+
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  const base::Value::ListStorage& children = child->GetList();
+  ret->function_ = TokenFromValue(value);
+  ret->args_ = ListNode::NewFromJSON(children[0]);
+  if (children.size() > 1)
+    ret->block_ = BlockNode::NewFromJSON(children[1]);
+
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 void FunctionCallNode::SetNewLocation(int line_number) {
@@ -616,7 +833,16 @@ Err IdentifierNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value IdentifierNode::GetJSONNode() const {
-  return CreateJSONNode("IDENTIFIER", value_.value());
+  return CreateJSONNode(kDumpNodeName, value_.value(), GetRange());
+}
+
+// static
+std::unique_ptr<IdentifierNode> IdentifierNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<IdentifierNode>();
+  ret->set_value(TokenFromValue(value));
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 void IdentifierNode::SetNewLocation(int line_number) {
@@ -665,16 +891,35 @@ Err ListNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value ListNode::GetJSONNode() const {
-  base::Value dict(CreateJSONNode("LIST"));
+  base::Value dict(CreateJSONNode(kDumpNodeName, GetRange()));
   base::Value child(base::Value::Type::LIST);
   for (const auto& cur : contents_) {
     child.GetList().push_back(cur->GetJSONNode());
   }
-  if (end_ && end_->comments()) {
-    child.GetList().push_back(end_->GetJSONNode());
-  }
+  if (end_)
+    dict.SetKey(kJsonEnd, end_->GetJSONNode());
   dict.SetKey(kJsonNodeChild, std::move(child));
+  dict.SetKey(kJsonBeginToken, base::Value(begin_token_.value()));
   return dict;
+}
+
+// static
+std::unique_ptr<ListNode> ListNode::NewFromJSON(const base::Value& value) {
+  auto ret = std::make_unique<ListNode>();
+
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  for (const auto& elem : child->GetList()) {
+    ret->contents_.push_back(ParseNode::BuildFromJSON(elem));
+  }
+  ret->begin_token_ =
+      Token::ClassifyAndMake(GetBeginLocationFromJSON(value),
+                             value.FindKey(kJsonBeginToken)->GetString());
+  if (value.FindKey(kJsonEnd)) {
+    ret->end_ = EndNode::NewFromJSON(*value.FindKey(kJsonEnd));
+  }
+
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 template <typename Comparator>
@@ -748,7 +993,7 @@ void ListNode::SortAsStringsList() {
   });
 }
 
-void ListNode::SortAsDepsList() {
+void ListNode::SortAsTargetsList() {
   // Sorts first relative targets, then absolute, each group is sorted
   // alphabetically.
   SortList([](const ParseNode* a, const ParseNode* b) {
@@ -875,7 +1120,16 @@ Err LiteralNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value LiteralNode::GetJSONNode() const {
-  return CreateJSONNode("LITERAL", value_.value());
+  return CreateJSONNode(kDumpNodeName, value_.value(), GetRange());
+}
+
+// static
+std::unique_ptr<LiteralNode> LiteralNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<LiteralNode>();
+  ret->value_ = TokenFromValue(value);
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 void LiteralNode::SetNewLocation(int line_number) {
@@ -911,11 +1165,22 @@ Err UnaryOpNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value UnaryOpNode::GetJSONNode() const {
-  base::Value dict = CreateJSONNode("UNARY", op_.value());
+  base::Value dict = CreateJSONNode(kDumpNodeName, op_.value(), GetRange());
   base::Value child(base::Value::Type::LIST);
   child.GetList().push_back(operand_->GetJSONNode());
   dict.SetKey(kJsonNodeChild, std::move(child));
   return dict;
+}
+
+// static
+std::unique_ptr<UnaryOpNode> UnaryOpNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<UnaryOpNode>();
+  ret->op_ = TokenFromValue(value);
+  DECLARE_CHILD_AS_LIST_OR_FAIL();
+  ret->operand_ = ParseNode::BuildFromJSON(child->GetList()[0]);
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 // BlockCommentNode ------------------------------------------------------------
@@ -943,8 +1208,17 @@ Err BlockCommentNode::MakeErrorDescribing(const std::string& msg,
 
 base::Value BlockCommentNode::GetJSONNode() const {
   std::string escaped;
-  base::EscapeJSONString(std::string(comment_.value()), false, &escaped);
-  return CreateJSONNode("BLOCK_COMMENT", escaped);
+  return CreateJSONNode(kDumpNodeName, comment_.value(), GetRange());
+}
+
+// static
+std::unique_ptr<BlockCommentNode> BlockCommentNode::NewFromJSON(
+    const base::Value& value) {
+  auto ret = std::make_unique<BlockCommentNode>();
+  ret->comment_ = Token(GetBeginLocationFromJSON(value), Token::BLOCK_COMMENT,
+                        value.FindKey(kJsonNodeValue)->GetString());
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }
 
 // EndNode ---------------------------------------------------------------------
@@ -971,5 +1245,12 @@ Err EndNode::MakeErrorDescribing(const std::string& msg,
 }
 
 base::Value EndNode::GetJSONNode() const {
-  return CreateJSONNode("END", value_.value());
+  return CreateJSONNode(kDumpNodeName, value_.value(), GetRange());
+}
+
+// static
+std::unique_ptr<EndNode> EndNode::NewFromJSON(const base::Value& value) {
+  auto ret = std::make_unique<EndNode>(TokenFromValue(value));
+  GetCommentsFromJSON(ret.get(), value);
+  return ret;
 }

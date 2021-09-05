@@ -11,11 +11,12 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.chrome.browser.payments.PaymentRequestFactory;
-import org.chromium.chrome.browser.payments.PaymentRequestImpl;
+import org.chromium.chrome.browser.payments.ChromePaymentRequestFactory;
+import org.chromium.chrome.browser.payments.ChromePaymentRequestService;
 import org.chromium.components.autofill.EditableOption;
-import org.chromium.components.payments.ComponentPaymentRequestImpl;
-import org.chromium.components.payments.ComponentPaymentRequestImpl.NativeObserverForTest;
+import org.chromium.components.payments.PaymentRequestService;
+import org.chromium.components.payments.PaymentRequestService.NativeObserverForTest;
+import org.chromium.components.payments.PaymentUiServiceTestInterface;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentItem;
 
@@ -26,24 +27,44 @@ import java.util.List;
  */
 @JNINamespace("payments")
 public class PaymentRequestTestBridge {
+    private static PaymentUiServiceTestInterface sUiService;
+
     /**
-     * A test override of the PaymentRequestImpl's Delegate. Allows tests to control the answers
-     * about the state of the system, in order to control which paths should be tested in the
-     * PaymentRequestImpl.
+     * A test override of the ChromePaymentRequestService's Delegate. Allows tests to control the
+     * answers about the state of the system, in order to control which paths should be tested in
+     * the ChromePaymentRequestService.
      */
-    private static class PaymentRequestDelegateForTest
-            implements ComponentPaymentRequestImpl.Delegate {
+    private static class ChromePaymentRequestDelegateForTest
+            extends PaymentRequestDelegateForTest implements ChromePaymentRequestService.Delegate {
+        private final boolean mSkipUiForBasicCard;
+
+        ChromePaymentRequestDelegateForTest(boolean isOffTheRecord, boolean isValidSsl,
+                boolean prefsCanMakePayment, String twaPackageName, boolean skipUiForBasicCard) {
+            super(isOffTheRecord, isValidSsl, prefsCanMakePayment, twaPackageName);
+            mSkipUiForBasicCard = skipUiForBasicCard;
+        }
+
+        @Override
+        public boolean skipUiForBasicCard() {
+            return mSkipUiForBasicCard;
+        }
+    }
+
+    /**
+     * A test override of the PaymentRequestService's Delegate. Allows tests to control the
+     * answers about the state of the system, in order to control which paths should be tested in
+     * the ChromePaymentRequestService.
+     */
+    private static class PaymentRequestDelegateForTest implements PaymentRequestService.Delegate {
         private final boolean mIsOffTheRecord;
         private final boolean mIsValidSsl;
-        private final boolean mIsWebContentsActive;
         private final boolean mPrefsCanMakePayment;
         private final String mTwaPackageName;
 
         PaymentRequestDelegateForTest(boolean isOffTheRecord, boolean isValidSsl,
-                boolean isWebContentsActive, boolean prefsCanMakePayment, String twaPackageName) {
+                boolean prefsCanMakePayment, String twaPackageName) {
             mIsOffTheRecord = isOffTheRecord;
             mIsValidSsl = isValidSsl;
-            mIsWebContentsActive = isWebContentsActive;
             mPrefsCanMakePayment = prefsCanMakePayment;
             mTwaPackageName = twaPackageName;
         }
@@ -60,22 +81,12 @@ public class PaymentRequestTestBridge {
         }
 
         @Override
-        public boolean isWebContentsActive() {
-            return mIsWebContentsActive;
-        }
-
-        @Override
         public boolean prefsCanMakePayment() {
             return mPrefsCanMakePayment;
         }
 
-        @Override
-        public boolean skipUiForBasicCard() {
-            return false;
-        }
-
-        @Override
         @Nullable
+        @Override
         public String getTwaPackageName() {
             return mTwaPackageName;
         }
@@ -117,6 +128,17 @@ public class PaymentRequestTestBridge {
             mOnAbortCalledPtr = onAbortCalledPtr;
             mOnCompleteCalledPtr = onCompleteCalledPtr;
             mOnMinimalUIReadyPtr = onMinimalUIReadyPtr;
+        }
+
+        @Override
+        public void onPaymentUiServiceCreated(PaymentUiServiceTestInterface uiService) {
+            assert uiService != null;
+            PaymentRequestTestBridge.sUiService = uiService;
+        }
+
+        @Override
+        public void onClosed() {
+            PaymentRequestTestBridge.sUiService = null;
         }
 
         @Override
@@ -194,14 +216,14 @@ public class PaymentRequestTestBridge {
 
     @CalledByNative
     private static void setUseDelegateForTest(boolean useDelegate, boolean isOffTheRecord,
-            boolean isValidSsl, boolean isWebContentsActive, boolean prefsCanMakePayment,
-            boolean skipUiForBasicCard, String twaPackageName) {
+            boolean isValidSsl, boolean prefsCanMakePayment, boolean skipUiForBasicCard,
+            String twaPackageName) {
         if (useDelegate) {
-            PaymentRequestFactory.sDelegateForTest =
-                    new PaymentRequestDelegateForTest(isOffTheRecord, isValidSsl,
-                            isWebContentsActive, prefsCanMakePayment, twaPackageName);
+            ChromePaymentRequestFactory.sDelegateForTest =
+                    new ChromePaymentRequestDelegateForTest(isOffTheRecord, isValidSsl,
+                            prefsCanMakePayment, twaPackageName, skipUiForBasicCard);
         } else {
-            PaymentRequestFactory.sDelegateForTest = null;
+            ChromePaymentRequestFactory.sDelegateForTest = null;
         }
     }
 
@@ -211,7 +233,7 @@ public class PaymentRequestTestBridge {
             long onHasEnrolledInstrumentReturnedPtr, long onAppListReadyPtr,
             long setAppDescriptionPtr, long onNotSupportedErrorPtr, long onConnectionTerminatedPtr,
             long onAbortCalledPtr, long onCompleteCalledPtr, long onMinimalUIReadyPtr) {
-        ComponentPaymentRequestImpl.setNativeObserverForTest(
+        PaymentRequestService.setNativeObserverForTest(
                 new PaymentRequestNativeObserverBridgeToNativeForTest(onCanMakePaymentCalledPtr,
                         onCanMakePaymentReturnedPtr, onHasEnrolledInstrumentCalledPtr,
                         onHasEnrolledInstrumentReturnedPtr, onAppListReadyPtr, setAppDescriptionPtr,
@@ -221,27 +243,27 @@ public class PaymentRequestTestBridge {
 
     @CalledByNative
     private static WebContents getPaymentHandlerWebContentsForTest() {
-        return PaymentRequestImpl.getPaymentHandlerWebContentsForTest();
+        return sUiService.getPaymentHandlerWebContentsForTest();
     }
 
     @CalledByNative
     private static boolean clickPaymentHandlerSecurityIconForTest() {
-        return PaymentRequestImpl.clickPaymentHandlerSecurityIconForTest();
+        return sUiService.clickPaymentHandlerSecurityIconForTest();
     }
 
     @CalledByNative
     private static boolean clickPaymentHandlerCloseButtonForTest() {
-        return PaymentRequestImpl.clickPaymentHandlerCloseButtonForTest();
+        return sUiService.clickPaymentHandlerCloseButtonForTest();
     }
 
     @CalledByNative
     private static boolean confirmMinimalUIForTest() {
-        return PaymentRequestImpl.confirmMinimalUIForTest();
+        return sUiService.confirmMinimalUIForTest();
     }
 
     @CalledByNative
     private static boolean dismissMinimalUIForTest() {
-        return PaymentRequestImpl.dismissMinimalUIForTest();
+        return sUiService.dismissMinimalUIForTest();
     }
 
     @CalledByNative

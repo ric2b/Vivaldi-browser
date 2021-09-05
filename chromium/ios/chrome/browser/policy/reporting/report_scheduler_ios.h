@@ -27,7 +27,10 @@ class ReportSchedulerIOS : public ReportScheduler::Delegate {
   void StartWatchingUpdatesIfNeeded(base::Time last_upload,
                                     base::TimeDelta upload_interval) override;
   void StopWatchingUpdates() override;
-  void SaveLastUploadVersion() override;
+  void OnBrowserVersionUploaded() override;
+  void StartWatchingExtensionRequestIfNeeded() override;
+  void StopWatchingExtensionRequest() override;
+  void OnExtensionRequestUploaded() override;
 };
 
 }  // namespace enterprise_reporting

@@ -79,8 +79,8 @@ double ConsecutiveMatchWithGaps(const base::string16& needle,
     matched_ranges->emplace_back(0, needle.size());
     return kPrefixScore;
   }
-  base::i18n::UTF16CharIterator n_iter(&needle);
-  base::i18n::UTF16CharIterator h_iter(&haystack);
+  base::i18n::UTF16CharIterator n_iter(needle);
+  base::i18n::UTF16CharIterator h_iter(haystack);
 
   std::vector<MatchRecord> matches;
   int gap_size_before_match = 0;
@@ -141,6 +141,8 @@ namespace commander {
 double FuzzyFind(const base::string16& needle,
                  const base::string16& haystack,
                  std::vector<gfx::Range>* matched_ranges) {
+  if (needle.size() == 0)
+    return 0;
   DCHECK(needle == base::i18n::FoldCase(needle));
   matched_ranges->clear();
   const base::string16& folded = base::i18n::FoldCase(haystack);

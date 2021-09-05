@@ -158,6 +158,28 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             View view = findViewById(R.id.sort_bookmarks_id);
             PopupMenu popupMenu = new PopupMenu(getContext(), view);
             popupMenu.inflate(R.menu.vivaldi_sort_bookmarks_menu);
+
+            BookmarkItemsAdapter.SortOrder order = mDelegate.getSortOrder();
+            if (order == BookmarkItemsAdapter.SortOrder.MANUAL) {
+                popupMenu.getMenu().findItem(R.id.sort_manual_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_manual_id).setChecked(true);
+            } else if (order == BookmarkItemsAdapter.SortOrder.TITLE) {
+                popupMenu.getMenu().findItem(R.id.sort_by_title_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_by_title_id).setChecked(true);
+            } else if (order == BookmarkItemsAdapter.SortOrder.ADDRESS) {
+                popupMenu.getMenu().findItem(R.id.sort_by_address_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_by_address_id).setChecked(true);
+            } else if (order == BookmarkItemsAdapter.SortOrder.NICK) {
+                popupMenu.getMenu().findItem(R.id.sort_by_nickname_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_by_nickname_id).setChecked(true);
+            } else if (order == BookmarkItemsAdapter.SortOrder.DESCRIPTION) {
+                popupMenu.getMenu().findItem(R.id.sort_by_description_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_by_description_id).setChecked(true);
+            } else if (order == BookmarkItemsAdapter.SortOrder.DATE) {
+                popupMenu.getMenu().findItem(R.id.sort_by_date_id).setCheckable(true);
+                popupMenu.getMenu().findItem(R.id.sort_by_date_id).setChecked(true);
+            }
+
             popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                 @Override
                 public boolean onMenuItemClick(MenuItem menuItem) {
@@ -180,6 +202,10 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                     } else if (menuItem.getItemId() == R.id.sort_by_description_id) {
                         mDelegate.setSortOrder(
                                 BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.DESCRIPTION.getNumber()));
+                        return true;
+                    } else if (menuItem.getItemId() == R.id.sort_by_date_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.DATE.getNumber()));
                         return true;
                     }
                     return false;
@@ -266,7 +292,8 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         setNavigationButton(NAVIGATION_BUTTON_BACK);
 
         // Vivaldi needs this for adding new bookmarks
-        BookmarkUtils.setLastUsedParent(getContext(), mCurrentFolder.getId());
+        if (!mCurrentFolder.getId().equals(mDelegate.getModel().getTrashFolderId()))
+            BookmarkUtils.setLastUsedParent(getContext(), mCurrentFolder.getId());
     }
 
     @Override
@@ -301,6 +328,15 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             for (BookmarkId bookmark : selectedBookmarks) {
                 if (bookmark.getType() == BookmarkType.PARTNER) {
                     getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(false);
+                    break;
+                }
+            }
+
+            // Disable edit, move buttons, if the selection includes a reading list item.
+            for (BookmarkId bookmark : selectedBookmarks) {
+                if (bookmark.getType() == BookmarkType.READING_LIST) {
+                    getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(false);
+                    getMenu().findItem(R.id.selection_mode_edit_menu_id).setVisible(false);
                     break;
                 }
             }

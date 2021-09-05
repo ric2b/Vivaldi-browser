@@ -8,8 +8,8 @@
 
 #include "base/strings/string16.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 class Browser;
 
@@ -21,10 +21,6 @@ class WebContents;
 namespace base {
 class ListValue;
 class Time;
-}
-
-namespace gfx {
-class RectF;
 }
 
 namespace ui {

@@ -78,25 +78,25 @@ AccessibilityOrientation AXSlider::Orientation() const {
 void AXSlider::AddChildren() {
   DCHECK(!IsDetached());
   DCHECK(!have_children_);
-
   have_children_ = true;
 
   AXObjectCacheImpl& cache = AXObjectCache();
-
-  AXSliderThumb* thumb = static_cast<AXSliderThumb*>(
-      cache.GetOrCreate(ax::mojom::Role::kSliderThumb));
+  AXObject* thumb = cache.GetOrCreate(ax::mojom::Role::kSliderThumb);
+  DCHECK(thumb);
   thumb->SetParent(this);
 
   // Before actually adding the value indicator to the hierarchy,
   // allow the platform to make a final decision about it.
-  if (!thumb->AccessibilityIsIncludedInTree())
+  if (!thumb->AccessibilityIsIncludedInTree()) {
     cache.Remove(thumb->AXObjectID());
-  else
-    children_.push_back(thumb);
+    return;
+  }
+
+  children_.push_back(thumb);
 }
 
 AXObject* AXSlider::ElementAccessibilityHitTest(const IntPoint& point) const {
-  if (children_.size()) {
+  if (HasChildren()) {
     DCHECK(children_.size() == 1);
     if (children_[0]->GetBoundsInFrameCoordinates().Contains(point))
       return children_[0].Get();

@@ -5,15 +5,25 @@
 #include "chrome/browser/ui/commander/commander_controller.h"
 
 #include "base/memory/ptr_util.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/commander/apps_command_source.h"
 #include "chrome/browser/ui/commander/commander_view_model.h"
+#include "chrome/browser/ui/commander/simple_command_source.h"
 
 namespace commander {
 
 namespace {
 
+size_t constexpr kMaxResults = 8;
+
 CommanderController::CommandSources CreateDefaultSources() {
-  return {};
+  CommanderController::CommandSources sources;
+  sources.push_back(std::make_unique<SimpleCommandSource>());
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  sources.push_back(std::make_unique<AppsCommandSource>());
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  return sources;
 }
 
 }  // namespace
@@ -50,7 +60,8 @@ void CommanderController::OnTextChanged(const base::string16& text,
                const std::unique_ptr<CommandItem>& right) {
               return left->score > right->score;
             });
-  // TODO(lgrey): Threshold this at some kind of max items.
+  if (items.size() > kMaxResults)
+    items.resize(kMaxResults);
   current_items_ = std::move(items);
   CommanderViewModel vm;
   vm.result_set_id = ++current_result_set_id_;
@@ -91,6 +102,11 @@ void CommanderController::OnCommandSelected(size_t command_index,
     vm.action = CommanderViewModel::Action::kPrompt;
     callback_.Run(vm);
   }
+}
+
+void CommanderController::OnCompositeCommandCancelled() {
+  DCHECK(delegate_);
+  delegate_.reset();
 }
 
 void CommanderController::SetUpdateCallback(ViewModelUpdateCallback callback) {

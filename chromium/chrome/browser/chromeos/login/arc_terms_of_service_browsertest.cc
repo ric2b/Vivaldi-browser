@@ -5,7 +5,7 @@
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 
 #include "ash/public/cpp/login_screen_test_api.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
@@ -302,7 +302,7 @@ class ArcTermsOfServiceScreenTest : public OobeBaseTest {
     return BuildHttpResponse(content);
   }
 
-  // Returns a successful |BasicHttpResponse| with |content|.
+  // Returns a successful `BasicHttpResponse` with `content`.
   std::unique_ptr<BasicHttpResponse> BuildHttpResponse(
       const std::string& content) {
     std::unique_ptr<BasicHttpResponse> http_response =
@@ -533,9 +533,9 @@ class ParameterizedArcTermsOfServiceScreenTest
   }
 
   // Common routine that enables/disables checkboxes based on test parameters.
-  // When |accept| is true, advances to next screen by clicking on the "Accept"
+  // When `accept` is true, advances to next screen by clicking on the "Accept"
   // button.
-  // |play_consent|, |backup_and_restore_consent| and |location_service_consent|
+  // `play_consent`, `backup_and_restore_consent` and `location_service_consent`
   // are the expected consents recordings.
   void AdvanceNextScreenWithExpectations(
       bool accept,

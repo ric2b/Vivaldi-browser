@@ -5,6 +5,7 @@
 #ifndef ASH_WM_DESKS_DESK_ANIMATION_BASE_H_
 #define ASH_WM_DESKS_DESK_ANIMATION_BASE_H_
 
+#include "ash/ash_export.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/root_window_desk_switch_animator.h"
@@ -19,7 +20,8 @@ class DesksController;
 // such as DeskActivationAnimation and DeskRemovalAnimation implement the
 // abstract interface of this class to handle the unique operations specific to
 // each animation type.
-class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
+class ASH_EXPORT DeskAnimationBase
+    : public RootWindowDeskSwitchAnimator::Delegate {
  public:
   DeskAnimationBase(DesksController* controller,
                     int ending_desk_index,
@@ -29,6 +31,7 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   ~DeskAnimationBase() override;
 
   int ending_desk_index() const { return ending_desk_index_; }
+  int visible_desk_changes() const { return visible_desk_changes_; }
 
   // Launches the animation. This should be done once all animators
   // are created and added to `desk_switch_animators_`. This is to avoid any
@@ -53,6 +56,14 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   void OnStartingDeskScreenshotTaken(int ending_desk_index) override;
   void OnEndingDeskScreenshotTaken() override;
   void OnDeskSwitchAnimationFinished() override;
+  void OnVisibleDeskChanged() override;
+
+  void set_skip_notify_controller_on_animation_finished_for_testing(bool val) {
+    skip_notify_controller_on_animation_finished_for_testing_ = val;
+  }
+
+  RootWindowDeskSwitchAnimator* GetDeskSwitchAnimatorAtIndexForTesting(
+      size_t index) const;
 
  protected:
   // Abstract functions that can be overridden by child classes to do different
@@ -84,8 +95,21 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   // OnEndingDeskScreenshotTaken is called.
   const bool is_continuous_gesture_animation_;
 
+  // Used for metrics collection to track how many desks changes a user has seen
+  // during the animation. This is different from the number of desk activations
+  // as the user may switch desks but not activate it if the desk already has a
+  // screenshot taken. This will only change for an activation animation, not a
+  // remove animation.
+  int visible_desk_changes_ = 0;
+
   // ThroughputTracker used for measuring this animation smoothness.
   ui::ThroughputTracker throughput_tracker_;
+
+  // If true, do not notify |controller_| when
+  // OnDeskSwitchAnimationFinished() is called. This class and
+  // DeskController are tied together in production code, but may not be in a
+  // test scenario.
+  bool skip_notify_controller_on_animation_finished_for_testing_ = false;
 };
 
 }  // namespace ash

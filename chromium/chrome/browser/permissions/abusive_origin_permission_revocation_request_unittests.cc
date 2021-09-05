@@ -17,16 +17,17 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 
-class AbusiveOriginPermissionRevocationRequestTest : public testing::Test {
+class AbusiveOriginPermissionRevocationRequestTestBase : public testing::Test {
  public:
   using Outcome = AbusiveOriginPermissionRevocationRequest::Outcome;
   using SiteReputation = CrowdDenyPreloadData::SiteReputation;
 
-  AbusiveOriginPermissionRevocationRequestTest() = default;
+  AbusiveOriginPermissionRevocationRequestTestBase() = default;
 
-  ~AbusiveOriginPermissionRevocationRequestTest() override = default;
+  ~AbusiveOriginPermissionRevocationRequestTestBase() override = default;
 
  protected:
   void SetUp() override {
@@ -68,9 +69,11 @@ class AbusiveOriginPermissionRevocationRequestTest : public testing::Test {
   void AddToPreloadDataBlocklist(
       const GURL& origin,
       chrome_browser_crowd_deny::
-          SiteReputation_NotificationUserExperienceQuality reputation_type) {
+          SiteReputation_NotificationUserExperienceQuality reputation_type,
+      bool has_warning) {
     SiteReputation reputation;
     reputation.set_notification_ux_quality(reputation_type);
+    reputation.set_warning_only(has_warning);
     testing_preload_data_.SetOriginReputation(url::Origin::Create(origin),
                                               std::move(reputation));
   }
@@ -90,8 +93,7 @@ class AbusiveOriginPermissionRevocationRequestTest : public testing::Test {
     HostContentSettingsMap* host_content_settings_map =
         HostContentSettingsMapFactory::GetForProfile(testing_profile_.get());
     host_content_settings_map->SetContentSettingDefaultScope(
-        origin, GURL(), ContentSettingsType::NOTIFICATIONS, std::string(),
-        value);
+        origin, GURL(), ContentSettingsType::NOTIFICATIONS, value);
   }
 
   void VerifyNotificationsPermission(const GURL& origin,
@@ -100,7 +102,7 @@ class AbusiveOriginPermissionRevocationRequestTest : public testing::Test {
         HostContentSettingsMapFactory::GetForProfile(testing_profile_.get());
 
     ContentSetting result = host_content_settings_map->GetContentSetting(
-        origin, GURL(), ContentSettingsType::NOTIFICATIONS, std::string());
+        origin, GURL(), ContentSettingsType::NOTIFICATIONS);
 
     EXPECT_EQ(value, result);
   }
@@ -119,18 +121,22 @@ class AbusiveOriginPermissionRevocationRequestTest : public testing::Test {
   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
       safe_browsing_factory_;
 
-  DISALLOW_COPY_AND_ASSIGN(AbusiveOriginPermissionRevocationRequestTest);
+  DISALLOW_COPY_AND_ASSIGN(AbusiveOriginPermissionRevocationRequestTestBase);
 };
 
-TEST_F(AbusiveOriginPermissionRevocationRequestTest,
-       PermissionRevocationFeatureDisabled) {
-  const GURL origin_to_revoke = GURL("https://origin.com/");
+class AbusiveOriginPermissionRevocationRequestTest
+    : public AbusiveOriginPermissionRevocationRequestTestBase {
+ public:
+  AbusiveOriginPermissionRevocationRequestTest() {
+    feature_list_.InitAndEnableFeature(
+        features::kAbusiveNotificationPermissionRevocation);
+  }
 
-  SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
-  QueryAndExpectDecisionForUrl(origin_to_revoke,
-                               Outcome::PERMISSION_NOT_REVOKED);
-  VerifyNotificationsPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
-}
+  ~AbusiveOriginPermissionRevocationRequestTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
 
 TEST_F(AbusiveOriginPermissionRevocationRequestTest,
        OriginIsNotOnBlockingLists) {
@@ -138,20 +144,12 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest,
 
   SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
 
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kAbusiveNotificationPermissionRevocation);
-
   QueryAndExpectDecisionForUrl(origin_to_revoke,
                                Outcome::PERMISSION_NOT_REVOKED);
   VerifyNotificationsPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
 }
 
 TEST_F(AbusiveOriginPermissionRevocationRequestTest, SafeBrowsingTest) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kAbusiveNotificationPermissionRevocation);
-
   const GURL origin_to_revoke = GURL("https://origin.com/");
 
   SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
@@ -170,7 +168,8 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest, SafeBrowsingTest) {
       AbusiveOriginPermissionRevocationRequest::HasPreviouslyRevokedPermission(
           GetTestingProfile(), origin_to_revoke));
 
-  AddToPreloadDataBlocklist(origin_to_revoke, SiteReputation::ABUSIVE_CONTENT);
+  AddToPreloadDataBlocklist(origin_to_revoke, SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
   QueryAndExpectDecisionForUrl(origin_to_revoke,
                                Outcome::PERMISSION_REVOKED_DUE_TO_ABUSE);
   VerifyNotificationsPermission(origin_to_revoke, CONTENT_SETTING_ASK);
@@ -180,10 +179,6 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest, SafeBrowsingTest) {
 }
 
 TEST_F(AbusiveOriginPermissionRevocationRequestTest, PreloadDataTest) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kAbusiveNotificationPermissionRevocation);
-
   const GURL abusive_content_origin_to_revoke =
       GURL("https://abusive-content.com/");
   const GURL abusive_prompts_origin_to_revoke =
@@ -205,13 +200,18 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest, PreloadDataTest) {
     QueryAndExpectDecisionForUrl(origin, Outcome::PERMISSION_NOT_REVOKED);
 
   AddToPreloadDataBlocklist(abusive_content_origin_to_revoke,
-                            SiteReputation::ABUSIVE_CONTENT);
+                            SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
   AddToPreloadDataBlocklist(abusive_prompts_origin_to_revoke,
-                            SiteReputation::ABUSIVE_PROMPTS);
+                            SiteReputation::ABUSIVE_PROMPTS,
+                            /*has_warning=*/false);
   AddToPreloadDataBlocklist(unsolicited_prompts_origin,
-                            SiteReputation::UNSOLICITED_PROMPTS);
-  AddToPreloadDataBlocklist(acceptable_origin, SiteReputation::ACCEPTABLE);
-  AddToPreloadDataBlocklist(unknown_origin, SiteReputation::UNKNOWN);
+                            SiteReputation::UNSOLICITED_PROMPTS,
+                            /*has_warning=*/false);
+  AddToPreloadDataBlocklist(acceptable_origin, SiteReputation::ACCEPTABLE,
+                            /*has_warning=*/false);
+  AddToPreloadDataBlocklist(unknown_origin, SiteReputation::UNKNOWN,
+                            /*has_warning=*/false);
 
   // The origins are on CrowdDeny blocking lists, but not on SafeBrowsing.
   for (auto origin : origins)
@@ -231,24 +231,70 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest, PreloadDataTest) {
   QueryAndExpectDecisionForUrl(unknown_origin, Outcome::PERMISSION_NOT_REVOKED);
 }
 
+TEST_F(AbusiveOriginPermissionRevocationRequestTest,
+       PreloadDataTestWithWarning) {
+  const GURL abusive_content_origin_to_revoke =
+      GURL("https://abusive-content.com/");
+  const GURL abusive_prompts_origin_to_revoke =
+      GURL("https://abusive-prompts.com/");
+  const GURL unsolicited_prompts_origin =
+      GURL("https://unsolicited-prompts.com/");
+  const GURL acceptable_origin = GURL("https://acceptable-origin.com/");
+  const GURL unknown_origin = GURL("https://unknown-origin.com/");
+
+  auto origins = {abusive_content_origin_to_revoke,
+                  abusive_prompts_origin_to_revoke, unsolicited_prompts_origin,
+                  acceptable_origin, unknown_origin};
+
+  for (auto origin : origins)
+    SetPermission(origin, CONTENT_SETTING_ALLOW);
+
+  // The origins are not on any blocking lists.
+  for (auto origin : origins)
+    QueryAndExpectDecisionForUrl(origin, Outcome::PERMISSION_NOT_REVOKED);
+
+  AddToPreloadDataBlocklist(abusive_content_origin_to_revoke,
+                            SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/true);
+  AddToPreloadDataBlocklist(abusive_prompts_origin_to_revoke,
+                            SiteReputation::ABUSIVE_PROMPTS,
+                            /*has_warning=*/true);
+  AddToPreloadDataBlocklist(unsolicited_prompts_origin,
+                            SiteReputation::UNSOLICITED_PROMPTS,
+                            /*has_warning=*/true);
+  AddToPreloadDataBlocklist(acceptable_origin, SiteReputation::ACCEPTABLE,
+                            /*has_warning=*/true);
+  AddToPreloadDataBlocklist(unknown_origin, SiteReputation::UNKNOWN,
+                            /*has_warning=*/true);
+
+  // The origins are on CrowdDeny blocking lists, but not on SafeBrowsing.
+  for (auto origin : origins)
+    QueryAndExpectDecisionForUrl(origin, Outcome::PERMISSION_NOT_REVOKED);
+
+  for (auto origin : origins)
+    AddToSafeBrowsingBlocklist(origin);
+
+  // The warning is enabled for all origin, permission should not be revoked.
+  for (auto origin : origins)
+    QueryAndExpectDecisionForUrl(origin, Outcome::PERMISSION_NOT_REVOKED);
+}
+
 TEST_F(AbusiveOriginPermissionRevocationRequestTest, ExemptAbusiveOriginTest) {
   const GURL origin_to_exempt = GURL("https://origin-allow.com/");
   const GURL origin_to_revoke = GURL("https://origin.com/");
-
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kAbusiveNotificationPermissionRevocation);
 
   AbusiveOriginPermissionRevocationRequest::ExemptOriginFromFutureRevocations(
       GetTestingProfile(), origin_to_exempt);
 
   SetPermission(origin_to_exempt, CONTENT_SETTING_ALLOW);
 
-  AddToPreloadDataBlocklist(origin_to_exempt, SiteReputation::ABUSIVE_CONTENT);
+  AddToPreloadDataBlocklist(origin_to_exempt, SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
   AddToSafeBrowsingBlocklist(origin_to_exempt);
 
   SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
-  AddToPreloadDataBlocklist(origin_to_revoke, SiteReputation::ABUSIVE_CONTENT);
+  AddToPreloadDataBlocklist(origin_to_revoke, SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
   AddToSafeBrowsingBlocklist(origin_to_revoke);
 
   // The origin added to the exempt list will not be revoked.
@@ -259,4 +305,50 @@ TEST_F(AbusiveOriginPermissionRevocationRequestTest, ExemptAbusiveOriginTest) {
   QueryAndExpectDecisionForUrl(origin_to_revoke,
                                Outcome::PERMISSION_REVOKED_DUE_TO_ABUSE);
   VerifyNotificationsPermission(origin_to_revoke, CONTENT_SETTING_ASK);
+}
+
+TEST_F(AbusiveOriginPermissionRevocationRequestTest, SafeBrowsingDisabledTest) {
+  const GURL origin_to_revoke = GURL("https://origin.com/");
+
+  SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
+
+  AddToSafeBrowsingBlocklist(origin_to_revoke);
+  AddToPreloadDataBlocklist(origin_to_revoke, SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
+  QueryAndExpectDecisionForUrl(origin_to_revoke,
+                               Outcome::PERMISSION_REVOKED_DUE_TO_ABUSE);
+
+  GetTestingProfile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
+                                              false);
+
+  // Permission should not be revoked because Safe Browsing is disabled.
+  const GURL origin_to_not_revoke = GURL("https://origin-not_revoked.com/");
+
+  SetPermission(origin_to_not_revoke, CONTENT_SETTING_ALLOW);
+
+  AddToSafeBrowsingBlocklist(origin_to_not_revoke);
+  AddToPreloadDataBlocklist(origin_to_not_revoke,
+                            SiteReputation::ABUSIVE_CONTENT,
+                            /*has_warning=*/false);
+
+  QueryAndExpectDecisionForUrl(origin_to_not_revoke,
+                               Outcome::PERMISSION_NOT_REVOKED);
+  VerifyNotificationsPermission(origin_to_not_revoke, CONTENT_SETTING_ALLOW);
+}
+
+class AbusiveOriginPermissionRevocationRequestDisabledTest
+    : public AbusiveOriginPermissionRevocationRequestTestBase {
+ public:
+  AbusiveOriginPermissionRevocationRequestDisabledTest() = default;
+  ~AbusiveOriginPermissionRevocationRequestDisabledTest() override = default;
+};
+
+TEST_F(AbusiveOriginPermissionRevocationRequestDisabledTest,
+       PermissionRevocationFeatureDisabled) {
+  const GURL origin_to_revoke = GURL("https://origin.com/");
+
+  SetPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
+  QueryAndExpectDecisionForUrl(origin_to_revoke,
+                               Outcome::PERMISSION_NOT_REVOKED);
+  VerifyNotificationsPermission(origin_to_revoke, CONTENT_SETTING_ALLOW);
 }

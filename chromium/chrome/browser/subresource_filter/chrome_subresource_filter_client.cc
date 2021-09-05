@@ -14,16 +14,16 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "chrome/browser/subresource_filter/ads_intervention_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing/core/db/database_manager.h"
+#include "components/subresource_filter/content/browser/ads_intervention_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_scope.h"
@@ -33,7 +33,8 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/ui/android/content_settings/ads_blocked_infobar_delegate.h"
+#include "chrome/browser/ui/android/infobars/chrome_confirm_infobar.h"
+#include "components/subresource_filter/android/ads_blocked_infobar_delegate.h"
 #endif
 
 ChromeSubresourceFilterClient::ChromeSubresourceFilterClient(
@@ -42,17 +43,37 @@ ChromeSubresourceFilterClient::ChromeSubresourceFilterClient(
   DCHECK(web_contents);
   profile_context_ = SubresourceFilterProfileContextFactory::GetForProfile(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+}
 
+ChromeSubresourceFilterClient::~ChromeSubresourceFilterClient() = default;
+
+// static
+void ChromeSubresourceFilterClient::
+    CreateThrottleManagerWithClientForWebContents(
+        content::WebContents* web_contents) {
   subresource_filter::RulesetService* ruleset_service =
       g_browser_process->subresource_filter_ruleset_service();
   subresource_filter::VerifiedRulesetDealer::Handle* dealer =
       ruleset_service ? ruleset_service->GetRulesetDealer() : nullptr;
-  throttle_manager_ = std::make_unique<
-      subresource_filter::ContentSubresourceFilterThrottleManager>(
-      this, dealer, web_contents);
+  subresource_filter::ContentSubresourceFilterThrottleManager::
+      CreateForWebContents(
+          web_contents,
+          std::make_unique<ChromeSubresourceFilterClient>(web_contents),
+          dealer);
 }
 
-ChromeSubresourceFilterClient::~ChromeSubresourceFilterClient() {}
+// static
+ChromeSubresourceFilterClient* ChromeSubresourceFilterClient::FromWebContents(
+    content::WebContents* web_contents) {
+  auto* throttle_manager = subresource_filter::
+      ContentSubresourceFilterThrottleManager::FromWebContents(web_contents);
+
+  if (!throttle_manager)
+    return nullptr;
+
+  return static_cast<ChromeSubresourceFilterClient*>(
+      throttle_manager->client());
+}
 
 void ChromeSubresourceFilterClient::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -64,8 +85,21 @@ void ChromeSubresourceFilterClient::DidStartNavigation(
   }
 }
 
+void ChromeSubresourceFilterClient::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted() && navigation_handle->IsInMainFrame() &&
+      !navigation_handle->IsSameDocument()) {
+    ads_violation_triggered_for_last_committed_navigation_ = false;
+  }
+}
+
 void ChromeSubresourceFilterClient::OnReloadRequested() {
-  LogAction(SubresourceFilterAction::kAllowlistedSite);
+  // TODO(crbug.com/1116095): Once ContentSubresourceFilterThrottleManager knows
+  // about content settings, this method can move entirely into
+  // ContentSubresourceFilterThrottleManager::OnReloadRequested() and
+  // SubresourceFilterClient::OnReloadRequested() can be eliminated.
+  subresource_filter::ContentSubresourceFilterThrottleManager::LogAction(
+      subresource_filter::SubresourceFilterAction::kAllowlistedSite);
   AllowlistByContentSettings(web_contents()->GetLastCommittedURL());
   web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
 }
@@ -79,7 +113,8 @@ void ChromeSubresourceFilterClient::ShowNotification() {
           top_level_url)) {
     ShowUI(top_level_url);
   } else {
-    LogAction(SubresourceFilterAction::kUISuppressed);
+    subresource_filter::ContentSubresourceFilterThrottleManager::LogAction(
+        subresource_filter::SubresourceFilterAction::kUISuppressed);
   }
 }
 
@@ -98,32 +133,21 @@ ChromeSubresourceFilterClient::OnPageActivationComputed(
     *decision = subresource_filter::ActivationDecision::FORCED_ACTIVATION;
   }
 
-  const GURL& url(navigation_handle->GetURL());
-
-  base::Optional<AdsInterventionManager::LastAdsIntervention>
-      last_intervention =
-          profile_context_->ads_intervention_manager()->GetLastAdsIntervention(
-              url);
-
-  // Only activate the subresource filter if we are intervening on
-  // ads
-  if (profile_context_->settings_manager()->GetSiteActivationFromMetadata(
-          url) &&
-      last_intervention &&
-      last_intervention->duration_since <
-          subresource_filter::kAdsInterventionDuration.Get()) {
+  if (profile_context_->ads_intervention_manager()->ShouldActivate(
+          navigation_handle)) {
     effective_activation_level =
         subresource_filter::mojom::ActivationLevel::kEnabled;
     *decision = subresource_filter::ActivationDecision::ACTIVATED;
   }
 
+  const GURL& url(navigation_handle->GetURL());
   if (url.SchemeIsHTTPOrHTTPS()) {
     profile_context_->settings_manager()->SetSiteMetadataBasedOnActivation(
         url,
         effective_activation_level ==
             subresource_filter::mojom::ActivationLevel::kEnabled,
-        SubresourceFilterContentSettingsManager::ActivationSource::
-            kSafeBrowsing);
+        subresource_filter::SubresourceFilterContentSettingsManager::
+            ActivationSource::kSafeBrowsing);
   }
 
   if (profile_context_->settings_manager()->GetSitePermission(url) ==
@@ -138,16 +162,28 @@ ChromeSubresourceFilterClient::OnPageActivationComputed(
   return effective_activation_level;
 }
 
+// TODO(https://crbug.com/1131969): Consider adding reporting when
+// ads violations are triggered.
 void ChromeSubresourceFilterClient::OnAdsViolationTriggered(
     content::RenderFrameHost* rfh,
     subresource_filter::mojom::AdsViolation triggered_violation) {
+  // Only trigger violations once per navigation. The ads intervention
+  // manager ignores all interventions after recording an intervention
+  // for the intervention duration, however, a page that began a navigation
+  // before the intervention duration and was still alive after the duration
+  // could re-trigger an ads intervention.
+  if (ads_violation_triggered_for_last_committed_navigation_)
+    return;
+
   // If the feature is disabled, simulate ads interventions as if we were
   // enforcing on ads: do not record new interventions if we would be enforcing
   // an intervention on ads already.
-  // TODO(https://crbug/1107998): Verify this behavior when violation signals
-  // and histograms are added.
+  //
+  // TODO(https://crbug.com/1131971): Add support for enabling ads interventions
+  // separately for different ads violations.
   const GURL& url = rfh->GetLastCommittedURL();
-  base::Optional<AdsInterventionManager::LastAdsIntervention>
+  base::Optional<
+      subresource_filter::AdsInterventionManager::LastAdsIntervention>
       last_intervention =
           profile_context_->ads_intervention_manager()->GetLastAdsIntervention(
               url);
@@ -158,6 +194,8 @@ void ChromeSubresourceFilterClient::OnAdsViolationTriggered(
 
   profile_context_->ads_intervention_manager()
       ->TriggerAdsInterventionForUrlOnSubsequentLoads(url, triggered_violation);
+
+  ads_violation_triggered_for_last_committed_navigation_ = true;
 }
 
 void ChromeSubresourceFilterClient::AllowlistByContentSettings(
@@ -176,25 +214,17 @@ ChromeSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
 void ChromeSubresourceFilterClient::ToggleForceActivationInCurrentWebContents(
     bool force_activation) {
   if (!activated_via_devtools_ && force_activation)
-    LogAction(SubresourceFilterAction::kForcedActivationEnabled);
+    subresource_filter::ContentSubresourceFilterThrottleManager::LogAction(
+        subresource_filter::SubresourceFilterAction::kForcedActivationEnabled);
   activated_via_devtools_ = force_activation;
-}
-
-subresource_filter::ContentSubresourceFilterThrottleManager*
-ChromeSubresourceFilterClient::GetThrottleManager() const {
-  return throttle_manager_.get();
-}
-
-// static
-void ChromeSubresourceFilterClient::LogAction(SubresourceFilterAction action) {
-  UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.Actions2", action);
 }
 
 void ChromeSubresourceFilterClient::ShowUI(const GURL& url) {
 #if defined(OS_ANDROID)
   InfoBarService* infobar_service =
       InfoBarService::FromWebContents(web_contents());
-  AdsBlockedInfobarDelegate::Create(infobar_service);
+  subresource_filter::AdsBlockedInfobarDelegate::Create(
+      infobar_service, ChromeConfirmInfoBar::GetResourceIdMapper());
 #endif
   // TODO(https://crbug.com/1103176): Plumb the actual frame reference here
   // (it comes  from
@@ -205,9 +235,8 @@ void ChromeSubresourceFilterClient::ShowUI(const GURL& url) {
           web_contents()->GetMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::ADS);
 
-  LogAction(SubresourceFilterAction::kUIShown);
+  subresource_filter::ContentSubresourceFilterThrottleManager::LogAction(
+      subresource_filter::SubresourceFilterAction::kUIShown);
   did_show_ui_for_navigation_ = true;
   profile_context_->settings_manager()->OnDidShowUI(url);
 }
-
-WEB_CONTENTS_USER_DATA_KEY_IMPL(ChromeSubresourceFilterClient)

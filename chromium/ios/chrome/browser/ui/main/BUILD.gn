@@ -65,6 +65,8 @@ source_set("scene") {
     ":main",
     ":scene_testing",
     "//base",
+    "//components/infobars/core",
+    "//components/previous_session_info",
     "//components/signin/public/identity_manager",
     "//components/url_formatter",
     "//components/web_resource",
@@ -86,8 +88,8 @@ source_set("scene") {
     "//ios/chrome/browser/crash_report/breadcrumbs:feature_flags",
     "//ios/chrome/browser/first_run",
     "//ios/chrome/browser/geolocation:geolocation_internal",
+    "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/main",
-    "//ios/chrome/browser/metrics:previous_session_info",
     "//ios/chrome/browser/ntp:features",
     "//ios/chrome/browser/screenshot",
     "//ios/chrome/browser/signin",
@@ -100,10 +102,12 @@ source_set("scene") {
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/first_run",
+    "//ios/chrome/browser/ui/first_run:field_trial",
     "//ios/chrome/browser/ui/history",
     "//ios/chrome/browser/ui/settings:settings_root",
     "//ios/chrome/browser/ui/settings/sync",
-    "//ios/chrome/browser/ui/tab_grid",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid",
+    "//ios/chrome/browser/ui/thumb_strip:feature_flags",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/util:multiwindow_util",
@@ -134,10 +138,16 @@ source_set("scene") {
   frameworks = [ "UIKit.framework" ]
 }
 
+source_set("browser_interface_provider") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [ "browser_interface_provider.h" ]
+  deps = [ "//base" ]
+  frameworks = [ "UIKit.framework" ]
+}
+
 source_set("main") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "browser_interface_provider.h",
     "browser_view_wrangler.h",
     "browser_view_wrangler.mm",
     "bvc_container_view_controller.h",
@@ -198,7 +208,10 @@ source_set("main") {
     deps += [ "//ios/chrome/app/resources:base_scene_storyboard" ]
   }
 
-  public_deps = [ ":scene_state_header" ]
+  public_deps = [
+    ":browser_interface_provider",
+    ":scene_state_header",
+  ]
 
   # TODO(crbug.com/1103553): remove circular dependency.
   allow_circular_includes_from = [ "//ios/chrome/browser/ui/settings/sync" ]

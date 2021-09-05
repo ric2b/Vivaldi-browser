@@ -38,14 +38,11 @@ class ChromeShellDelegate : public ash::ShellDelegate {
       override;
   void BindFingerprint(
       mojo::PendingReceiver<device::mojom::Fingerprint> receiver) override;
-  void BindNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   void BindMultiDeviceSetup(
       mojo::PendingReceiver<
           chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver)
       override;
-  media_session::mojom::MediaSessionService* GetMediaSessionService() override;
+  media_session::MediaSessionService* GetMediaSessionService() override;
   std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
       ash::NearbyShareController* controller) const override;
 

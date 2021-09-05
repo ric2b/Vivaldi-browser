@@ -57,7 +57,7 @@ AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
     std::unique_ptr<viz::SingleReleaseCallback> release_callback) {
   return base::AdoptRef(new AcceleratedStaticBitmapImage(
       mailbox, sync_token, shared_image_texture_id, sk_image_info,
-      texture_target, is_origin_top_left, kDefaultImageOrientation,
+      texture_target, is_origin_top_left, ImageOrientationEnum::kDefault,
       std::move(context_provider_wrapper), context_thread_ref,
       std::move(context_task_runner), std::move(release_callback)));
 }
@@ -244,7 +244,7 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
     return;
   }
 
-  GrContext* shared_gr_context =
+  GrDirectContext* shared_gr_context =
       context_provider_wrapper->ContextProvider()->GetGrContext();
   DCHECK(shared_ri &&
          shared_gr_context);  // context isValid already checked in callers

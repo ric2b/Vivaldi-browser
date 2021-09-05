@@ -14,7 +14,7 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/session/session_controller.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
@@ -343,10 +343,6 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
       kAccountsPrefAllowGuest,
       base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
                  weak_factory_.GetWeakPtr()));
-  allow_supervised_user_subscription_ = cros_settings_->AddSettingsObserver(
-      kAccountsPrefSupervisedUsersEnabled,
-      base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
-                 weak_factory_.GetWeakPtr()));
   // For user allowlist.
   users_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefUsers,
@@ -413,7 +409,7 @@ void ChromeUserManagerImpl::Shutdown() {
   local_accounts_subscription_.reset();
 
   if (session_length_limiter_ && IsEnterpriseManaged()) {
-    // Store session length before tearing down |session_length_limiter_| for
+    // Store session length before tearing down `session_length_limiter_` for
     // enrolled devices so that it can be reported on the next run.
     const base::TimeDelta session_length =
         session_length_limiter_->GetSessionDuration();
@@ -572,8 +568,6 @@ void ChromeUserManagerImpl::SaveUserOAuthStatus(
     user_manager::User::OAuthTokenStatus oauth_token_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ChromeUserManager::SaveUserOAuthStatus(account_id, oauth_token_status);
-
-  GetUserFlow(account_id)->HandleOAuthTokenStatusChange(oauth_token_status);
 }
 
 void ChromeUserManagerImpl::SaveUserDisplayName(
@@ -581,13 +575,6 @@ void ChromeUserManagerImpl::SaveUserDisplayName(
     const base::string16& display_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ChromeUserManager::SaveUserDisplayName(account_id, display_name);
-
-  // Do not update local state if data stored or cached outside the user's
-  // cryptohome is to be treated as ephemeral.
-  if (!IsUserNonCryptohomeDataEphemeral(account_id)) {
-    supervised_user_manager_->UpdateManagerName(account_id.GetUserEmail(),
-                                                display_name);
-  }
 }
 
 void ChromeUserManagerImpl::StopPolicyObserverForTesting() {
@@ -641,8 +628,7 @@ void ChromeUserManagerImpl::OnDeviceLocalAccountsChanged() {
 }
 
 bool ChromeUserManagerImpl::CanCurrentUserLock() const {
-  if (!ChromeUserManager::CanCurrentUserLock() ||
-      !GetCurrentUserFlow()->CanLockScreen()) {
+  if (!ChromeUserManager::CanCurrentUserLock()) {
     return false;
   }
   bool can_lock = false;
@@ -681,12 +667,6 @@ PrefService* ChromeUserManagerImpl::GetLocalState() const {
   return g_browser_process ? g_browser_process->local_state() : NULL;
 }
 
-void ChromeUserManagerImpl::HandleUserOAuthTokenStatusChange(
-    const AccountId& account_id,
-    user_manager::User::OAuthTokenStatus status) const {
-  GetUserFlow(account_id)->HandleOAuthTokenStatusChange(status);
-}
-
 bool ChromeUserManagerImpl::IsEnterpriseManaged() const {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -712,32 +692,9 @@ void ChromeUserManagerImpl::LoadDeviceLocalAccounts(
   }
 }
 
-void ChromeUserManagerImpl::PerformPreUserListLoadingActions() {
-  // Clean up user list first. All code down the path should be synchronous,
-  // so that local state after transaction rollback is in consistent state.
-  // This process also should not trigger EnsureUsersLoaded again.
-  if (supervised_user_manager_->HasFailedUserCreationTransaction())
-    supervised_user_manager_->RollbackUserCreationTransaction();
-}
-
 void ChromeUserManagerImpl::PerformPostUserListLoadingActions() {
-  std::vector<user_manager::User*> users_to_remove;
-
   for (user_manager::User* user : users_) {
-    // TODO(http://crbug/866790): Remove supervised user accounts. After we have
-    // enough confidence that there are no more supervised users on devices in
-    // the wild, remove this.
-    if (base::FeatureList::IsEnabled(
-            features::kRemoveSupervisedUsersOnStartup) &&
-        user->IsSupervised()) {
-      users_to_remove.push_back(user);
-    } else {
-      GetUserImageManager(user->GetAccountId())->LoadUserImage();
-    }
-  }
-
-  for (user_manager::User* user : users_to_remove) {
-    RemoveUser(user->GetAccountId(), nullptr);
+    GetUserImageManager(user->GetAccountId())->LoadUserImage();
   }
 }
 
@@ -860,39 +817,6 @@ void ChromeUserManagerImpl::RegularUserLoggedInAsEphemeral(
   WallpaperControllerClient::Get()->ShowUserWallpaper(account_id);
 }
 
-void ChromeUserManagerImpl::SupervisedUserLoggedIn(
-    const AccountId& account_id) {
-  // TODO(nkostylev): Refactor, share code with RegularUserLoggedIn().
-
-  // Remove the user from the user list.
-  active_user_ =
-      RemoveRegularOrSupervisedUserFromList(account_id, false /* notify */);
-
-  if (GetActiveUser()) {
-    SetIsCurrentUserNew(
-        supervised_user_manager_->CheckForFirstRun(account_id.GetUserEmail()));
-  } else {
-    // If the user was not found on the user list, create a new user.
-    SetIsCurrentUserNew(true);
-    active_user_ = user_manager::User::CreateSupervisedUser(account_id);
-  }
-
-  // Add the user to the front of the user list.
-  AddUserRecord(active_user_);
-
-  // Now that user is in the list, save display name.
-  if (IsCurrentUserNew()) {
-    SaveUserDisplayName(GetActiveUser()->GetAccountId(),
-                        GetActiveUser()->GetDisplayName());
-  }
-
-  GetUserImageManager(account_id)->UserLoggedIn(IsCurrentUserNew(), true);
-  WallpaperControllerClient::Get()->ShowUserWallpaper(account_id);
-
-  // Make sure that new data is persisted to Local State.
-  GetLocalState()->CommitPendingWrite();
-}
-
 void ChromeUserManagerImpl::PublicAccountUserLoggedIn(
     user_manager::User* user) {
   SetIsCurrentUserNew(true);
@@ -1007,7 +931,7 @@ void ChromeUserManagerImpl::NotifyOnLogin() {
 void ChromeUserManagerImpl::RemoveNonCryptohomeData(
     const AccountId& account_id) {
   // Wallpaper removal depends on user preference, so it must happen before
-  // |known_user::RemovePrefs|. See https://crbug.com/778077.
+  // `known_user::RemovePrefs`. See https://crbug.com/778077.
   for (auto& handler : cloud_external_data_policy_handlers_)
     handler->RemoveForAccountId(account_id);
   // TODO(tbarzic): Forward data removal request to ash::HammerDeviceHandler,
@@ -1210,13 +1134,6 @@ void ChromeUserManagerImpl::ResetUserFlow(const AccountId& account_id) {
   }
 }
 
-bool ChromeUserManagerImpl::AreSupervisedUsersAllowed() const {
-  bool supervised_users_allowed = false;
-  cros_settings_->GetBoolean(kAccountsPrefSupervisedUsersEnabled,
-                             &supervised_users_allowed);
-  return supervised_users_allowed;
-}
-
 bool ChromeUserManagerImpl::IsGuestSessionAllowed() const {
   // In tests CrosSettings might not be initialized.
   if (!cros_settings_)
@@ -1247,7 +1164,7 @@ void ChromeUserManagerImpl::OnProfileAdded(Profile* profile) {
       GetUserImageManager(user->GetAccountId())->UserProfileCreated();
 
     // Allow managed guest session user to lock if
-    // |kLoginExtensionApiLaunchExtensionId| is set.
+    // `kLoginExtensionApiLaunchExtensionId` is set.
     if (user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT &&
         !profile->GetPrefs()
              ->GetString(prefs::kLoginExtensionApiLaunchExtensionId)
@@ -1271,7 +1188,7 @@ bool ChromeUserManagerImpl::IsUserAllowed(
          user.GetType() == user_manager::USER_TYPE_CHILD);
 
   return chrome_user_manager_util::IsUserAllowed(
-      user, AreSupervisedUsersAllowed(), IsGuestSessionAllowed(),
+      user, IsGuestSessionAllowed(),
       user.HasGaiaAccount() && IsGaiaUserAllowed(user));
 }
 
@@ -1334,10 +1251,9 @@ void ChromeUserManagerImpl::UpdateUserTimeZoneRefresher(Profile* profile) {
   if (!IsUserLoggedIn())
     return;
 
-  // Timezone auto refresh is disabled for Guest, Supervized and OffTheRecord
+  // Timezone auto refresh is disabled for Guest and OffTheRecord
   // users, but enabled for Kiosk mode.
-  if (IsLoggedInAsGuest() || IsLoggedInAsSupervisedUser() ||
-      profile->IsOffTheRecord()) {
+  if (IsLoggedInAsGuest() || profile->IsOffTheRecord()) {
     g_browser_process->platform_part()->GetTimezoneResolver()->Stop();
     return;
   }
@@ -1390,8 +1306,8 @@ bool ChromeUserManagerImpl::IsManagedSessionEnabledForUser(
 
   if (!broker) {
     // The broker could be unavailable at the early initialization stage when
-    // - |DeviceSettingsProvider| does not have a list of device local accounts
-    //   in |kAccountsPrefDeviceLocalAccounts|
+    // - `DeviceSettingsProvider` does not have a list of device local accounts
+    //   in `kAccountsPrefDeviceLocalAccounts`
     // - and there is an attempt to autologin with public account before the
     // device settings become available. The broker will become available later
     // and the real policy value will be returned with future calls.

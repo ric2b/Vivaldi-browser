@@ -13,7 +13,9 @@
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/ozone/platform_object.h"
 #include "ui/ozone/platform_selection.h"
+#include "ui/ozone/public/platform_menu_utils.h"
 #include "ui/ozone/public/platform_screen.h"
+#include "ui/ozone/public/platform_user_input_monitor.h"
 
 namespace ui {
 
@@ -98,9 +100,8 @@ PlatformGLEGLUtility* OzonePlatform::GetPlatformGLEGLUtility() {
   return nullptr;
 }
 
-int OzonePlatform::GetKeyModifiers() const {
-  // Platform may override this to provide the current state of modifier keys.
-  return 0;
+PlatformMenuUtils* OzonePlatform::GetPlatformMenuUtils() {
+  return nullptr;
 }
 
 bool OzonePlatform::IsNativePixmapConfigSupported(
@@ -129,6 +130,12 @@ void OzonePlatform::AddInterfaces(mojo::BinderMap* binders) {}
 void OzonePlatform::AfterSandboxEntry() {
   // This should not be called in single-process mode.
   DCHECK(!single_process_);
+}
+
+std::unique_ptr<PlatformUserInputMonitor>
+OzonePlatform::GetPlatformUserInputMonitor(
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner) {
+  return {};
 }
 
 void OzonePlatform::PostMainMessageLoopStart(

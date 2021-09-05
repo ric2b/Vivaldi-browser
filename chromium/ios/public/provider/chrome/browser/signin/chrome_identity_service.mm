@@ -65,19 +65,9 @@ bool ChromeIdentityService::IsValidIdentity(ChromeIdentity* identity) {
   return false;
 }
 
-ChromeIdentity* ChromeIdentityService::GetIdentityWithEmail(
-    const std::string& email) {
-  return nil;
-}
-
 ChromeIdentity* ChromeIdentityService::GetIdentityWithGaiaID(
     const std::string& gaia_id) {
   return nil;
-}
-
-std::vector<std::string>
-ChromeIdentityService::GetCanonicalizeEmailsForAllIdentities() {
-  return std::vector<std::string>();
 }
 
 bool ChromeIdentityService::HasIdentities() {
@@ -91,6 +81,14 @@ NSArray* ChromeIdentityService::GetAllIdentities() {
 NSArray* ChromeIdentityService::GetAllIdentitiesSortedForDisplay() {
   return nil;
 }
+
+void ChromeIdentityService::RunAfterCacheIsPopulated(
+    base::OnceClosure callback) {
+  if (!callback.is_null())
+    std::move(callback).Run();
+}
+
+void ChromeIdentityService::WaitUntilCacheIsPopulated() {}
 
 void ChromeIdentityService::ForgetIdentity(ChromeIdentity* identity,
                                            ForgetIdentityCallback callback) {}

@@ -23,6 +23,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_log.h"
 
 class ClipboardProvider;
 class DocumentProvider;
@@ -127,12 +128,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   void OnProviderUpdate(bool updated_matches) override;
 
   // Called when an omnibox event log entry is generated.
-  // Populates provider_info with diagnostic information about the status
-  // of various providers.  In turn, calls
-  // AutocompleteProvider::AddProviderInfo() so each provider can add
-  // provider-specific information, information we want to log for a particular
-  // provider but not others.
-  void AddProvidersInfo(ProvidersInfo* provider_info) const;
+  // Populates |log.provider_info| with diagnostic information about the status
+  // of various providers and |log.feature_triggered_in_session| with triggered
+  // features.
+  void AddProviderAndTriggeringLogs(OmniboxLog* logs) const;
 
   // Called when a new omnibox session starts.
   // We start a new session when the user first begins modifying the omnibox
@@ -172,8 +171,17 @@ class AutocompleteController : public AutocompleteProviderListener,
     return last_time_default_match_changed_;
   }
 
+  // Sets the provider timeout duration for future calls to |Start()|.
+  void SetStartStopTimerDurationForTesting(base::TimeDelta duration);
+
+  // Returns the AutocompleteProviderClient owned by the controller.
+  AutocompleteProviderClient* autocomplete_provider_client() const {
+    return provider_client_.get();
+  }
+
  private:
   friend class AutocompleteProviderTest;
+  friend class OmniboxSuggestionButtonRowBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateAssistedQueryStats);
@@ -319,12 +327,11 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Timer used to tell the providers to Stop() searching for matches.
   base::OneShotTimer stop_timer_;
 
-  // Amount of time (in ms) between when the user stops typing and
-  // when we send Stop() to every provider.  This is intended to avoid
-  // the disruptive effect of belated omnibox updates, updates that
-  // come after the user has had to time to read the whole dropdown
-  // and doesn't expect it to change.
-  const base::TimeDelta stop_timer_duration_;
+  // Amount of time between when the user stops typing and when we send Stop()
+  // to every provider.  This is intended to avoid the disruptive effect of
+  // belated omnibox updates, updates that come after the user has had to time
+  // to read the whole dropdown and doesn't expect it to change.
+  base::TimeDelta stop_timer_duration_;
 
   // True if a query is not currently running.
   bool done_;

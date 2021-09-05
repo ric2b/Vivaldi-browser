@@ -15,18 +15,20 @@
 #include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/trust_token_http_headers.h"
 #include "services/network/public/cpp/trust_token_parameterization.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/trust_tokens/boringssl_trust_token_issuance_cryptographer.h"
 #include "services/network/trust_tokens/boringssl_trust_token_redemption_cryptographer.h"
 #include "services/network/trust_tokens/ed25519_key_pair_generator.h"
 #include "services/network/trust_tokens/ed25519_trust_token_request_signer.h"
+#include "services/network/trust_tokens/local_trust_token_operation_delegate.h"
+#include "services/network/trust_tokens/local_trust_token_operation_delegate_impl.h"
+#include "services/network/trust_tokens/operating_system_matching.h"
 #include "services/network/trust_tokens/suitable_trust_token_origin.h"
-#include "services/network/trust_tokens/trust_token_http_headers.h"
 #include "services/network/trust_tokens/trust_token_key_commitment_controller.h"
 #include "services/network/trust_tokens/trust_token_parameterization.h"
 #include "services/network/trust_tokens/trust_token_request_canonicalizer.h"
-#include "services/network/trust_tokens/trust_token_request_issuance_helper.h"
 #include "services/network/trust_tokens/trust_token_request_redemption_helper.h"
 #include "services/network/trust_tokens/trust_token_request_signing_helper.h"
 #include "services/network/trust_tokens/types.h"
@@ -78,9 +80,12 @@ void LogOutcome(const net::NetLogWithSource& log,
 TrustTokenRequestHelperFactory::TrustTokenRequestHelperFactory(
     PendingTrustTokenStore* store,
     const TrustTokenKeyCommitmentGetter* key_commitment_getter,
+    base::RepeatingCallback<mojom::NetworkContextClient*(void)>
+        context_client_provider,
     base::RepeatingCallback<bool(void)> authorizer)
     : store_(store),
       key_commitment_getter_(key_commitment_getter),
+      context_client_provider_(std::move(context_client_provider)),
       authorizer_(std::move(authorizer)) {}
 TrustTokenRequestHelperFactory::~TrustTokenRequestHelperFactory() = default;
 
@@ -143,6 +148,9 @@ void TrustTokenRequestHelperFactory::ConstructHelperUsingStore(
           new TrustTokenRequestIssuanceHelper(
               std::move(top_frame_origin), store, key_commitment_getter_,
               std::make_unique<BoringsslTrustTokenIssuanceCryptographer>(),
+              std::make_unique<LocalTrustTokenOperationDelegateImpl>(
+                  context_client_provider_),
+              base::BindRepeating(&IsCurrentOperatingSystem),
               std::move(net_log))));
       return;
     }

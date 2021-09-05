@@ -24,12 +24,14 @@
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -46,6 +48,7 @@
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification_blocker.h"
@@ -788,32 +791,78 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayPopupNotification) {
 IN_PROC_BROWSER_TEST_F(NotificationsTestWithFakeMediaStream,
                        MAYBE_ShouldQueueDuringScreenPresent) {
   ASSERT_TRUE(embedded_test_server()->Start());
+  // Start second server so we can test screen recording on secure connections.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+  ASSERT_TRUE(https_server.Start());
+
   AllowAllOrigins();
   ui_test_utils::NavigateToURL(browser(), GetTestPageURL());
+  const int notification_tab = browser()->tab_strip_model()->active_index();
 
   // We should see displayed notifications by default.
   std::string result = CreateSimpleNotification(browser(), /*wait=*/false);
   EXPECT_NE("-1", result);
-  ASSERT_EQ(1, GetNotificationCount());
+  message_center::NotificationList::Notifications notifications =
+      message_center::MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(1u, notifications.size());
+  EXPECT_EQ(base::ASCIIToUTF16("My Title"), (*notifications.begin())->title());
+  EXPECT_EQ(base::ASCIIToUTF16("My Body"), (*notifications.begin())->message());
 
-  // Start a screen cast session.
+  // Open a new tab to a diffent origin from the one that shows notifications.
+  chrome::NewTab(browser());
+  ui_test_utils::NavigateToURL(
+      browser(),
+      https_server.GetURL("/notifications/notification_tester.html"));
+  const int screen_capture_tab = browser()->tab_strip_model()->active_index();
+
+  // Start a screen capture session.
   content::WebContents* web_contents = GetActiveWebContents(browser());
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents, "startScreenCast();", &result));
+      web_contents, "startScreenCapture();", &result));
   ASSERT_EQ("success", result);
 
-  // Showing a notification during the screen cast session should not show it.
+  // Showing a notification during the screen capture session should show the
+  // "Notifications muted" notification.
+  browser()->tab_strip_model()->ActivateTabAt(notification_tab);
   result = CreateSimpleNotification(browser(), /*wait=*/false);
   EXPECT_NE("-1", result);
-  ASSERT_EQ(1, GetNotificationCount());
+  notifications =
+      message_center::MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(2u, notifications.size());
+  EXPECT_EQ(l10n_util::GetPluralStringFUTF16(IDS_NOTIFICATION_MUTED_TITLE,
+                                             /*count=*/1),
+            (*notifications.begin())->title());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_NOTIFICATION_MUTED_MESSAGE),
+            (*notifications.begin())->message());
 
-  // Stop the screen cast session.
+  // Showing another notification during the screen captuure session should
+  // update the "Notifications muted" notification title.
+  result = CreateSimpleNotification(browser(), /*wait=*/false);
+  EXPECT_NE("-1", result);
+  notifications =
+      message_center::MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(2u, notifications.size());
+  EXPECT_EQ(l10n_util::GetPluralStringFUTF16(IDS_NOTIFICATION_MUTED_TITLE,
+                                             /*count=*/2),
+            (*notifications.begin())->title());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_NOTIFICATION_MUTED_MESSAGE),
+            (*notifications.begin())->message());
+
+  // Stop the screen capture session.
+  browser()->tab_strip_model()->ActivateTabAt(screen_capture_tab);
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents, "stopScreenCast();", &result));
+      web_contents, "stopScreenCapture();", &result));
   ASSERT_EQ("success", result);
 
-  // After stopping the screen cast session we expect the queued notification to
-  // be shown.
-  ASSERT_EQ(2, GetNotificationCount());
+  // Stopping the screen capture session should display the queued notifications
+  // and close the "Notifications muted" notification.
+  notifications =
+      message_center::MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(3u, notifications.size());
+  for (const auto* notification : notifications) {
+    EXPECT_EQ(base::ASCIIToUTF16("My Title"), notification->title());
+    EXPECT_EQ(base::ASCIIToUTF16("My Body"), notification->message());
+  }
 }
 #endif  // !defined(OS_ANDROID)

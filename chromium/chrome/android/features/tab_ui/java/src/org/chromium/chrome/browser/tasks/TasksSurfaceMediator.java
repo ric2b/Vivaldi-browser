@@ -28,7 +28,7 @@ import androidx.annotation.Nullable;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.ntp.IncognitoCookieControlsManager;
-import org.chromium.chrome.browser.omnibox.LocationBar;
+import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.OverviewModeObserver;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
@@ -60,6 +60,8 @@ class TasksSurfaceMediator implements OverviewModeObserver {
 
         // Set the initial state.
         mModel.set(IS_SURFACE_BODY_VISIBLE, true);
+        mModel.set(IS_FAKE_SEARCH_BOX_VISIBLE, true);
+        mModel.set(IS_VOICE_RECOGNITION_BUTTON_VISIBLE, false);
     }
 
     public void initWithNative(FakeboxDelegate fakeboxDelegate) {
@@ -70,7 +72,7 @@ class TasksSurfaceMediator implements OverviewModeObserver {
             @Override
             public void onClick(View v) {
                 mFakeboxDelegate.setUrlBarFocus(
-                        true, null, LocationBar.OmniboxFocusReason.TASKS_SURFACE_FAKE_BOX_TAP);
+                        true, null, OmniboxFocusReason.TASKS_SURFACE_FAKE_BOX_TAP);
                 RecordUserAction.record("TasksSurface.FakeBox.Tapped");
             }
         });
@@ -84,8 +86,8 @@ class TasksSurfaceMediator implements OverviewModeObserver {
             @Override
             public void afterTextChanged(Editable s) {
                 if (s.length() == 0) return;
-                mFakeboxDelegate.setUrlBarFocus(true, s.toString(),
-                        LocationBar.OmniboxFocusReason.TASKS_SURFACE_FAKE_BOX_LONG_PRESS);
+                mFakeboxDelegate.setUrlBarFocus(
+                        true, s.toString(), OmniboxFocusReason.TASKS_SURFACE_FAKE_BOX_LONG_PRESS);
                 RecordUserAction.record("TasksSurface.FakeBox.LongPressed");
 
                 // This won't cause infinite loop since we checked s.length() == 0 above.
@@ -112,10 +114,6 @@ class TasksSurfaceMediator implements OverviewModeObserver {
         mModel.set(
                 INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED_LISTENER, mIncognitoCookieControlsManager);
         mModel.set(INCOGNITO_COOKIE_CONTROLS_ICON_CLICK_LISTENER, mIncognitoCookieControlsManager);
-
-        // Set the initial state.
-        mModel.set(IS_FAKE_SEARCH_BOX_VISIBLE, true);
-        mModel.set(IS_VOICE_RECOGNITION_BUTTON_VISIBLE, false);
     }
 
     /**

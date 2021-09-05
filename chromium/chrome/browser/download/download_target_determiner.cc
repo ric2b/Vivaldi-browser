@@ -58,6 +58,10 @@
 #include "chrome/browser/ui/pdf/adobe_reader_info_win.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "app/vivaldi_apptools.h"
+#endif
+
 using content::BrowserThread;
 using download::DownloadItem;
 using download::DownloadPathReservationTracker;
@@ -505,6 +509,15 @@ DownloadTargetDeterminer::DoRequestConfirmation() {
          confirmation_reason_ == DownloadConfirmationReason::NONE)) {
       is_checking_dialog_confirmed_path_ = false;
       return CONTINUE;
+    }
+    // Vivaldi - External download manager support
+    if (vivaldi::IsVivaldiRunning()) {
+      delegate_->RequestConfirmation(
+          download_, virtual_path_, confirmation_reason_,
+          base::BindRepeating(
+              &DownloadTargetDeterminer::RequestConfirmationDone,
+              weak_ptr_factory_.GetWeakPtr()));
+      return QUIT_DOLOOP;
     }
 #endif
 

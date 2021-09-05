@@ -29,9 +29,9 @@ import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
@@ -610,10 +610,6 @@ public class AwActivityTestRule extends ActivityTestRule<AwTestRunnerActivity> {
      */
     public boolean canZoomOutOnUiThread(final AwContents awContents) throws Exception {
         return TestThreadUtils.runOnUiThreadBlocking(() -> awContents.canZoomOut());
-    }
-
-    public void killRenderProcessOnUiThreadAsync(final AwContents awContents) {
-        TestThreadUtils.runOnUiThreadBlocking(() -> awContents.killRenderProcess());
     }
 
     /**

@@ -8,11 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "content/browser/file_system_access/fixed_native_file_system_permission_grant.h"
@@ -22,6 +22,10 @@
 #include "content/browser/file_system_access/native_file_system_file_handle_impl.h"
 #include "content/browser/file_system_access/native_file_system_transfer_token_impl.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_web_contents_factory.h"
+#include "content/test/test_render_frame_host.h"
+#include "content/test/test_web_contents.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -110,6 +114,7 @@ constexpr char kTestMountPoint[] = "testfs";
 using base::test::RunOnceCallback;
 using blink::mojom::PermissionStatus;
 using HandleType = content::NativeFileSystemPermissionContext::HandleType;
+using PathType = content::NativeFileSystemPermissionContext::PathType;
 
 class NativeFileSystemManagerImplTest : public testing::Test {
  public:
@@ -137,6 +142,9 @@ class NativeFileSystemManagerImplTest : public testing::Test {
     manager_ = base::MakeRefCounted<NativeFileSystemManagerImpl>(
         file_system_context_, chrome_blob_context_, &permission_context_,
         /*off_the_record=*/false);
+
+    web_contents_ = web_contents_factory_.CreateWebContents(&browser_context_);
+    static_cast<TestWebContents*>(web_contents_)->NavigateAndCommit(kTestURL);
 
     manager_->BindReceiver(kBindingContext,
                            manager_remote_.BindNewPipeAndPassReceiver());
@@ -216,6 +224,117 @@ class NativeFileSystemManagerImplTest : public testing::Test {
     return result;
   }
 
+  void GetEntryFromDropTokenFileTest(
+      const base::FilePath& file_path,
+      NativeFileSystemEntryFactory::PathType path_type,
+      const std::string& expected_file_contents) {
+    // Create a token representing a dropped file at `file_path`.
+    mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken>
+        token_remote;
+    manager_->CreateNativeFileSystemDragDropToken(
+        path_type, file_path, kBindingContext.process_id(),
+        token_remote.InitWithNewPipeAndPassReceiver());
+
+    // Expect permission requests when the token is sent to be redeemed.
+    EXPECT_CALL(
+        permission_context_,
+        GetReadPermissionGrant(
+            kTestOrigin, file_path, HandleType::kFile,
+            NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
+        .WillOnce(testing::Return(allow_grant_));
+
+    EXPECT_CALL(
+        permission_context_,
+        GetWritePermissionGrant(
+            kTestOrigin, file_path, HandleType::kFile,
+            NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
+        .WillOnce(testing::Return(allow_grant_));
+
+    // Attempt to resolve `token_remote` and store the resulting
+    // NativeFileSystemFileHandle in `file_remote`.
+    base::RunLoop await_token_resolution;
+    blink::mojom::NativeFileSystemEntryPtr native_file_system_entry;
+    manager_remote_->GetEntryFromDragDropToken(
+        std::move(token_remote),
+        base::BindLambdaForTesting([&](blink::mojom::NativeFileSystemEntryPtr
+                                           returned_native_file_system_entry) {
+          native_file_system_entry =
+              std::move(returned_native_file_system_entry);
+          await_token_resolution.Quit();
+        }));
+    await_token_resolution.Run();
+
+    ASSERT_FALSE(native_file_system_entry.is_null());
+    ASSERT_TRUE(native_file_system_entry->entry_handle->is_file());
+    mojo::Remote<blink::mojom::NativeFileSystemFileHandle> file_handle(
+        std::move(native_file_system_entry->entry_handle->get_file()));
+
+    // Check to see if the resulting NativeFileSystemFileHandle can read the
+    // contents of the file at `file_path`.
+    EXPECT_EQ(ReadStringFromFileRemote(std::move(file_handle)),
+              expected_file_contents);
+  }
+
+  void GetEntryFromDropTokenDirectoryTest(
+      const base::FilePath& dir_path,
+      NativeFileSystemEntryFactory::PathType path_type,
+      const std::string& expected_child_file_name) {
+    mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken>
+        token_remote;
+    manager_->CreateNativeFileSystemDragDropToken(
+        path_type, dir_path, kBindingContext.process_id(),
+        token_remote.InitWithNewPipeAndPassReceiver());
+
+    // Expect permission requests when the token is sent to be redeemed.
+    EXPECT_CALL(
+        permission_context_,
+        GetReadPermissionGrant(
+            kTestOrigin, dir_path, HandleType::kDirectory,
+            NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
+        .WillOnce(testing::Return(allow_grant_));
+
+    EXPECT_CALL(
+        permission_context_,
+        GetWritePermissionGrant(
+            kTestOrigin, dir_path, HandleType::kDirectory,
+            NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
+        .WillOnce(testing::Return(allow_grant_));
+
+    // Attempt to resolve `token_remote` and store the resulting
+    // NativeFileSystemDirectoryHandle in `dir_remote`.
+    base::RunLoop await_token_resolution;
+    blink::mojom::NativeFileSystemEntryPtr native_file_system_entry;
+    manager_remote_->GetEntryFromDragDropToken(
+        std::move(token_remote),
+        base::BindLambdaForTesting([&](blink::mojom::NativeFileSystemEntryPtr
+                                           returned_native_file_system_entry) {
+          native_file_system_entry =
+              std::move(returned_native_file_system_entry);
+          await_token_resolution.Quit();
+        }));
+    await_token_resolution.Run();
+
+    ASSERT_FALSE(native_file_system_entry.is_null());
+    ASSERT_TRUE(native_file_system_entry->entry_handle->is_directory());
+    mojo::Remote<blink::mojom::NativeFileSystemDirectoryHandle> dir_remote(
+        std::move(native_file_system_entry->entry_handle->get_directory()));
+
+    // Use `dir_remote` to verify that dir_path contains a child called
+    // expected_child_file_name.
+    base::RunLoop await_get_file;
+    dir_remote->GetFile(
+        expected_child_file_name, /*create=*/false,
+        base::BindLambdaForTesting(
+            [&](blink::mojom::NativeFileSystemErrorPtr result,
+                mojo::PendingRemote<blink::mojom::NativeFileSystemFileHandle>
+                    file_handle) {
+              await_get_file.Quit();
+              ASSERT_EQ(blink::mojom::NativeFileSystemStatus::kOk,
+                        result->status);
+            }));
+    await_get_file.Run();
+  }
+
  protected:
   const GURL kTestURL = GURL("https://example.com/test");
   const url::Origin kTestOrigin = url::Origin::Create(kTestURL);
@@ -227,9 +346,14 @@ class NativeFileSystemManagerImplTest : public testing::Test {
 
   BrowserTaskEnvironment task_environment_;
 
+  TestBrowserContext browser_context_;
+  TestWebContentsFactory web_contents_factory_;
+
   base::ScopedTempDir dir_;
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   scoped_refptr<ChromeBlobStorageContext> chrome_blob_context_;
+
+  WebContents* web_contents_;
 
   testing::StrictMock<MockNativeFileSystemPermissionContext>
       permission_context_;
@@ -745,51 +869,12 @@ TEST_F(NativeFileSystemManagerImplTest, SerializeHandle_ExternalFile) {
 TEST_F(NativeFileSystemManagerImplTest,
        GetEntryFromDragDropToken_File_ValidPID) {
   // Create a file and write some text into it.
-  base::FilePath file_path = dir_.GetPath().AppendASCII("mr_file");
+  const base::FilePath file_path = dir_.GetPath().AppendASCII("mr_file");
   const std::string file_contents = "Deleted code is debugged code.";
-  ASSERT_TRUE(base::CreateTemporaryFile(&file_path));
   ASSERT_TRUE(base::WriteFile(file_path, file_contents));
 
-  // Create a token representing a dropped file at `file_path`.
-  mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token_remote;
-  manager_->CreateNativeFileSystemDragDropToken(
-      file_path, kBindingContext.process_id(),
-      token_remote.InitWithNewPipeAndPassReceiver());
-
-  // Expect permission requests when the token is sent to be redeemed.
-  EXPECT_CALL(permission_context_,
-              GetReadPermissionGrant(
-                  kTestOrigin, file_path, HandleType::kFile,
-                  NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
-      .WillOnce(testing::Return(allow_grant_));
-
-  EXPECT_CALL(permission_context_,
-              GetWritePermissionGrant(
-                  kTestOrigin, file_path, HandleType::kFile,
-                  NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
-      .WillOnce(testing::Return(allow_grant_));
-
-  // Attempt to resolve `token_remote` and store the resulting
-  // NativeFileSystemFileHandle in `file_remote`.
-  base::RunLoop await_token_resolution;
-  blink::mojom::NativeFileSystemEntryPtr native_file_system_entry;
-  manager_remote_->GetEntryFromDragDropToken(
-      std::move(token_remote),
-      base::BindLambdaForTesting([&](blink::mojom::NativeFileSystemEntryPtr
-                                         returned_native_file_system_entry) {
-        native_file_system_entry = std::move(returned_native_file_system_entry);
-        await_token_resolution.Quit();
-      }));
-  await_token_resolution.Run();
-
-  ASSERT_FALSE(native_file_system_entry.is_null());
-  ASSERT_TRUE(native_file_system_entry->entry_handle->is_file());
-  mojo::Remote<blink::mojom::NativeFileSystemFileHandle> file_handle(
-      std::move(native_file_system_entry->entry_handle->get_file()));
-
-  // Check to see if the resulting NativeFileSystemFileHandle can read the
-  // contents of the file at `file_path`.
-  EXPECT_EQ(ReadStringFromFileRemote(std::move(file_handle)), file_contents);
+  GetEntryFromDropTokenFileTest(
+      file_path, NativeFileSystemEntryFactory::PathType::kLocal, file_contents);
 }
 
 // NativeFileSystemManager should successfully resolve a
@@ -800,63 +885,56 @@ TEST_F(NativeFileSystemManagerImplTest,
        GetEntryFromDragDropToken_Directory_ValidPID) {
   // Create a directory and create a NativeFileSystemDragDropToken representing
   // the new directory.
-  const base::FilePath kDirPath = dir_.GetPath().AppendASCII("mr_dir");
-  ASSERT_TRUE(base::CreateDirectory(kDirPath));
+  const base::FilePath dir_path = dir_.GetPath().AppendASCII("mr_dir");
+  ASSERT_TRUE(base::CreateDirectory(dir_path));
+  const std::string child_file_name = "child-file-name.txt";
+  ASSERT_TRUE(base::WriteFile(dir_path.AppendASCII(child_file_name), ""));
 
-  mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token_remote;
-  manager_->CreateNativeFileSystemDragDropToken(
-      kDirPath, kBindingContext.process_id(),
-      token_remote.InitWithNewPipeAndPassReceiver());
+  GetEntryFromDropTokenDirectoryTest(
+      dir_path, NativeFileSystemEntryFactory::PathType::kLocal,
+      child_file_name);
+}
 
-  // Expect permission requests when the token is sent to be redeemed.
-  EXPECT_CALL(permission_context_,
-              GetReadPermissionGrant(
-                  kTestOrigin, kDirPath, HandleType::kDirectory,
-                  NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
-      .WillOnce(testing::Return(allow_grant_));
+// NativeFileSystemManager should successfully resolve a
+// NativeFileSystemDragDropToken representing a file in the user's file system
+// into a valid Remote<blink::mojom::NativeFileSystemFileHandle>, given
+// that the PID is valid.
+TEST_F(NativeFileSystemManagerImplTest,
+       GetEntryFromDragDropToken_File_ExternalPath) {
+  // Create a file and write some text into it.
+  const base::FilePath file_path = dir_.GetPath().AppendASCII("mr_file");
+  const std::string file_contents = "Deleted code is debugged code.";
+  ASSERT_TRUE(base::WriteFile(file_path, file_contents));
 
-  EXPECT_CALL(permission_context_,
-              GetWritePermissionGrant(
-                  kTestOrigin, kDirPath, HandleType::kDirectory,
-                  NativeFileSystemPermissionContext::UserAction::kDragAndDrop))
-      .WillOnce(testing::Return(allow_grant_));
+  const base::FilePath virtual_file_path =
+      base::FilePath::FromUTF8Unsafe(kTestMountPoint)
+          .Append(file_path.BaseName());
 
-  // Attempt to resolve `token_remote` and store the resulting
-  // NativeFileSystemDirectoryHandle in `dir_remote`.
-  base::RunLoop await_token_resolution;
-  blink::mojom::NativeFileSystemEntryPtr native_file_system_entry;
-  manager_remote_->GetEntryFromDragDropToken(
-      std::move(token_remote),
-      base::BindLambdaForTesting([&](blink::mojom::NativeFileSystemEntryPtr
-                                         returned_native_file_system_entry) {
-        native_file_system_entry = std::move(returned_native_file_system_entry);
-        await_token_resolution.Quit();
-      }));
-  await_token_resolution.Run();
+  GetEntryFromDropTokenFileTest(
+      virtual_file_path, NativeFileSystemEntryFactory::PathType::kExternal,
+      file_contents);
+}
 
-  ASSERT_FALSE(native_file_system_entry.is_null());
-  ASSERT_TRUE(native_file_system_entry->entry_handle->is_directory());
-  mojo::Remote<blink::mojom::NativeFileSystemDirectoryHandle> dir_remote(
-      std::move(native_file_system_entry->entry_handle->get_directory()));
+// NativeFileSystemManager should successfully resolve a
+// NativeFileSystemDragDropToken representing a NativeFileSystemDirectoryEntry
+// into a valid Remote<blink::mojom::NativeFileSystemDirectoryHandle>, given
+// that the PID is valid.
+TEST_F(NativeFileSystemManagerImplTest,
+       GetEntryFromDragDropToken_Directory_ExternalPath) {
+  // Create a directory and create a NativeFileSystemDragDropToken representing
+  // the new directory.
+  const base::FilePath dir_path = dir_.GetPath().AppendASCII("mr_dir");
+  ASSERT_TRUE(base::CreateDirectory(dir_path));
+  const std::string child_file_name = "child-file-name.txt";
+  ASSERT_TRUE(base::WriteFile(dir_path.AppendASCII(child_file_name), ""));
 
-  // Use `dir_remote` to create a child of the directory, and pass the test if
-  // the child was successfully created at the expected path. Block until this
-  // happens or test times out.
-  base::RunLoop await_get_directory;
-  const std::string kChildDirectory = "child_dir";
-  dir_remote->GetDirectory(
-      kChildDirectory, /*create=*/true,
-      base::BindLambdaForTesting(
-          [&](blink::mojom::NativeFileSystemErrorPtr result,
-              mojo::PendingRemote<blink::mojom::NativeFileSystemDirectoryHandle>
-                  directory_handle) {
-            await_get_directory.Quit();
-            ASSERT_EQ(blink::mojom::NativeFileSystemStatus::kOk,
-                      result->status);
-            EXPECT_TRUE(
-                kDirPath.IsParent(kDirPath.AppendASCII(kChildDirectory)));
-          }));
-  await_get_directory.Run();
+  const base::FilePath virtual_dir_path =
+      base::FilePath::FromUTF8Unsafe(kTestMountPoint)
+          .Append(dir_path.BaseName());
+
+  GetEntryFromDropTokenDirectoryTest(
+      virtual_dir_path, NativeFileSystemEntryFactory::PathType::kExternal,
+      child_file_name);
 }
 
 // NativeFileSystemManager should refuse to resolve a
@@ -872,7 +950,8 @@ TEST_F(NativeFileSystemManagerImplTest,
   // process attempting to redeem to the token.
   mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token_remote;
   manager_->CreateNativeFileSystemDragDropToken(
-      file_path, /*renderer_id=*/kBindingContext.process_id() - 1,
+      NativeFileSystemEntryFactory::PathType::kLocal, file_path,
+      /*renderer_id=*/kBindingContext.process_id() - 1,
       token_remote.InitWithNewPipeAndPassReceiver());
 
   // Try to redeem the NativeFileSystemDragDropToken for a
@@ -897,7 +976,8 @@ TEST_F(NativeFileSystemManagerImplTest,
   // process attempting to redeem to the token.
   mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token_remote;
   manager_->CreateNativeFileSystemDragDropToken(
-      kDirPath, /*renderer_id=*/kBindingContext.process_id() - 1,
+      NativeFileSystemEntryFactory::PathType::kLocal, kDirPath,
+      /*renderer_id=*/kBindingContext.process_id() - 1,
       token_remote.InitWithNewPipeAndPassReceiver());
 
   // Try to redeem the NativeFileSystemDragDropToken for a
@@ -922,7 +1002,8 @@ TEST_F(NativeFileSystemManagerImplTest,
   mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token_remote;
   auto drag_drop_token_impl =
       std::make_unique<NativeFileSystemDragDropTokenImpl>(
-          manager_.get(), kDirPath, kBindingContext.process_id(),
+          manager_.get(), NativeFileSystemEntryFactory::PathType::kLocal,
+          kDirPath, kBindingContext.process_id(),
           token_remote.InitWithNewPipeAndPassReceiver());
 
   // Try to redeem the NativeFileSystemDragDropToken for a
@@ -933,6 +1014,195 @@ TEST_F(NativeFileSystemManagerImplTest,
                                              base::DoNothing());
   EXPECT_EQ("Unrecognized drag drop token.",
             bad_message_observer.WaitForBadMessage());
+}
+
+TEST_F(NativeFileSystemManagerImplTest, ChooseEntries_OpenFile) {
+  base::FilePath test_file = dir_.GetPath().AppendASCII("foo");
+  ASSERT_TRUE(base::CreateTemporaryFile(&test_file));
+
+  FileSystemChooser::ResultEntry entry;
+  entry.type = PathType::kLocal;
+  entry.path = test_file;
+  manager_->SetFilePickerResultForTesting(std::move(entry));
+
+  static_cast<TestRenderFrameHost*>(web_contents_->GetMainFrame())
+      ->SimulateUserActivation();
+
+  mojo::Remote<blink::mojom::NativeFileSystemManager> manager_remote;
+  NativeFileSystemManagerImpl::BindingContext binding_context = {
+      kTestOrigin, kTestURL,
+      web_contents_->GetMainFrame()->GetGlobalFrameRoutingId()};
+  manager_->BindReceiver(binding_context,
+                         manager_remote.BindNewPipeAndPassReceiver());
+
+  EXPECT_CALL(permission_context_, CanObtainReadPermission(kTestOrigin))
+      .WillOnce(testing::Return(true));
+
+  EXPECT_CALL(permission_context_, GetLastPickedDirectory(kTestOrigin))
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_, GetDefaultDirectory())
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_,
+              SetLastPickedDirectory(kTestOrigin, test_file.DirName()));
+
+  EXPECT_CALL(
+      permission_context_,
+      ConfirmSensitiveDirectoryAccess_(
+          kTestOrigin, NativeFileSystemPermissionContext::PathType::kLocal,
+          test_file, NativeFileSystemPermissionContext::HandleType::kFile,
+          web_contents_->GetMainFrame()->GetGlobalFrameRoutingId(), testing::_))
+      .WillOnce(RunOnceCallback<5>(NativeFileSystemPermissionContext::
+                                       SensitiveDirectoryResult::kAllowed));
+
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, test_file,
+                  NativeFileSystemPermissionContext::HandleType::kFile,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(allow_grant_));
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, test_file,
+                  NativeFileSystemPermissionContext::HandleType::kFile,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(allow_grant_));
+
+  base::RunLoop loop;
+  manager_remote->ChooseEntries(
+      blink::mojom::ChooseFileSystemEntryType::kOpenFile, /*accepts=*/{},
+      /*include_accepts_all=*/true,
+      base::BindLambdaForTesting(
+          [&](blink::mojom::NativeFileSystemErrorPtr result,
+              std::vector<blink::mojom::NativeFileSystemEntryPtr> entries) {
+            loop.Quit();
+          }));
+  loop.Run();
+}
+
+TEST_F(NativeFileSystemManagerImplTest, ChooseEntries_SaveFile) {
+  base::FilePath test_file = dir_.GetPath().AppendASCII("foo");
+  ASSERT_TRUE(base::CreateTemporaryFile(&test_file));
+
+  FileSystemChooser::ResultEntry entry;
+  entry.type = PathType::kLocal;
+  entry.path = test_file;
+  manager_->SetFilePickerResultForTesting(std::move(entry));
+
+  static_cast<TestRenderFrameHost*>(web_contents_->GetMainFrame())
+      ->SimulateUserActivation();
+
+  mojo::Remote<blink::mojom::NativeFileSystemManager> manager_remote;
+  NativeFileSystemManagerImpl::BindingContext binding_context = {
+      kTestOrigin, kTestURL,
+      web_contents_->GetMainFrame()->GetGlobalFrameRoutingId()};
+  manager_->BindReceiver(binding_context,
+                         manager_remote.BindNewPipeAndPassReceiver());
+
+  EXPECT_CALL(permission_context_, CanObtainReadPermission(kTestOrigin))
+      .WillOnce(testing::Return(true));
+  EXPECT_CALL(permission_context_, CanObtainWritePermission(kTestOrigin))
+      .WillOnce(testing::Return(true));
+
+  EXPECT_CALL(permission_context_, GetLastPickedDirectory(kTestOrigin))
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_, GetDefaultDirectory())
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_,
+              SetLastPickedDirectory(kTestOrigin, test_file.DirName()));
+
+  EXPECT_CALL(
+      permission_context_,
+      ConfirmSensitiveDirectoryAccess_(
+          kTestOrigin, NativeFileSystemPermissionContext::PathType::kLocal,
+          test_file, NativeFileSystemPermissionContext::HandleType::kFile,
+          web_contents_->GetMainFrame()->GetGlobalFrameRoutingId(), testing::_))
+      .WillOnce(RunOnceCallback<5>(NativeFileSystemPermissionContext::
+                                       SensitiveDirectoryResult::kAllowed));
+
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, test_file,
+                  NativeFileSystemPermissionContext::HandleType::kFile,
+                  NativeFileSystemPermissionContext::UserAction::kSave))
+      .WillOnce(testing::Return(allow_grant_));
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, test_file,
+                  NativeFileSystemPermissionContext::HandleType::kFile,
+                  NativeFileSystemPermissionContext::UserAction::kSave))
+      .WillOnce(testing::Return(allow_grant_));
+
+  base::RunLoop loop;
+  manager_remote->ChooseEntries(
+      blink::mojom::ChooseFileSystemEntryType::kSaveFile, /*accepts=*/{},
+      /*include_accepts_all=*/true,
+      base::BindLambdaForTesting(
+          [&](blink::mojom::NativeFileSystemErrorPtr result,
+              std::vector<blink::mojom::NativeFileSystemEntryPtr> entries) {
+            loop.Quit();
+          }));
+  loop.Run();
+}
+
+TEST_F(NativeFileSystemManagerImplTest, ChooseEntries_OpenDirectory) {
+  base::FilePath test_dir = dir_.GetPath();
+
+  FileSystemChooser::ResultEntry entry;
+  entry.type = PathType::kLocal;
+  entry.path = test_dir;
+  manager_->SetFilePickerResultForTesting(std::move(entry));
+
+  static_cast<TestRenderFrameHost*>(web_contents_->GetMainFrame())
+      ->SimulateUserActivation();
+
+  mojo::Remote<blink::mojom::NativeFileSystemManager> manager_remote;
+  NativeFileSystemManagerImpl::BindingContext binding_context = {
+      kTestOrigin, kTestURL,
+      web_contents_->GetMainFrame()->GetGlobalFrameRoutingId()};
+  manager_->BindReceiver(binding_context,
+                         manager_remote.BindNewPipeAndPassReceiver());
+
+  EXPECT_CALL(permission_context_, CanObtainReadPermission(kTestOrigin))
+      .WillOnce(testing::Return(true));
+
+  EXPECT_CALL(permission_context_, GetLastPickedDirectory(kTestOrigin))
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_, GetDefaultDirectory())
+      .WillOnce(testing::Return(base::FilePath()));
+  EXPECT_CALL(permission_context_,
+              SetLastPickedDirectory(kTestOrigin, test_dir));
+
+  EXPECT_CALL(
+      permission_context_,
+      ConfirmSensitiveDirectoryAccess_(
+          kTestOrigin, NativeFileSystemPermissionContext::PathType::kLocal,
+          test_dir, NativeFileSystemPermissionContext::HandleType::kDirectory,
+          web_contents_->GetMainFrame()->GetGlobalFrameRoutingId(), testing::_))
+      .WillOnce(RunOnceCallback<5>(NativeFileSystemPermissionContext::
+                                       SensitiveDirectoryResult::kAllowed));
+
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  kTestOrigin, test_dir,
+                  NativeFileSystemPermissionContext::HandleType::kDirectory,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(allow_grant_));
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  kTestOrigin, test_dir,
+                  NativeFileSystemPermissionContext::HandleType::kDirectory,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(allow_grant_));
+
+  base::RunLoop loop;
+  manager_remote->ChooseEntries(
+      blink::mojom::ChooseFileSystemEntryType::kOpenDirectory, {}, true,
+      base::BindLambdaForTesting(
+          [&](blink::mojom::NativeFileSystemErrorPtr result,
+              std::vector<blink::mojom::NativeFileSystemEntryPtr> entries) {
+            loop.Quit();
+          }));
+  loop.Run();
 }
 
 }  // namespace content

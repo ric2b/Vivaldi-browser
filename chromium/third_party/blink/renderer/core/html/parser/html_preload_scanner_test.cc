@@ -762,6 +762,10 @@ TEST_F(HTMLPreloadScannerTest, testPicture) {
        "<picture><source srcset='srcset_bla.gif'><img src='bla.gif'></picture>",
        "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
+       "<picture><source srcset='srcset_bla.gif' type=''><img "
+       "src='bla.gif'></picture>",
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
+      {"http://example.test",
        "<picture><source sizes='50vw' srcset='srcset_bla.gif'><img "
        "src='bla.gif'></picture>",
        "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 250},
@@ -1450,6 +1454,38 @@ TEST_F(HTMLPreloadScannerTest,
   Test(test1);
   LazyLoadImageTestCase test2 = {"<img src='bar.jpg'>", true};
   Test(test2);
+}
+
+// https://crbug.com/1087854
+TEST_F(HTMLPreloadScannerTest, CSSImportWithSemicolonInUrl) {
+  PreloadScannerTestCase test_cases[] = {
+      {"https://example.test",
+       "<style>@import "
+       "url(\"https://example2.test/css?foo=a;b&bar=d\");</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import "
+       "url('https://example2.test/css?foo=a;b&bar=d');</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import "
+       "url(https://example2.test/css?foo=a;b&bar=d);</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import \"https://example2.test/css?foo=a;b&bar=d\";</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import 'https://example2.test/css?foo=a;b&bar=d';</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+  };
+
+  for (const auto& test : test_cases)
+    Test(test);
 }
 
 }  // namespace blink

@@ -211,7 +211,7 @@ class DiagnosticsProxy {
 
   /**
    * Requests available routines.
-   * @return { !Promise<dpsl_internal.DiagnosticsGetAvailableRoutinesResponse> }
+   * @return {!Promise<!dpsl_internal.DiagnosticsGetAvailableRoutinesResponse>}
    */
   async handleGetAvailableRoutines() {
     const availableRoutines =
@@ -305,11 +305,11 @@ class DiagnosticsProxy {
   /**
    * Runs a command on a routine.
    * @param { !Object } message
-   * @return { !Promise<dpsl_internal.DiagnosticsGetRoutineUpdateResponse> }
+   * @return { !Promise<!dpsl_internal.DiagnosticsGetRoutineUpdateResponse> }
    */
   async handleGetRoutineUpdate(message) {
     const request =
-        /** @type {dpsl_internal.DiagnosticsGetRoutineUpdateRequest} */ (
+        /** @type {!dpsl_internal.DiagnosticsGetRoutineUpdateRequest} */ (
             message);
 
     let routine, command;
@@ -347,39 +347,25 @@ class DiagnosticsProxy {
     try {
       const response = await handler(message);
       return this.convertRunRoutineResponse(response.response);
-    } catch (/** @type !Error */ error) {
+    } catch (/** @type {!Error} */ error) {
       return error;
     }
   };
 
   /**
    * Runs battery capacity routine.
-   * @param { !Object } message
    * @return { !RunRoutineResponsePromise }
    */
-  async handleRunBatteryCapacityRoutine(message) {
-    const request =
-        /**
-         * @type {!dpsl_internal.DiagnosticsRunBatteryCapacityRoutineRequest}
-         */
-        (message);
-    return await getOrCreateDiagnosticsService().runBatteryCapacityRoutine(
-        request.lowMah, request.highMah);
+  async handleRunBatteryCapacityRoutine() {
+    return await getOrCreateDiagnosticsService().runBatteryCapacityRoutine();
   };
 
   /**
    * Runs battery health routine.
-   * @param { !Object } message
    * @return { !RunRoutineResponsePromise }
    */
-  async handleRunBatteryHealthRoutine(message) {
-    const request =
-        /**
-         * @type {!dpsl_internal.DiagnosticsRunBatteryHealthRoutineRequest}
-         */
-        (message);
-    return await getOrCreateDiagnosticsService().runBatteryHealthRoutine(
-        request.maximumCycleCount, request.percentBatteryWearAllowed);
+  async handleRunBatteryHealthRoutine() {
+    return await getOrCreateDiagnosticsService().runBatteryHealthRoutine();
   };
 
   /**
@@ -562,7 +548,7 @@ class DiagnosticsProxy {
         (message);
     this.assertNumberIsPositive(request.lengthSeconds);
     return await getOrCreateDiagnosticsService().runPrimeSearchRoutine(
-        request.lengthSeconds, request.maximumNumber);
+        request.lengthSeconds, BigInt(request.maximumNumber));
   };
 
   /**
@@ -813,9 +799,10 @@ class TelemetryProxy {
     // At this point, closure compiler knows that the input is {!Object}.
 
     // Rule #2: convert objects like { value: X } to X, where X is either a
-    // number or a boolean.
+    // number, a bigint, or a boolean.
     if (Object.entries(input).length === 1 &&
         (typeof input['value'] === 'number' ||
+         typeof input['value'] === typeof BigInt(0) ||
          typeof input['value'] === 'boolean')) {
       return input['value'];
     }
@@ -841,7 +828,7 @@ class TelemetryProxy {
 
   /**
    * Requests telemetry info.
-   * @param { Object } message
+   * @param { !Object } message
    * @return { !Promise<!dpsl_internal.ProbeTelemetryInfoResponse> }
    */
   async handleProbeTelemetryInfo(message) {
@@ -879,21 +866,70 @@ class SystemEventsProxy {
     this.messagePipe = messagePipe;
     this.iframeReady = iframeReady;
 
-    this.events = {
-      ON_LID_CLOSED: 'lid-closed',
-      ON_LID_OPENED: 'lid-opened',
+    const events = {
+      // Bluetooth events
+      BLUETOOTH_ADAPTER_ADDED: 'bluetooth-adapter-added',
+      BLUETOOTH_ADAPTER_REMOVED: 'bluetooth-adapter-removed',
+      BLUETOOTH_ADAPTER_PROPERTY_CHANGED: 'bluetooth-adapter-property-changed',
+      BLUETOOTH_DEVICE_ADDED: 'bluetooth-device-added',
+      BLUETOOTH_DEVICE_REMOVED: 'bluetooth-device-removed',
+      BLUETOOTH_DEVICE_PROPERTY_CHANGED: 'bluetooth-device-property-changed',
+
+      // Lid events
+      LID_CLOSED: 'lid-closed',
+      LID_OPENED: 'lid-opened',
+
+      // Power events
+      AC_INSERTED: 'ac-inserted',
+      AC_REMOVED: 'ac-removed',
+      OS_SUSPEND: 'os-suspend',
+      OS_RESUME: 'os-resume',
     };
+
+    this.bluetoothObserverCallbackRouter_ =
+        new chromeos.health.mojom.BluetoothObserverCallbackRouter();
+
+    this.bluetoothObserverCallbackRouter_.onAdapterAdded.addListener(
+        () => this.sendEvent(events.BLUETOOTH_ADAPTER_ADDED));
+    this.bluetoothObserverCallbackRouter_.onAdapterRemoved.addListener(
+        () => this.sendEvent(events.BLUETOOTH_ADAPTER_REMOVED));
+    this.bluetoothObserverCallbackRouter_.onAdapterPropertyChanged.addListener(
+        () => this.sendEvent(events.BLUETOOTH_ADAPTER_PROPERTY_CHANGED));
+    this.bluetoothObserverCallbackRouter_.onDeviceAdded.addListener(
+        () => this.sendEvent(events.BLUETOOTH_DEVICE_ADDED));
+    this.bluetoothObserverCallbackRouter_.onDeviceRemoved.addListener(
+        () => this.sendEvent(events.BLUETOOTH_DEVICE_REMOVED));
+    this.bluetoothObserverCallbackRouter_.onDevicePropertyChanged.addListener(
+        () => this.sendEvent(events.BLUETOOTH_DEVICE_PROPERTY_CHANGED));
+
+    getOrCreateSystemEventsService().addBluetoothObserver(
+        this.bluetoothObserverCallbackRouter_.$.bindNewPipeAndPassRemote());
 
     this.lidObserverCallbackRouter_ =
         new chromeos.health.mojom.LidObserverCallbackRouter();
 
     this.lidObserverCallbackRouter_.onLidClosed.addListener(
-        () => this.sendEvent(this.events.ON_LID_CLOSED));
+        () => this.sendEvent(events.LID_CLOSED));
     this.lidObserverCallbackRouter_.onLidOpened.addListener(
-        () => this.sendEvent(this.events.ON_LID_OPENED));
+        () => this.sendEvent(events.LID_OPENED));
 
     getOrCreateSystemEventsService().addLidObserver(
         this.lidObserverCallbackRouter_.$.bindNewPipeAndPassRemote());
+
+    this.powerObserverCallbackRouter_ =
+        new chromeos.health.mojom.PowerObserverCallbackRouter();
+
+    this.powerObserverCallbackRouter_.onAcInserted.addListener(
+        () => this.sendEvent(events.AC_INSERTED));
+    this.powerObserverCallbackRouter_.onAcRemoved.addListener(
+        () => this.sendEvent(events.AC_REMOVED));
+    this.powerObserverCallbackRouter_.onOsSuspend.addListener(
+        () => this.sendEvent(events.OS_SUSPEND));
+    this.powerObserverCallbackRouter_.onOsResume.addListener(
+        () => this.sendEvent(events.OS_RESUME));
+
+    getOrCreateSystemEventsService().addPowerObserver(
+        this.powerObserverCallbackRouter_.$.bindNewPipeAndPassRemote());
   }
 
   /**
@@ -923,14 +959,12 @@ untrustedMessagePipe.registerHandler(
 untrustedMessagePipe.registerHandler(
     dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_CAPACITY_ROUTINE,
     (message) => diagnosticsProxy.genericRunRoutineHandler(
-        (message) => diagnosticsProxy.handleRunBatteryCapacityRoutine(message),
-        message));
+        () => diagnosticsProxy.handleRunBatteryCapacityRoutine(), message));
 
 untrustedMessagePipe.registerHandler(
     dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_HEALTH_ROUTINE,
     (message) => diagnosticsProxy.genericRunRoutineHandler(
-        (message) => diagnosticsProxy.handleRunBatteryHealthRoutine(message),
-        message));
+        () => diagnosticsProxy.handleRunBatteryHealthRoutine(), message));
 
 untrustedMessagePipe.registerHandler(
     dpsl_internal.Message.DIAGNOSTICS_RUN_SMARTCTL_CHECK_ROUTINE,

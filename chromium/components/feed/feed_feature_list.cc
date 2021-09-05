@@ -30,9 +30,6 @@ const base::FeatureParam<bool> kOnlySetLastRefreshAttemptOnSuccess{
     &kInterestFeedContentSuggestions,
     "only_set_last_refresh_attempt_on_success", true};
 
-const base::Feature kInterestFeedFeedback{"InterestFeedFeedback",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kReportFeedUserActions{"ReportFeedUserActions",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -46,6 +43,15 @@ const base::Feature kInterestFeedV1ClicksAndViewsConditionalUpload{
 const base::Feature kInterestFeedV2ClicksAndViewsConditionalUpload{
     "InterestFeedV2ClickAndViewActionsConditionalUpload",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature that allows the client to automatically dismiss the notice card based
+// on the clicks and views on the notice card.
+const base::Feature kInterestFeedNoticeCardAutoDismiss{
+    "InterestFeedNoticeCardAutoDismiss", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Used for A:B testing of a bug fix (crbug.com/1151391).
+const base::Feature kInterestFeedSpinnerAlwaysAnimate{
+    "InterestFeedSpinnerAlwaysAnimate", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kDefaultReferrerUrl[] =
     "https://www.googleapis.com/auth/chrome-content-suggestions";

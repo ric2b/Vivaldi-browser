@@ -7,9 +7,10 @@
 #include <stddef.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -44,9 +45,9 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/page_state.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -63,8 +64,7 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
 
-    std::string b = base::NumberToString(base::Time::Now().ToInternalValue());
-    TestingProfile* profile = profile_manager()->CreateTestingProfile(b);
+    Profile* profile = browser()->profile();
     SessionService* session_service = new SessionService(profile);
     path_ = profile->GetPath();
 
@@ -975,8 +975,8 @@ TEST_F(SessionServiceTest, RemovePostDataWithPasswords) {
   ASSERT_NE(window_id, tab_id);
 
   // Create a page state representing a HTTP body with posted passwords.
-  content::PageState page_state =
-      content::PageState::CreateForTesting(GURL(), true, "data", nullptr);
+  blink::PageState page_state =
+      blink::PageState::CreateForTesting(GURL(), true, "data", nullptr);
 
   // Create a TabNavigation containing page_state and representing a POST
   // request with passwords.
@@ -1227,6 +1227,34 @@ TEST_F(SessionServiceTest, TabGroupMetadataSaved) {
     ASSERT_TRUE(base::Contains(tab_groups, group_id));
     EXPECT_EQ(visual_data[group_ndx], tab_groups[group_id]->visual_data);
   }
+}
+
+TEST_F(SessionServiceTest, Workspace) {
+  auto* test_browser_window =
+      static_cast<TestBrowserWindow*>(browser()->window());
+  test_browser_window->set_workspace(window_workspace);
+  AddTab(browser(), GURL("http://foo/1"));
+  // Force a reset, to verify that SessionService::BuildCommandsForBrowser
+  // handles workspaces correctly.
+  service()->ResetFromCurrentBrowsers();
+
+  sessions::CommandStorageManager* command_storage_manager =
+      service()->GetCommandStorageManagerForTest();
+  const std::vector<std::unique_ptr<sessions::SessionCommand>>&
+      pending_commands = command_storage_manager->pending_commands();
+  bool found_workspace_command = false;
+  std::unique_ptr<sessions::SessionCommand> workspace_command =
+      sessions::CreateSetWindowWorkspaceCommand(browser()->session_id(),
+                                                window_workspace);
+  for (const auto& command : pending_commands) {
+    if (command->id() == workspace_command->id() &&
+        command->contents_as_string_piece() ==
+            workspace_command->contents_as_string_piece()) {
+      found_workspace_command = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_workspace_command);
 }
 
 // Functions used by GetSessionsAndDestroy.

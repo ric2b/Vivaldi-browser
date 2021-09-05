@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -19,7 +19,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/system/functions.h"
@@ -1257,7 +1256,7 @@ TEST_F(CorsURLLoaderTest,
   request.update_first_party_url_on_redirect = true;
   request.trusted_params = ResourceRequest::TrustedParams();
   request.trusted_params->isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateTopFrame,
+      net::IsolationInfo::RequestType::kMainFrame,
       url_origin /* top_frame_origin */, url_origin /* frame_origin */,
       url_site_for_cookies);
   CreateLoaderAndStart(request);
@@ -1286,10 +1285,10 @@ TEST_F(CorsURLLoaderTest,
   EXPECT_TRUE(
       GetRequest().site_for_cookies.IsEquivalent(new_url_site_for_cookies));
   EXPECT_TRUE(GetRequest().trusted_params->isolation_info.IsEqualForTesting(
-      net::IsolationInfo::Create(
-          net::IsolationInfo::RedirectMode::kUpdateTopFrame,
-          new_url_origin /* top_frame_origin */,
-          new_url_origin /* frame_origin */, new_url_site_for_cookies)));
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kMainFrame,
+                                 new_url_origin /* top_frame_origin */,
+                                 new_url_origin /* frame_origin */,
+                                 new_url_site_for_cookies)));
 
   NotifyLoaderClientOnReceiveResponse(
       {{"Access-Control-Allow-Origin", "https://example.com"}});
@@ -2282,8 +2281,8 @@ TEST_F(CorsURLLoaderTest, RestrictedPrefetchSucceedsWithNIK) {
   // Fill up the |trusted_params| NetworkIsolationKey member.
   url::Origin request_origin = url::Origin::Create(request.url);
   request.trusted_params->isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateNothing, request_origin,
-      request_origin, net::SiteForCookies());
+      net::IsolationInfo::RequestType::kOther, request_origin, request_origin,
+      net::SiteForCookies());
 
   CreateLoaderAndStart(request);
   RunUntilCreateLoaderAndStartCalled();

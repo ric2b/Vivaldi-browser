@@ -5,7 +5,7 @@
 #include "chromeos/services/network_config/cros_network_config.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -131,15 +131,14 @@ class CrosNetworkConfigTest : public testing::Test {
         /*global_network_config=*/base::DictionaryValue());
 
     const std::string user_policy_ssid = "wifi2";
-    base::Value wifi2_onc = base::Value::FromUniquePtrValue(
-        onc::ReadDictionaryFromJson(base::StringPrintf(
-            R"({"GUID": "wifi2_guid", "Type": "WiFi",
+    base::Value wifi2_onc = onc::ReadDictionaryFromJson(base::StringPrintf(
+        R"({"GUID": "wifi2_guid", "Type": "WiFi",
                 "Name": "wifi2", "Priority": 0,
                 "WiFi": { "Passphrase": "fake", "SSID": "%s", "HexSSID": "%s",
                           "Security": "WPA-PSK", "AutoConnect": true}})",
-            user_policy_ssid.c_str(),
-            base::HexEncode(user_policy_ssid.c_str(), user_policy_ssid.size())
-                .c_str())));
+        user_policy_ssid.c_str(),
+        base::HexEncode(user_policy_ssid.c_str(), user_policy_ssid.size())
+            .c_str()));
     base::ListValue user_policy_onc;
     user_policy_onc.Append(std::move(wifi2_onc));
     managed_network_configuration_handler_->SetPolicy(
@@ -1316,6 +1315,24 @@ TEST_F(CrosNetworkConfigTest, DeviceListChanged) {
   // disabling state, next when it's actually disabled, and lastly when
   // Device::available_managed_network_path_ changes.
   EXPECT_EQ(3, observer()->device_state_list_changed());
+
+  // Enable Tethering
+  helper().network_state_handler()->SetTetherTechnologyState(
+      NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(4, observer()->device_state_list_changed());
+
+  // Tests that observers are notified of device state list change
+  // when a tether scan begins for a device.
+  helper().network_state_handler()->SetTetherScanState(true);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(5, observer()->device_state_list_changed());
+
+  // Tests that observers are notified of device state list change
+  // when a tether scan completes.
+  helper().network_state_handler()->SetTetherScanState(false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(6, observer()->device_state_list_changed());
 }
 
 TEST_F(CrosNetworkConfigTest, ActiveNetworksChanged) {

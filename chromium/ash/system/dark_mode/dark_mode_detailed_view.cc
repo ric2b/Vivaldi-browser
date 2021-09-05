@@ -9,7 +9,6 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_detailed_view.h"
-#include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -23,21 +22,38 @@ namespace {
 
 class TrayRadioButton : public views::RadioButton {
  public:
-  TrayRadioButton(views::ButtonListener* listener,
-                  const base::string16& button_label)
+  TrayRadioButton(PressedCallback callback, const base::string16& button_label)
       : views::RadioButton(button_label) {
+    SetCallback(std::move(callback));
     SetBorder(views::CreateEmptyBorder(kTrayRadioButtonPadding));
     SetImageLabelSpacing(kTrayRadioButtonInterSpacing);
-    set_callback(views::Button::PressedCallback(listener, this));
+  }
+
+  // views::RadioButton:
+  SkColor GetIconImageColor(int icon_state) const override {
+    return AshColorProvider::Get()->GetContentLayerColor(
+        icon_state & IconState::CHECKED
+            ? AshColorProvider::ContentLayerType::kRadioColorActive
+            : AshColorProvider::ContentLayerType::kRadioColorInactive);
   }
 
   // views::RadioButton:
   void OnThemeChanged() override {
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SMALL_TITLE);
-    SetEnabledTextColors(style.GetTextColor());
-    style.SetupLabel(label());
+    views::RadioButton::OnThemeChanged();
+    SetEnabledTextColors(AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary));
+    TrayPopupUtils::SetLabelFontList(label(),
+                                     TrayPopupUtils::FontStyle::kSmallTitle);
   }
 };
+
+void SetupLabel(views::Label* label) {
+  label->SetBorder(views::CreateEmptyBorder(kTraySubLabelPadding));
+  label->SetMultiLine(true);
+  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
+}
 
 }  // namespace
 
@@ -55,8 +71,10 @@ void DarkModeDetailedView::CreateItems() {
   tri_view()->SetContainerVisible(TriView::Container::END, true);
 
   auto* ash_color_provider = AshColorProvider::Get();
-  toggle_ =
-      TrayPopupUtils::CreateToggleButton(this, IDS_ASH_STATUS_TRAY_DARK_THEME);
+  toggle_ = TrayPopupUtils::CreateToggleButton(
+      base::BindRepeating(&AshColorProvider::ToggleColorMode,
+                          base::Unretained(AshColorProvider::Get())),
+      IDS_ASH_STATUS_TRAY_DARK_THEME);
   toggle_->SetIsOn(ash_color_provider->IsDarkModeEnabled());
   tri_view()->AddView(TriView::Container::END, toggle_);
 
@@ -67,17 +85,21 @@ void DarkModeDetailedView::CreateItems() {
 
   themed_mode_button_ =
       scroll_content()->AddChildView(std::make_unique<TrayRadioButton>(
-          this, l10n_util::GetStringUTF16(
-                    IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_TITLE)));
-  TrayPopupUtils::SetupTraySubLabel(scroll_content()->AddChildView(
+          base::BindRepeating(&AshColorProvider::UpdateColorModeThemed,
+                              base::Unretained(AshColorProvider::Get()), true),
+          l10n_util::GetStringUTF16(
+              IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_TITLE)));
+  SetupLabel(scroll_content()->AddChildView(
       std::make_unique<views::Label>(l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_DESCRIPTION))));
 
   neutral_mode_button_ =
       scroll_content()->AddChildView(std::make_unique<TrayRadioButton>(
-          this, l10n_util::GetStringUTF16(
-                    IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_TITLE)));
-  TrayPopupUtils::SetupTraySubLabel(scroll_content()->AddChildView(
+          base::BindRepeating(&AshColorProvider::UpdateColorModeThemed,
+                              base::Unretained(AshColorProvider::Get()), false),
+          l10n_util::GetStringUTF16(
+              IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_TITLE)));
+  SetupLabel(scroll_content()->AddChildView(
       std::make_unique<views::Label>(l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_DESCRIPTION))));
 
@@ -98,17 +120,6 @@ void DarkModeDetailedView::UpdateToggleButton(bool dark_mode_enabled) {
 void DarkModeDetailedView::UpdateCheckedButton(bool is_themed) {
   is_themed ? themed_mode_button_->SetChecked(true)
             : neutral_mode_button_->SetChecked(true);
-}
-
-void DarkModeDetailedView::HandleButtonPressed(views::Button* sender,
-                                               const ui::Event& event) {
-  auto* ash_color_provider = AshColorProvider::Get();
-  if (sender == toggle_)
-    ash_color_provider->ToggleColorMode();
-  else if (sender == themed_mode_button_)
-    ash_color_provider->UpdateColorModeThemed(/*is_themed=*/true);
-  else if (sender == neutral_mode_button_)
-    ash_color_provider->UpdateColorModeThemed(/*is_themed=*/false);
 }
 
 }  // namespace ash

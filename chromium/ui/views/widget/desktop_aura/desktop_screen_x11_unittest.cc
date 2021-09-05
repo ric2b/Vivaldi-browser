@@ -24,7 +24,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
@@ -71,7 +70,7 @@ class DesktopScreenX11Test : public views::ViewsTestBase,
   // Overridden from testing::Test:
   void SetUp() override {
     ViewsTestBase::SetUp();
-    // TODO(msisov): rewrite desktop screen tests for ozone and non-ozone Linux.
+    // TODO(crbug.com/1096425): Once non-Ozone X11 is deprecated, re-work this.
     if (features::IsUsingOzonePlatform())
       GTEST_SKIP();
     // Initialize the world to the single monitor case.

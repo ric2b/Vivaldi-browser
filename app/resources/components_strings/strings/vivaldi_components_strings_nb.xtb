@@ -22,7 +22,7 @@
 <translation id="1916770123977586577">Last inn siden på nytt for å bruke de oppdaterte innstillingene</translation>
 <translation id="1919345977826869612">Annonser</translation>
 <translation id="1974060860693918893">Avansert</translation>
-<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk proxy-serveren og brannmuren<ph name="END_LINK" /></translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Lyd</translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Bakgrunnssynkronisering</translation>
@@ -44,7 +44,7 @@
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldig svar.</translation>
 <translation id="2586657967955657006">Utklippstavle</translation>
 <translation id="2609632851001447353">Varianter</translation>
-<translation id="2634124572758952069"><ph name="HOST_NAME" /> sin server-IP-adresse ble ikke funnet.</translation>
+<translation id="2634124572758952069">IP-adressen for tjeneren til <ph name="HOST_NAME" /> ble ikke funnet.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Ingen tilgang til filen</translation>
 <translation id="2705137772291741111">Den lagrede (bufrede) kopien av nettsiden var ikke lesbar.</translation>
@@ -53,17 +53,17 @@
 <translation id="2826760142808435982">Tilkoblingen er kryptert og autentisert med <ph name="CIPHER" /> og bruker <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
 <translation id="2856444702002559011">Angripere kan kanskje prøve å stjele informasjonen din fra <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (for eksempel passord, meldinger og kredittkort). <ph name="BEGIN_LEARN_MORE_LINK" />Lær mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nettverksendring ble oppdaget.</translation>
-<translation id="2948083400971632585">På innstillingssiden kan du deaktivere eventuelle proxyservere for tilkoblinger.</translation>
+<translation id="2948083400971632585">På innstillingssiden kan du deaktivere eventuelle mellomtjenere for tilkoblinger.</translation>
 <translation id="2991571918955627853">Du kan ikke besøke <ph name="SITE" /> akkurat no, fordi nettsiden bruker HSTS. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="3005723025932146533">Vis lagret kopi</translation>
 <translation id="301521992641321250">Automatisk blokkert</translation>
 <translation id="3041612393474885105">Sertifikatinformasjon</translation>
 <translation id="3109728660330352905">Du har ikke tillatelse til å vise denne siden.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prøv å kjøre Tilkoblingsdiagnostikk<ph name="END_LINK" />.</translation>
-<translation id="3154506275960390542">Denne siden inkluderer et skjema som kanskje ikke sendes inn sikkert. Data kan ses av andre under sending, eller kan endres av en angriper for å endre hva serveren mottar.</translation>
-<translation id="3176929007561373547">Sjekk dine proxy-innstillinger eller kontakt din nettverksadministrator for å
-      forsikre deg om at proxy-serveren kjører. Hvis du tror du ikke trenger å
-      bruke en proxy-server:
+<translation id="3154506275960390542">Denne siden inkluderer et skjema som kanskje ikke sendes inn sikkert. Data kan ses av andre under sending, eller kan endres av en angriper for å endre hva tjeneren mottar.</translation>
+<translation id="3176929007561373547">Sjekk dine mellomtjener-innstillinger eller kontakt din nettverksadministrator for å
+      forsikre deg om at mellomtjeneren kjører. Hvis du tror du ikke trenger å
+      bruke en mellomtjener:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på oppdater-knappen for å sende inn dataene som trengs for å laste siden på nytt.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
@@ -83,12 +83,12 @@
 <translation id="3658742229777143148">Revisjon</translation>
 <translation id="3681007416295224113">Sertifikatinformasjon</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Sjekk proxy-, brannmur- og DNS-konfigurasjoner<ph name="END_LINK" /></translation>
-<translation id="382518646247711829">Hvis du bruker en proxy-server…</translation>
+<translation id="382518646247711829">Hvis du bruker en mellomtjener …</translation>
 <translation id="3894751534882749287">Hvis du vil vise siden likevel, kan du endre nivået av sporingsbeskyttelse i menyen for sporingsblokkering, eller ved å trykke på Tillat-knappen</translation>
 <translation id="3950820424414687140">Logg inn</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
 <translation id="3987940399970879459">Mindre enn 1 MB</translation>
-<translation id="4075732493274867456">Klienten og serveren støtter ikke en vanlig SSL-protkollversjon og krypteringsprogrampakke.</translation>
+<translation id="4075732493274867456">Klienten og tjeneren støtter ikke en vanlig SSL-protokollversjon eller krypteringsprogrampakke.</translation>
 <translation id="4116663294526079822">Alltid tillat på dette nettstedet</translation>
 <translation id="4130226655945681476">Sjekke nettverkskabler, modemet og ruteren</translation>
 <translation id="4151403195736952345">Bruk global standardinnstilling (Oppdag)</translation>
@@ -145,7 +145,7 @@
 <translation id="5838278095973806738">Du bør ikke skrive inn sensitiv informasjon på denne siden (for eksempel passord eller betalingsinformasjon) da det kan blir stjålet av angripere.</translation>
 <translation id="5869405914158311789">Siden kan ikke nås</translation>
 <translation id="5932224571077948991">Nettstedet viser påtrengende eller villedende annonser</translation>
-<translation id="5990559369517809815">Forespørsler til serveren har blitt blokkert av en utvidelse.</translation>
+<translation id="5990559369517809815">Forespørsler til tjeneren har blitt blokkert av en utvidelse.</translation>
 <translation id="6051221802930200923">Du kan ikke besøke <ph name="SITE" /> akkurat no, fordi nettsiden bruker sertifikatlåsing. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="6146055958333702838">Kontroller eventuelle kabler og start eventuelle rutere, modem og andre
     nettverksenheter på nytt.</translation>
@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">Lær mer</translation>
 <translation id="6177128806592000436">Tilkoblingen til dette nettstedet er ikke sikker</translation>
 <translation id="6203231073485539293">Sjekk internettilkoblingen</translation>
+<translation id="6225522625585012689">Gå til &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å se listen over blokkerte nettadresser og andre regler systemadministratoren din har fastsatt.</translation>
 <translation id="625755898061068298">Du har valgt å skru av sikkerhetsadvarsler for denne siden.</translation>
 <translation id="6264485186158353794">Tilbake til sikkerhet</translation>
 <translation id="6305205051461490394"><ph name="URL" /> kan ikke nås.</translation>
@@ -166,7 +167,7 @@
 <translation id="6569060085658103619">Du ser på en utvidelsesside</translation>
 <translation id="6657585470893396449">Passord</translation>
 <translation id="6685834062052613830">Logg ut og fullfør oppsett</translation>
-<translation id="6711464428925977395">Enter er det noe galt med proxy-serveren, eller så er adressen feil.</translation>
+<translation id="6711464428925977395">Enter er det noe galt med mellomtjeneren, eller så er adressen feil.</translation>
 <translation id="6757797048963528358">Enheten din gikk inn i hvilemodus.</translation>
 <translation id="6897140037006041989">Brukeragent</translation>
 <translation id="7053983685419859001">Blokker</translation>
@@ -180,7 +181,7 @@
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7364115444476960850">Siden du prøvde å få tilgang til ble blokkert av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilplassering</translation>
-<translation id="7445762425076701745">Identiteten til serveren du kobler til kan ikke bekreftes helt. Du er koblet til en server med et navn som bare er gyldig innenfor nettverket ditt, og en ekstern sertifikatautoritet har ikke noen måte å kunne validere eierskapet på. Siden noen sertifikatautoriteter utsteder sertifikater for disse navnene uansett, er det ikke mulig å forsikre om at du faktisk er koblet til den ønskede nettsiden, og ikke en angriper.</translation>
+<translation id="7445762425076701745">Identiteten til tjeneren du kobler til kan ikke bekreftes helt. Du er koblet til en tjener med et navn som bare er gyldig innenfor nettverket ditt, og en ekstern sertifikatautoritet har ikke noen måte å kunne validere eierskapet på. Siden noen sertifikatautoriteter utsteder sertifikater for disse navnene uansett, er det ikke mulig å forsikre om at du faktisk er koblet til den ønskede nettsiden, og ikke en angriper.</translation>
 <translation id="7455133967321480974">Bruk global standardinnstilling (Blokker)</translation>
 <translation id="7518003948725431193">Ingen nettside ble funnet på nettadressen: <ph name="URL" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
@@ -219,7 +220,7 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> sin &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt; ble ikke funnet. Undersøker problemet.</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
-<translation id="9001074447101275817">Proxy-serveren <ph name="DOMAIN" /> krever brukernavn og passord.</translation>
+<translation id="9001074447101275817">Mellomtjeneren <ph name="DOMAIN" /> krever brukernavn og passord.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9011424611726486705">Åpne nettstedsinnstillinger</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>

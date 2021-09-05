@@ -60,9 +60,6 @@ const base::Feature kSharedHighlightingIOS{"SharedHighlightingIOS",
 const base::Feature kEnableFullPageScreenshot{
     "EnableFullPageScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnableAutofillPasswordReauthIOS{
-    "EnableAutofillPasswordReauthIOS", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kDefaultBrowserFullscreenPromo{
     "DefaultBrowserFullscreenPromo", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -73,3 +70,12 @@ const base::Feature kDefaultBrowserSettings{"DefaultBrowserSettings",
 // finished.
 const base::Feature kModernTabStrip{"ModernTabStrip",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kIncognitoAuthentication{
+    "enable-incognito-authentication-ios", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLocationPermissionsPrompt{
+    "LocationPermissionsPrompt", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kIOSPersistCrashRestore{"IOSPersistCrashRestore",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};

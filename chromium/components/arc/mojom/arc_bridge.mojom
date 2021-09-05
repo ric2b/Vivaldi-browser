@@ -18,6 +18,7 @@ import "components/arc/mojom/cast_receiver.mojom";
 import "components/arc/mojom/cert_store.mojom";
 import "components/arc/mojom/clipboard.mojom";
 import "components/arc/mojom/crash_collector.mojom";
+import "components/arc/mojom/digital_goods.mojom";
 import "components/arc/mojom/disk_quota.mojom";
 import "components/arc/mojom/enterprise_reporting.mojom";
 import "components/arc/mojom/file_system.mojom";
@@ -44,6 +45,7 @@ import "components/arc/mojom/property.mojom";
 import "components/arc/mojom/rotation_lock.mojom";
 import "components/arc/mojom/screen_capture.mojom";
 import "components/arc/mojom/sensor.mojom";
+import "components/arc/mojom/sharesheet.mojom";
 import "components/arc/mojom/storage_manager.mojom";
 import "components/arc/mojom/timer.mojom";
 import "components/arc/mojom/tracing.mojom";
@@ -56,9 +58,9 @@ import "components/arc/mojom/volume_mounter.mojom";
 import "components/arc/mojom/wake_lock.mojom";
 import "components/arc/mojom/wallpaper.mojom";
 
-// Next MinVersion: 51
+// Next MinVersion: 53
 // Deprecated method IDs: 101, 105, 121
-// Next method ID: 156
+// Next method ID: 158
 interface ArcBridgeHost {
   // Keep the entries alphabetical. In order to do so without breaking
   // compatibility with the ARC instance, explicitly assign each interface a
@@ -118,6 +120,10 @@ interface ArcBridgeHost {
   // Notifies Chrome that the CrashCollectorInstance interface is ready.
   [MinVersion=7] OnCrashCollectorInstanceReady@112(
       pending_remote<CrashCollectorInstance> instance_remote);
+
+  // Notifies Chrome that the DigitalGoodsInstance interface is ready.
+  [MinVersion=51] OnDigitalGoodsInstanceReady@156(
+      pending_remote<DigitalGoodsInstance> instance_remote);
 
   // Notifies Chrome that the DiskQuotaInstance interface is ready.
   [MinVersion=39] OnDiskQuotaInstanceReady@144(
@@ -220,6 +226,10 @@ interface ArcBridgeHost {
   // Notifies Chrome that the SensorInstance interface is ready.
   [MinVersion=49] OnSensorInstanceReady@154(
       pending_remote<SensorInstance> instance_ptr);
+
+  // Notifies Chrome that the SharesheetInstance interface is ready.
+  [MinVersion=53] OnSharesheetInstanceReady@158(
+                      pending_remote<SharesheetInstance> instance_remote);
 
   // Notifies Chrome that the SmartCardManagerInstance interface is ready.
   [MinVersion=48] OnSmartCardManagerInstanceReady@153(

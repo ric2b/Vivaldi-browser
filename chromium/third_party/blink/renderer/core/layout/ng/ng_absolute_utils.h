@@ -14,7 +14,6 @@
 
 namespace blink {
 
-class LayoutObject;
 class NGBlockNode;
 class NGConstraintSpace;
 struct NGLogicalStaticPosition;
@@ -24,14 +23,6 @@ struct CORE_EXPORT NGLogicalOutOfFlowDimensions {
   LogicalSize size = {kIndefiniteSize, kIndefiniteSize};
   NGBoxStrut margins;
 };
-
-// Implements <dialog> static positioning.
-//
-// Returns new dialog top position if layout_dialog requires <dialog>
-// OOF-positioned centering.
-CORE_EXPORT base::Optional<LayoutUnit> ComputeAbsoluteDialogYPosition(
-    const LayoutObject& layout_dialog,
-    LayoutUnit height);
 
 // The following routines implement the absolute size resolution algorithm.
 // https://www.w3.org/TR/css-position-3/#abs-non-replaced-width
@@ -73,8 +64,7 @@ CORE_EXPORT void ComputeOutOfFlowInlineDimensions(
     const base::Optional<MinMaxSizes>& minmax_content_sizes,
     const base::Optional<MinMaxSizes>& minmax_intrinsic_sizes_for_ar,
     const base::Optional<LogicalSize>& replaced_size,
-    const WritingMode container_writing_mode,
-    const TextDirection container_direction,
+    const WritingDirectionMode container_writing_direction,
     NGLogicalOutOfFlowDimensions* dimensions);
 
 // Computes the rest of the absolute position which depends on child's
@@ -86,8 +76,7 @@ CORE_EXPORT void ComputeOutOfFlowBlockDimensions(
     const NGLogicalStaticPosition&,
     const base::Optional<LayoutUnit>& child_block_size,
     const base::Optional<LogicalSize>& replaced_size,
-    const WritingMode container_writing_mode,
-    const TextDirection container_direction,
+    const WritingDirectionMode container_writing_direction,
     NGLogicalOutOfFlowDimensions* dimensions);
 
 }  // namespace blink

@@ -6,23 +6,11 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/logging.h"
 #include "base/vivaldi_switches.h"
-#include "url/gurl.h"
 
 #if defined(OS_MAC)
-#include <iostream>
 #include "browser/mac/sparkle_util.h"
-#endif
-
-#if defined(OS_WIN)
-#include <windows.h>
-
-#include "base/i18n/rtl.h"
-#include "base/win/registry.h"
-#include "base/win/windows_version.h"
-#include "third_party/_winsparkle_lib/include/winsparkle.h"
-#include "update_notifier/update_notifier_switches.h"
 #endif
 
 #define UPDATE_SOURCE_WIN_normal 0
@@ -31,44 +19,14 @@
 #define UPDATE_SOURCE_WIN_beta 1
 #define UPDATE_SOURCE_WIN_final 1
 
-#define S(s) UPDATE_SOURCE_WIN_ ## s
+#define S(s) UPDATE_SOURCE_WIN_##s
 #define UPDATE_SOURCE_WIN(s) S(s)
 
 #define UPDATE_PREVIEW_SOURCE_WINDOWS 1
 
-namespace vivaldi {
+namespace init_sparkle {
+
 namespace {
-#if defined(OS_WIN)
-
-const char kUpdateRegPath[] = "Software\\Vivaldi\\AutoUpdate";
-const wchar_t kVivaldiKey[] = L"Software\\Vivaldi\\AutoUpdate";
-const wchar_t kEnabled[] = L"Enabled";
-
-const int kWinSparkleInitDelaySecs = 20;
-
-void WinSparkleCheckForUpdates(base::Callback<bool()> should_check_update_cb,
-                               bool force_check) {
-  const int interval_secs = win_sparkle_get_update_check_interval();
-  const time_t last_check_time = win_sparkle_get_last_check_time();
-  const time_t current_time = time(NULL);
-
-  // Only check for updates in reasonable intervals.
-  // If |force_check| is true, an update request will be sent regardless of
-  // the last check time.
-  if ((force_check || current_time - last_check_time >= interval_secs) &&
-      (should_check_update_cb.is_null() ||
-       should_check_update_cb.Run())) {
-    win_sparkle_check_update_without_ui();
-  }
-
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&WinSparkleCheckForUpdates, should_check_update_cb, false),
-      base::TimeDelta::FromSeconds(interval_secs));
-}
-#endif
-
-// #define _DEBUG_AUTOUPDATE
 
 #if defined(OS_WIN) || defined(OS_MAC)
 const char kVivaldiAppCastUrl[] =
@@ -113,70 +71,42 @@ const char kVivaldiAppCastUrl[] =
 #endif
 }  // anonymous namespace
 
-void InitializeSparkle(const base::CommandLine& command_line,
-                       base::Callback<bool()> should_check_update_callback) {
+Config GetConfig(const base::CommandLine& command_line) {
+  Config config;
 #if defined(OS_WIN) || defined(OS_MAC)
-  static bool vivaldi_updater_initialized = false;
-  if (!vivaldi_updater_initialized) {
-    GURL appcast_url(kVivaldiAppCastUrl);
-    DCHECK(appcast_url.is_valid());
-    bool show_vuu = false;
+  config.appcast_url = GURL(kVivaldiAppCastUrl);
+  DCHECK(config.appcast_url.is_valid());
 
-    if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
-      // Ref. VB-7983: If the --vuu switch is specified,
-      // show the update url in a messagebox/stdout
-      show_vuu = true;
-      std::string vuu =
-          command_line.GetSwitchValueASCII(switches::kVivaldiUpdateURL);
-      if (!vuu.empty()) {
-        GURL gurl(vuu);
-        if (gurl.is_valid()) {
-          // Use the supplied url for update.
-          appcast_url = gurl;
-        }
+  if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
+    // Ref. VB-7983: If the --vuu switch is specified,
+    // show the update url in a messagebox/stdout
+    config.show_appcast = true;
+    std::string update_url =
+        command_line.GetSwitchValueASCII(switches::kVivaldiUpdateURL);
+    if (!update_url.empty()) {
+      GURL gurl(update_url);
+      if (gurl.is_valid()) {
+        // Use the supplied url for update.
+        config.appcast_url = gurl;
       }
     }
-#if defined(OS_WIN)
-    if (show_vuu) {
-      ::MessageBoxA(NULL, appcast_url.spec().c_str(), "Vivaldi Update URL:",
-                    MB_ICONINFORMATION | MB_SETFOREGROUND);
-    }
-
-    win_sparkle_set_appcast_url(appcast_url.spec().c_str());
-    win_sparkle_set_registry_path(kUpdateRegPath);
-    win_sparkle_set_automatic_check_for_updates(0);
-
-    std::string locale = base::i18n::GetConfiguredLocale();
-    win_sparkle_set_lang(locale.c_str());
-
-    win_sparkle_init();
-
-    // Do not force a delayed check for updates on init if we are launched with
-    // the check-for-updates command line parameter, "--c".
-    bool force_update_on_init =
-        !command_line.HasSwitch(vivaldi_update_notifier::kCheckForUpdates);
-
-    base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_QUERY_VALUE);
-    std::wstring enabled;
-    if (key.Valid())
-      key.ReadValue(kEnabled, &enabled);
-    if (enabled == L"1") {
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE,
-          base::Bind(&WinSparkleCheckForUpdates,
-                     should_check_update_callback,
-                     force_update_on_init),
-          base::TimeDelta::FromSeconds(kWinSparkleInitDelaySecs));
-    }
-#elif defined(OS_MAC)
-    SparkleUtil::SetFeedURL(appcast_url.spec().c_str());
-    if (show_vuu) {
-      std::string feed_url = SparkleUtil::GetFeedURL();
-      std::cout << "Vivaldi Update URL = " << feed_url.c_str() << std::endl;
-    }
-#endif
-    vivaldi_updater_initialized = true;
   }
 #endif
+  return config;
 }
-}  // namespace vivaldi
+
+#if defined(OS_MAC)
+void Initialize(const base::CommandLine& command_line) {
+  static bool vivaldi_updater_initialized = false;
+  if (!vivaldi_updater_initialized) {
+    Config config = GetConfig(command_line);
+    SparkleUtil::SetFeedURL(config.appcast_url.spec().c_str());
+    if (config.show_appcast) {
+      LOG(INFO) << "Vivaldi Update URL: " << config.appcast_url.spec();
+    }
+    vivaldi_updater_initialized = true;
+  }
+}
+#endif
+
+}  // namespace init_sparkle

@@ -60,14 +60,14 @@ void AccessibilityTreeFormatterMacBrowserTest::TestAndCheck(
   waiter.WaitForNotification();
 
   // Set property filters
-  std::unique_ptr<AccessibilityTreeFormatter> formatter =
+  std::unique_ptr<ui::AXTreeFormatter> formatter =
       AccessibilityTreeFormatter::Create();
 
-  std::vector<AccessibilityTreeFormatter::PropertyFilter> property_filters;
+  std::vector<ui::AXPropertyFilter> property_filters;
 
   for (const char* filter : filters) {
-    property_filters.push_back(AccessibilityTreeFormatter::PropertyFilter(
-        filter, AccessibilityTreeFormatter::PropertyFilter::ALLOW_EMPTY));
+    property_filters.push_back(
+        ui::AXPropertyFilter(filter, ui::AXPropertyFilter::ALLOW_EMPTY));
   }
 
   formatter->AddDefaultFilters(&property_filters);

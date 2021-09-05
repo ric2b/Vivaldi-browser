@@ -36,22 +36,22 @@
 #include "chrome/browser/printing/printer_query.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/plural_string_handler.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/component_extension_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/print_preview_pdf_resources.h"
 #include "chrome/grit/print_preview_resources.h"
 #include "chrome/grit/print_preview_resources_map.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/common/print_messages.h"
 #include "components/strings/grit/components_strings.h"
@@ -86,11 +86,6 @@ namespace {
 const char kBasicPrintShortcut[] = "\x28\xE2\x8c\xA5\xE2\x8C\x98\x50\x29";
 #elif !defined(OS_CHROMEOS)
 const char kBasicPrintShortcut[] = "(Ctrl+Shift+P)";
-#endif
-
-#if !BUILDFLAG(OPTIMIZE_WEBUI)
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/print_preview/preprocessed/";
 #endif
 
 PrintPreviewUI::TestDelegate* g_test_delegate = nullptr;
@@ -222,7 +217,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"customMargins", IDS_PRINT_PREVIEW_CUSTOM_MARGINS},
     {"defaultMargins", IDS_PRINT_PREVIEW_DEFAULT_MARGINS},
     {"destinationLabel", IDS_PRINT_PREVIEW_DESTINATION_LABEL},
-    {"destinationNotSupportedWarning", IDS_DESTINATION_NOT_SUPPORTED_WARNING},
     {"destinationSearchTitle", IDS_PRINT_PREVIEW_DESTINATION_SEARCH_TITLE},
     {"dpiItemLabel", IDS_PRINT_PREVIEW_DPI_ITEM_LABEL},
     {"dpiLabel", IDS_PRINT_PREVIEW_DPI_LABEL},
@@ -277,6 +271,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"optionShortEdge", IDS_PRINT_PREVIEW_OPTION_SHORT_EDGE},
     {"optionTwoSided", IDS_PRINT_PREVIEW_OPTION_TWO_SIDED},
     {"optionsLabel", IDS_PRINT_PREVIEW_OPTIONS_LABEL},
+    {"pageDescription", IDS_PRINT_PREVIEW_DESCRIPTION},
     {"pageRangeLimitInstructionWithValue",
      IDS_PRINT_PREVIEW_PAGE_RANGE_LIMIT_INSTRUCTION_WITH_VALUE},
     {"pageRangeSyntaxInstruction",
@@ -316,7 +311,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"title", IDS_PRINT_PREVIEW_TITLE},
     {"top", IDS_PRINT_PREVIEW_TOP_MARGIN_LABEL},
     {"unsupportedCloudPrinter", IDS_PRINT_PREVIEW_UNSUPPORTED_CLOUD_PRINTER},
-    {"warningIconAriaLabel", IDS_WARNING_ICON_ARIA_LABEL},
 #if defined(OS_CHROMEOS)
     {"configuringFailedText", IDS_PRINT_CONFIGURING_FAILED_TEXT},
     {"configuringInProgressText", IDS_PRINT_CONFIGURING_IN_PROGRESS_TEXT},
@@ -352,39 +346,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
   source->AddString("gcpCertificateErrorLearnMoreURL",
                     chrome::kCloudPrintCertificateErrorLearnMoreURL);
 
-  const bool is_enterprise_managed = webui::IsEnterpriseManaged();
-  if (is_enterprise_managed) {
-    source->AddLocalizedString(
-        "cloudPrintingNotSupportedWarning",
-        IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING_ENTERPRISE);
-    source->AddLocalizedString("printerNotSupportedWarning",
-                               IDS_PRINTER_NOT_SUPPORTED_WARNING_ENTERPRISE);
-  } else {
-    source->AddString(
-        "cloudPrintingNotSupportedWarning",
-        l10n_util::GetStringFUTF16(
-            IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING,
-            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
-    source->AddString(
-        "printerNotSupportedWarning",
-        l10n_util::GetStringFUTF16(
-            IDS_PRINTER_NOT_SUPPORTED_WARNING,
-            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
-  }
-
 #if !defined(OS_CHROMEOS)
-  if (is_enterprise_managed) {
-    source->AddLocalizedString(
-        "saveToDriveNotSupportedWarning",
-        IDS_GOOGLE_DRIVE_OPTION_NOT_SUPPORTED_WARNING_ENTERPRISE);
-  } else {
-    source->AddString(
-        "saveToDriveNotSupportedWarning",
-        l10n_util::GetStringFUTF16(
-            IDS_GOOGLE_DRIVE_OPTION_NOT_SUPPORTED_WARNING,
-            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
-  }
-
   const base::string16 shortcut_text(base::UTF8ToUTF16(kBasicPrintShortcut));
   source->AddString("systemDialogOption",
                     l10n_util::GetStringFUTF16(
@@ -410,11 +372,16 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
 
   source->AddBoolean("isEnterpriseManaged", webui::IsEnterpriseManaged());
 
-  bool cloud_print_deprecation_warnings_suppressed =
-      profile->GetPrefs()->GetBoolean(
-          prefs::kCloudPrintDeprecationWarningsSuppressed);
+  bool cloud_print_deprecation_warnings_suppressed = true;
   source->AddBoolean("cloudPrintDeprecationWarningsSuppressed",
                      cloud_print_deprecation_warnings_suppressed);
+
+#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
+  source->AddBoolean(
+      "forceEnablePrivetPrinting",
+      cloud_print_deprecation_warnings_suppressed ||
+          base::FeatureList::IsEnabled(features::kForceEnablePrivetPrinting));
+#endif
 
 #if defined(OS_CHROMEOS)
   source->AddBoolean(
@@ -437,19 +404,15 @@ void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
       {"pdf/elements/icons.js", IDR_PDF_ICONS_JS},
       {"pdf/elements/shared-vars.js", IDR_PDF_SHARED_VARS_JS},
       {"pdf/elements/viewer-error-screen.js", IDR_PDF_VIEWER_ERROR_SCREEN_JS},
-      {"pdf/elements/viewer-page-indicator.js",
-       IDR_PRINT_PREVIEW_PDF_VIEWER_PAGE_INDICATOR_JS},
       {"pdf/elements/viewer-zoom-button.js", IDR_PDF_VIEWER_ZOOM_BUTTON_JS},
       {"pdf/elements/viewer-zoom-toolbar.js", IDR_PDF_VIEWER_ZOOM_SELECTOR_JS},
       {"pdf/gesture_detector.js", IDR_PDF_GESTURE_DETECTOR_JS},
       {"pdf/index.css", IDR_PDF_INDEX_CSS},
-      {"pdf/index.html", IDR_PRINT_PREVIEW_PDF_INDEX_PP_HTML},
       {"pdf/main.js", IDR_PDF_MAIN_JS},
       {"pdf/metrics.js", IDR_PDF_METRICS_JS},
       {"pdf/open_pdf_params_parser.js", IDR_PDF_OPEN_PDF_PARAMS_PARSER_JS},
       {"pdf/pdf_scripting_api.js", IDR_PDF_PDF_SCRIPTING_API_JS},
       {"pdf/pdf_viewer_base.js", IDR_PDF_PDF_VIEWER_BASE_JS},
-      {"pdf/pdf_viewer.js", IDR_PRINT_PREVIEW_PDF_PDF_VIEWER_PP_JS},
       {"pdf/pdf_viewer_shared_style.js", IDR_PDF_PDF_VIEWER_SHARED_STYLE_JS},
       {"pdf/pdf_viewer_utils.js", IDR_PDF_PDF_VIEWER_UTILS_JS},
       {"pdf/toolbar_manager.js", IDR_PDF_TOOLBAR_MANAGER_JS},
@@ -471,16 +434,10 @@ void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
 content::WebUIDataSource* CreatePrintPreviewUISource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIPrintHost);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(source, "print_preview.js",
-                                     IDR_PRINT_PREVIEW_PRINT_PREVIEW_ROLLUP_JS,
-                                     IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML);
-#else
   webui::SetupWebUIDataSource(
       source,
-      base::make_span(kPrintPreviewResources, kPrintPreviewResourcesSize),
-      kGeneratedPath, IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML);
-#endif
+      base::make_span(kPrintPreviewResources, kPrintPreviewResourcesSize), "",
+      IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML);
   AddPrintPreviewStrings(source);
   SetupPrintPreviewPlugin(source);
   AddPrintPreviewFlags(source, profile);
@@ -827,6 +784,8 @@ void PrintPreviewUI::OnClosePrintPreviewDialog() {
 void PrintPreviewUI::SetOptionsFromDocument(
     const mojom::OptionsFromDocumentParamsPtr params,
     int32_t request_id) {
+  if (request_id == -1)
+    return;
   handler_->SendPrintPresetOptions(params->is_scaling_disabled, params->copies,
                                    params->duplex, request_id);
 }
@@ -834,6 +793,8 @@ void PrintPreviewUI::SetOptionsFromDocument(
 void PrintPreviewUI::PrintPreviewFailed(int32_t document_cookie,
                                         int32_t request_id) {
   StopWorker(document_cookie);
+  if (request_id == -1)
+    return;
   OnPrintPreviewFailed(request_id);
 }
 
@@ -841,12 +802,16 @@ void PrintPreviewUI::PrintPreviewCancelled(int32_t document_cookie,
                                            int32_t request_id) {
   // Always need to stop the worker.
   StopWorker(document_cookie);
+  if (request_id == -1)
+    return;
   handler_->OnPrintPreviewCancelled(request_id);
 }
 
 void PrintPreviewUI::PrinterSettingsInvalid(int32_t document_cookie,
                                             int32_t request_id) {
   StopWorker(document_cookie);
+  if (request_id == -1)
+    return;
   handler_->OnInvalidPrinterSettings(request_id);
 }
 

@@ -2,8 +2,6 @@
 
 update_target("//chrome/renderer:renderer") {
   sources += [
-    "//vivaldi/renderer/vivaldi_render_view_observer.cc",
-    "//vivaldi/renderer/vivaldi_render_view_observer.h",
     "//vivaldi/renderer/vivaldi_render_frame_observer.cc",
     "//vivaldi/renderer/vivaldi_render_frame_observer.h",
     "//vivaldi/renderer/vivaldi_spatial_navigation.cc",
@@ -11,7 +9,7 @@ update_target("//chrome/renderer:renderer") {
   ]
 }
 
-update_template_instance("//third_party/blink/renderer/core/layout:layout") {
+update_template_instance("//third_party/blink/renderer/core:core") {
   sources += [
     "//vivaldi/renderer/vivaldi_snapshot_page.cc",
     "//vivaldi/renderer/vivaldi_snapshot_page.h",

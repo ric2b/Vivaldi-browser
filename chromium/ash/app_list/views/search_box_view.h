@@ -50,7 +50,6 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
 
   // Overridden from SearchBoxViewBase:
   void ClearSearch() override;
-  views::View* GetSelectedViewInContentsView() override;
   void HandleSearchBoxEvent(ui::LocatedEvent* located_event) override;
   void ModelChanged() override;
   void UpdateKeyboardVisibility() override;
@@ -61,6 +60,7 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
   void SetupCloseButton() override;
   void SetupBackButton() override;
   void RecordSearchBoxActivationHistogram(ui::EventType event_type) override;
+  void OnSearchBoxActiveChanged(bool active) override;
 
   // Overridden from views::View:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -68,9 +68,6 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
   const char* GetClassName() const override;
-
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // Updates the search box's background corner radius and color based on the
   // state of AppListModel.
@@ -111,6 +108,10 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
   }
   ContentsView* contents_view() { return contents_view_; }
 
+  void set_a11y_selection_on_search_result(bool value) {
+    a11y_selection_on_search_result_ = value;
+  }
+
   void set_highlight_range_for_test(const gfx::Range& range) {
     highlight_range_ = range;
   }
@@ -134,6 +135,7 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
   void SetAutocompleteText(const base::string16& autocomplete_text);
 
   // Overridden from views::TextfieldController:
+  void OnBeforeUserAction(views::Textfield* sender) override;
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
   bool HandleKeyEvent(views::Textfield* sender,
@@ -176,9 +178,12 @@ class APP_LIST_EXPORT SearchBoxView : public SearchBoxViewBase,
   // True if app list search autocomplete is enabled.
   const bool is_app_list_search_autocomplete_enabled_;
 
-
   // Whether tablet mode is active.
   bool is_tablet_mode_ = false;
+
+  // Set by SearchResultPageView when the accessibility selection moves to a
+  // search result view.
+  bool a11y_selection_on_search_result_ = false;
 
   base::WeakPtrFactory<SearchBoxView> weak_ptr_factory_{this};
 

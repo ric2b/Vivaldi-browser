@@ -197,6 +197,13 @@ Widget* Widget::CreateWindowWithParent(WidgetDelegate* delegate,
   return new Widget(std::move(params));
 }
 
+Widget* Widget::CreateWindowWithParent(std::unique_ptr<WidgetDelegate> delegate,
+                                       gfx::NativeView parent,
+                                       const gfx::Rect& bounds) {
+  DCHECK(delegate->owned_by_widget());
+  return CreateWindowWithParent(delegate.release(), parent, bounds);
+}
+
 // static
 Widget* Widget::CreateWindowWithContext(WidgetDelegate* delegate,
                                         gfx::NativeWindow context,
@@ -206,6 +213,15 @@ Widget* Widget::CreateWindowWithContext(WidgetDelegate* delegate,
   params.context = context;
   params.bounds = bounds;
   return new Widget(std::move(params));
+}
+
+// static
+Widget* Widget::CreateWindowWithContext(
+    std::unique_ptr<WidgetDelegate> delegate,
+    gfx::NativeWindow context,
+    const gfx::Rect& bounds) {
+  DCHECK(delegate->owned_by_widget());
+  return CreateWindowWithContext(delegate.release(), context, bounds);
 }
 
 // static
@@ -282,11 +298,13 @@ bool Widget::RequiresNonClientView(InitParams::Type type) {
 void Widget::Init(InitParams params) {
   TRACE_EVENT0("views", "Widget::Init");
 
-  // If an internal name was not provided the class name of the contents view
-  // is a reasonable default.
-  if (params.name.empty() && params.delegate &&
-      params.delegate->GetContentsView())
-    params.name = params.delegate->GetContentsView()->GetClassName();
+  if (params.name.empty() && params.delegate) {
+    params.name = params.delegate->internal_name();
+    // If an internal name was not provided the class name of the contents view
+    // is a reasonable default.
+    if (params.name.empty() && params.delegate->GetContentsView())
+      params.name = params.delegate->GetContentsView()->GetClassName();
+  }
 
   parent_ = params.parent ? GetWidgetForNativeView(params.parent) : nullptr;
 

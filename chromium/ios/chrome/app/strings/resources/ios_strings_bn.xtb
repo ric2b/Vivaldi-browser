@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">প্রিন্ট ব্যর্থ হয়েছে।</translation>
 <translation id="1125564390852150847">নতুন ট্যাব তৈরি করুন।</translation>
 <translation id="1145536944570833626">বিদ্যমান ডেটা মুছুন।</translation>
+<translation id="1147031633655575115"><ph name="USER" /> হিসেবে সাইন-ইন করেছেন</translation>
 <translation id="1154690515305205900">হাইলাইট করা টেক্সটের লিঙ্ক তৈরি করা যায়নি।</translation>
+<translation id="1157749421655780457">লোকেশন অ্যাক্সেস করার অনুমতি দিন...</translation>
 <translation id="1165039591588034296">ত্রুটি</translation>
 <translation id="1172898394251786223">পরবর্তী ফিল্ড</translation>
 <translation id="1176932207622159128">ছবি সেভ করা যায়নি</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">পাসওয়ার্ড লুকান</translation>
 <translation id="145015347812617860"><ph name="COUNT" />টি আইটেম</translation>
 <translation id="1491277525950327607">সেটিং টগল করতে দুবার আলতো চাপুন</translation>
+<translation id="1492417797159476138">আপনি আগেই এই সাইটের জন্য ইউজারনেমটি সেভ করেছেন</translation>
 <translation id="1509486075633541495">ওয়েবসাইটে সাইন-ইন করুন</translation>
 <translation id="1509960214886564027">একাধিক সাইটের ফিচারগুলি কাজ নাও করতে পারে</translation>
 <translation id="152234381334907219">কখনও সংরক্ষিত হয়নি</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">ফিরুন</translation>
 <translation id="3892144330757387737">আপনি এখানে আপনার ইতিহাস দেখতে পাবেন</translation>
 <translation id="3897092660631435901">মেনু</translation>
+<translation id="3913386780052199712">Chrome-এ সাইন-ইন করা হয়েছে</translation>
 <translation id="3915450441834151894">সাইটের তথ্য</translation>
 <translation id="3922310737605261887">কপি করা টেক্সট সার্চ করুন</translation>
 <translation id="3928666092801078803">আমার ডেটা একত্রিত করুন</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">নতুন ছদ্মবেশী ট্যাব খুলুন</translation>
 <translation id="4758977202923349869">এই ফ্রেমে ক্রেডিট কার্ড রাখুন</translation>
 <translation id="4775879719735953715">ডিফল্ট ব্রাউজার</translation>
+<translation id="4778644898150334464">অন্য পাসওয়ার্ড ব্যবহার করুন</translation>
 <translation id="4802417911091824046">পাসফ্রেজ এনক্রিপশনে Google Pay-এর পেমেন্ট পদ্ধতি ও ঠিকানা অন্তর্ভুক্ত থাকে না।
 
 <ph name="BEGIN_LINK" />রিসেট সিঙ্ক<ph name="END_LINK" /> থেকে এই সেটিং পরিবর্তন করুন</translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">ঠিক আছে</translation>
 <translation id="5062321486222145940">Google ড্রাইভ ইনস্টল করুন</translation>
 <translation id="5083464117946352670">ফাইলের আকার নির্ধারণ করা যাচ্ছে না।</translation>
+<translation id="5090832849094901128">এই পাসওয়ার্ডটি মুছে দিলেও, <ph name="WEBSITE" />-এ আপনার অ্যাকাউন্ট মুছে যাবে না।</translation>
 <translation id="5094827893301452931">Tweet সম্পূর্ণ হয়েছে৷</translation>
 <translation id="5118764316110575523">বন্ধ করা আছে</translation>
 <translation id="5127805178023152808">সিঙ্ক বন্ধ রয়েছে</translation>
@@ -512,6 +518,9 @@
 <translation id="6476800141292307438">পৃষ্ঠাটি <ph name="LANGUAGE" /> ভাষাতে অনুবাদ হচ্ছে। স্ক্রিনের নিচের দিকে বিকল্পগুলি দেওয়া আছে।</translation>
 <translation id="648164694371393720">যাচাইকরণের সময় সমস্যা হয়েছে</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" />টি আইটেম মোছা হয়েছে</translation>
+<translation id="6497772452874122664"><ph name="TIME" />-এর উপর ভরসা থাকলে, আপনি অন্য কোনও সাইটে সেভ করা পাসওয়ার্ড ব্যবহার করতে পারবেন।
+
+প্রতিটি সাইটের জন্য অনন্য পাসওয়ার্ড ব্যবহার করার চেষ্টা করুন।</translation>
 <translation id="651505212789431520">সিঙ্ক বাতিল করতে চান? যেকোনও সময় সেটিংস থেকে আপনি সিঙ্ক চালু করতে পারবেন।</translation>
 <translation id="6561262006871132942">বড় করে দেখুন</translation>
 <translation id="6585618849026997638">গুরুত্বপূর্ণ পৃষ্ঠার বুকমার্ক যোগ করে সহজেই সেখানে ফিরে যেতে পারবেন</translation>
@@ -554,7 +563,7 @@
 <translation id="6944369514868857500">অন্য অ্যাকাউন্ট বেছে নিন</translation>
 <translation id="6945221475159498467">নির্বাচন</translation>
 <translation id="6973630695168034713">ফোল্ডারগুলি</translation>
-<translation id="6979158407327259162">Google ড্রাইভ</translation>
+<translation id="6979158407327259162">Google Drive</translation>
 <translation id="6988572888918530647">আপনার Google অ্যাকাউন্ট ম্যানেজ করুন</translation>
 <translation id="6995899638241819463">আপনার পাসওয়ার্ড কোনও ডেটা নিরাপত্তা লঙ্ঘনের কারণে সর্বজনীনভাবে প্রকাশ হলে তা আপনাকে জানানো হবে</translation>
 <translation id="6998989275928107238">প্রাপক:</translation>
@@ -591,6 +600,7 @@
 <translation id="739941347996872055">আগের ট্যাব</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906">পড়া হয়নি এমন <ph name="UNREAD_COUNT" />টি নিবন্ধ।</translation>
+<translation id="7412027924265291969">চালিয়ে যান</translation>
 <translation id="7425346204213733349">আপনার বুকমার্ক, ইতিহাস, পাসওয়ার্ড এবং অন্যান্য সেটিংসে করা পরিবর্তন আর আপনার Google অ্যাকাউন্টের সাথে সিঙ্ক করা হবে না। অবশ্য, আপনার বিদ্যমান ডেটা আপনার Google অ্যাকাউন্টে সঞ্চিত থাকবে।</translation>
 <translation id="7435356471928173109">আপনার অ্যাডমিনিস্ট্রেটর বন্ধ করে দিয়েছে</translation>
 <translation id="7454057999980797137">রাজ্য / দেশ</translation>
@@ -601,6 +611,7 @@
 <translation id="7472734401283673885">কোম্পানির নাম:</translation>
 <translation id="7473891865547856676">না থাক</translation>
 <translation id="7481312909269577407">ফরওয়ার্ড</translation>
+<translation id="7483467499335917849">আপনার বর্তমান লোকেশন ব্যবহার করুন</translation>
 <translation id="750493650310597496">০টি নির্বাচিত</translation>
 <translation id="7514365320538308">ডাউনলোড করুন</translation>
 <translation id="7537586195939242955">দুঃখিত, এই সময়ে পাসবুকে আপনার পাস ইনস্টল করা যাবে না৷</translation>
@@ -734,6 +745,7 @@
 <translation id="9094033019050270033">পাসওয়ার্ড আপডেট করুন</translation>
 <translation id="9100610230175265781">পাসফ্রেজের প্রয়োজন</translation>
 <translation id="9107664647686727385">কোনও পাসওয়ার্ড লিক হয়েছে কিনা দেখুন</translation>
+<translation id="9137526406337347448">Google পরিসেবাসমূহ</translation>
 <translation id="9148126808321036104">আবার সাইন-ইন করুন</translation>
 <translation id="9152539721251340337">একটি QR কোড তৈরি করুন</translation>
 <translation id="9157836665414082580">ডায়ালগ রুদ্ধ করুন</translation>

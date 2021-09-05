@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/process/process_handle.h"
 #include "base/strings/pattern.h"
@@ -140,12 +140,12 @@ AccessibilityWinBrowserTest::AccessibilityWinBrowserTest() = default;
 AccessibilityWinBrowserTest::~AccessibilityWinBrowserTest() = default;
 
 std::string AccessibilityWinBrowserTest::PrintAXTree() const {
-  std::unique_ptr<AccessibilityTreeFormatter> formatter(
+  std::unique_ptr<ui::AXTreeFormatter> formatter(
       AccessibilityTreeFormatter::Create());
   DCHECK(formatter);
   formatter->set_show_ids(true);
-  formatter->SetPropertyFilters({AccessibilityTreeFormatter::PropertyFilter(
-      "*", AccessibilityTreeFormatter::PropertyFilter::ALLOW)});
+  formatter->SetPropertyFilters(
+      {ui::AXPropertyFilter("*", ui::AXPropertyFilter::ALLOW)});
 
   std::string str;
   formatter->FormatAccessibilityTreeForTesting(
@@ -469,15 +469,14 @@ BrowserAccessibility* AccessibilityWinBrowserTest::FindNodeInSubtree(
     const std::string& name_or_value) {
   const std::string& name =
       node.GetStringAttribute(ax::mojom::StringAttribute::kName);
-  // Note that in the case of a text field, "BrowserAccessibility::GetValue" has
-  // the added functionality of computing the value of an ARIA text box from its
-  // inner text.
+  // Note that in the case of a text field,
+  // "BrowserAccessibility::GetValueForControl" has the added functionality of
+  // computing the value of an ARIA text box from its inner text.
   //
   // <div contenteditable="true" role="textbox">Hello world.</div>
   // Will expose no HTML value attribute, but some screen readers, such as Jaws,
   // VoiceOver and Talkback, require one to be computed.
-  const std::string& value =
-      node.GetStringAttribute(ax::mojom::StringAttribute::kValue);
+  const std::string value = base::UTF16ToUTF8(node.GetValueForControl());
   if (node.GetRole() == role &&
       (name == name_or_value || value == name_or_value)) {
     return &node;
@@ -2484,7 +2483,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   base::win::ScopedBstr new_value(L"New value");
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(), ui::kAXModeComplete,
-      ui::AXEventGenerator::Event::VALUE_CHANGED);
+      ui::AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED);
   EXPECT_HRESULT_SUCCEEDED(input->put_accValue(childid_self, new_value.Get()));
   waiter.WaitForNotification();
 
@@ -4190,9 +4189,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIAccessibleAction) {
   image_name.Release();
   // Cllicking the image will change its name.
   EXPECT_HRESULT_SUCCEEDED(image_action->doAction(0));
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ax::mojom::Event::kTextChanged);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::NAME_CHANGED);
   waiter.WaitForNotification();
   EXPECT_HRESULT_SUCCEEDED(
       image->get_accName(childid_self, image_name.Receive()));
@@ -4430,7 +4429,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
   // center of the window.
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kScrollPositionChanged);
+      ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED);
   ASSERT_HRESULT_SUCCEEDED(target->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
   waiter.WaitForNotification();
 
@@ -4448,7 +4447,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
   // center of the window.
   AccessibilityNotificationWaiter waiter2(
       shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kScrollPositionChanged);
+      ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED);
   ASSERT_HRESULT_SUCCEEDED(target2->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
   waiter2.WaitForNotification();
 
@@ -4480,10 +4479,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   main_frame->ExecuteJavaScriptWithUserGestureForTests(L"");
 
   // Trigger a reload here, which will get cancelled.
+  AppModalDialogWaiter dialog_waiter(shell());
   shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
 
   // Wait for the dialog to be triggered and then get cancelled.
-  WaitForAppModalDialog(shell());
+  dialog_waiter.Wait();
 
   // Now set up a listener for native Windows accessibility events.
   // The bug here was that when a page is being reloaded or navigated
@@ -4595,7 +4595,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIScrollProvider) {
 
         AccessibilityNotificationWaiter waiter(
             shell()->web_contents(), ui::kAXModeComplete,
-            ax::mojom::Event::kScrollPositionChanged);
+            ui::AXEventGenerator::Event::SCROLL_HORIZONTAL_POSITION_CHANGED);
 
         EXPECT_HRESULT_SUCCEEDED(scroll_provider->Scroll(
             ScrollAmount_SmallIncrement, ScrollAmount_NoAmount));
@@ -4608,7 +4608,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIScrollProvider) {
 
         AccessibilityNotificationWaiter waiter2(
             shell()->web_contents(), ui::kAXModeComplete,
-            ax::mojom::Event::kScrollPositionChanged);
+            ui::AXEventGenerator::Event::SCROLL_HORIZONTAL_POSITION_CHANGED);
 
         EXPECT_HRESULT_SUCCEEDED(scroll_provider->SetScrollPercent(0.0, 0.0));
         waiter2.WaitForNotification();
@@ -4635,7 +4635,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIScrollProvider) {
 
         AccessibilityNotificationWaiter waiter(
             shell()->web_contents(), ui::kAXModeComplete,
-            ax::mojom::Event::kScrollPositionChanged);
+            ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED);
 
         EXPECT_HRESULT_SUCCEEDED(scroll_provider->Scroll(
             ScrollAmount_NoAmount, ScrollAmount_SmallIncrement));
@@ -4648,7 +4648,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIScrollProvider) {
 
         AccessibilityNotificationWaiter waiter2(
             shell()->web_contents(), ui::kAXModeComplete,
-            ax::mojom::Event::kScrollPositionChanged);
+            ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED);
 
         EXPECT_HRESULT_SUCCEEDED(scroll_provider->SetScrollPercent(0.0, 0.0));
         waiter2.WaitForNotification();
@@ -5279,7 +5279,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetCurrentValue) {
   // Call setCurrentValue on the slider, wait for the value changed event.
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(), ui::kAXModeComplete,
-      ui::AXEventGenerator::Event::VALUE_CHANGED);
+      ui::AXEventGenerator::Event::RANGE_VALUE_CHANGED);
   base::win::ScopedVariant new_value(5.0);
   ASSERT_HRESULT_SUCCEEDED(slider_iavalue->setCurrentValue(new_value));
   waiter.WaitForNotification();

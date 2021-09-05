@@ -4,8 +4,10 @@
 
 #include <memory>
 
+#include "base/files/file_util.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service.h"
@@ -31,10 +33,10 @@
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/policy_constants.h"
 #include "components/version_info/channel.h"
@@ -71,6 +73,7 @@
 #include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/extensions/updater/local_extension_cache.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
@@ -169,6 +172,14 @@ void RegisterURLReplacingHandler(net::EmbeddedTestServer* test_server,
 }
 
 class ExtensionPolicyTest : public PolicyTest {
+ public:
+  ExtensionPolicyTest() {
+#if defined(OS_CHROMEOS)
+    scoped_feature_list_.InitAndDisableFeature(
+        chromeos::features::kCameraSystemWebApp);
+#endif  // defined(OS_CHROMEOS)
+  }
+
  protected:
   void SetUp() override {
     // Set default verification mode for content verifier to be enabled.
@@ -189,9 +200,8 @@ class ExtensionPolicyTest : public PolicyTest {
           test_extension_cache_.get());
     }
 
-    web_app::WebAppProviderBase::GetProviderBase(browser()->profile())
-        ->os_integration_manager()
-        .SuppressOsHooksForTesting();
+    os_hooks_suppress_ =
+        web_app::OsIntegrationManager::ScopedSuppressOsHooksForTesting();
   }
 
   extensions::ExtensionCacheFake* extension_cache() {
@@ -371,6 +381,11 @@ class ExtensionPolicyTest : public PolicyTest {
       ignore_content_verifier_;
   extensions::ExtensionUpdater::ScopedSkipScheduledCheckForTest
       skip_scheduled_extension_checks_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  web_app::ScopedOsHooksSuppress os_hooks_suppress_;
 };
 
 }  // namespace
@@ -2157,8 +2172,8 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
     base::RunLoop run_loop;
     profile_manager->CreateProfileAsync(
         path_profile,
-        base::Bind(&policy::OnProfileInitialized, &profile,
-                   run_loop.QuitClosure()),
+        base::BindRepeating(&policy::OnProfileInitialized, &profile,
+                            run_loop.QuitClosure()),
         base::string16(), std::string());
 
     // Run the message loop to allow profile creation to take place; the loop is

@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/accessibility/accessibility_ui.h"
-#include "chrome/browser/browser_features.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
@@ -24,8 +23,8 @@
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/suggestions/suggestions_ui.h"
+#include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/autofill_and_password_manager_internals/autofill_internals_ui.h"
 #include "chrome/browser/ui/webui/autofill_and_password_manager_internals/password_manager_internals_ui.h"
@@ -86,9 +85,11 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/prefs/pref_service.h"
+#include "components/reading_list/features/reading_list_switches.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/web_ui/constants.h"
+#include "components/search/ntp_features.h"
 #include "components/security_interstitials/content/connection_help_ui.h"
 #include "components/security_interstitials/content/known_interception_disclosure_ui.h"
 #include "components/security_interstitials/content/urls.h"
@@ -120,12 +121,12 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/explore_sites_internals/explore_sites_internals_ui.h"
+#include "chrome/browser/ui/webui/feed_internals/feed_internals_ui.h"
 #include "chrome/browser/ui/webui/offline/offline_internals_ui.h"
 #include "chrome/browser/ui/webui/webapks_ui.h"
 #include "components/feed/buildflags.h"
 #include "components/feed/feed_feature_list.h"
-#include "chrome/browser/ui/webui/feed_internals/feed_internals_ui.h"
-#else   // defined(OS_ANDROID)
+#else  // defined(OS_ANDROID)
 #include "chrome/browser/media/feeds/media_feeds_service.h"
 #include "chrome/browser/media/kaleidoscope/constants.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_ui.h"
@@ -153,20 +154,26 @@
 
 #if defined(OS_CHROMEOS)
 #include "base/system/sys_info.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service_factory.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_service_factory.h"
+#include "chrome/browser/chromeos/net/network_health/network_health_service.h"
 #include "chrome/browser/chromeos/printing/print_management/printing_manager.h"
 #include "chrome/browser/chromeos/printing/print_management/printing_manager_factory.h"
 #include "chrome/browser/chromeos/scanning/scan_service.h"
 #include "chrome/browser/chromeos/scanning/scan_service_factory.h"
+#include "chrome/browser/chromeos/scanning/scanning_paths_provider_impl.h"
 #include "chrome/browser/chromeos/secure_channel/secure_channel_client_provider.h"
 #include "chrome/browser/chromeos/web_applications/chrome_camera_app_ui_delegate.h"
 #include "chrome/browser/chromeos/web_applications/chrome_help_app_ui_delegate.h"
 #include "chrome/browser/chromeos/web_applications/chrome_media_app_ui_delegate.h"
+#include "chrome/browser/feedback/feedback_dialog_utils.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/ui/webui/chromeos/add_supervision/add_supervision_ui.h"
 #include "chrome/browser/ui/webui/chromeos/arc_graphics_tracing/arc_graphics_tracing_ui.h"
+#include "chrome/browser/ui/webui/chromeos/arc_power_control/arc_power_control_ui.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/assistant_optin_ui.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/cellular_setup/cellular_setup_dialog.h"
@@ -196,6 +203,8 @@
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_ui.h"
 #include "chromeos/components/camera_app_ui/camera_app_ui.h"
 #include "chromeos/components/camera_app_ui/url_constants.h"
+#include "chromeos/components/connectivity_diagnostics/connectivity_diagnostics_ui.h"
+#include "chromeos/components/connectivity_diagnostics/url_constants.h"
 #include "chromeos/components/diagnostics_ui/diagnostics_ui.h"
 #include "chromeos/components/diagnostics_ui/url_constants.h"
 #include "chromeos/components/help_app_ui/help_app_ui.h"
@@ -213,10 +222,12 @@
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #endif
 
 #if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
+#include "chrome/browser/chromeos/web_applications/chrome_file_manager_ui_delegate.h"
 #include "chrome/browser/ui/webui/chromeos/emulator/device_emulator_ui.h"
 #include "chromeos/components/file_manager/file_manager_ui.h"
 #include "chromeos/components/file_manager/url_constants.h"
@@ -230,9 +241,14 @@
 #include "chrome/browser/ui/webui/app_launcher_page_ui.h"
 #endif
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#include "chrome/browser/ui/webui/webui_js_exception/webui_js_exception_ui.h"
+#endif
+
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/ui/webui/browser_switch/browser_switch_ui.h"
+#include "chrome/browser/ui/webui/signin/profile_customization_ui.h"
 #include "chrome/browser/ui/webui/signin/profile_picker_ui.h"
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_ui.h"
 #include "chrome/browser/ui/webui/signin/signin_error_ui.h"
@@ -258,10 +274,6 @@
 
 #if defined(USE_NSS_CERTS) && defined(USE_AURA)
 #include "chrome/browser/ui/webui/certificate_viewer_ui.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
-#include "chrome/browser/ui/webui/local_discovery/local_discovery_ui.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -336,6 +348,16 @@ WebUIController* NewWebUI<chromeos::CameraAppUI>(WebUI* web_ui,
   return new chromeos::CameraAppUI(web_ui, std::move(delegate));
 }
 
+#if !defined(OFFICIAL_BUILD)
+template <>
+WebUIController* NewWebUI<chromeos::file_manager::FileManagerUI>(
+    WebUI* web_ui,
+    const GURL& url) {
+  auto delegate = std::make_unique<ChromeFileManagerUIDelegate>();
+  return new chromeos::file_manager::FileManagerUI(web_ui, std::move(delegate));
+}
+#endif  // !defined(OFFICIAL_BUILD)
+
 template <>
 WebUIController* NewWebUI<chromeos::HelpAppUI>(WebUI* web_ui, const GURL& url) {
   auto delegate = std::make_unique<ChromeHelpAppUIDelegate>(web_ui);
@@ -381,12 +403,18 @@ void BindScanService(
     service->BindInterface(std::move(pending_receiver));
 }
 
+std::unique_ptr<ui::SelectFilePolicy> CreateChromeSelectFilePolicy(
+    content::WebContents* web_contents) {
+  return std::make_unique<ChromeSelectFilePolicy>(web_contents);
+}
+
 template <>
 WebUIController* NewWebUI<chromeos::ScanningUI>(WebUI* web_ui,
                                                 const GURL& url) {
   return new chromeos::ScanningUI(
-      web_ui,
-      base::BindRepeating(&BindScanService, Profile::FromWebUI(web_ui)));
+      web_ui, base::BindRepeating(&BindScanService, Profile::FromWebUI(web_ui)),
+      base::BindRepeating(&CreateChromeSelectFilePolicy),
+      std::make_unique<chromeos::ScanningPathsProviderImpl>());
 }
 
 void BindMultiDeviceSetup(
@@ -413,6 +441,26 @@ WebUIController* NewWebUI<chromeos::multidevice::ProximityAuthUI>(
       chromeos::secure_channel::SecureChannelClientProvider::GetInstance()
           ->GetClient(),
       base::BindRepeating(&BindMultiDeviceSetup, Profile::FromWebUI(web_ui)));
+}
+
+template <>
+WebUIController* NewWebUI<chromeos::ConnectivityDiagnosticsUI>(
+    WebUI* web_ui,
+    const GURL& url) {
+  return new chromeos::ConnectivityDiagnosticsUI(
+      web_ui,
+      /* BindNetworkDiagnosticsServiceCallback */
+      base::BindRepeating(
+          [](mojo::PendingReceiver<
+              chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+                 receiver) {
+            chromeos::network_health::NetworkHealthService::GetInstance()
+                ->BindDiagnosticsReceiver(std::move(receiver));
+          }),
+      /* SendFeedbackReportCallback */
+      base::BindRepeating(
+          &chrome::ShowFeedbackDialogForWebUI,
+          chrome::WebUIFeedbackSource::kConnectivityDiagnostics));
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -574,7 +622,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<NewTabUI>;
   if (url.host_piece() == chrome::kChromeUINewTabPageHost)
     return &NewWebUI<NewTabPageUI>;
-  if (base::FeatureList::IsEnabled(features::kReadLater)) {
+  if (base::FeatureList::IsEnabled(reading_list::switches::kReadLater)) {
     if (url.host_piece() == chrome::kChromeUIReadLaterHost)
       return &NewWebUI<ReadLaterUI>;
   }
@@ -639,16 +687,19 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::AccountManagerWelcomeUI>;
   if (url.host_piece() == chrome::kChromeUIAccountMigrationWelcomeHost)
     return &NewWebUI<chromeos::AccountMigrationWelcomeUI>;
-  if (chromeos::features::IsParentalControlsSettingsEnabled()) {
-    if (url.host_piece() == chrome::kChromeUIAddSupervisionHost)
-      return &NewWebUI<chromeos::AddSupervisionUI>;
-  }
+  if (url.host_piece() == chrome::kChromeUIAddSupervisionHost)
+    return &NewWebUI<chromeos::AddSupervisionUI>;
   if (url.host_piece() == chrome::kChromeUIBluetoothPairingHost)
     return &NewWebUI<chromeos::BluetoothPairingDialogUI>;
   if (url.host_piece() == chrome::kChromeUICellularSetupHost)
     return &NewWebUI<chromeos::cellular_setup::CellularSetupDialogUI>;
   if (url.host_piece() == chrome::kChromeUICertificateManagerHost)
     return &NewWebUI<chromeos::CertificateManagerDialogUI>;
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kConnectivityDiagnosticsWebUi) &&
+      url.host_piece() == chromeos::kChromeUIConnectivityDiagnosticsHost) {
+    return &NewWebUI<chromeos::ConnectivityDiagnosticsUI>;
+  }
   if (url.host_piece() == chrome::kChromeUICrostiniInstallerHost)
     return &NewWebUI<chromeos::CrostiniInstallerUI>;
   if (chromeos::CrostiniUpgraderUI::IsEnabled() &&
@@ -727,16 +778,21 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
           web_app::SystemAppType::CAMERA)) {
     return &NewWebUI<chromeos::CameraAppUI>;
   }
-  if (base::FeatureList::IsEnabled(features::kNearbySharing)) {
-    if (url.host_piece() == chrome::kChromeUINearbyInternalsHost)
-      return &NewWebUI<NearbyInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUINearbyInternalsHost)
+    return &NewWebUI<NearbyInternalsUI>;
+  if (arc::IsArcAllowedForProfile(profile)) {
+    if (url.host_piece() == chrome::kChromeUIArcGraphicsTracingHost) {
+      return &NewWebUI<chromeos::ArcGraphicsTracingUI<
+          chromeos::ArcGraphicsTracingMode::kFull>>;
+    }
+    if (url.host_piece() == chrome::kChromeUIArcOverviewTracingHost) {
+      return &NewWebUI<chromeos::ArcGraphicsTracingUI<
+          chromeos::ArcGraphicsTracingMode::kOverview>>;
+    }
+    if (url.host_piece() == chrome::kChromeUIArcPowerControlHost) {
+      return &NewWebUI<chromeos::ArcPowerControlUI>;
+    }
   }
-  if (url.host_piece() == chrome::kChromeUIArcGraphicsTracingHost)
-    return &NewWebUI<chromeos::ArcGraphicsTracingUI<
-        chromeos::ArcGraphicsTracingMode::kFull>>;
-  if (url.host_piece() == chrome::kChromeUIArcOverviewTracingHost)
-    return &NewWebUI<chromeos::ArcGraphicsTracingUI<
-        chromeos::ArcGraphicsTracingMode::kOverview>>;
 
 #if !defined(OFFICIAL_BUILD)
 #if !defined(USE_REAL_DBUS_CLIENTS)
@@ -756,6 +812,10 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   }
 #endif  // !defined(OFFICIAL_BUILD)
 #endif  // defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  if (url.host_piece() == chrome::kChromeUIWebUIJsExceptionHost)
+    return &NewWebUI<WebUIJsExceptionUI>;
+#endif
 #if defined(OS_ANDROID)
   if (url.host_piece() == chrome::kChromeUIExploreSitesInternalsHost &&
       !profile->IsOffTheRecord())
@@ -789,14 +849,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   }
 #endif  // defined(OS_ANDROID)
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-  if (url.host_piece() == chrome::kChromeUIProfilePickerHost) {
+  if (url.host_piece() == chrome::kChromeUIProfileCustomizationHost)
+    return &NewWebUI<ProfileCustomizationUI>;
+  if (url.host_piece() == chrome::kChromeUIProfilePickerHost)
     return &NewWebUI<ProfilePickerUI>;
-  }
   if (url.host_piece() == chrome::kChromeUIMdUserManagerHost)
     return &NewWebUI<UserManagerUI>;
   if (url.host_piece() == chrome::kChromeUISigninErrorHost &&
-      (!profile->IsOffTheRecord() ||
-       profile->GetOriginalProfile()->IsSystemProfile()))
+      (!profile->IsOffTheRecord() || profile->IsSystemProfile()))
     return &NewWebUI<SigninErrorUI>;
   if (url.host_piece() == chrome::kChromeUISigninEmailConfirmationHost &&
       !profile->IsOffTheRecord())
@@ -847,11 +907,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     if (url.path() == "/pdf/index.html")
       return nullptr;
     return &NewWebUI<printing::PrintPreviewUI>;
-  }
-#endif
-#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
-  if (url.host_piece() == chrome::kChromeUIDevicesHost) {
-    return &NewWebUI<LocalDiscoveryUI>;
   }
 #endif
 

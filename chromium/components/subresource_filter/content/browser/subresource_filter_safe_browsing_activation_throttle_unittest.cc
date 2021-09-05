@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -94,6 +94,7 @@ class MockSubresourceFilterClient : public SubresourceFilterClient {
   MOCK_METHOD0(
       GetSafeBrowsingDatabaseManager,
       const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>());
+  MOCK_METHOD0(OnReloadRequested, void());
 
   void AllowlistInCurrentWebContents(const GURL& url) {
     ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
@@ -167,11 +168,13 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
                                               base::DoNothing());
 
     auto* contents = RenderViewHostTestHarness::web_contents();
-    client_ =
+    auto subresource_filter_client =
         std::make_unique<::testing::NiceMock<MockSubresourceFilterClient>>();
+    client_ = subresource_filter_client.get();
     throttle_manager_ =
         std::make_unique<ContentSubresourceFilterThrottleManager>(
-            client_.get(), ruleset_dealer_.get(), contents);
+            std::move(subresource_filter_client), ruleset_dealer_.get(),
+            contents);
     fake_safe_browsing_database_ = new FakeSafeBrowsingDatabaseManager();
     NavigateAndCommit(GURL("https://test.com"));
     Observe(contents);
@@ -331,7 +334,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
 
   const base::HistogramTester& tester() const { return tester_; }
 
-  MockSubresourceFilterClient* client() { return client_.get(); }
+  MockSubresourceFilterClient* client() { return client_; }
 
   base::TestMockTimeTaskRunner* test_io_task_runner() const {
     return test_io_task_runner_.get();
@@ -353,7 +356,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   std::unique_ptr<ContentSubresourceFilterThrottleManager> throttle_manager_;
 
   std::unique_ptr<content::NavigationSimulator> navigation_simulator_;
-  std::unique_ptr<MockSubresourceFilterClient> client_;
+  MockSubresourceFilterClient* client_;
   std::unique_ptr<TestSubresourceFilterObserver> observer_;
   scoped_refptr<FakeSafeBrowsingDatabaseManager> fake_safe_browsing_database_;
   base::HistogramTester tester_;
@@ -906,9 +909,6 @@ struct RedirectSamplesAndResults {
 
 TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
        RedirectPositionLogged) {
-  std::string histogram_string =
-      "SubresourceFilter.PageLoad.Activation.RedirectPosition2.Enforcement";
-
   // Set up the urls for enforcement.
   GURL normal_url("https://example.regular");
   GURL bad_url("https://example.bad");
@@ -941,7 +941,7 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
       {{worse_url}, true, RedirectPosition::kOnly},
   };
   for (const auto& test_case : kTestCases) {
-    const base::HistogramTester histograms;
+    ukm::TestAutoSetUkmRecorder test_ukm_recorder;
     SimulateStartAndExpectProceed(test_case.urls[0]);
     for (size_t index = 1; index < test_case.urls.size(); index++) {
       SimulateRedirectAndExpectProceed(test_case.urls[index]);
@@ -955,11 +955,20 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
       EXPECT_EQ(mojom::ActivationLevel::kDisabled,
                 *observer()->GetPageActivationForLastCommittedLoad());
     }
+    using SubresourceFilter = ukm::builders::SubresourceFilter;
+    auto entries =
+        test_ukm_recorder.GetEntriesByName(SubresourceFilter::kEntryName);
+    EXPECT_EQ(1u, entries.size());
+    const auto* entry = entries[0];
     if (test_case.last_enforcement_position.has_value()) {
-      histograms.ExpectUniqueSample(histogram_string,
-                                    *test_case.last_enforcement_position, 1);
+      test_ukm_recorder.ExpectEntryMetric(
+          entry, SubresourceFilter::kEnforcementRedirectPositionName,
+          static_cast<int64_t>(*test_case.last_enforcement_position));
     } else {
-      histograms.ExpectTotalCount(histogram_string, 0);
+      EXPECT_EQ(
+          nullptr,
+          test_ukm_recorder.GetEntryMetric(
+              entry, SubresourceFilter::kEnforcementRedirectPositionName));
     }
   }
 }

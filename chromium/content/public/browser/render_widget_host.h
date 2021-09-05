@@ -121,7 +121,7 @@ class RenderWidgetHostView;
 // messages for select popups. This placement is more out of convenience than
 // anything else. When the view is live, these messages are forwarded to it by
 // the RenderWidgetHost's IPC message map.
-class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
+class CONTENT_EXPORT RenderWidgetHost {
  public:
   // Returns the RenderWidgetHost given its ID and the ID of its render process.
   // Returns nullptr if the IDs do not correspond to a live RenderWidgetHost.
@@ -131,7 +131,7 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // hosts.
   static std::unique_ptr<RenderWidgetHostIterator> GetRenderWidgetHosts();
 
-  ~RenderWidgetHost() override {}
+  virtual ~RenderWidgetHost() {}
 
   // Returns the viz::FrameSinkId that this object uses to put things on screen.
   // This value is constant throughout the lifetime of this object. Note that
@@ -331,6 +331,15 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // Shows the context menu using the specified point as anchor point.
   virtual void ShowContextMenuAtPoint(const gfx::Point& point,
                                       const ui::MenuSourceType source_type) {}
+
+  // Roundtrips through the renderer and compositor pipeline to ensure that any
+  // changes to the contents resulting from operations executed prior to this
+  // call are visible on screen. The call completes asynchronously (if it
+  // succeeds) by running the supplied |callback| with a value of true upon
+  // successful completion and false otherwise when the widget is destroyed.
+  // This can run synchronously on failure.
+  using VisualStateCallback = base::OnceCallback<void(bool)>;
+  virtual void InsertVisualStateCallback(VisualStateCallback callback) {}
 };
 
 }  // namespace content

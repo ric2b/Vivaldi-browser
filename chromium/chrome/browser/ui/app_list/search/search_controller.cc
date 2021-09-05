@@ -29,14 +29,14 @@
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/search_result_ranker.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/prefs/pref_service.h"
 
 namespace app_list {
 
 namespace {
 
-constexpr char kLogDisplayTypeClickedResultZeroState[] =
-    "Apps.LogDisplayTypeClickedResultZeroState";
 constexpr char kLauncherSearchQueryLengthJumped[] =
     "Apps.LauncherSearchQueryLengthJumped";
 
@@ -116,13 +116,6 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
   // Log the length of the last query that led to the clicked result.
   ash::RecordLauncherClickedSearchQueryLength(last_query_.length());
 
-  // Log the display type of the clicked result in zero-state
-  if (query_for_recommendation_) {
-    UMA_HISTOGRAM_ENUMERATION(kLogDisplayTypeClickedResultZeroState,
-                              result->display_type(),
-                              ash::SearchResultDisplayType::kLast);
-  }
-
   const bool dismiss_view_on_open = result->dismiss_view_on_open();
 
   // Open() may cause |result| to be deleted.
@@ -137,10 +130,9 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
 }
 
 void SearchController::InvokeResultAction(ChromeSearchResult* result,
-                                          int action_index,
-                                          int event_flags) {
+                                          int action_index) {
   // TODO(xiyuan): Hook up with user learning.
-  result->InvokeAction(action_index, event_flags);
+  result->InvokeAction(action_index);
 }
 
 size_t SearchController::AddGroup(size_t max_results) {
@@ -254,6 +246,9 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
           RemoveAppShortcutLabel(NormalizeId(app_launch_data.id));
     }
   }
+
+  profile_->GetPrefs()->SetBoolean(chromeos::prefs::kLauncherResultEverLaunched,
+                                   true);
 
   // CrOS action recorder.
   CrOSActionRecorder::GetCrosActionRecorder()->RecordAction(

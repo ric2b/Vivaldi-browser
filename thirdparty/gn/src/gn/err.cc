@@ -168,9 +168,17 @@ void Err::InternalPrintToStdout(bool is_sub_err, bool is_fatal) const {
       loc_str.insert(0, "See ");
     else
       loc_str.insert(0, "at ");
-    loc_str.append(": ");
+    if (!toolchain_label_.is_null())
+      loc_str += " ";
   }
-  OutputString(loc_str + message_ + "\n");
+  std::string toolchain_str;
+  if (!toolchain_label_.is_null()) {
+    toolchain_str += "(" + toolchain_label_.GetUserVisibleName(false) + ")";
+  }
+  std::string colon;
+  if (!loc_str.empty() || !toolchain_str.empty())
+    colon = ": ";
+  OutputString(loc_str + toolchain_str + colon + message_ + "\n");
 
   // Quoted line.
   if (input_file) {

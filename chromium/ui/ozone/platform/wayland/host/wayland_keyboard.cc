@@ -16,7 +16,6 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
-#include "ui/events/ozone/evdev/keyboard_util_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/types/event_type.h"
@@ -45,11 +44,7 @@ WaylandKeyboard::WaylandKeyboard(
       connection_(connection),
       delegate_(delegate),
       auto_repeat_handler_(this),
-#if BUILDFLAG(USE_XKBCOMMON)
-      layout_engine_(static_cast<XkbKeyboardLayoutEngine*>(layout_engine)) {
-#else
-      layout_engine_(layout_engine) {
-#endif
+      layout_engine_(static_cast<LayoutEngine*>(layout_engine)) {
   static const wl_keyboard_listener listener = {
       &WaylandKeyboard::Keymap,    &WaylandKeyboard::Enter,
       &WaylandKeyboard::Leave,     &WaylandKeyboard::Key,
@@ -193,8 +188,7 @@ void WaylandKeyboard::DispatchKey(uint32_t key,
                                   base::TimeTicks timestamp,
                                   int device_id,
                                   int flags) {
-  DomCode dom_code =
-      KeycodeConverter::NativeKeycodeToDomCode(EvdevCodeToNativeCode(key));
+  DomCode dom_code = KeycodeConverter::EvdevCodeToDomCode(key);
   if (dom_code == ui::DomCode::NONE)
     return;
 

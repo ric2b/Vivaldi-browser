@@ -22,10 +22,9 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
@@ -65,7 +64,6 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
@@ -80,11 +78,11 @@
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/cpp/stub_icon_loader.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/model/sync_data.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
@@ -109,6 +107,8 @@ constexpr int kFrameworkNycVersion = 25;
 constexpr int kFrameworkPiVersion = 28;
 
 constexpr size_t kMaxSimultaneousIconRequests = 250;
+
+constexpr int kDefaultIconUpdateCount = 1;
 
 class FakeAppIconLoaderDelegate : public AppIconLoaderDelegate {
  public:
@@ -303,13 +303,15 @@ void WaitForIconCreation(ArcAppListPrefs* prefs,
   } while (!base::PathExists(icon_path));
 }
 
-void WaitForIconUpdates(Profile* profile, const std::string& app_id) {
+void WaitForIconUpdates(Profile* profile,
+                        const std::string& app_id,
+                        int expected_update_count = kDefaultIconUpdateCount) {
   FakeAppIconLoaderDelegate delegate;
   AppServiceAppIconLoader icon_loader(
       profile, ash::AppListConfig::instance().grid_icon_dimension(), &delegate);
 
   icon_loader.FetchImage(app_id);
-  delegate.WaitForIconUpdates(1);
+  delegate.WaitForIconUpdates(expected_update_count);
 }
 
 void VerifyIcon(const gfx::ImageSkia& src, const gfx::ImageSkia& dst) {
@@ -341,27 +343,14 @@ enum class ArcState {
   ARC_WITHOUT_PLAY_STORE,
 };
 
-struct ArcAppModelBuilderParam {
-  const ArcState arc_state;
-  const web_app::ProviderType provider_type;
+constexpr ArcState kManagedArcStates[] = {
+    ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED,
+    ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED,
 };
 
-constexpr ArcAppModelBuilderParam kManagedArcStates[] = {
-    {ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED,
-     web_app::ProviderType::kBookmarkApps},
-    {ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED,
-     web_app::ProviderType::kBookmarkApps},
-    {ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED,
-     web_app::ProviderType::kWebApps},
-    {ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED,
-     web_app::ProviderType::kWebApps},
-};
-
-constexpr ArcAppModelBuilderParam kUnmanagedArcStates[] = {
-    {ArcState::ARC_PLAY_STORE_UNMANAGED, web_app::ProviderType::kBookmarkApps},
-    {ArcState::ARC_WITHOUT_PLAY_STORE, web_app::ProviderType::kBookmarkApps},
-    {ArcState::ARC_PLAY_STORE_UNMANAGED, web_app::ProviderType::kWebApps},
-    {ArcState::ARC_WITHOUT_PLAY_STORE, web_app::ProviderType::kWebApps},
+constexpr ArcState kUnmanagedArcStates[] = {
+    ArcState::ARC_PLAY_STORE_UNMANAGED,
+    ArcState::ARC_WITHOUT_PLAY_STORE,
 };
 
 void OnPaiStartedCallback(bool* started_flag) {
@@ -426,19 +415,10 @@ void RemoveArcApps(Profile* profile, FakeAppListModelUpdater* model_updater) {
 
 }  // namespace
 
-class ArcAppModelBuilderTest
-    : public extensions::ExtensionServiceTestBase,
-      public ::testing::WithParamInterface<ArcAppModelBuilderParam> {
+class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
+                               public ::testing::WithParamInterface<ArcState> {
  public:
-  ArcAppModelBuilderTest() {
-    if (GetProviderType() == web_app::ProviderType::kWebApps) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    } else if (GetProviderType() == web_app::ProviderType::kBookmarkApps) {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    }
-  }
+  ArcAppModelBuilderTest() = default;
   ArcAppModelBuilderTest(const ArcAppModelBuilderTest&) = delete;
   ArcAppModelBuilderTest& operator=(const ArcAppModelBuilderTest&) = delete;
   ~ArcAppModelBuilderTest() override {
@@ -476,11 +456,7 @@ class ArcAppModelBuilderTest
     extensions::ExtensionServiceTestBase::TearDown();
   }
 
-  ArcState GetArcState() const { return GetParam().arc_state; }
-
-  web_app::ProviderType GetProviderType() const {
-    return GetParam().provider_type;
-  }
+  ArcState GetArcState() const { return GetParam(); }
 
   ChromeLauncherController* CreateLauncherController() {
     launcher_controller_ = std::make_unique<ChromeLauncherController>(
@@ -828,7 +804,6 @@ class ArcAppModelBuilderTest
   FakeAppListModelUpdater* model_updater() { return model_updater_.get(); }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   ArcAppTest arc_test_;
   std::unique_ptr<FakeAppListModelUpdater> model_updater_;
   std::unique_ptr<test::TestAppListControllerDelegate> controller_;
@@ -936,7 +911,7 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
   }
 
   // Ensures that icons for the test app were updated for each scale factor.
-  void EnsureIconsUpdated() {
+  void EnsureIconsUpdated(int expected_update_count = kDefaultIconUpdateCount) {
     const arc::mojom::AppInfo app = test_app();
     const std::string app_id = ArcAppTest::GetAppId(app);
 
@@ -950,7 +925,7 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
     ASSERT_EQ(GetAppListIconDimensionForScaleFactor(ui::SCALE_FACTOR_200P),
               icon_requests[1]->dimension());
 
-    WaitForIconUpdates(profile_.get(), app_id);
+    WaitForIconUpdates(profile_.get(), app_id, expected_update_count);
   }
 
   // ArcAppListPrefs::Observer overrides.
@@ -2887,7 +2862,10 @@ TEST_P(ArcAppModelIconTest, IconInvalidationOnFrameworkUpdate) {
       CreatePackageWithVersion(kFrameworkPackageName, kFrameworkNycVersion));
   app_instance()->SendRefreshPackageList(std::move(packages));
 
-  WaitForIconUpdates(profile_.get(), app_id);
+  const std::vector<ui::ScaleFactor>& scale_factors =
+      ui::GetSupportedScaleFactors();
+  WaitForIconUpdates(profile_.get(), app_id,
+                     scale_factors.size() + kDefaultIconUpdateCount);
 
   RestartArc();
 
@@ -2913,7 +2891,7 @@ TEST_P(ArcAppModelIconTest, IconInvalidationOnFrameworkUpdate) {
   app_instance()->SendRefreshPackageList(std::move(packages));
 
   EXPECT_FALSE(app_instance()->icon_requests().empty());
-  EnsureIconsUpdated();
+  EnsureIconsUpdated(scale_factors.size() + kDefaultIconUpdateCount);
 }
 
 // This verifies that app icons are invalidated in case icon version was
@@ -3231,8 +3209,9 @@ TEST_P(ArcAppModelBuilderTest, DontRemoveRuntimeAppOnPackageChange) {
 }
 
 TEST_P(ArcAppModelBuilderTest, PackageSyncableServiceEnabled) {
-  EXPECT_TRUE(ProfileSyncServiceFactory::GetForProfile(profile_.get())
-                  ->GetRegisteredDataTypes()
+  EXPECT_TRUE(ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
+                  profile_.get())
+                  ->GetRegisteredDataTypesForTest()
                   .Has(syncer::ARC_PACKAGE));
 }
 
@@ -3240,8 +3219,9 @@ TEST_P(ArcAppModelBuilderTest, PackageSyncableServiceDisabled) {
   base::test::ScopedCommandLine command_line;
   command_line.GetProcessCommandLine()->AppendSwitch(
       chromeos::switches::kArcDisableAppSync);
-  EXPECT_FALSE(ProfileSyncServiceFactory::GetForProfile(profile_.get())
-                   ->GetRegisteredDataTypes()
+  EXPECT_FALSE(ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
+                   profile_.get())
+                   ->GetRegisteredDataTypesForTest()
                    .Has(syncer::ARC_PACKAGE));
 }
 

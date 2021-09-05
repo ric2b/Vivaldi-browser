@@ -298,8 +298,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
         if (child.item->type == vivaldi::menubar_menu::ITEM_TYPE_CHECKBOX) {
           menu_model->AddCheckItem(id, label);
           id_to_checked_map_[id] = child.item->checked && *child.item->checked;
-        } else if (child.item->type ==
-                   vivaldi::menubar_menu::ITEM_TYPE_RADIOBUTTON) {
+        } else if (child.item->type == vivaldi::menubar_menu::ITEM_TYPE_RADIO) {
           if (!child.item->group.get()) {
             return "Radio button added without group";
           }
@@ -436,6 +435,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
       return "Unknown menu element";
     }
   }
+  SanitizeModel(menu_model);
   return "";
 }
 
@@ -486,6 +486,10 @@ void MenubarMenuShowFunction::PopulateSubmodel(
   }
 }
 
+// Chrome menu code will replace multiple separators with one, remove those
+// at the start of a menu but not remove the last separator if it happens to be
+// the last item in the menu. We want removal because automatic hiding of menu
+// elements depending on state can easily make a separator the last item.
 void MenubarMenuShowFunction::SanitizeModel(ui::SimpleMenuModel* menu_model) {
   for (int i = menu_model->GetItemCount() - 1; i >= 0; i--) {
     if (menu_model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {

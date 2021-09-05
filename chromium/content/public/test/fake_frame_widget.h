@@ -9,6 +9,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "third_party/blink/public/mojom/page/widget.mojom.h"
 #include "ui/base/ui_base_types.h"
@@ -29,9 +30,19 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
   void operator=(const FakeFrameWidget&) = delete;
 
   base::i18n::TextDirection GetTextDirection() const;
+  const blink::mojom::ViewportIntersectionStatePtr& GetIntersectionState()
+      const;
+
   base::Optional<bool> GetActive() const;
 
  private:
+  void DragTargetDragEnter(
+      blink::mojom::DragDataPtr drag_data,
+      const gfx::PointF& point_in_viewport,
+      const gfx::PointF& screen_point,
+      blink::DragOperationsMask operations_allowed,
+      uint32_t key_modifiers,
+      base::OnceCallback<void(blink::DragOperation)> callback) override {}
   void DragTargetDragOver(const gfx::PointF& point_in_viewport,
                           const gfx::PointF& screen_point,
                           blink::DragOperationsMask operations_allowed,
@@ -70,11 +81,15 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
   }
   void BindInputTargetClient(
       mojo::PendingReceiver<viz::mojom::InputTargetClient> receiver) override {}
+  void SetViewportIntersection(
+      blink::mojom::ViewportIntersectionStatePtr intersection_state) override;
+  void LoadImageAt(const gfx::Point&) override {}
 
   mojo::AssociatedReceiver<blink::mojom::FrameWidget> receiver_;
   base::i18n::TextDirection text_direction_ =
       base::i18n::TextDirection::UNKNOWN_DIRECTION;
   base::Optional<bool> active_;
+  blink::mojom::ViewportIntersectionStatePtr intersection_state_;
 };
 
 }  // namespace content

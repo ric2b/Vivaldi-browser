@@ -68,7 +68,8 @@ gfx::ImageSkia GetImageSkiaFromImageModel(const ui::ImageModel* model,
 // The transparent button which holds a button state but is not rendered.
 class TransparentButton : public Button {
  public:
-  explicit TransparentButton(ButtonListener* listener) : Button(listener) {
+  explicit TransparentButton(PressedCallback callback)
+      : Button(std::move(callback)) {
     SetFocusBehavior(FocusBehavior::NEVER);
     button_controller()->set_notify_action(
         ButtonController::NotifyAction::kOnPress);
@@ -213,7 +214,7 @@ class Combobox::ComboboxMenuModel : public ui::MenuModel {
   }
 
   void ActivatedAt(int index) override {
-    owner_->selected_index_ = index;
+    owner_->SetSelectedIndex(index);
     owner_->OnPerformAction();
   }
 
@@ -243,7 +244,9 @@ Combobox::Combobox(std::unique_ptr<ui::ComboboxModel> model,
 Combobox::Combobox(ui::ComboboxModel* model, int text_context, int text_style)
     : text_context_(text_context),
       text_style_(text_style),
-      arrow_button_(new TransparentButton(this)) {
+      arrow_button_(new TransparentButton(
+          base::BindRepeating(&Combobox::ArrowButtonPressed,
+                              base::Unretained(this)))) {
   SetModel(model);
 #if defined(OS_APPLE)
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
@@ -276,7 +279,8 @@ const gfx::FontList& Combobox::GetFontList() const {
 }
 
 void Combobox::SetSelectedIndex(int index) {
-  // TODO(http://crbug.com/1132465): No-op when selected_index_ == index.
+  if (selected_index_ == index)
+    return;
   selected_index_ = index;
   if (size_to_largest_label_) {
     OnPropertyChanged(&selected_index_, kPropertyEffectsPaint);
@@ -287,8 +291,8 @@ void Combobox::SetSelectedIndex(int index) {
 }
 
 bool Combobox::SelectValue(const base::string16& value) {
-  for (int i = 0; i < model()->GetItemCount(); ++i) {
-    if (value == model()->GetItemAt(i)) {
+  for (int i = 0; i < GetModel()->GetItemCount(); ++i) {
+    if (value == GetModel()->GetItemAt(i)) {
       SetSelectedIndex(i);
       return true;
     }
@@ -313,12 +317,17 @@ void Combobox::SetModel(ui::ComboboxModel* model) {
   if (model_) {
     menu_model_ = std::make_unique<ComboboxMenuModel>(this, model_);
     observer_.Add(model_);
-    selected_index_ = model_->GetDefaultIndex();
+    SetSelectedIndex(model_->GetDefaultIndex());
     OnComboboxModelChanged(model_);
   }
 }
 
-void Combobox::SetTooltipText(const base::string16& tooltip_text) {
+base::string16 Combobox::GetTooltipTextAndAccessibleName() const {
+  return arrow_button_->GetTooltipText();
+}
+
+void Combobox::SetTooltipTextAndAccessibleName(
+    const base::string16& tooltip_text) {
   arrow_button_->SetTooltipText(tooltip_text);
   if (accessible_name_.empty())
     accessible_name_ = tooltip_text;
@@ -364,7 +373,7 @@ void Combobox::OnThemeChanged() {
 }
 
 int Combobox::GetRowCount() {
-  return model()->GetItemCount();
+  return GetModel()->GetItemCount();
 }
 
 int Combobox::GetSelectedRow() {
@@ -379,8 +388,8 @@ void Combobox::SetSelectedRow(int row) {
 }
 
 base::string16 Combobox::GetTextForRow(int row) {
-  return model()->IsItemSeparatorAt(row) ? base::string16()
-                                         : model()->GetItemAt(row);
+  return GetModel()->IsItemSeparatorAt(row) ? base::string16()
+                                            : GetModel()->GetItemAt(row);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -420,9 +429,9 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   DCHECK_EQ(e.type(), ui::ET_KEY_PRESSED);
 
   DCHECK_GE(selected_index_, 0);
-  DCHECK_LT(selected_index_, model()->GetItemCount());
-  if (selected_index_ < 0 || selected_index_ > model()->GetItemCount())
-    selected_index_ = 0;
+  DCHECK_LT(selected_index_, GetModel()->GetItemCount());
+  if (selected_index_ < 0 || selected_index_ > GetModel()->GetItemCount())
+    SetSelectedIndex(0);
 
   bool show_menu = false;
   int new_index = kNoSelection;
@@ -449,24 +458,24 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
       if (e.IsAltDown())
         show_menu = true;
       else
-        new_index = GetAdjacentIndex(model(), 1, selected_index_);
+        new_index = GetAdjacentIndex(GetModel(), 1, selected_index_);
       break;
 
     // Move to the end of the list.
     case ui::VKEY_END:
     case ui::VKEY_NEXT:  // Page down.
-      new_index = GetAdjacentIndex(model(), -1, model()->GetItemCount());
+      new_index = GetAdjacentIndex(GetModel(), -1, GetModel()->GetItemCount());
       break;
 
     // Move to the beginning of the list.
     case ui::VKEY_HOME:
     case ui::VKEY_PRIOR:  // Page up.
-      new_index = GetAdjacentIndex(model(), 1, -1);
+      new_index = GetAdjacentIndex(GetModel(), 1, -1);
       break;
 
     // Move to the previous item if any.
     case ui::VKEY_UP:
-      new_index = GetAdjacentIndex(model(), -1, selected_index_);
+      new_index = GetAdjacentIndex(GetModel(), -1, selected_index_);
       break;
 
     case ui::VKEY_RETURN:
@@ -481,8 +490,8 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   if (show_menu) {
     ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
   } else if (new_index != selected_index_ && new_index != kNoSelection) {
-    DCHECK(!model()->IsItemSeparatorAt(new_index));
-    selected_index_ = new_index;
+    DCHECK(!GetModel()->IsItemSeparatorAt(new_index));
+    SetSelectedIndex(new_index);
     OnPerformAction();
   }
 
@@ -536,24 +545,13 @@ bool Combobox::HandleAccessibleAction(const ui::AXActionData& action_data) {
   // |this|. However, mouse events for Combobox are handled by |arrow_button_|,
   // which is hidden from the a11y tree (so can't expose actions). Rather than
   // forwarding ax::mojom::Action::kDoDefault to View and then forwarding the
-  // mouse event it generates to |arrow_button_| to have it forward back to
-  // |this| (as its ButtonListener), just handle the action explicitly here and
-  // bypass View.
+  // mouse event it generates to |arrow_button_| to have it forward back to the
+  // callback on |this|, just handle the action explicitly here and bypass View.
   if (GetEnabled() && action_data.action == ax::mojom::Action::kDoDefault) {
     ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
     return true;
   }
   return View::HandleAccessibleAction(action_data);
-}
-
-void Combobox::ButtonPressed(Button* sender, const ui::Event& event) {
-  if (!GetEnabled())
-    return;
-
-  // TODO(hajimehoshi): Fix the problem that the arrow button blinks when
-  // cliking this while the dropdown menu is opened.
-  if ((base::TimeTicks::Now() - closed_time_) > kMinimumTimeBetweenButtonClicks)
-    ShowDropDownMenu(ui::GetMenuSourceTypeForEvent(event));
 }
 
 void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
@@ -564,12 +562,20 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
   if (selected_index_ >= model_->GetItemCount() ||
       model_->GetItemCount() == 0 ||
       model_->IsItemSeparatorAt(selected_index_)) {
-    selected_index_ = model_->GetDefaultIndex();
+    SetSelectedIndex(model_->GetDefaultIndex());
   }
 
   content_size_ = GetContentSize();
   PreferredSizeChanged();
   SchedulePaint();
+}
+
+const base::RepeatingClosure& Combobox::GetCallback() const {
+  return callback_;
+}
+
+const std::unique_ptr<ui::ComboboxModel>& Combobox::GetOwnedModel() const {
+  return owned_model_;
 }
 
 void Combobox::UpdateBorder() {
@@ -596,7 +602,7 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
   int contents_height = height() - insets.height();
 
   // Draw the icon.
-  ui::ImageModel icon = model()->GetIconAt(selected_index_);
+  ui::ImageModel icon = GetModel()->GetIconAt(selected_index_);
   if (!icon.IsEmpty()) {
     gfx::ImageSkia icon_skia =
         GetImageSkiaFromImageModel(&icon, GetNativeTheme());
@@ -610,11 +616,11 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
 
   // Draw the text.
   SkColor text_color = GetTextColorForEnableState(*this, GetEnabled());
-  DCHECK_GE(selected_index_, 0);
-  DCHECK_LT(selected_index_, model()->GetItemCount());
-  if (selected_index_ < 0 || selected_index_ > model()->GetItemCount())
-    selected_index_ = 0;
-  base::string16 text = model()->GetItemAt(selected_index_);
+  if (selected_index_ < 0 || selected_index_ > GetModel()->GetItemCount()) {
+    NOTREACHED();
+    SetSelectedIndex(0);
+  }
+  base::string16 text = GetModel()->GetItemAt(selected_index_);
 
   int disclosure_arrow_offset = width() - kComboboxArrowContainerWidth;
 
@@ -633,6 +639,16 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
   AdjustBoundsForRTLUI(&arrow_bounds);
 
   PaintComboboxArrow(text_color, arrow_bounds, canvas);
+}
+
+void Combobox::ArrowButtonPressed(const ui::Event& event) {
+  if (!GetEnabled())
+    return;
+
+  // TODO(hajimehoshi): Fix the problem that the arrow button blinks when
+  // cliking this while the dropdown menu is opened.
+  if ((base::TimeTicks::Now() - closed_time_) > kMinimumTimeBetweenButtonClicks)
+    ShowDropDownMenu(ui::GetMenuSourceTypeForEvent(event));
 }
 
 void Combobox::ShowDropDownMenu(ui::MenuSourceType source_type) {
@@ -684,13 +700,13 @@ gfx::Size Combobox::GetContentSize() const {
   const gfx::FontList& font_list = GetFontList();
   int height = font_list.GetHeight();
   int width = 0;
-  for (int i = 0; i < model()->GetItemCount(); ++i) {
+  for (int i = 0; i < GetModel()->GetItemCount(); ++i) {
     if (model_->IsItemSeparatorAt(i))
       continue;
 
     if (size_to_largest_label_ || i == selected_index_) {
-      int item_width = gfx::GetStringWidth(model()->GetItemAt(i), font_list);
-      ui::ImageModel icon = model()->GetIconAt(i);
+      int item_width = gfx::GetStringWidth(GetModel()->GetItemAt(i), font_list);
+      ui::ImageModel icon = GetModel()->GetIconAt(i);
       if (!icon.IsEmpty()) {
         gfx::ImageSkia icon_skia =
             GetImageSkiaFromImageModel(&icon, GetNativeTheme());
@@ -712,10 +728,14 @@ PrefixSelector* Combobox::GetPrefixSelector() {
 }
 
 BEGIN_METADATA(Combobox, View)
+ADD_PROPERTY_METADATA(base::RepeatingClosure, Callback)
+ADD_PROPERTY_METADATA(std::unique_ptr<ui::ComboboxModel>, OwnedModel)
+ADD_PROPERTY_METADATA(ui::ComboboxModel*, Model)
 ADD_PROPERTY_METADATA(int, SelectedIndex)
 ADD_PROPERTY_METADATA(bool, Invalid)
 ADD_PROPERTY_METADATA(bool, SizeToLargestLabel)
 ADD_PROPERTY_METADATA(base::string16, AccessibleName)
+ADD_PROPERTY_METADATA(base::string16, TooltipTextAndAccessibleName)
 END_METADATA
 
 }  // namespace views

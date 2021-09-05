@@ -103,6 +103,10 @@ component("cpp") {
     "source_stream_to_data_pipe.h",
     "spki_hash_set.cc",
     "spki_hash_set.h",
+    "supports_loading_mode/supports_loading_mode_parser.cc",
+    "supports_loading_mode/supports_loading_mode_parser.h",
+    "trust_token_http_headers.cc",
+    "trust_token_http_headers.h",
     "trust_token_operation_authorization.h",
     "weak_wrapper_shared_url_loader_factory.cc",
     "weak_wrapper_shared_url_loader_factory.h",
@@ -141,6 +145,7 @@ component("cpp") {
 
   deps = [
     "//base",
+    "//build:chromeos_buildflags",
     "//components/prefs",
     "//ipc",
     "//services/proxy_resolver/public/mojom",
@@ -196,6 +201,21 @@ component("cross_origin_embedder_policy") {
     "//services/network/public/mojom:url_loader_base_shared",
   ]
 
+  defines = [ "IS_NETWORK_CPP_BASE_IMPL" ]
+}
+
+# This component is separate from cpp_base as it is a dependency of
+# //services/network/public/mojom:cookies_mojom.
+component("schemeful_site_mojom_support") {
+  sources = [
+    "schemeful_site_mojom_traits.cc",
+    "schemeful_site_mojom_traits.h",
+  ]
+  deps = [
+    "//net",
+    "//services/network/public/mojom:mojom_schemeful_site_shared",
+    "//url/mojom:url_mojom_origin",
+  ]
   defines = [ "IS_NETWORK_CPP_BASE_IMPL" ]
 }
 
@@ -260,6 +280,7 @@ component("cpp_base") {
     ":crash_keys",
     ":cross_origin_embedder_policy",
     ":ip_address_mojom_support",
+    ":schemeful_site_mojom_support",
     "//services/network/public/mojom:url_loader_base",
     "//third_party/webrtc_overrides:webrtc_component",
     "//url/ipc:url_ipc",
@@ -322,9 +343,11 @@ source_set("tests") {
     "optional_trust_token_params_unittest.cc",
     "origin_isolation_parser_unittest.cc",
     "proxy_config_mojom_traits_unittest.cc",
+    "schemeful_site_mojom_traits_unittest.cc",
     "simple_url_loader_unittest.cc",
     "site_for_cookies_mojom_traits_unittest.cc",
     "source_stream_to_data_pipe_unittest.cc",
+    "supports_loading_mode/supports_loading_mode_parser_unittest.cc",
     "url_request_mojom_traits_unittest.cc",
     "web_sandbox_flags_unittests.cc",
   ]

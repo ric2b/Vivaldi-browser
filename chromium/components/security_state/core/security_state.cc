@@ -84,7 +84,7 @@ std::string GetHistogramSuffixForSafetyTipStatus(
 // Sets |level| to the right value if status should be set.
 bool ShouldSetSecurityLevelFromSafetyTip(security_state::SafetyTipStatus status,
                                          SecurityLevel* level) {
-  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (!IsSafetyTipUIFeatureEnabled()) {
     return false;
   }
 
@@ -326,6 +326,13 @@ bool IsSHA1InChain(const VisibleSecurityState& visible_security_state) {
 // launched.
 bool ShouldShowDangerTriangleForWarningLevel() {
   return true;
+}
+
+bool IsSafetyTipUIFeatureEnabled() {
+  return base::FeatureList::IsEnabled(features::kSafetyTipUI) ||
+         base::FeatureList::IsEnabled(
+             features::kSafetyTipUIForSimplifiedDomainDisplay) ||
+         base::FeatureList::IsEnabled(features::kSafetyTipUIOnDelayedWarning);
 }
 
 }  // namespace security_state

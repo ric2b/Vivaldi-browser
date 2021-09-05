@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/scoped_observer.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
@@ -45,7 +45,9 @@ class TestingSyncConfirmationHandler : public SyncConfirmationHandler {
       Browser* browser,
       content::WebUI* web_ui,
       std::unordered_map<std::string, int> string_to_grd_id_map)
-      : SyncConfirmationHandler(browser, string_to_grd_id_map) {
+      : SyncConfirmationHandler(browser->profile(),
+                                string_to_grd_id_map,
+                                browser) {
     set_web_ui(web_ui);
   }
 

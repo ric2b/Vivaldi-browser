@@ -24,6 +24,13 @@ AX_BASE_EXPORT extern const base::Feature kEnableAccessibilityExposeHTMLElement;
 // browser process AXTree (as an ignored node).
 AX_BASE_EXPORT bool IsAccessibilityExposeHTMLElementEnabled();
 
+AX_BASE_EXPORT extern const base::Feature
+    kEnableAccessibilityExposeIgnoredNodes;
+
+// Returns true if all ignored nodes are exposed by Blink in the
+// accessibility tree.
+AX_BASE_EXPORT bool IsAccessibilityExposeIgnoredNodesEnabled();
+
 AX_BASE_EXPORT extern const base::Feature kEnableAccessibilityLanguageDetection;
 
 // Return true if language detection should be used to determine the language
@@ -61,6 +68,13 @@ AX_BASE_EXPORT extern const base::Feature kAccessibilityCursorColor;
 // Returns true if the accessibility cursor color feature is enabled, letting
 // users pick a custom cursor color.
 AX_BASE_EXPORT bool IsAccessibilityCursorColorEnabled();
+
+// Enables new magnifier focus following feature, which provides a richer
+// focus following experience.
+AX_BASE_EXPORT extern const base::Feature kMagnifierNewFocusFollowing;
+
+// Returns true if the new magnifier focus following feature is enabled.
+AX_BASE_EXPORT bool IsMagnifierNewFocusFollowingEnabled();
 #endif  // defined(OS_CHROMEOS)
 
 // Enables Get Image Descriptions to augment existing images labels,
@@ -81,6 +95,15 @@ AX_BASE_EXPORT extern const base::Feature kUseAXPositionForDocumentMarkers;
 // of the legacy code that collects document markers manually from static text
 // nodes and which is different for each platform.
 AX_BASE_EXPORT bool IsUseAXPositionForDocumentMarkersEnabled();
+
+#if defined(OS_CHROMEOS)
+// Enables enhanced Select-to-speak features that allow users broader control
+// of TTS (pause, resume, skip between sentences and paragraphs).
+AX_BASE_EXPORT extern const base::Feature kSelectToSpeakNavigationControl;
+
+// Returns true if enhanced Select-to-speak features are enabled.
+AX_BASE_EXPORT bool IsSelectToSpeakNavigationControlEnabled();
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace features
 

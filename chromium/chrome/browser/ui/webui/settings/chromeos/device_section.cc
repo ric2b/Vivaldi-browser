@@ -10,10 +10,12 @@
 #include "ash/public/cpp/stylus_utils.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_display_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_keyboard_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_pointer_handler.h"
@@ -716,6 +718,17 @@ void AddDevicePowerStrings(content::WebUIDataSource* html_source) {
   AddLocalizedStringsBulk(html_source, kPowerStrings);
 }
 
+// Mirrors enum of the same name in enums.xml.
+enum class TouchpadSensitivity {
+  kNONE = 0,
+  kSlowest = 1,
+  kSlow = 2,
+  kMedium = 3,
+  kFast = 4,
+  kFastest = 5,
+  kMaxValue = kFastest,
+};
+
 }  // namespace
 
 DeviceSection::DeviceSection(Profile* profile,
@@ -842,8 +855,21 @@ std::string DeviceSection::GetSectionPath() const {
 
 bool DeviceSection::LogMetric(mojom::Setting setting,
                               base::Value& value) const {
-  // Unimplemented.
-  return false;
+  switch (setting) {
+    case mojom::Setting::kTouchpadSpeed:
+      base::UmaHistogramEnumeration(
+          "ChromeOS.Settings.Device.TouchpadSpeedValue",
+          static_cast<TouchpadSensitivity>(value.GetInt()));
+      return true;
+
+    case mojom::Setting::kKeyboardFunctionKeys:
+      base::UmaHistogramBoolean("ChromeOS.Settings.Device.KeyboardFunctionKeys",
+                                value.GetBool());
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -1108,6 +1134,7 @@ void DeviceSection::AddDevicePointersStrings(
     content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kPointersStrings[] = {
       {"mouseTitle", IDS_SETTINGS_MOUSE_TITLE},
+      {"pointingStickTitle", IDS_SETTINGS_POINTING_STICK_TITLE},
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
       {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
@@ -1118,6 +1145,9 @@ void DeviceSection::AddDevicePointersStrings(
       {"mouseScrollSpeed", IDS_SETTINGS_MOUSE_SCROLL_SPEED_LABEL},
       {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
       {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
+      {"primaryMouseButtonLeft", IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_LEFT_LABEL},
+      {"primaryMouseButtonRight",
+       IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_RIGHT_LABEL},
       {"mouseReverseScroll", IDS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL},
       {"mouseAccelerationLabel", IDS_SETTINGS_MOUSE_ACCELERATION_LABEL},
       {"mouseScrollAccelerationLabel",
@@ -1138,6 +1168,9 @@ void DeviceSection::AddDevicePointersStrings(
   html_source->AddBoolean(
       "allowScrollSettings",
       base::FeatureList::IsEnabled(::chromeos::features::kAllowScrollSettings));
+  html_source->AddBoolean(
+      "separatePointingStickSettings",
+      base::FeatureList::IsEnabled(::features::kSeparatePointingStickSettings));
 }
 
 }  // namespace settings

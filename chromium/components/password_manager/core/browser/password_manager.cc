@@ -13,6 +13,7 @@
 
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -23,6 +24,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/form_data_predictions.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
@@ -59,7 +61,7 @@ using autofill::NOT_USERNAME;
 using autofill::SINGLE_USERNAME;
 using autofill::UNKNOWN_TYPE;
 using autofill::USERNAME;
-using autofill::mojom::PasswordFormFieldPredictionType;
+using autofill::mojom::SubmissionIndicatorEvent;
 using base::NumberToString;
 using BlacklistedStatus =
     password_manager::OriginCredentialStore::BlacklistedStatus;
@@ -229,8 +231,6 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterTimePref(prefs::kAccountStoreDateLastUsedForFilling,
                              base::Time());
 
-  registry->RegisterIntegerPref(prefs::kSettingsLaunchedPasswordChecks, 0);
-
 #if defined(OS_APPLE)
   registry->RegisterIntegerPref(prefs::kKeychainMigrationStatus,
                                 4 /* MIGRATED_DELETED */);
@@ -298,17 +298,17 @@ void PasswordManager::OnPasswordNoLongerGenerated(PasswordManagerDriver* driver,
     form_manager->PasswordNoLongerGenerated();
 }
 
-void PasswordManager::SetGenerationElementAndReasonForForm(
+void PasswordManager::SetGenerationElementAndTypeForForm(
     password_manager::PasswordManagerDriver* driver,
     const FormData& form_data,
     FieldRendererId generation_element,
-    bool is_manually_triggered) {
+    autofill::password_generation::PasswordGenerationType type) {
   DCHECK(client_->IsSavingAndFillingEnabled(form_data.url));
 
   PasswordFormManager* form_manager = GetMatchedManager(driver, form_data);
   if (form_manager) {
     form_manager->SetGenerationElement(generation_element);
-    form_manager->SetGenerationPopupWasShown(is_manually_triggered);
+    form_manager->SetGenerationPopupWasShown(type);
   }
 }
 
@@ -575,7 +575,7 @@ void PasswordManager::CreateFormManagers(
       // filled values.
       // TODO(https://crbug.com/831123): Implement more robust filling and
       // remove the next line.
-      manager->FillForm(form_data);
+      manager->FillForm(form_data, predictions_);
     } else {
       new_forms_data.push_back(&form_data);
     }
@@ -890,8 +890,8 @@ void PasswordManager::OnPasswordFormsRendered(
 }
 
 void PasswordManager::OnLoginSuccessful() {
-  if (autofill_assistant_mode_ == AutofillAssistantMode::kUIShown) {
-    // Suppress prompts while Autofill Assistant is running.
+  if (client_->IsAutofillAssistantUIVisible()) {
+    // Suppress prompts while Autofill Assistant UI is shown.
     return;
   }
 
@@ -1223,23 +1223,51 @@ void PasswordManager::ShowManualFallbackForSaving(
   }
 }
 
-void PasswordManager::SetAutofillAssistantMode(AutofillAssistantMode mode) {
-  if (autofill_assistant_mode_ == mode) {
+void PasswordManager::ResetPendingCredentials() {
+  for (auto& form_manager : form_managers_)
+    form_manager->ResetState();
+  owned_submitted_form_manager_.reset();
+}
+
+void PasswordManager::OnPasswordFormCleared(
+    PasswordManagerDriver* driver,
+    const autofill::FormData& form_data) {
+  PasswordFormManager* manager = GetMatchedManager(driver, form_data);
+  if (!manager || !manager->is_submitted() ||
+      !manager->GetSubmittedForm()->IsPossibleChangePasswordForm()) {
     return;
   }
-  autofill_assistant_mode_ = mode;
-
-  if (autofill_assistant_mode_ == AutofillAssistantMode::kUINotShown) {
-    // Reset pending credentials as Autofill Assistant has handled the pending
-    // submission.
-    for (auto& form_manager : form_managers_)
-      form_manager->ResetState();
-    owned_submitted_form_manager_.reset();
+  // If a password form was cleared, login is successful.
+  if (form_data.is_form_tag &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::kDetectFormSubmissionOnFormClear)) {
+    manager->UpdateSubmissionIndicatorEvent(
+        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
+    OnLoginSuccessful();
+    return;
+  }
+  // If password fields outside the <form> tag were cleared, it should be
+  // verified that fields are relevant.
+  FieldRendererId new_password_field_id =
+      manager->GetSubmittedForm()->new_password_element_renderer_id;
+  auto it = base::ranges::find(form_data.fields, new_password_field_id,
+                               &autofill::FormFieldData::unique_renderer_id);
+  if (it != form_data.fields.end() && it->value.empty() &&
+      base::FeatureList::IsEnabled(
+          features::kDetectFormSubmissionOnFormClear)) {
+    manager->UpdateSubmissionIndicatorEvent(
+        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
+    OnLoginSuccessful();
   }
 }
 
-AutofillAssistantMode PasswordManager::GetAutofillAssistantMode() const {
-  return autofill_assistant_mode_;
+bool PasswordManager::IsFormManagerPendingPasswordUpdate() const {
+  for (const auto& form_manager : form_managers_) {
+    if (form_manager->IsPasswordUpdate())
+      return true;
+  }
+  return owned_submitted_form_manager_ &&
+         owned_submitted_form_manager_->IsPasswordUpdate();
 }
 
 #if defined(OS_IOS)

@@ -86,11 +86,20 @@ FuzzerSoftwareOutputSurfaceProvider::FuzzerSoftwareOutputSurfaceProvider(
 FuzzerSoftwareOutputSurfaceProvider::~FuzzerSoftwareOutputSurfaceProvider() =
     default;
 
+std::unique_ptr<DisplayCompositorMemoryAndTaskController>
+FuzzerSoftwareOutputSurfaceProvider::CreateGpuDependency(
+    bool gpu_compositing,
+    gpu::SurfaceHandle surface_handle,
+    const RendererSettings& renderer_settings) {
+  return nullptr;
+}
+
 std::unique_ptr<OutputSurface>
 FuzzerSoftwareOutputSurfaceProvider::CreateOutputSurface(
     gpu::SurfaceHandle surface_handle,
     bool gpu_compositing,
     mojom::DisplayClient* display_client,
+    DisplayCompositorMemoryAndTaskController* gpu_dependency,
     const RendererSettings& renderer_settings,
     const DebugRendererSettings* debug_settings) {
   std::unique_ptr<SoftwareOutputDevice> software_output_device =
@@ -99,12 +108,4 @@ FuzzerSoftwareOutputSurfaceProvider::CreateOutputSurface(
   return std::make_unique<SoftwareOutputSurface>(
       std::move(software_output_device));
 }
-
-gpu::SharedImageManager*
-FuzzerSoftwareOutputSurfaceProvider::GetSharedImageManager() {
-  // This is used for creating overlay processor. Software compositor does not
-  // support overlay.
-  return nullptr;
-}
-
 }  // namespace viz

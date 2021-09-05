@@ -28,13 +28,6 @@ if (is_android) {
   import("//v8/gni/v8.gni")
 }
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 source_set("android_descriptors") {
   sources = [ "browser/android_descriptors.h" ]
   public_deps = [ "//content/public/common:content_descriptors" ]
@@ -146,6 +139,10 @@ source_set("weblayer_lib_base") {
     "app/main.cc",
     "browser/autofill_client_impl.cc",
     "browser/autofill_client_impl.h",
+    "browser/background_sync/background_sync_controller_factory.cc",
+    "browser/background_sync/background_sync_controller_factory.h",
+    "browser/background_sync/background_sync_delegate_impl.cc",
+    "browser/background_sync/background_sync_delegate_impl.h",
     "browser/browser_context_impl.cc",
     "browser/browser_context_impl.h",
     "browser/browser_impl.cc",
@@ -198,16 +195,14 @@ source_set("weblayer_lib_base") {
     "browser/host_content_settings_map_factory.h",
     "browser/i18n_util.cc",
     "browser/i18n_util.h",
-    "browser/infobar_container_android.cc",
-    "browser/infobar_container_android.h",
     "browser/insecure_form_controller_client.cc",
     "browser/insecure_form_controller_client.h",
-    "browser/javascript_tab_modal_dialog_manager_delegate_android.cc",
-    "browser/javascript_tab_modal_dialog_manager_delegate_android.h",
     "browser/js_communication/web_message_host_factory_wrapper.cc",
     "browser/js_communication/web_message_host_factory_wrapper.h",
     "browser/navigation_controller_impl.cc",
     "browser/navigation_controller_impl.h",
+    "browser/navigation_entry_data.cc",
+    "browser/navigation_entry_data.h",
     "browser/navigation_error_navigation_throttle.cc",
     "browser/navigation_error_navigation_throttle.h",
     "browser/navigation_impl.cc",
@@ -230,6 +225,8 @@ source_set("weblayer_lib_base") {
     "browser/no_state_prefetch/prerender_utils.h",
     "browser/page_load_metrics_initialize.cc",
     "browser/page_load_metrics_initialize.h",
+    "browser/page_load_metrics_observer_impl.cc",
+    "browser/page_load_metrics_observer_impl.h",
     "browser/page_specific_content_settings_delegate.cc",
     "browser/page_specific_content_settings_delegate.h",
     "browser/password_manager_driver_factory.cc",
@@ -272,8 +269,6 @@ source_set("weblayer_lib_base") {
     "browser/translate_client_impl.h",
     "browser/translate_ranker_factory.cc",
     "browser/translate_ranker_factory.h",
-    "browser/ukm_page_load_metrics_observer.cc",
-    "browser/ukm_page_load_metrics_observer.h",
     "browser/url_bar/autocomplete_scheme_classifier_impl.cc",
     "browser/url_bar/autocomplete_scheme_classifier_impl.h",
     "browser/url_bar/page_info_delegate_impl.cc",
@@ -369,6 +364,7 @@ source_set("weblayer_lib_base") {
     "//components/autofill/content/renderer",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
+    "//components/background_sync",
     "//components/base32",
     "//components/blocked_content",
     "//components/browsing_data/content",
@@ -383,6 +379,8 @@ source_set("weblayer_lib_base") {
     "//components/crash/content/browser",
     "//components/crash/core/app",
     "//components/crash/core/common",
+    "//components/download/content/factory",
+    "//components/download/content/public",
     "//components/embedder_support",
     "//components/embedder_support/origin_trials",
     "//components/error_page/common",
@@ -400,6 +398,10 @@ source_set("weblayer_lib_base") {
     "//components/metrics",
     "//components/metrics:content",
     "//components/network_time",
+    "//components/no_state_prefetch/browser",
+    "//components/no_state_prefetch/common",
+    "//components/no_state_prefetch/common:mojo_bindings",
+    "//components/no_state_prefetch/renderer",
     "//components/omnibox/browser:location_bar",
     "//components/page_info",
     "//components/page_load_metrics/browser",
@@ -409,10 +411,6 @@ source_set("weblayer_lib_base") {
     "//components/policy/core/browser",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
-    "//components/prerender/browser",
-    "//components/prerender/common",
-    "//components/prerender/common:mojo_bindings",
-    "//components/prerender/renderer",
     "//components/safe_browsing/content/common:interfaces",
     "//components/safe_browsing/content/renderer:throttles",
     "//components/safe_browsing/core:features",
@@ -544,8 +542,12 @@ source_set("weblayer_lib_base") {
       "browser/google_accounts_callback_proxy.h",
       "browser/http_auth_handler_impl.cc",
       "browser/http_auth_handler_impl.h",
+      "browser/infobar_container_android.cc",
+      "browser/infobar_container_android.h",
       "browser/infobar_service.cc",
       "browser/infobar_service.h",
+      "browser/javascript_tab_modal_dialog_manager_delegate_android.cc",
+      "browser/javascript_tab_modal_dialog_manager_delegate_android.h",
       "browser/js_communication/web_message_host_factory_proxy.cc",
       "browser/js_communication/web_message_host_factory_proxy.h",
       "browser/js_communication/web_message_reply_proxy_impl.cc",
@@ -580,6 +582,8 @@ source_set("weblayer_lib_base") {
       "browser/tts_environment_android_impl.h",
       "browser/url_bar/page_info_client_impl.cc",
       "browser/url_bar/page_info_client_impl.h",
+      "browser/url_bar/trusted_cdn_observer.cc",
+      "browser/url_bar/trusted_cdn_observer.h",
       "browser/verdict_cache_manager_factory.cc",
       "browser/verdict_cache_manager_factory.h",
       "browser/weblayer_factory_impl_android.cc",
@@ -613,6 +617,7 @@ source_set("weblayer_lib_base") {
       "//components/embedder_support/android:web_contents_delegate",
       "//components/embedder_support/android/metrics",
       "//components/external_intents/android",
+      "//components/favicon/android",
       "//components/infobars/android",
       "//components/infobars/content",
       "//components/javascript_dialogs",
@@ -622,6 +627,7 @@ source_set("weblayer_lib_base") {
       "//components/minidump_uploader",
       "//components/navigation_interception",
       "//components/page_info/android",
+      "//components/payments/content/android",
       "//components/permissions/android:native",
       "//components/resources:android_resources",
       "//components/safe_browsing/android:remote_database_manager",
@@ -795,14 +801,11 @@ if (is_android) {
 
 grit("resources") {
   source = "weblayer_resources.grd"
+  use_brotli = true
 
   outputs = [
     "grit/weblayer_resources.h",
     "weblayer_resources.pak",
-  ]
-  grit_flags = [
-    "-E",
-    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
   ]
   deps = [ "//weblayer/browser/webui:mojo_bindings_js" ]
 }

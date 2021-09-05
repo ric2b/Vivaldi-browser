@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "content/browser/hid/hid_test_utils.h"
 #include "content/public/browser/content_browser_client.h"
@@ -276,8 +276,13 @@ TEST_F(HidServiceTest, OpenAndNavigateCrossOrigin) {
   EXPECT_TRUE(contents()->IsConnectedToHidDevice());
 
   NavigateAndCommit(GURL(kCrossOriginTestUrl));
-  base::RunLoop().RunUntilIdle();
+
+  base::RunLoop disconnect_loop;
+  connection.set_disconnect_handler(disconnect_loop.QuitClosure());
+
+  disconnect_loop.Run();
   EXPECT_FALSE(contents()->IsConnectedToHidDevice());
+  EXPECT_FALSE(connection.is_connected());
 }
 
 TEST_F(HidServiceTest, RegisterClient) {
@@ -370,15 +375,30 @@ TEST_F(HidServiceTest, RevokeDevicePermission) {
   EXPECT_TRUE(contents()->IsConnectedToHidDevice());
   EXPECT_TRUE(connection);
 
+  base::RunLoop disconnect_loop;
+  connection.set_disconnect_handler(disconnect_loop.QuitClosure());
+
   // Simulate user revoking permission.
   EXPECT_CALL(hid_delegate(), HasDevicePermission).WillOnce(Return(false));
   url::Origin origin = url::Origin::Create(GURL(kTestUrl));
   hid_delegate().OnPermissionRevoked(origin, origin);
 
-  // TODO(mattreynolds): Use a disconnect handler with a run loop instead of the
-  // potentially flaky `RunUntilIdle`. This depends on fixing
-  // `FakeHidConnection` to monitor the watcher just as `HidConnectionImpl`
-  // does.
+  disconnect_loop.Run();
+  EXPECT_FALSE(contents()->IsConnectedToHidDevice());
+  EXPECT_FALSE(connection.is_connected());
+}
+
+TEST_F(HidServiceTest, RevokeDevicePermissionWithoutConnection) {
+  NavigateAndCommit(GURL(kTestUrl));
+
+  mojo::Remote<blink::mojom::HidService> service;
+  contents()->GetMainFrame()->GetHidService(
+      service.BindNewPipeAndPassReceiver());
+
+  // Simulate user revoking permission.
+  url::Origin origin = url::Origin::Create(GURL(kTestUrl));
+  hid_delegate().OnPermissionRevoked(origin, origin);
+
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(contents()->IsConnectedToHidDevice());
 }

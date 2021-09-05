@@ -8,9 +8,9 @@
 #include "base/macros.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
@@ -28,14 +28,15 @@ namespace web_app {
 class WebAppProviderBase;
 
 // Base class for tests of user interface support for web applications.
-// ProviderType selects between use of BMO web apps and
-// Extensions-based bookmark apps.
 class WebAppControllerBrowserTestBase
-    : public extensions::ExtensionBrowserTest,
-      public ::testing::WithParamInterface<ProviderType> {
+    : public extensions::ExtensionBrowserTest {
  public:
   WebAppControllerBrowserTestBase();
-  ~WebAppControllerBrowserTestBase() = 0;
+  WebAppControllerBrowserTestBase(const WebAppControllerBrowserTestBase&) =
+      delete;
+  WebAppControllerBrowserTestBase& operator=(
+      const WebAppControllerBrowserTestBase&) = delete;
+  ~WebAppControllerBrowserTestBase() override = 0;
 
   WebAppProviderBase& provider();
 
@@ -62,17 +63,12 @@ class WebAppControllerBrowserTestBase
   Browser* NavigateInNewWindowAndAwaitInstallabilityCheck(const GURL&);
 
   base::Optional<AppId> FindAppWithUrlInScope(const GURL& url);
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebAppControllerBrowserTestBase);
 };
 
 class WebAppControllerBrowserTest : public WebAppControllerBrowserTestBase {
  public:
   WebAppControllerBrowserTest();
-  ~WebAppControllerBrowserTest() = 0;
+  ~WebAppControllerBrowserTest() override = 0;
 
   // ExtensionBrowserTest:
   void SetUp() override;
@@ -98,6 +94,8 @@ class WebAppControllerBrowserTest : public WebAppControllerBrowserTestBase {
   // Similar to net::MockCertVerifier, but also updates the CertVerifier
   // used by the NetworkService.
   content::ContentMockCertVerifier cert_verifier_;
+
+  ScopedOsHooksSuppress os_hooks_suppress_;
 
   DISALLOW_COPY_AND_ASSIGN(WebAppControllerBrowserTest);
 };

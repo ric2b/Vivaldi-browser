@@ -7,8 +7,10 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/lazy_instance.h"
+#include "base/task/task_features.h"
 #include "base/task/thread_pool/task_tracker.h"
 #include "base/threading/thread_local.h"
 
@@ -33,6 +35,8 @@ const ThreadGroup* GetCurrentThreadGroup() {
 }
 
 }  // namespace
+
+constexpr ThreadGroup::YieldSortKey ThreadGroup::kMaxYieldSortKey;
 
 void ThreadGroup::BaseScopedCommandsExecutor::ScheduleReleaseTaskSource(
     RegisteredTaskSource task_source) {
@@ -90,6 +94,11 @@ void ThreadGroup::UnbindFromCurrentThread() {
 
 bool ThreadGroup::IsBoundToCurrentThread() const {
   return GetCurrentThreadGroup() == this;
+}
+
+void ThreadGroup::Start() {
+  CheckedAutoLock auto_lock(lock_);
+  disable_fair_scheduling_ = FeatureList::IsEnabled(kDisableFairJobScheduling);
 }
 
 size_t
@@ -162,7 +171,10 @@ void ThreadGroup::ReEnqueueTaskSourceLockRequired(
     } else {
       // If the TaskSource should be reenqueued in the current thread group,
       // reenqueue it inside the scope of the lock.
-      priority_queue_.Push(std::move(transaction_with_task_source));
+      auto sort_key = transaction_with_task_source.task_source->GetSortKey(
+          disable_fair_scheduling_);
+      priority_queue_.Push(std::move(transaction_with_task_source.task_source),
+                           sort_key);
     }
     // This is called unconditionally to ensure there are always workers to run
     // task sources in the queue. Some ThreadGroup implementations only invoke
@@ -205,15 +217,19 @@ RegisteredTaskSource ThreadGroup::TakeRegisteredTaskSource(
     return priority_queue_.PopTaskSource();
   // Replace the top task_source and then update the queue.
   std::swap(priority_queue_.PeekTaskSource(), task_source);
-  priority_queue_.UpdateSortKey(*task_source.get(), task_source->GetSortKey());
+  if (!disable_fair_scheduling_) {
+    priority_queue_.UpdateSortKey(*task_source.get(),
+                                  task_source->GetSortKey(false));
+  }
   return task_source;
 }
 
 void ThreadGroup::UpdateSortKeyImpl(BaseScopedCommandsExecutor* executor,
                                     TaskSource::Transaction transaction) {
   CheckedAutoLock auto_lock(lock_);
-  priority_queue_.UpdateSortKey(*transaction.task_source(),
-                                transaction.task_source()->GetSortKey());
+  priority_queue_.UpdateSortKey(
+      *transaction.task_source(),
+      transaction.task_source()->GetSortKey(disable_fair_scheduling_));
   EnsureEnoughWorkersLockRequired(executor);
 }
 
@@ -232,7 +248,10 @@ void ThreadGroup::PushTaskSourceAndWakeUpWorkersImpl(
         std::move(transaction_with_task_source.task_source));
     return;
   }
-  priority_queue_.Push(std::move(transaction_with_task_source));
+  auto sort_key = transaction_with_task_source.task_source->GetSortKey(
+      disable_fair_scheduling_);
+  priority_queue_.Push(std::move(transaction_with_task_source.task_source),
+                       sort_key);
   EnsureEnoughWorkersLockRequired(executor);
 }
 
@@ -245,7 +264,9 @@ void ThreadGroup::InvalidateAndHandoffAllTaskSourcesToOtherThreadGroup(
   replacement_thread_group_ = destination_thread_group;
 }
 
-bool ThreadGroup::ShouldYield(TaskSourceSortKey sort_key) const {
+bool ThreadGroup::ShouldYield(TaskSourceSortKey sort_key) {
+  DCHECK(TS_UNCHECKED_READ(max_allowed_sort_key_).is_lock_free());
+
   if (!task_tracker_->CanRunPriority(sort_key.priority()))
     return true;
   // It is safe to read |max_allowed_sort_key_| without a lock since this
@@ -253,8 +274,7 @@ bool ThreadGroup::ShouldYield(TaskSourceSortKey sort_key) const {
   // the new value when it is updated.
   auto max_allowed_sort_key =
       TS_UNCHECKED_READ(max_allowed_sort_key_).load(std::memory_order_relaxed);
-  if (sort_key.priority() < max_allowed_sort_key.priority)
-    return true;
+
   // To reduce unnecessary yielding, a task will never yield to a BEST_EFFORT
   // task regardless of its worker_count.
   if (sort_key.priority() > max_allowed_sort_key.priority ||
@@ -264,7 +284,19 @@ bool ThreadGroup::ShouldYield(TaskSourceSortKey sort_key) const {
   // Otherwise, a task only yields to a task of equal priority if its
   // worker_count would be greater still after yielding, e.g. a job with 1
   // worker doesn't yield to a job with 0 workers.
-  return sort_key.worker_count() > max_allowed_sort_key.worker_count + 1;
+  if (sort_key.priority() == max_allowed_sort_key.priority &&
+      sort_key.worker_count() <= max_allowed_sort_key.worker_count + 1) {
+    return false;
+  }
+
+  // Reset |max_allowed_sort_key_| so that only one thread should yield at a
+  // time for a given task.
+  max_allowed_sort_key =
+      TS_UNCHECKED_READ(max_allowed_sort_key_)
+          .exchange(kMaxYieldSortKey, std::memory_order_relaxed);
+  // Another thread might have decided to yield and racily reset
+  // |max_allowed_sort_key_|, in which case this thread doesn't yield.
+  return max_allowed_sort_key.priority != TaskPriority::BEST_EFFORT;
 }
 
 #if defined(OS_WIN)

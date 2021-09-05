@@ -12,9 +12,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "chrome/services/sharing/public/mojom/nearby_connections.mojom-forward.h"
-#include "chrome/services/sharing/public/mojom/sharing.mojom.h"
-#include "chrome/services/sharing/public/mojom/webrtc.mojom-forward.h"
+#include "chromeos/services/nearby/public/mojom/nearby_connections.mojom-forward.h"
+#include "chromeos/services/nearby/public/mojom/sharing.mojom.h"
+#include "chromeos/services/nearby/public/mojom/webrtc.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -48,13 +48,16 @@ class SharingImpl : public mojom::Sharing {
   ~SharingImpl() override;
 
   // mojom::Sharing:
-  void CreateNearbyConnections(
-      NearbyConnectionsDependenciesPtr dependencies,
-      CreateNearbyConnectionsCallback callback) override;
-  void CreateNearbySharingDecoder(
-      CreateNearbySharingDecoderCallback callback) override;
+  void Connect(
+      NearbyConnectionsDependenciesPtr deps,
+      mojo::PendingReceiver<NearbyConnectionsMojom> connections_receiver,
+      mojo::PendingReceiver<sharing::mojom::NearbySharingDecoder>
+          decoder_receiver) override;
+  void ShutDown(ShutDownCallback callback) override;
 
  private:
+  friend class SharingImplTest;
+
   void NearbyConnectionsDisconnected();
 
   mojo::Receiver<mojom::Sharing> receiver_;

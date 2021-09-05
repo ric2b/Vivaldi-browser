@@ -18,8 +18,8 @@ cr.define('nearby_share', function() {
       super([
         'addReceiveObserver',
         'isInHighVisibility',
-        'enterHighVisibility',
-        'exitHighVisibility',
+        'registerForegroundReceiveSurface',
+        'unregisterForegroundReceiveSurface',
         'accept',
         'reject',
       ]);
@@ -40,7 +40,14 @@ cr.define('nearby_share', function() {
 
     simulateShareTargetArrival(name, connectionToken) {
       const target = {id: {low: 1, high: 2}, name: name, type: 1};
-      this.observer_.onIncomingShare(target, connectionToken);
+      const metadata = {
+        'status': nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation,
+        progress: 0.0,
+        token: connectionToken,
+        is_original: true,
+        is_final_status: false
+      };
+      this.observer_.onTransferUpdate(target, metadata);
       return target;
     }
 
@@ -63,24 +70,24 @@ cr.define('nearby_share', function() {
     /**
      * @return {!Promise<{success: !boolean}>}
      */
-    async enterHighVisibility() {
+    async registerForegroundReceiveSurface() {
       this.inHighVisibility_ = true;
       if (this.observer_) {
         this.observer_.onHighVisibilityChanged(this.inHighVisibility_);
       }
-      this.methodCalled('enterHighVisibility');
+      this.methodCalled('registerForegroundReceiveSurface');
       return {success: this.nextResult_};
     }
 
     /**
      * @return {!Promise<{success: !boolean}>}
      */
-    async exitHighVisibility() {
+    async unregisterForegroundReceiveSurface() {
       this.inHighVisibility_ = false;
       if (this.observer_) {
         this.observer_.onHighVisibilityChanged(this.inHighVisibility_);
       }
-      this.methodCalled('exitHighVisibility');
+      this.methodCalled('unregisterForegroundReceiveSurface');
       return {success: this.nextResult_};
     }
 

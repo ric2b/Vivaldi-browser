@@ -15,6 +15,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "device/fido/ctap2_device_operation.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_constants.h"
@@ -51,19 +52,19 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   void GetTouch(base::OnceCallback<void()> callback) override;
   void GetPinRetries(GetRetriesCallback callback) override;
   void GetPINToken(std::string pin,
-                   const std::vector<pin::Permissions>& permissions,
+                   std::vector<pin::Permissions> permissions,
                    base::Optional<std::string> rp_id,
                    GetTokenCallback callback) override;
   void GetUvRetries(GetRetriesCallback callback) override;
   bool CanGetUvToken() override;
-  void GetUvToken(base::Optional<std::string> rp_id,
+  void GetUvToken(std::vector<pin::Permissions> permissions,
+                  base::Optional<std::string> rp_id,
                   GetTokenCallback callback) override;
-  void SetPIN(const std::string& pin,
-              SetPINCallback callback) override;
+  void SetPIN(const std::string& pin, SetPINCallback callback) override;
   void ChangePIN(const std::string& old_pin,
                  const std::string& new_pin,
                  SetPINCallback callback) override;
-  MakeCredentialPINDisposition WillNeedPINToMakeCredential(
+  MakeCredentialPINUVDisposition PINUVDispositionForMakeCredential(
       const CtapMakeCredentialRequest& request,
       const FidoRequestHandlerBase::Observer* observer) override;
 
@@ -106,6 +107,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
                      LargeBlobReadCallback callback) override;
 
   base::Optional<base::span<const int32_t>> GetAlgorithms() override;
+  bool DiscoverableCredentialStorageFull() const override;
+
   void Reset(ResetCallback callback) override;
   void Cancel() override;
   std::string GetId() const override;
@@ -124,9 +127,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
 #if defined(OS_MAC)
   bool IsTouchIdAuthenticator() const override;
 #endif  // defined(OS_MAC)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   bool IsChromeOSAuthenticator() const override;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
   base::WeakPtr<FidoAuthenticator> GetWeakPtr() override;
 
   FidoDevice* device() { return device_.get(); }
@@ -157,7 +160,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
       base::Optional<pin::KeyAgreementResponse> key);
   void OnHaveEphemeralKeyForGetPINToken(
       std::string pin,
-      uint8_t permissions,
+      std::vector<pin::Permissions> permissions,
       base::Optional<std::string> rp_id,
       GetTokenCallback callback,
       CtapDeviceResponseCode status,
@@ -175,6 +178,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
       base::Optional<pin::KeyAgreementResponse> key);
   void OnHaveEphemeralKeyForUvToken(
       base::Optional<std::string> rp_id,
+      std::vector<pin::Permissions> permissions,
       GetTokenCallback callback,
       CtapDeviceResponseCode status,
       base::Optional<pin::KeyAgreementResponse> key);
@@ -248,6 +252,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   base::Optional<AuthenticatorSupportedOptions> options_;
   std::unique_ptr<FidoTask> task_;
   std::unique_ptr<GenericDeviceOperation> operation_;
+
+  // The highest advertised PINUVAuthProtocol version that the authenticator
+  // supports. This is guaranteed to be non-null after authenticator
+  // initialization if |options_| indicates that PIN is supported.
+  base::Optional<PINUVAuthProtocol> chosen_pin_uv_auth_protocol_;
+
   base::WeakPtrFactory<FidoDeviceAuthenticator> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FidoDeviceAuthenticator);

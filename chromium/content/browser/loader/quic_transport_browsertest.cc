@@ -14,9 +14,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
@@ -276,8 +277,9 @@ IN_PROC_BROWSER_TEST_F(QuicTransportBrowserTest, CreateSendStream) {
   ASSERT_TRUE(WaitForTitle(ASCIIToUTF16("PASS"), {ASCIIToUTF16("FAIL")}));
 }
 
-// Flaky on many platforms (see crbug/1064434).
-IN_PROC_BROWSER_TEST_F(QuicTransportBrowserTest, DISABLED_ReceiveStream) {
+// ReceiveStream is flaky: crbug.com/1140193
+#define MAYBE_ReceiveStream DISABLED_ReceiveStream
+IN_PROC_BROWSER_TEST_F(QuicTransportBrowserTest, MAYBE_ReceiveStream) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title2.html")));

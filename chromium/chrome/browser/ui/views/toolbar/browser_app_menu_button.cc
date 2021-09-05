@@ -14,17 +14,19 @@
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_otr_state.h"
-#include "chrome/browser/ui/in_product_help/in_product_help.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_view_class_properties.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
-#include "chrome/browser/ui/views/in_product_help/feature_promo_colors.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_colors.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
@@ -137,8 +139,9 @@ class PulsingInkDropMask : public views::AnimationDelegateViews,
 // static
 bool BrowserAppMenuButton::g_open_app_immediately_for_testing = false;
 
-BrowserAppMenuButton::BrowserAppMenuButton(ToolbarView* toolbar_view)
-    : AppMenuButton(toolbar_view), toolbar_view_(toolbar_view) {
+BrowserAppMenuButton::BrowserAppMenuButton(PressedCallback callback,
+                                           ToolbarView* toolbar_view)
+    : AppMenuButton(std::move(callback)), toolbar_view_(toolbar_view) {
   SetInkDropMode(InkDropMode::ON);
   SetHorizontalAlignment(gfx::ALIGN_RIGHT);
 
@@ -155,41 +158,6 @@ void BrowserAppMenuButton::SetTypeAndSeverity(
   UpdateTextAndHighlightColor();
 }
 
-void BrowserAppMenuButton::SetPromoFeature(
-    base::Optional<InProductHelpFeature> promo_feature) {
-  if (promo_feature_ == promo_feature)
-    return;
-
-  promo_feature_ = promo_feature;
-
-  // We override GetInkDropBaseColor() and CreateInkDropMask(), returning the
-  // promo values if we are showing an in-product help promo. Calling
-  // HostSizeChanged() will force the new mask and color to be fetched.
-  //
-  // TODO(collinbaker): Consider adding explicit way to recreate mask instead of
-  // relying on HostSizeChanged() to do so.
-  GetInkDrop()->HostSizeChanged(size());
-
-  views::InkDropState next_state;
-  if (promo_feature_ || IsMenuShowing()) {
-    // If we are showing a promo, we must use the ACTIVATED state to show the
-    // highlight. Otherwise, if the menu is currently showing, we need to keep
-    // the ink drop in the ACTIVATED state.
-    next_state = views::InkDropState::ACTIVATED;
-  } else {
-    // If we are not showing a promo and the menu is hidden, we use the
-    // DEACTIVATED state.
-    next_state = views::InkDropState::DEACTIVATED;
-    // TODO(collinbaker): this is brittle since we don't know if something else
-    // should keep this ACTIVATED or in some other state. Consider adding code
-    // to track the correct state and restore to that.
-  }
-  GetInkDrop()->AnimateToState(next_state);
-
-  UpdateIcon();
-  SchedulePaint();
-}
-
 void BrowserAppMenuButton::ShowMenu(int run_types) {
   if (IsMenuShowing())
     return;
@@ -202,8 +170,22 @@ void BrowserAppMenuButton::ShowMenu(int run_types) {
 
   Browser* browser = toolbar_view_->browser();
 
-  bool alert_reopen_tab_items =
-      promo_feature_ == InProductHelpFeature::kReopenTab;
+  FeaturePromoControllerViews* const feature_promo_controller =
+      BrowserView::GetBrowserViewForBrowser(toolbar_view_->browser())
+          ->feature_promo_controller();
+
+  // If the menu was opened while reopen tab in-product help was
+  // showing, we continue the IPH into the menu. Notify the promo
+  // controller we are taking control of the promo.
+  DCHECK(!reopen_tab_promo_handle_);
+  if (feature_promo_controller->BubbleIsShowing(
+          feature_engagement::kIPHReopenTabFeature)) {
+    reopen_tab_promo_handle_ =
+        feature_promo_controller->CloseBubbleAndContinuePromo(
+            feature_engagement::kIPHReopenTabFeature);
+  }
+
+  bool alert_reopen_tab_items = reopen_tab_promo_handle_.has_value();
 
   RunMenu(
       std::make_unique<AppMenuModel>(toolbar_view_, browser,
@@ -217,23 +199,32 @@ void BrowserAppMenuButton::OnThemeChanged() {
 }
 
 void BrowserAppMenuButton::UpdateIcon() {
-  bool touch_ui = ui::TouchUiController::Get()->touch_ui();
-  if (base::FeatureList::IsEnabled(features::kUseTextForUpdateButton)) {
-    const gfx::VectorIcon& icon =
-        touch_ui ? kBrowserToolsTouchIcon : kBrowserToolsIcon;
-    for (auto state : kButtonStates) {
-      SkColor icon_color =
-          toolbar_view_->app_menu_icon_controller()->GetIconColor(
-              GetForegroundColor(state));
-      SetImageModel(state, ui::ImageModel::FromVectorIcon(icon, icon_color));
-    }
-    return;
-  }
+  const gfx::VectorIcon& icon = ui::TouchUiController::Get()->touch_ui()
+                                    ? kBrowserToolsTouchIcon
+                                    : kBrowserToolsIcon;
   for (auto state : kButtonStates) {
-    SetImageModel(state,
-                  toolbar_view_->app_menu_icon_controller()->GetIconImage(
-                      touch_ui, GetForegroundColor(state)));
+    SkColor icon_color =
+        toolbar_view_->app_menu_icon_controller()->GetIconColor(
+            GetForegroundColor(state));
+    SetImageModel(state, ui::ImageModel::FromVectorIcon(icon, icon_color));
   }
+}
+
+void BrowserAppMenuButton::HandleMenuClosed() {
+  // If we were showing a promo in the menu, drop the handle to notify
+  // FeaturePromoController we're done. This is a no-op if we weren't
+  // showing the promo.
+  reopen_tab_promo_handle_.reset();
+}
+
+void BrowserAppMenuButton::AfterPropertyChange(const void* key,
+                                               int64_t old_value) {
+  if (key != kHasInProductHelpPromoKey)
+    return;
+  // FeaturePromoControllerViews sets the following property when a
+  // bubble is showing. When the state changes, update our highlight for
+  // the promo.
+  SetHasInProductHelpPromo(GetProperty(kHasInProductHelpPromoKey));
 }
 
 void BrowserAppMenuButton::UpdateTextAndHighlightColor() {
@@ -275,9 +266,42 @@ void BrowserAppMenuButton::UpdateTextAndHighlightColor() {
   }
 
   SetTooltipText(l10n_util::GetStringUTF16(tooltip_message_id));
+  SetHighlight(text, color);
+}
 
-  if (base::FeatureList::IsEnabled(features::kUseTextForUpdateButton))
-    SetHighlight(text, color);
+void BrowserAppMenuButton::SetHasInProductHelpPromo(
+    bool has_in_product_help_promo) {
+  if (has_in_product_help_promo_ == has_in_product_help_promo)
+    return;
+
+  has_in_product_help_promo_ = has_in_product_help_promo;
+
+  // We override GetInkDropBaseColor() and CreateInkDropMask(), returning the
+  // promo values if we are showing an in-product help promo. Calling
+  // HostSizeChanged() will force the new mask and color to be fetched.
+  //
+  // TODO(collinbaker): Consider adding explicit way to recreate mask instead of
+  // relying on HostSizeChanged() to do so.
+  GetInkDrop()->HostSizeChanged(size());
+
+  views::InkDropState next_state;
+  if (has_in_product_help_promo_ || IsMenuShowing()) {
+    // If we are showing a promo, we must use the ACTIVATED state to show the
+    // highlight. Otherwise, if the menu is currently showing, we need to keep
+    // the ink drop in the ACTIVATED state.
+    next_state = views::InkDropState::ACTIVATED;
+  } else {
+    // If we are not showing a promo and the menu is hidden, we use the
+    // DEACTIVATED state.
+    next_state = views::InkDropState::DEACTIVATED;
+    // TODO(collinbaker): this is brittle since we don't know if something else
+    // should keep this ACTIVATED or in some other state. Consider adding code
+    // to track the correct state and restore to that.
+  }
+  GetInkDrop()->AnimateToState(next_state);
+
+  UpdateIcon();
+  SchedulePaint();
 }
 
 const char* BrowserAppMenuButton::GetClassName() const {
@@ -285,7 +309,7 @@ const char* BrowserAppMenuButton::GetClassName() const {
 }
 
 SkColor BrowserAppMenuButton::GetForegroundColor(ButtonState state) const {
-  return promo_feature_
+  return has_in_product_help_promo_
              ? GetFeaturePromoHighlightColorForToolbar(GetThemeProvider())
              : ToolbarButton::GetForegroundColor(state);
 }
@@ -343,7 +367,7 @@ BrowserAppMenuButton::CreateInkDropHighlight() const {
 
 std::unique_ptr<views::InkDropMask> BrowserAppMenuButton::CreateInkDropMask()
     const {
-  if (promo_feature_) {
+  if (has_in_product_help_promo_) {
     // This gets the latest ink drop insets. |SetTrailingMargin()| is called
     // whenever our margins change (i.e. due to the window maximizing or
     // minimizing) and updates our internal padding property accordingly.
@@ -359,14 +383,14 @@ std::unique_ptr<views::InkDropMask> BrowserAppMenuButton::CreateInkDropMask()
 }
 
 SkColor BrowserAppMenuButton::GetInkDropBaseColor() const {
-  return promo_feature_
+  return has_in_product_help_promo_
              ? GetFeaturePromoHighlightColorForToolbar(GetThemeProvider())
              : AppMenuButton::GetInkDropBaseColor();
 }
 
 base::string16 BrowserAppMenuButton::GetTooltipText(const gfx::Point& p) const {
   // Suppress tooltip when IPH is showing.
-  if (promo_feature_)
+  if (has_in_product_help_promo_)
     return base::string16();
 
   return AppMenuButton::GetTooltipText(p);

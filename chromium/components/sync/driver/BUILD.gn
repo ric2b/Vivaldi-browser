@@ -7,8 +7,7 @@ import("//tools/grit/grit_rule.gni")
 
 static_library("driver") {
   sources = [
-    "about_sync_util.cc",
-    "about_sync_util.h",
+    "active_devices_provider.h",
     "backend_migrator.cc",
     "backend_migrator.h",
     "configure_context.h",
@@ -26,8 +25,8 @@ static_library("driver") {
     "glue/sync_engine_backend.h",
     "glue/sync_engine_impl.cc",
     "glue/sync_engine_impl.h",
-    "model_association_manager.cc",
-    "model_association_manager.h",
+    "model_load_manager.cc",
+    "model_load_manager.h",
     "model_type_controller.cc",
     "model_type_controller.h",
     "non_ui_syncable_service_based_model_type_controller.cc",
@@ -46,6 +45,8 @@ static_library("driver") {
     "sync_client.h",
     "sync_driver_switches.cc",
     "sync_driver_switches.h",
+    "sync_internals_util.cc",
+    "sync_internals_util.h",
     "sync_service.cc",
     "sync_service.h",
     "sync_service_crypto.cc",
@@ -89,6 +90,8 @@ static_library("driver") {
     "//components/keyed_service/core",
     "//components/metrics",
     "//components/os_crypt",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
     "//components/prefs",
     "//components/signin/public/identity_manager",
     "//components/sync/invalidations",
@@ -101,10 +104,6 @@ static_library("driver") {
     sources += [
       "sync_policy_handler.cc",
       "sync_policy_handler.h",
-    ]
-    deps += [
-      "//components/policy:generated",
-      "//components/policy/core/browser",
     ]
   }
 
@@ -123,10 +122,6 @@ grit("resources") {
     "sync_driver_resources.pak",
   ]
   output_dir = "$root_gen_dir/components"
-  grit_flags = [
-    "-E",
-    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-  ]
 }
 
 static_library("test_support") {
@@ -159,6 +154,7 @@ static_library("test_support") {
   deps = [
     "//components/invalidation/impl:test_support",
     "//components/pref_registry",
+    "//components/prefs:test_support",
     "//components/signin/public/base",
     "//components/signin/public/identity_manager:test_support",
     "//components/sync",
@@ -166,7 +162,6 @@ static_library("test_support") {
     "//components/sync:test_support_model",
     "//components/sync/driver",
     "//components/sync/invalidations:test_support",
-    "//components/sync_preferences:test_support",
     "//components/version_info",
     "//components/version_info:generate_version_info",
     "//google_apis",

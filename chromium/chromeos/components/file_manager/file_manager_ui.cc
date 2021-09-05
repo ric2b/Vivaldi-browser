@@ -11,32 +11,43 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/file_manager/grit/file_manager_resources.h"
 
 namespace chromeos {
 namespace file_manager {
 
-FileManagerUI::FileManagerUI(content::WebUI* web_ui)
-    : MojoWebUIController(web_ui) {
+FileManagerUI::FileManagerUI(content::WebUI* web_ui,
+                             std::unique_ptr<FileManagerUIDelegate> delegate)
+    : MojoWebUIController(web_ui), delegate_(std::move(delegate)) {
   auto source = base::WrapUnique(content::WebUIDataSource::Create(
       chromeos::file_manager::kChromeUIFileManagerHost));
+  source->AddLocalizedStrings(*this->delegate()->GetFileManagerAppStrings());
   // The HTML content loaded on chrome://file-manager.
-  source->AddResourcePath("", IDR_FILE_MANAGER_MAIN_HTML);
+  source->AddResourcePath("", IDR_FILE_MANAGER_SWA_MAIN_HTML);
 
   // The resources requested by chrome://file-manager HTML.
-  source->AddResourcePath("main.css", IDR_FILE_MANAGER_MAIN_CSS);
-  source->AddResourcePath("main.js", IDR_FILE_MANAGER_MAIN_JS);
+  // TOD(majewski): Rename main.* to main_swa.*
+  source->AddResourcePath("main.css", IDR_FILE_MANAGER_SWA_MAIN_CSS);
+  source->AddResourcePath("main.js", IDR_FILE_MANAGER_SWA_MAIN_JS);
   source->AddResourcePath("file_manager.mojom-lite.js",
-                          IDR_FILE_MANAGER_MOJO_LITE_JS);
+                          IDR_FILE_MANAGER_SWA_MOJO_LITE_JS);
   source->AddResourcePath("browser_proxy.js",
-                          IDR_FILE_MANAGER_BROWSER_PROXY_JS);
+                          IDR_FILE_MANAGER_SWA_BROWSER_PROXY_JS);
+
+  // Sets up legacy_main_script.js to be the same as Files App
+  //   ui/file_manager/file_manager/foreground/js/main_scripts.js
+  source->AddResourcePath("legacy_main_scripts.js", IDR_FILE_MANAGER_MAIN_JS);
 
 #if !DCHECK_IS_ON()
   // If a user goes to an invalid url and non-DCHECK mode (DHECK = debug mode)
   // is set, serve a default page so the user sees your default page instead
   // of an unexpected error. But if DCHECK is set, the user will be a
   // developer and be able to identify an error occurred.
-  source->SetDefaultResource(IDR_FILE_MANAGER_MAIN_HTML);
+  source->SetDefaultResource(IDR_FILE_MANAGER_SWA_MAIN_HTML);
 #endif  // !DCHECK_IS_ON()
+
+  // TODO(crbug.com/1098685): Trusted Type remaining WebUI.
+  source->DisableTrustedTypesCSP();
 
   auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
   content::WebUIDataSource::Add(browser_context, source.release());

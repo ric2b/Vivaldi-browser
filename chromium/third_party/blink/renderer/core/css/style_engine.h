@@ -34,7 +34,7 @@
 #include <utility>
 #include "base/auto_reset.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-shared.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/active_style_sheets.h"
@@ -133,6 +133,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void AddTextTrack(TextTrack*);
   void RemoveTextTrack(TextTrack*);
 
+  // An Element with no tag name, IDs, classes (etc), as described by the
+  // WebVTT spec:
+  // https://w3c.github.io/webvtt/#obtaining-css-boxes
+  //
+  // TODO(https://github.com/w3c/webvtt/issues/477): Make originating element
+  // actually featureless.
+  Element* EnsureVTTOriginatingElement();
+
   const ActiveStyleSheetVector ActiveStyleSheetsForInspector();
 
   bool NeedsActiveStyleUpdate() const;
@@ -150,8 +158,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void WatchedSelectorsChanged();
   void InitialStyleChanged();
   void ColorSchemeChanged();
-  void SetOwnerColorScheme(ColorScheme);
-  ColorScheme GetOwnerColorScheme() const { return owner_color_scheme_; }
+  void SetOwnerColorScheme(mojom::blink::ColorScheme);
+  mojom::blink::ColorScheme GetOwnerColorScheme() const {
+    return owner_color_scheme_;
+  }
   void InitialViewportChanged();
   void ViewportRulesChanged();
   void HtmlImportAddedOrRemoved();
@@ -168,9 +178,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     DCHECK(!IsHTMLImport());
     DCHECK(global_rule_set_);
     return global_rule_set_->WatchedSelectorsRuleSet();
-  }
-  bool HasStyleSheets() const {
-    return GetDocumentStyleSheetCollection().HasStyleSheets();
   }
 
   RuleSet* RuleSetForSheet(CSSStyleSheet&);
@@ -399,13 +406,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void SetColorSchemeFromMeta(const CSSValue* color_scheme);
   const CSSValue* GetMetaColorSchemeValue() const { return meta_color_scheme_; }
-  PreferredColorScheme GetPreferredColorScheme() const {
+  mojom::PreferredColorScheme GetPreferredColorScheme() const {
     return preferred_color_scheme_;
   }
   ForcedColors GetForcedColors() const { return forced_colors_; }
   void UpdateColorSchemeBackground(bool color_scheme_changed = false);
   Color ForcedBackgroundColor() const { return forced_background_color_; }
   Color ColorAdjustBackgroundColor() const;
+
+  TreeScopeStyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
 
   void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
@@ -423,7 +432,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
 
   TreeScopeStyleSheetCollection& EnsureStyleSheetCollectionFor(TreeScope&);
-  TreeScopeStyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
   bool ShouldUpdateDocumentStyleSheetCollection() const;
   bool ShouldUpdateShadowTreeStyleSheetCollection() const;
 
@@ -503,8 +511,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void ClearKeyframeRules() { keyframes_rule_map_.clear(); }
   void ClearPropertyRules();
+  void ClearScrollTimelineRules();
 
   void AddPropertyRulesFromSheets(const ActiveStyleSheetVector&);
+  void AddScrollTimelineRulesFromSheets(const ActiveStyleSheetVector&);
 
   // Returns true if any @font-face rules are added.
   bool AddUserFontFaceRules(const RuleSet&);
@@ -639,13 +649,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // The preferred color scheme is set in settings, but may be overridden by the
   // ForceDarkMode setting where the preferred_color_scheme_ will be set to
   // kLight to avoid dark styling to be applied before auto darkening.
-  PreferredColorScheme preferred_color_scheme_{PreferredColorScheme::kLight};
+  mojom::PreferredColorScheme preferred_color_scheme_{
+      mojom::PreferredColorScheme::kLight};
 
   // We pass the used value of color-scheme from the iframe element in the
   // embedding document. If the color-scheme of the owner element and the root
   // element in the embedded document differ, use a solid backdrop color instead
   // of the default transparency of an iframe.
-  ColorScheme owner_color_scheme_{ColorScheme::kLight};
+  mojom::blink::ColorScheme owner_color_scheme_;
 
   // The color of the canvas backdrop for the used color-scheme.
   Color color_scheme_background_;
@@ -658,8 +669,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   friend class NodeTest;
   friend class StyleEngineTest;
   friend class WhitespaceAttacherTest;
+  friend class StyleCascadeTest;
 
   HeapHashSet<Member<TextTrack>> text_tracks_;
+  Member<Element> vtt_originating_element_;
 };
 
 }  // namespace blink

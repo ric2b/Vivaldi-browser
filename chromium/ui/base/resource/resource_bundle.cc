@@ -91,7 +91,7 @@ base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
 
   // Return just the name of the pak file.
 #if defined(OS_WIN)
-  return base::FilePath(base::ASCIIToUTF16(pak_name));
+  return base::FilePath(base::ASCIIToWide(pak_name));
 #else
   return base::FilePath(pak_name.c_str());
 #endif  // OS_WIN
@@ -697,6 +697,13 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
 }
 
 std::string ResourceBundle::LoadDataResourceString(int resource_id) const {
+  if (delegate_) {
+    base::Optional<std::string> data =
+        delegate_->LoadDataResourceString(resource_id);
+    if (data)
+      return data.value();
+  }
+
   return LoadDataResourceStringForScale(resource_id, ui::SCALE_FACTOR_NONE);
 }
 

@@ -41,9 +41,10 @@ struct XRRuntimeSessionOptions {
   // Represents the type of session that is being requested.
   XRSessionMode mode;
 
-  // The enabled features combine the active required and optional features as
+  // The below arrays combine the active required and optional features as
   // resolved by BrowserXRRuntime and VRServiceImpl.
-  array<XRSessionFeature> enabled_features;
+  array<XRSessionFeature> required_features;
+  array<XRSessionFeature> optional_features;
 
   // The following options are used for permission requests and showing module
   // install UI.
@@ -51,6 +52,8 @@ struct XRRuntimeSessionOptions {
   // module install UI in the browser process before calling out to devices.
   int32 render_process_id;
   int32 render_frame_id;
+
+  array<XRTrackedImage> tracked_images;
 };
 
 // An XRRuntime may live in the browser process or a utility process.  The
@@ -132,6 +135,8 @@ struct XRDeviceData {
   [EnableIf=is_win]
   // The LUID of the GPU that the device is plugged into.
   gpu.mojom.Luid? luid;
+  // Indicates whether the device supports AR or not
+  bool is_ar_blend_mode_supported;
 };
 
 // Notify the browser process about a set of runtimes.  The browser process

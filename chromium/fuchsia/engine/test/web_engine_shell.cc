@@ -22,8 +22,8 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/values.h"
 #include "fuchsia/base/init_logging.h"
@@ -37,12 +37,14 @@ constexpr char kRemoteDebuggingPortSwitch[] = "remote-debugging-port";
 constexpr char kHeadlessSwitch[] = "headless";
 constexpr char kEnableProtectedMediaIdentifier[] =
     "enable-protected-media-identifier";
+constexpr char kWebEnginePackageName[] = "web-engine-package-name";
 
 void PrintUsage() {
   std::cerr << "Usage: "
             << base::CommandLine::ForCurrentProcess()->GetProgram().BaseName()
             << " [--" << kRemoteDebuggingPortSwitch << "] [--"
-            << kHeadlessSwitch << "] URL. [--] [--{extra_flag1}] "
+            << kHeadlessSwitch << "] [--" << kWebEnginePackageName
+            << "=name] URL. [--] [--{extra_flag1}] "
             << "[--{extra_flag2}]" << std::endl
             << "Setting " << kRemoteDebuggingPortSwitch << " to 0 will "
             << "automatically choose an available port." << std::endl
@@ -80,15 +82,22 @@ GURL GetUrlFromArgs(const base::CommandLine::StringVector& args) {
 }
 
 fuchsia::web::ContextProviderPtr ConnectToContextProvider(
+    base::StringPiece web_engine_package_name_override,
     const base::CommandLine::StringVector& extra_command_line_arguments) {
   sys::ComponentContext* const component_context =
       base::ComponentContextForProcess();
 
   // If there are no additional command-line arguments then use the
   // system instance of the ContextProvider.
-  if (extra_command_line_arguments.empty()) {
+  if (extra_command_line_arguments.empty() &&
+      web_engine_package_name_override.empty()) {
     return component_context->svc()->Connect<fuchsia::web::ContextProvider>();
   }
+
+  base::StringPiece web_engine_package_name =
+      web_engine_package_name_override.empty()
+          ? "web_engine"
+          : web_engine_package_name_override;
 
   // Launch a private ContextProvider instance, with the desired command-line
   // arguments.
@@ -96,8 +105,9 @@ fuchsia::web::ContextProviderPtr ConnectToContextProvider(
   component_context->svc()->Connect(launcher.NewRequest());
 
   fuchsia::sys::LaunchInfo launch_info;
-  launch_info.url =
-      "fuchsia-pkg://fuchsia.com/web_engine#meta/context_provider.cmx";
+  launch_info.url = base::StringPrintf(
+      "fuchsia-pkg://fuchsia.com/%s#meta/context_provider.cmx",
+      web_engine_package_name.data());
   launch_info.arguments = extra_command_line_arguments;
   fidl::InterfaceHandle<fuchsia::io::Directory> service_directory;
   launch_info.directory_request = service_directory.NewRequest().TakeChannel();
@@ -148,7 +158,9 @@ int main(int argc, char** argv) {
   additional_args.erase(additional_args.begin());
 
   fuchsia::web::ContextProviderPtr web_context_provider =
-      ConnectToContextProvider(additional_args);
+      ConnectToContextProvider(
+          command_line->GetSwitchValueASCII(kWebEnginePackageName),
+          additional_args);
 
   // Set up the content directory fuchsia-pkg://shell-data/, which will host
   // the files stored under //fuchsia/engine/test/shell_data.
@@ -156,7 +168,7 @@ int main(int argc, char** argv) {
   fuchsia::web::ContentDirectoryProvider content_directory;
   base::FilePath pkg_path;
   base::PathService::Get(base::DIR_ASSETS, &pkg_path);
-  content_directory.set_directory(base::fuchsia::OpenDirectory(
+  content_directory.set_directory(base::OpenDirectoryHandle(
       pkg_path.AppendASCII("fuchsia/engine/test/shell_data")));
   content_directory.set_name("shell-data");
   std::vector<fuchsia::web::ContentDirectoryProvider> content_directories;
@@ -168,8 +180,8 @@ int main(int argc, char** argv) {
   // embedder application. By passing a handle to this process' service
   // directory to the ContextProvider, we are allowing the Context access to the
   // same set of services available to this application.
-  create_context_params.set_service_directory(base::fuchsia::OpenDirectory(
-      base::FilePath(base::fuchsia::kServiceDirectoryPath)));
+  create_context_params.set_service_directory(
+      base::OpenDirectoryHandle(base::FilePath(base::kServiceDirectoryPath)));
 
   // Enable other WebEngine features.
   fuchsia::web::ContextFeatureFlags features =
@@ -188,12 +200,11 @@ int main(int argc, char** argv) {
   // DRM services require cdm_data_directory to be populated, so create a
   // directory under /data and use that as the cdm_data_directory.
   base::FilePath cdm_data_path =
-      base::FilePath(base::fuchsia::kPersistedDataDirectoryPath)
-          .Append("cdm_data");
+      base::FilePath(base::kPersistedDataDirectoryPath).Append("cdm_data");
   base::File::Error error;
   CHECK(base::CreateDirectoryAndGetError(cdm_data_path, &error)) << error;
   create_context_params.set_cdm_data_directory(
-      base::fuchsia::OpenDirectory(cdm_data_path));
+      base::OpenDirectoryHandle(cdm_data_path));
   CHECK(create_context_params.cdm_data_directory());
 
   base::RunLoop run_loop;
@@ -250,6 +261,9 @@ int main(int argc, char** argv) {
           quit_run_loop.Run();
         }
       });
+
+  // Since this is for development, enable all logging.
+  frame->SetJavaScriptLogLevel(fuchsia::web::ConsoleLogLevel::DEBUG);
 
   if (enable_protected_media_identifier_access) {
     fuchsia::web::PermissionDescriptor protected_media_permission;

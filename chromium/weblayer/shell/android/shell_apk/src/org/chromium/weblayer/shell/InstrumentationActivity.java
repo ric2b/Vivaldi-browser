@@ -24,6 +24,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.components.strictmode.ThreadStrictModeInterceptor;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.FullscreenCallback;
 import org.chromium.weblayer.NewTabCallback;
@@ -42,6 +43,8 @@ import java.util.List;
 /**
  * Activity for running instrumentation tests.
  */
+// This isn't part of Chrome, so using explicit colors/sizes is ok.
+@SuppressWarnings("checkstyle:SetTextColorAndSetTextSizeCheck")
 public class InstrumentationActivity extends FragmentActivity {
     private static final String TAG = "WLInstrumentation";
     private static final String KEY_MAIN_VIEW_ID = "mainViewId";
@@ -55,9 +58,16 @@ public class InstrumentationActivity extends FragmentActivity {
     // True by default. If set to false, the test should call loadWebLayerSync.
     public static final String EXTRA_CREATE_WEBLAYER = "EXTRA_CREATE_WEBLAYER";
 
+    public static final String EXTRA_TOP_VIEW_MIN_HEIGHT = "EXTRA_TOP_VIEW_MIN_HEIGHT";
+    public static final String EXTRA_ONLY_EXPAND_CONTROLS_AT_TOP =
+            "EXTRA_ONLY_EXPAND_CONTROLS_AT_TOP";
+
     // Used in tests to specify whether WebLayer URL bar should set default click listeners
     // that show Page Info UI on its TextView.
     public static final String EXTRA_URLBAR_TEXT_CLICKABLE = "EXTRA_URLBAR_TEXT_CLICKABLE";
+
+    // Used in tests to specify whether WebLayer URL bar should show publisher url.
+    public static final String EXTRA_URLBAR_SHOW_PUBLISHER_URL = "EXTRA_URLBAR_SHOW_PUBLISHER_URL";
 
     private static OnCreatedCallback sOnCreatedCallback;
 
@@ -183,8 +193,8 @@ public class InstrumentationActivity extends FragmentActivity {
     protected void onCreate(final Bundle savedInstanceState) {
         // JaCoCo injects code that does file access, which doesn't work well with strict mode.
         if (!isJaCoCoEnabled()) {
-            StrictMode.setThreadPolicy(
-                    new ThreadPolicy.Builder().detectAll().penaltyLog().penaltyDeath().build());
+            ThreadStrictModeInterceptor.buildWithDeathPenaltyAndKnownViolationExemptions().install(
+                    new ThreadPolicy.Builder().detectAll().build());
             // This doesn't use detectAll() as the untagged sockets policy is encountered in tests
             // using TestServer.
             StrictMode.setVmPolicy(new VmPolicy.Builder()
@@ -270,7 +280,18 @@ public class InstrumentationActivity extends FragmentActivity {
         mBrowser = Browser.fromFragment(mFragment);
         mProfile = mBrowser.getProfile();
 
-        mBrowser.setTopView(mTopContentsContainer);
+        final boolean onlyExpandControlsAtTop =
+                getIntent().getBooleanExtra(EXTRA_ONLY_EXPAND_CONTROLS_AT_TOP, false);
+        final int minTopViewHeight = getIntent().getIntExtra(EXTRA_TOP_VIEW_MIN_HEIGHT, -1);
+
+        if (onlyExpandControlsAtTop || minTopViewHeight != -1) {
+            // This was added in 86.
+            mBrowser.setTopView(mTopContentsContainer, Math.max(0, minTopViewHeight),
+                    onlyExpandControlsAtTop,
+                    /* animate */ false);
+        } else {
+            mBrowser.setTopView(mTopContentsContainer);
+        }
 
         mRendererCrashListener = new TabCallback() {
             @Override
@@ -374,6 +395,9 @@ public class InstrumentationActivity extends FragmentActivity {
                                                        .setIconColor(android.R.color.black);
         if (getIntent().getBooleanExtra(EXTRA_URLBAR_TEXT_CLICKABLE, true)) {
             optionsBuilder = optionsBuilder.showPageInfoWhenTextIsClicked();
+        }
+        if (getIntent().getBooleanExtra(EXTRA_URLBAR_SHOW_PUBLISHER_URL, false)) {
+            optionsBuilder = optionsBuilder.showPublisherUrl();
         }
 
         mUrlBarView = mBrowser.getUrlBarController().createUrlBarView(optionsBuilder.build());

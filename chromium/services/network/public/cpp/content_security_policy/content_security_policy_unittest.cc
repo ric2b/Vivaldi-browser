@@ -141,6 +141,17 @@ network::mojom::SourceLocationPtr SourceLocation() {
   return network::mojom::SourceLocation::New();
 }
 
+mojom::ContentSecurityPolicyPtr ParseOneCspReportOnly(std::string expression) {
+  scoped_refptr<net::HttpResponseHeaders> headers(
+      new net::HttpResponseHeaders("HTTP/1.1 200 OK"));
+  headers->SetHeader("Content-Security-Policy-Report-Only", expression);
+  std::vector<mojom::ContentSecurityPolicyPtr> policies;
+  AddContentSecurityPolicyFromHeaders(*headers, GURL("https://example.com/"),
+                                      &policies);
+  CHECK_EQ(1u, policies.size());
+  return std::move(policies[0]);
+}
+
 }  // namespace
 
 TEST(ContentSecurityPolicy, ParseFrameAncestors) {
@@ -1014,9 +1025,9 @@ TEST(ContentSecurityPolicy, ParseSandbox) {
   AddContentSecurityPolicyFromHeaders(*headers, GURL("https://example.com/"),
                                       &policies);
   EXPECT_EQ(policies[0]->sandbox,
-            mojom::WebSandboxFlags::kDownloads |
-                mojom::WebSandboxFlags::kScripts |
-                mojom::WebSandboxFlags::kAutomaticFeatures);
+            ~mojom::WebSandboxFlags::kDownloads &
+                ~mojom::WebSandboxFlags::kScripts &
+                ~mojom::WebSandboxFlags::kAutomaticFeatures);
 }
 
 TEST(ContentSecurityPolicy, ParseSerializedSourceList) {
@@ -1508,6 +1519,41 @@ TEST(ContentSecurityPolicy, SubsumesPluginTypes) {
         << test.policy_a << " should " << (test.expected ? "" : "not ")
         << "subsume " << test.policies_b;
   }
+}
+
+TEST(ContentSecurityPolicy, InvalidPolicyInReportOnlySandbox) {
+  mojom::ContentSecurityPolicyPtr policy = ParseOneCspReportOnly("sandbox");
+
+  EXPECT_EQ(mojom::WebSandboxFlags::kNone, policy->sandbox);
+  ASSERT_EQ(1u, policy->parsing_errors.size());
+  EXPECT_EQ(
+      "The Content Security Policy directive 'sandbox' is ignored when "
+      "delivered in a report-only policy.",
+      policy->parsing_errors[0]);
+}
+
+TEST(ContentSecurityPolicy, InvalidPolicyInReportOnlyUpgradeInsecureRequest) {
+  mojom::ContentSecurityPolicyPtr policy =
+      ParseOneCspReportOnly("upgrade-insecure-requests");
+
+  EXPECT_FALSE(policy->upgrade_insecure_requests);
+  ASSERT_EQ(1u, policy->parsing_errors.size());
+  EXPECT_EQ(
+      "The Content Security Policy directive 'upgrade-insecure-requests' is "
+      "ignored when delivered in a report-only policy.",
+      policy->parsing_errors[0]);
+}
+
+TEST(ContentSecurityPolicy, InvalidPolicyInReportTreatAsPublicAddress) {
+  mojom::ContentSecurityPolicyPtr policy =
+      ParseOneCspReportOnly("treat-as-public-address");
+
+  EXPECT_FALSE(policy->treat_as_public_address);
+  ASSERT_EQ(1u, policy->parsing_errors.size());
+  EXPECT_EQ(
+      "The Content Security Policy directive 'treat-as-public-address' is "
+      "ignored when delivered in a report-only policy.",
+      policy->parsing_errors[0]);
 }
 
 }  // namespace network

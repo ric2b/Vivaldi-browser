@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="pt-PT">
+<translation id="1397811292916898096">Pesquisar com <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Alternar separadores normais/privados</translation>
+<translation id="1644574205037202324">Histórico</translation>
+<translation id="17513872634828108">Separadores abertos</translation>
+<translation id="1829244130665387512">Procurar na página</translation>
+<translation id="2038563949887743358">Ativar Pedir website para computador</translation>
+<translation id="2433507940547922241">Aparência</translation>
+<translation id="2501278716633472235">Voltar</translation>
+<translation id="2633278372998075009">Separadores privados</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
+<translation id="3234355010754616171">Novo separador privado</translation>
+<translation id="3518985090088779359">Aceitar e continuar</translation>
+<translation id="3700829948786686853">Bem-vindo ao Vivaldi</translation>
+<translation id="3719826155360621982">Página inicial</translation>
+<translation id="385051799172605136">Voltar</translation>
+<translation id="4121750346708795461">Ao utilizar esta aplicação, concorda com o <ph name="BEGIN_LINK1" />Acordo de Utilização<ph name="END_LINK1" /> e a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>
+<translation id="4243710787042215766">Abrir num separador privado</translation>
+<translation id="4526803704855831732">Separadores privados</translation>
+<translation id="4759238208242260848">Transferências</translation>
+<translation id="4883379392681899581">Deixar o modo privado</translation>
+<translation id="4943872375798546930">Sem resultados</translation>
+<translation id="49576331685473090">Bloqueador de conteúdos</translation>
+<translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
+<translation id="5186185447130319458">Privado</translation>
+<translation id="5233638681132016545">Novo separador</translation>
+<translation id="572328651809341494">Separadores recentes</translation>
+<translation id="5840488417521835756">Saiba mais acerca dos tópicos nos websites sem sair da página. A funcionalidade Tocar para pesquisar só está disponível quando o Google está configurado como motor de pesquisa padrão no Vivaldi. Esta funcionalidade envia uma palavra e o seu contexto para a Pesquisa Google, que devolve definições, imagens, resultados de pesquisa e outros detalhes.
+
+Para ajustar o termo de pesquisa, mantenha-o premido para selecionar. Para refinar a pesquisa, arraste o painel totalmente para cima e toque na caixa de pesquisa.</translation>
+<translation id="6336451774241870485">Novo separador privado</translation>
+<translation id="6593061639179217415">Website para computador</translation>
+<translation id="6610147964972079463">Fechar separadores privados</translation>
+<translation id="706339621163631076">Política de privacidade do Vivaldi</translation>
+<translation id="7427132068601343474">Sobre o Vivaldi</translation>
+<translation id="7465104139234185284">Fechar todos os separadores privados</translation>
+<translation id="7519434535192513364">A funcionalidade Tocar para pesquisar só está disponível quando o Google é o motor de pesquisa padrão definido no Vivaldi. Envia a palavra selecionada e a página atual como contexto para a Pesquisa Google. Pode desativá-la nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" />.</translation>
+<translation id="804786196054284061">Termos de Utilização do Vivaldi</translation>
+<translation id="85991616550051997">Ir para a página inicial</translation>
+<translation id="8820817407110198400">Favoritos</translation>
+<translation id="9063523880881406963">Desativar Pedir website para computador</translation>
+<translation id="9080642952018487277">Entrar no modo privado</translation>
+</translationbundle>

@@ -89,7 +89,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
     return nullptr;
   }
   bool ShouldBlockFetchByMixedContentCheck(
-      mojom::RequestContextType,
+      mojom::blink::RequestContextType,
       const base::Optional<ResourceRequest::RedirectInfo>&,
       const KURL&,
       ReportingDisposition,
@@ -138,6 +138,7 @@ class BaseFetchContextTest : public testing::Test {
         MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
             properties, fetch_context_,
             base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+            base::MakeRefCounted<scheduler::FakeTaskRunner>(),
             MakeGarbageCollected<TestLoaderFactory>(), execution_context_));
   }
 
@@ -167,7 +168,7 @@ TEST_F(BaseFetchContextTest, CanRequest) {
 
   KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
-  resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+  resource_request.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
   resource_request.SetRequestorOrigin(GetSecurityOrigin());
 
   ResourceLoaderOptions options(nullptr /* world */);
@@ -196,7 +197,7 @@ TEST_F(BaseFetchContextTest, CheckCSPForRequest) {
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CheckCSPForRequest(
-                mojom::RequestContextType::SCRIPT,
+                mojom::blink::RequestContextType::SCRIPT,
                 network::mojom::RequestDestination::kScript, url, options,
                 ReportingDisposition::kReport,
                 KURL(NullURL(), "http://www.redirecting.com/"),

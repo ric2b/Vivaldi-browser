@@ -847,7 +847,8 @@ TEST(Table, EraseMaintainsValidIterator) {
 std::vector<int64_t> CollectBadMergeKeys(size_t N) {
   static constexpr int kGroupSize = Group::kWidth - 1;
 
-  auto topk_range = [](size_t b, size_t e, IntTable* t) -> std::vector<int64_t> {
+  auto topk_range = [](size_t b, size_t e,
+                       IntTable* t) -> std::vector<int64_t> {
     for (size_t i = b; i != e; ++i) {
       t->emplace(i);
     }
@@ -1001,8 +1002,8 @@ using ProbeStatsPerSize = std::map<size_t, ProbeStats>;
 // 1. Create new table and reserve it to keys.size() * 2
 // 2. Insert all keys xored with seed
 // 3. Collect ProbeStats from final table.
-ProbeStats CollectProbeStatsOnKeysXoredWithSeed(const std::vector<int64_t>& keys,
-                                                size_t num_iters) {
+ProbeStats CollectProbeStatsOnKeysXoredWithSeed(
+    const std::vector<int64_t>& keys, size_t num_iters) {
   const size_t reserve_size = keys.size() * 2;
 
   ProbeStats stats;
@@ -1708,6 +1709,26 @@ TEST(Nodes, ExtractInsert) {
   EXPECT_THAT(*res.position, Pair(k0, ""));
   EXPECT_TRUE(res.node);
   EXPECT_FALSE(node);
+}
+
+TEST(Nodes, HintInsert) {
+  IntTable t = {1, 2, 3};
+  auto node = t.extract(1);
+  EXPECT_THAT(t, UnorderedElementsAre(2, 3));
+  auto it = t.insert(t.begin(), std::move(node));
+  EXPECT_THAT(t, UnorderedElementsAre(1, 2, 3));
+  EXPECT_EQ(*it, 1);
+  EXPECT_FALSE(node);
+
+  node = t.extract(2);
+  EXPECT_THAT(t, UnorderedElementsAre(1, 3));
+  // reinsert 2 to make the next insert fail.
+  t.insert(2);
+  EXPECT_THAT(t, UnorderedElementsAre(1, 2, 3));
+  it = t.insert(t.begin(), std::move(node));
+  EXPECT_EQ(*it, 2);
+  // The node was not emptied by the insert call.
+  EXPECT_TRUE(node);
 }
 
 IntTable MakeSimpleTable(size_t size) {

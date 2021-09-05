@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//third_party/perfetto/gn/proto_library.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -15,6 +16,12 @@ proto_library("chrome_track_event") {
   generate_descriptor = "chrome_track_event.descriptor"
 }
 
+protozero_library("chrome_track_event_zero") {
+  perfetto_root_path = "//third_party/perfetto/"
+  sources = [ "chrome_track_event.proto" ]
+  import_dirs = [ "//third_party/perfetto/" ]
+}
+
 grit("chrome_track_event_resources") {
   source = "resources.grd"
   outputs = [
@@ -22,8 +29,4 @@ grit("chrome_track_event_resources") {
     "tracing_proto_resources.pak",
   ]
   deps = [ ":chrome_track_event" ]
-  grit_flags = [
-    "-E",
-    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-  ]
 }

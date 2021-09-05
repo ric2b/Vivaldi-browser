@@ -66,6 +66,7 @@ class ExceptionState;
 class FloatQuad;
 class FloatSize;
 class FocusOptions;
+class SetInnerHTMLOptions;
 class GetInnerHTMLOptions;
 class HTMLTemplateElement;
 class Image;
@@ -316,8 +317,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   double scrollTop();
   void setScrollLeft(double);
   void setScrollTop(double);
-  int scrollWidth();
-  int scrollHeight();
+  virtual int scrollWidth();
+  virtual int scrollHeight();
 
   void scrollBy(double x, double y);
   void scrollBy(const ScrollToOptions*);
@@ -697,6 +698,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   String innerHTML() const;
   String outerHTML() const;
   void setInnerHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
+  void setInnerHTMLWithOptions(const String&,
+                               const SetInnerHTMLOptions*,
+                               ExceptionState& = ASSERT_NO_EXCEPTION);
   String getInnerHTML(const GetInnerHTMLOptions* options) const;
   void setOuterHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
 
@@ -934,6 +938,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   const ElementData* GetElementData() const { return element_data_.Get(); }
   UniqueElementData& EnsureUniqueElementData();
 
+  bool IsViewportScrollElement();
+  void RecordScrollbarSizeForStudy(int measurement,
+                                   bool is_width,
+                                   bool is_offset);
+
   void AddPropertyToPresentationAttributeStyle(MutableCSSPropertyValueSet*,
                                                CSSPropertyID,
                                                CSSValueID identifier);
@@ -975,10 +984,13 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // create layout objects is completed (e.g. in display-locked trees).
   bool IsFocusableStyleAfterUpdate() const;
 
-  // classAttributeChanged() exists to share code between
-  // parseAttribute (called via setAttribute()) and
-  // svgAttributeChanged (called when element.className.baseValue is set)
+  // ClassAttributeChanged() and UpdateClassList() exist to share code between
+  // ParseAttribute (called via setAttribute()) and SvgAttributeChanged (called
+  // when element.className.baseVal is set or when the 'class' attribute is
+  // animated by SMIL).
   void ClassAttributeChanged(const AtomicString& new_class_string);
+  void UpdateClassList(const AtomicString& old_class_string,
+                       const AtomicString& new_class_string);
 
   static bool AttributeValueIsJavaScriptURL(const Attribute&);
 
@@ -1176,6 +1188,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool ShouldInvalidateDistributionWhenAttributeChanged(ShadowRoot&,
                                                         const QualifiedName&,
                                                         const AtomicString&);
+
+  void SetInnerHTMLInternal(const String&,
+                            const SetInnerHTMLOptions*,
+                            ExceptionState&);
 
   ElementRareData* GetElementRareData() const;
   ElementRareData& EnsureElementRareData();

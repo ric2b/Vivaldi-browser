@@ -32,7 +32,6 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
-#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_impl.h"
 #include "weblayer/browser/browser_list.h"
@@ -52,6 +51,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/unified_consent/pref_names.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/java/jni/ProfileImpl_jni.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
@@ -124,7 +124,7 @@ void OnDidGetCachedFaviconForPageUrl(
     gfx::Image image) {
   SkBitmap favicon = image.AsImageSkia().GetRepresentation(1.0f).GetBitmap();
   base::android::RunObjectCallbackAndroid(
-      callback, favicon.empty() ? nullptr : gfx::ConvertToJavaBitmap(&favicon));
+      callback, favicon.empty() ? nullptr : gfx::ConvertToJavaBitmap(favicon));
 }
 
 #endif  // OS_ANDROID

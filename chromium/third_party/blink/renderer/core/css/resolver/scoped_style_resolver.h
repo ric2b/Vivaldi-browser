@@ -56,8 +56,11 @@ class CORE_EXPORT ScopedStyleResolver final
   const TreeScope& GetTreeScope() const { return *scope_; }
   ScopedStyleResolver* Parent() const;
 
+  static StyleRuleKeyframes* KeyframeStylesForAnimationFromActiveSheets(
+      const AtomicString& name,
+      const ActiveStyleSheetVector& sheets);
   StyleRuleKeyframes* KeyframeStylesForAnimation(
-      const StringImpl* animation_name);
+      const AtomicString& animation_name);
 
   void AppendActiveStyleSheets(unsigned index, const ActiveStyleSheetVector&);
   void CollectMatchingAuthorRules(ElementRuleCollector&,
@@ -100,6 +103,8 @@ class CORE_EXPORT ScopedStyleResolver final
   void AddFontFaceRules(const RuleSet&);
   void AddKeyframeStyle(StyleRuleKeyframes*);
 
+  const ActiveStyleSheetVector& ActiveAuthorStyleSheets();
+
   Member<TreeScope> scope_;
 
   HeapVector<Member<CSSStyleSheet>> author_style_sheets_;
@@ -107,7 +112,7 @@ class CORE_EXPORT ScopedStyleResolver final
   MediaQueryResultList device_dependent_media_query_results_;
 
   using KeyframesRuleMap =
-      HeapHashMap<const StringImpl*, Member<StyleRuleKeyframes>>;
+      HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
   KeyframesRuleMap keyframes_rule_map_;
 
   class RuleSubSet final : public GarbageCollected<RuleSubSet> {

@@ -94,12 +94,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.FingerprintSetupScreen.UserActions"
-    enum="FingerprintSetupScreenUserAction" expires_after="2021-02-02">
+    enum="FingerprintSetupScreenUserAction" expires_after="2021-04-04">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
     Tracks all user actions on the fingerprint screen. Recorded when user clicks
     on buttons on the fingerprint screen.
+  </summary>
+</histogram>
+
+<histogram name="OOBE.GaiaPasswordChangedScreen.UserActions"
+    enum="GaiaPasswordChangedScreenUserAction" expires_after="2021-10-01">
+  <owner>raleksandrov@google.com</owner>
+  <owner>cros-oac@google.com</owner>
+  <summary>
+    Tracks all user actions on the GaiaPasswordChanged screen. Recorded when
+    user clicks on buttons on the screen.
   </summary>
 </histogram>
 
@@ -179,49 +189,49 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>Number of times error screen has appeared during update.</summary>
 </histogram>
 
-<histogram name="OOBE.RecommendApps.Fetcher.AppCount" units="units"
+<histogram name="OOBE.RecommendApps.Fetcher.AppCount" units="apps"
     expires_after="2021-07-30">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
-  <owner>play-bm-eng@google.com</owner>
+  <owner>chromesky-eng@google.com</owner>
   <summary>The number of recommended apps.</summary>
 </histogram>
 
 <histogram name="OOBE.RecommendApps.Fetcher.DownloadTime" units="ms"
-    expires_after="2020-11-15">
-  <owner>rsorokin@chromium.org</owner>
+    expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
-  <owner>play-bm-eng@google.com</owner>
+  <owner>chromesky-eng@google.com</owner>
   <summary>The time it takes to fetch the recommended apps.</summary>
 </histogram>
 
 <histogram name="OOBE.RecommendApps.Fetcher.ResponseCode"
-    enum="HttpResponseCode" expires_after="2021-03-15">
-  <owner>rsorokin@chromium.org</owner>
+    enum="HttpResponseCode" expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <owner>chromesky-eng@google.com</owner>
   <summary>The response code of fetching the recommended apps.</summary>
 </histogram>
 
 <histogram name="OOBE.RecommendApps.Fetcher.ResponseParseResult"
-    enum="RecommendAppsResponseParseResult" expires_after="2020-12-13">
-  <owner>rsorokin@chromium.org</owner>
+    enum="RecommendAppsResponseParseResult" expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <owner>chromesky-eng@google.com</owner>
   <summary>The result of parsing the recommend-apps response.</summary>
 </histogram>
 
 <histogram name="OOBE.RecommendApps.Screen.Action"
-    enum="RecommendAppsScreenAction" expires_after="2021-03-15">
-  <owner>rsorokin@chromium.org</owner>
+    enum="RecommendAppsScreenAction" expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <owner>chromesky-eng@google.com</owner>
   <summary>The user action on the recommend apps screen.</summary>
 </histogram>
 
-<histogram name="OOBE.RecommendApps.Screen.SelectedAppCount" units="units"
-    expires_after="2021-03-15">
-  <owner>rsorokin@chromium.org</owner>
+<histogram name="OOBE.RecommendApps.Screen.SelectedAppCount" units="apps"
+    expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <owner>chromesky-eng@google.com</owner>
   <summary>The number of apps user selected.</summary>
@@ -236,8 +246,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.RecommendApps.Screen.State"
-    enum="RecommendAppsScreenState" expires_after="2021-03-15">
-  <owner>rsorokin@chromium.org</owner>
+    enum="RecommendAppsScreenState" expires_after="2021-07-30">
+  <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <owner>chromesky-eng@google.com</owner>
   <summary>Whether the reocmmend apps screen is shown.</summary>
@@ -254,14 +264,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.StepCompletionTimeByExitReason" units="ms"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>Time spent on specific OOBE screen grouped by exit reason.</summary>
 </histogram>
 
 <histogram name="OOBE.SyncConsentScreen.Behavior" enum="SyncConsentBehavior"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>jamescook@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -273,7 +283,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.SyncConsentScreen.ReviewFollowingSetup"
-    enum="BooleanChecked" expires_after="2021-02-07">
+    enum="BooleanChecked" expires_after="2021-04-11">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -283,7 +293,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.SyncConsentScreen.SyncEnabled" enum="BooleanEnabled"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>jamescook@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -294,7 +304,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.SyncConsentScreen.UserChoice"
-    enum="SyncConsentUserChoice" expires_after="2021-01-31">
+    enum="SyncConsentUserChoice" expires_after="2021-04-04">
   <owner>jamescook@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -304,7 +314,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.UpdateScreen.StageTime.Check" units="ms"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>dkuzmin@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -364,7 +374,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="OOBE.WelcomeScreen.A11yUserActions"
-    enum="WelcomeScreenA11yUserAction" expires_after="2021-01-31">
+    enum="WelcomeScreenA11yUserAction" expires_after="2021-04-11">
   <owner>dkuzmin@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>

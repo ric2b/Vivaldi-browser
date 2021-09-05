@@ -4,6 +4,7 @@
 
 #include "chrome/browser/installable/installable_manager.h"
 
+#include "base/feature_list.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -11,8 +12,9 @@
 #include "content/public/common/content_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
+#include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 
-using IconPurpose = blink::Manifest::ImageResource::Purpose;
+using IconPurpose = blink::mojom::ManifestImageResource_Purpose;
 
 class InstallableManagerUnitTest : public testing::Test {
  public:
@@ -325,6 +327,12 @@ TEST_F(InstallableManagerUnitTest, ManifestDisplayModes) {
   manifest.display = blink::mojom::DisplayMode::kFullscreen;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  manifest.display = blink::mojom::DisplayMode::kWindowControlsOverlay;
+  EXPECT_TRUE(
+      IsManifestValid(manifest, false /* check_webapp_manifest_display */));
+  EXPECT_FALSE(IsManifestValid(manifest));
+  EXPECT_EQ(MANIFEST_DISPLAY_NOT_SUPPORTED, GetErrorCode());
 }
 
 class InstallableManagerUnitTest_DisplayOverride
@@ -366,6 +374,14 @@ TEST_F(InstallableManagerUnitTest_DisplayOverride, ManifestDisplayOverride) {
       IsManifestValid(manifest, false /* check_webapp_manifest_display */));
   EXPECT_FALSE(IsManifestValid(manifest));
   EXPECT_EQ(MANIFEST_DISPLAY_OVERRIDE_NOT_SUPPORTED, GetErrorCode());
+
+  manifest.display_override.insert(
+      manifest.display_override.begin(),
+      blink::mojom::DisplayMode::kWindowControlsOverlay);
+  EXPECT_TRUE(
+      IsManifestValid(manifest, false /* check_webapp_manifest_display */));
+  EXPECT_FALSE(IsManifestValid(manifest));
+  EXPECT_EQ(MANIFEST_DISPLAY_OVERRIDE_NOT_SUPPORTED, GetErrorCode());
 }
 
 TEST_F(InstallableManagerUnitTest_DisplayOverride, FallbackToBrowser) {
@@ -373,6 +389,30 @@ TEST_F(InstallableManagerUnitTest_DisplayOverride, FallbackToBrowser) {
 
   manifest.display = blink::mojom::DisplayMode::kBrowser;
   manifest.display_override.push_back(blink::mojom::DisplayMode::kMinimalUi);
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+}
+
+class InstallableManagerUnitTest_WindowControlsOverlay
+    : public InstallableManagerUnitTest {
+ public:
+  InstallableManagerUnitTest_WindowControlsOverlay() {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kWebAppManifestDisplayOverride,
+         features::kWebAppWindowControlsOverlay},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(InstallableManagerUnitTest_WindowControlsOverlay,
+       SupportWindowControlsOverlay) {
+  blink::Manifest manifest = GetValidManifest();
+
+  manifest.display_override.push_back(
+      blink::mojom::DisplayMode::kWindowControlsOverlay);
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 }

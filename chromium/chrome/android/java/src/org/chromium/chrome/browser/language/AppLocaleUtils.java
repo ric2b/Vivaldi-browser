@@ -15,6 +15,7 @@ import com.google.android.play.core.splitinstall.SplitInstallRequest;
 
 import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
@@ -26,6 +27,8 @@ import java.util.Locale;
  */
 public class AppLocaleUtils {
     private AppLocaleUtils(){};
+
+    private static final String TAG = "AppLocale";
 
     /**
      * Return true if languageName is the same as the current application override
@@ -76,7 +79,12 @@ public class AppLocaleUtils {
      */
     public static void maybeInstallActivitySplitCompat(Context context) {
         if (GlobalAppLocaleController.getInstance().isOverridden() && BundleUtils.isBundle()) {
+            Log.i(TAG, "maybeInstallActivitySplit isOverridden: %s  isBundle: %s",
+                    GlobalAppLocaleController.getInstance().isOverridden(), BundleUtils.isBundle());
+            Log.i(TAG, "Override Locale: %s", getAppLanguagePref());
+            logInstalledLanguages(context);
             SplitCompat.installActivity(context);
+            logInstalledLanguages(context);
         }
     }
 
@@ -94,6 +102,20 @@ public class AppLocaleUtils {
                             .addLanguage(Locale.forLanguageTag(languageName))
                             .build();
             splitInstallManager.startInstall(installRequest);
+        }
+    }
+
+    /**
+     * Log list of installed languages for context.
+     * @param context Context to log installed languages on.
+     */
+    private static void logInstalledLanguages(Context context) {
+        if (BundleUtils.isBundle()) {
+            SplitInstallManager splitInstallManager = SplitInstallManagerFactory.create(context);
+            Log.i(TAG, "Installed Languages: %s",
+                    TextUtils.join(", ", splitInstallManager.getInstalledLanguages()));
+        } else {
+            Log.i(TAG, "Installed Languages: None - not a bundle");
         }
     }
 }

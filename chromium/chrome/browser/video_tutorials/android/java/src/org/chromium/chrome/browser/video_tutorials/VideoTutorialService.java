@@ -26,10 +26,11 @@ public interface VideoTutorialService {
     /**
      * Called to get the list of supported languages.
      */
-    List<Language> getSupportedLanguages();
+    List<String> getSupportedLanguages();
 
     /**
-     * @return The user's language of choice for watching the video tutorials.
+     * @return The user's language of choice for watching the video tutorials, or null user hasn't
+     *         set it yet.
      */
     String getPreferredLocale();
 

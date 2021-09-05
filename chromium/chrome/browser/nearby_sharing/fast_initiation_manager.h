@@ -51,30 +51,27 @@ class FastInitiationManager : public device::BluetoothAdvertisement::Observer {
 
   // Begin broadcasting Fast Initiation advertisement.
   virtual void StartAdvertising(FastInitType type,
-                                base::OnceCallback<void()> callback,
-                                base::OnceCallback<void()> error_callback);
+                                base::OnceClosure callback,
+                                base::OnceClosure error_callback);
 
   // Stop broadcasting Fast Initiation advertisement.
-  virtual void StopAdvertising(base::OnceCallback<void()> callback);
+  virtual void StopAdvertising(base::OnceClosure callback);
 
  private:
   // device::BluetoothAdvertisement::Observer:
   void AdvertisementReleased(
       device::BluetoothAdvertisement* advertisement) override;
 
-  void OnSetAdvertisingInterval(FastInitType type);
-  void OnSetAdvertisingIntervalError(
-      FastInitType type,
-      device::BluetoothAdvertisement::ErrorCode code);
-  void RegisterAdvertisement(FastInitType type);
+  void RegisterAdvertisement(FastInitType type,
+                             base::OnceClosure callback,
+                             base::OnceClosure error_callback);
   void OnRegisterAdvertisement(
+      base::OnceClosure callback,
       scoped_refptr<device::BluetoothAdvertisement> advertisement);
   void OnRegisterAdvertisementError(
+      base::OnceClosure error_callback,
       device::BluetoothAdvertisement::ErrorCode error_code);
-  void OnRestoreAdvertisingInterval();
-  void OnRestoreAdvertisingIntervalError(
-      device::BluetoothAdvertisement::ErrorCode code);
-  void UnregisterAdvertisement();
+  void UnregisterAdvertisement(base::OnceClosure callback);
   void OnUnregisterAdvertisement();
   void OnUnregisterAdvertisementError(
       device::BluetoothAdvertisement::ErrorCode error_code);
@@ -86,9 +83,7 @@ class FastInitiationManager : public device::BluetoothAdvertisement::Observer {
 
   scoped_refptr<device::BluetoothAdapter> adapter_;
   scoped_refptr<device::BluetoothAdvertisement> advertisement_;
-  base::OnceCallback<void()> start_callback_;
-  base::OnceCallback<void()> start_error_callback_;
-  base::OnceCallback<void()> stop_callback_;
+  base::OnceClosure stop_callback_;
   base::WeakPtrFactory<FastInitiationManager> weak_ptr_factory_{this};
 };
 

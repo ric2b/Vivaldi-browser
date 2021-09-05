@@ -56,6 +56,7 @@ void AddPdfViewerStrings(base::Value* dict) {
     {"bookmarkExpandIconAriaLabel", IDS_PDF_BOOKMARK_EXPAND_ICON_ARIA_LABEL},
     {"downloadEdited", IDS_PDF_DOWNLOAD_EDITED},
     {"downloadOriginal", IDS_PDF_DOWNLOAD_ORIGINAL},
+    {"fullscreen", IDS_PDF_FULLSCREEN},
     {"labelPageNumber", IDS_PDF_LABEL_PAGE_NUMBER},
     {"menu", IDS_MENU},
     {"moreActions", IDS_DOWNLOAD_MORE_ACTIONS},
@@ -178,6 +179,9 @@ void AddAdditionalData(base::Value* dict) {
       base::FeatureList::IsEnabled(chrome_pdf::features::kPDFViewerUpdate)
           ? "pdf-viewer-update-enabled"
           : "");
+  dict->SetKey("presentationModeEnabled",
+               base::Value(base::FeatureList::IsEnabled(
+                   chrome_pdf::features::kPdfViewerPresentationMode)));
 
   bool enable_printing = true;
   bool enable_annotations = false;

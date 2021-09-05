@@ -49,6 +49,7 @@
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/scoped_views_test_helper.h"
 #include "ui/views/test/test_views_delegate.h"
 
@@ -130,7 +131,8 @@ class PageInfoBubbleViewTestApi {
   // Simulates recreating the dialog with a new PermissionInfoList.
   void SetPermissionInfo(const PermissionInfoList& list) {
     for (const PageInfo::PermissionInfo& info : list) {
-      view_->presenter_->OnSitePermissionChanged(info.type, info.setting);
+      view_->presenter_->OnSitePermissionChanged(info.type, info.setting,
+                                                 /*is_one_time=*/false);
     }
     CreateView();
   }
@@ -241,11 +243,9 @@ class FlashContentSettingsChangeWaiter : public content_settings::Observer {
   }
 
   // content_settings::Observer:
-  void OnContentSettingChanged(
-      const ContentSettingsPattern& primary_pattern,
-      const ContentSettingsPattern& secondary_pattern,
-      ContentSettingsType content_type,
-      const std::string& resource_identifier) override {
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type) override {
     if (content_type == ContentSettingsType::PLUGINS)
       Proceed();
   }
@@ -403,8 +403,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUsbDevice) {
   views::Button* button = static_cast<views::Button*>(children[2]);
   const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), 0, 0);
-  static_cast<views::ButtonListener*>(object_view)
-      ->ButtonPressed(button, event);
+  views::test::ButtonTestApi(button).NotifyClick(event);
   api_->SetPermissionInfo(list);
   EXPECT_EQ(kExpectedChildren, api_->permissions_view()->children().size());
   EXPECT_FALSE(store->HasDevicePermission(origin, origin, *device_info));
@@ -461,9 +460,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithPolicyUsbDevices) {
   // Policy granted USB permissions should not be able to be deleted.
   const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), 0, 0);
-  views::ButtonListener* button_listener =
-      static_cast<views::ButtonListener*>(object_view);
-  button_listener->ButtonPressed(button, event);
+  views::test::ButtonTestApi(button).NotifyClick(event);
   api_->SetPermissionInfo(list);
   EXPECT_EQ(kExpectedChildren + 1, api_->permissions_view()->children().size());
 }
@@ -519,9 +516,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
     views::Label* desc_label = static_cast<views::Label*>(children[3]);
     EXPECT_EQ(base::ASCIIToUTF16("USB device"), desc_label->GetText());
 
-    views::ButtonListener* button_listener =
-        static_cast<views::ButtonListener*>(object_view);
-    button_listener->ButtonPressed(button, event);
+    views::test::ButtonTestApi(button).NotifyClick(event);
     api_->SetPermissionInfo(list);
     EXPECT_EQ(kExpectedChildren + 1,
               api_->permissions_view()->children().size());
@@ -547,9 +542,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
     EXPECT_EQ(base::ASCIIToUTF16("USB device allowed by your administrator"),
               desc_label->GetText());
 
-    views::ButtonListener* button_listener =
-        static_cast<views::ButtonListener*>(object_view);
-    button_listener->ButtonPressed(button, event);
+    views::test::ButtonTestApi(button).NotifyClick(event);
     api_->SetPermissionInfo(list);
     EXPECT_EQ(kExpectedChildren + 1,
               api_->permissions_view()->children().size());
@@ -635,49 +628,6 @@ TEST_F(PageInfoBubbleViewTest, UpdatingSiteDataRetainsLayout) {
   size_t index = api_->GetCookiesLinkText().find(expected);
   EXPECT_NE(std::string::npos, index);
 }
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-TEST_F(PageInfoBubbleViewTest, ChangingFlashSettingForSiteIsRemembered) {
-  Profile* profile = web_contents_helper_.profile();
-  ChromePluginServiceFilter::GetInstance()->RegisterProfile(profile);
-  FlashContentSettingsChangeWaiter waiter(profile);
-
-  const GURL url(kUrl);
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile);
-  // Make sure the site being tested doesn't already have this marker set.
-  EXPECT_EQ(nullptr,
-            map->GetWebsiteSetting(url, url, ContentSettingsType::PLUGINS_DATA,
-                                   std::string(), nullptr));
-  EXPECT_EQ(0u, api_->permissions_view()->children().size());
-
-  // Change the Flash setting.
-  map->SetContentSettingDefaultScope(url, url, ContentSettingsType::PLUGINS,
-                                     std::string(), CONTENT_SETTING_ALLOW);
-  waiter.Wait();
-
-  // Check that this site has now been marked for displaying Flash always.
-  EXPECT_NE(nullptr,
-            map->GetWebsiteSetting(url, url, ContentSettingsType::PLUGINS_DATA,
-                                   std::string(), nullptr));
-
-  // Check the Flash permission is now showing since it's non-default.
-  api_->CreateView();
-  const auto& children = api_->permissions_view()->children();
-  views::Label* label = static_cast<views::Label*>(children[1]);
-  EXPECT_EQ(base::ASCIIToUTF16("Flash"), label->GetText());
-
-  // Change the Flash setting back to the default.
-  map->SetContentSettingDefaultScope(url, url, ContentSettingsType::PLUGINS,
-                                     std::string(), CONTENT_SETTING_DEFAULT);
-  EXPECT_EQ(kViewsPerPermissionRow, children.size());
-
-  // Check the Flash permission is still showing since the user changed it
-  // previously.
-  label = static_cast<views::Label*>(children[1]);
-  EXPECT_EQ(base::ASCIIToUTF16("Flash"), label->GetText());
-}
-#endif
 
 // Tests opening the bubble between navigation start and finish. The bubble
 // should be updated to reflect the secure state after the navigation commits.

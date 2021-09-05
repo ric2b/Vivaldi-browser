@@ -20,8 +20,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -115,7 +115,6 @@ void DidGetCertDbOnUiThread(base::Optional<TokenId> token_id,
                             NSSOperationState* state,
                             net::NSSCertDatabase* cert_db) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   if (!cert_db) {
     LOG(ERROR) << "Couldn't get NSSCertDatabase.";
     state->OnError(FROM_HERE, Status::kErrorInternal);
@@ -1112,6 +1111,33 @@ void GetCertificatesWithDB(std::unique_ptr<GetCertificatesState> state,
       base::BindOnce(&DidGetCertificates, std::move(state)), slot);
 }
 
+// Returns true if |public_key| is relevant as a "platform key" that should be
+// visible to chrome extensions / subsystems.
+bool ShouldIncludePublicKey(SECKEYPublicKey* public_key) {
+  crypto::ScopedSECItem cka_id(SECITEM_AllocItem(/*arena=*/nullptr,
+                                                 /*item=*/nullptr,
+                                                 /*len=*/0));
+  if (PK11_ReadRawAttribute(
+          /*objType=*/PK11_TypePubKey, public_key, CKA_ID, cka_id.get()) !=
+      SECSuccess) {
+    return false;
+  }
+
+  base::StringPiece cka_id_str(reinterpret_cast<char*>(cka_id->data),
+                               cka_id->len);
+
+  // Only keys generated/stored by extensions/Chrome should be visible to
+  // extensions. Oemcrypto stores its key in the TPM, but that should not
+  // be exposed. Look at exposing additional attributes or changing the slot
+  // that Oemcrypto stores keys, so that it can be done based on properties
+  // of the key. See https://crbug/com/1136396
+  if (cka_id_str == "arc-oemcrypto") {
+    VLOG(0) << "Filtered out arc-oemcrypto public key.";
+    return false;
+  }
+  return true;
+}
+
 // Does the actual retrieval of the SubjectPublicKeyInfo string on a worker
 // thread. Used by GetAllKeysWithDb().
 void GetAllKeysOnWorkerThread(std::unique_ptr<GetAllKeysState> state) {
@@ -1123,8 +1149,8 @@ void GetAllKeysOnWorkerThread(std::unique_ptr<GetAllKeysState> state) {
   // private + public keys, so it's sufficient to get the public keys (and also
   // not necessary to check that a private key for that public key really
   // exists).
-  SECKEYPublicKeyList* public_keys =
-      PK11_ListPublicKeysInSlot(state->slot_.get(), /*nickname=*/nullptr);
+  crypto::ScopedSECKEYPublicKeyList public_keys(
+      PK11_ListPublicKeysInSlot(state->slot_.get(), /*nickname=*/nullptr));
 
   if (!public_keys) {
     state->OnSuccess(FROM_HERE, std::move(public_key_spki_der_list));
@@ -1133,6 +1159,10 @@ void GetAllKeysOnWorkerThread(std::unique_ptr<GetAllKeysState> state) {
 
   for (SECKEYPublicKeyListNode* node = PUBKEY_LIST_HEAD(public_keys);
        !PUBKEY_LIST_END(node, public_keys); node = PUBKEY_LIST_NEXT(node)) {
+    if (!ShouldIncludePublicKey(node->key)) {
+      continue;
+    }
+
     crypto::ScopedSECItem subject_public_key_info(
         SECKEY_EncodeDERSubjectPublicKeyInfo(node->key));
     if (!subject_public_key_info) {
@@ -1147,7 +1177,6 @@ void GetAllKeysOnWorkerThread(std::unique_ptr<GetAllKeysState> state) {
     }
   }
 
-  SECKEY_DestroyPublicKeyList(public_keys);
   state->OnSuccess(FROM_HERE, std::move(public_key_spki_der_list));
 }
 
@@ -1336,7 +1365,11 @@ void GetKeyLocationsWithDB(std::unique_ptr<GetKeyLocationsState> state,
     if (rsa_key)
       token_ids.push_back(TokenId::kUser);
   }
-  if (token_ids.empty() && cert_db->GetPublicSlot().get()) {
+
+  // The "system" NSSCertDatabaseChromeOS instance reuses its "system slot" as
+  // "public slot", but that doesn't mean it's a user-specific slot.
+  if (token_ids.empty() && cert_db->GetPublicSlot().get() &&
+      cert_db->GetPublicSlot().get() != cert_db->GetSystemSlot().get()) {
     crypto::ScopedSECKEYPrivateKey rsa_key =
         crypto::FindNSSKeyFromPublicKeyInfoInSlot(
             public_key_vector, cert_db->GetPublicSlot().get());
@@ -1361,6 +1394,8 @@ CK_ATTRIBUTE_TYPE TranslateKeyAttributeTypeForSoftoken(KeyAttributeType type) {
   switch (type) {
     case KeyAttributeType::kCertificateProvisioningId:
       return CKA_START_DATE;
+    case KeyAttributeType::kKeyPermissions:
+      return CKA_END_DATE;
   }
 }
 
@@ -1375,6 +1410,8 @@ CK_ATTRIBUTE_TYPE TranslateKeyAttributeType(KeyAttributeType type,
   switch (type) {
     case KeyAttributeType::kCertificateProvisioningId:
       return pkcs11_custom_attributes::kCkaChromeOsBuiltinProvisioningProfileId;
+    case KeyAttributeType::kKeyPermissions:
+      return pkcs11_custom_attributes::kCkaChromeOsKeyPermissions;
   }
 }
 
@@ -1396,11 +1433,9 @@ void SetAttributeForKeyWithDb(std::unique_ptr<SetAttributeForKeyState> state,
   // This SECItem will point to data owned by |state| so it is not necessary to
   // use ScopedSECItem.
   SECItem attribute_value;
-
   attribute_value.data = reinterpret_cast<unsigned char*>(
       const_cast<char*>(state->attribute_value_.data()));
   attribute_value.len = state->attribute_value_.size();
-
   if (PK11_WriteRawAttribute(
           /*objType=*/PK11_TypePrivKey, private_key.get(),
           state->attribute_type_, &attribute_value) != SECSuccess) {

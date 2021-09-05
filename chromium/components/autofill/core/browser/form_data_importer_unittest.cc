@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
@@ -29,8 +29,10 @@
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
@@ -230,6 +232,7 @@ class FormDataImporterTestBase {
   std::unique_ptr<PersonalDataManager> personal_data_manager_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  TestPatternProvider test_pattern_provider_;
 };
 
 // TODO(crbug.com/1103421): Clean legacy implementation once structured names
@@ -580,18 +583,6 @@ TEST_P(FormDataImporterTest, ImportAddressProfileFromUnifiedSection) {
   // Assign the address field another section than the other fields.
   form_structure.field(3)->section = "another_section";
 
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndDisableFeature(
-      features::kAutofillProfileImportFromUnifiedSection);
-
-  // Without the feature, the import is expected to fail.
-  ImportAddressProfiles(/*extraction_successful=*/false, form_structure);
-
-  // After enabled the feature, the import is expected to succeed.
-  scoped_feature.Reset();
-  scoped_feature.InitAndEnableFeature(
-      features::kAutofillProfileImportFromUnifiedSection);
-
   ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
 
   AutofillProfile expected(base::GenerateGUID(), test::kEmptyOrigin);
@@ -842,7 +833,9 @@ TEST_P(FormDataImporterTest,
   EXPECT_EQ(0, expected.Compare(*results[0]));
 }
 
-TEST_P(FormDataImporterTest, ImportAddressProfiles_UnFocussableFields) {
+// Test that a form is imported correctly even if some fields are not
+// focusable.
+TEST_P(FormDataImporterTest, ImportAddressProfiles_WithUnFocussableFields) {
   FormData form;
   form.url = GURL("https://wwww.foo.com");
 
@@ -864,7 +857,8 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_UnFocussableFields) {
   form.fields.push_back(field);
 
   test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
-  // Set this field to be unfocusable.
+
+  // Set this field to be not focusable.
   field.is_focusable = false;
   form.fields.push_back(field);
 
@@ -877,18 +871,6 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_UnFocussableFields) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
 
-  // Verify the status quo that the form is not imported with the unfocusable
-  // fields.
-  // TODO(crbug.com/1101280): Remove once feature is launched.
-  scoped_feature_list_.Reset();
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillProfileImportFromUnfocusableFields);
-  ImportAddressProfiles(/*extraction_successful=*/false, form_structure);
-
-  // Activate the feature and test again.
-  scoped_feature_list_.Reset();
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillProfileImportFromUnfocusableFields);
   ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
 
   AutofillProfile expected(base::GenerateGUID(), test::kEmptyOrigin);
@@ -1605,6 +1587,181 @@ TEST_P(FormDataImporterTest,
   EXPECT_EQ(0, profile.Compare(*results2[0]));
 }
 
+TEST_P(FormDataImporterTest,
+       IncorporateStructuredNameInformationInVerifiedProfile) {
+  // This test is only applicable to structured names.
+  if (!structured_address::StructuredNamesEnabled()) {
+    return;
+  }
+
+  // Start with a verified profile.
+  AutofillProfile profile(base::GenerateGUID(), kSettingsOrigin);
+  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
+                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
+                       "Hollywood", "CA", "91601", "US", "12345678910");
+  EXPECT_TRUE(profile.IsVerified());
+
+  // Set the verification status for the first and middle name to parsed.
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_FIRST, base::ASCIIToUTF16("Marion"),
+      structured_address::VerificationStatus::kParsed);
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_FIRST, base::ASCIIToUTF16("Mitchell"),
+      structured_address::VerificationStatus::kParsed);
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
+      .WillOnce(QuitMessageLoop(&run_loop));
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(1);
+  personal_data_manager_->AddProfile(profile);
+  run_loop.Run();
+
+  // Simulate a form submission with conflicting info.
+  FormData form;
+  form.url = GURL("https://wwww.foo.com");
+
+  FormFieldData field;
+  test::CreateTestFormField("First name:", "first_name", "Marion Mitchell",
+                            "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Last name:", "last_name", "Morrison", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "johnwayne@me.xyz", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Address:", "address1", "123 Zoo St.", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "Hollywood", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "CA", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "91601", "text", &field);
+  form.fields.push_back(field);
+
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
+
+  // The form submission should result in a change of name structure.
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_FIRST, base::ASCIIToUTF16("Marion Mitchell"),
+      structured_address::VerificationStatus::kObserved);
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_MIDDLE, base::ASCIIToUTF16(""),
+      structured_address::VerificationStatus::kNoStatus);
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_LAST, base::ASCIIToUTF16("Morrison"),
+      structured_address::VerificationStatus::kObserved);
+
+  // Expect that no new profile is saved.
+  const std::vector<AutofillProfile*>& results =
+      personal_data_manager_->GetProfiles();
+  ASSERT_EQ(1U, results.size());
+  EXPECT_EQ(0, profile.Compare(*results[0]));
+
+  // Try the same thing, but without "Mitchell". The profiles should still match
+  // because "Marion Morrison" is a variant of the known full name.
+  test::CreateTestFormField("First name:", "first_name", "Marion", "text",
+                            &field);
+  form.fields[0] = field;
+
+  FormStructure form_structure2(form);
+  form_structure2.DetermineHeuristicTypes();
+
+  ImportAddressProfiles(/*extraction_successful=*/true, form_structure2);
+
+  // Expect that no new profile is saved.
+  const std::vector<AutofillProfile*>& results2 =
+      personal_data_manager_->GetProfiles();
+  ASSERT_EQ(1U, results2.size());
+  EXPECT_EQ(0, profile.Compare(*results2[0]));
+}
+
+TEST_P(FormDataImporterTest,
+       IncorporateStructuredAddressInformationInVerififedProfile) {
+  // This test is only applicable to structured addresses.
+  if (!structured_address::StructuredAddressesEnabled()) {
+    return;
+  }
+
+  // Start with a verified profile.
+  AutofillProfile profile(base::GenerateGUID(), kSettingsOrigin);
+  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
+                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
+                       "Hollywood", "CA", "91601", "US", "12345678910");
+  EXPECT_TRUE(profile.IsVerified());
+
+  // Reset the structured address to emulate a failed parsing attempt.
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_HOUSE_NUMBER, base::ASCIIToUTF16(""),
+      structured_address::VerificationStatus::kNoStatus);
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_NAME, base::ASCIIToUTF16(""),
+      structured_address::VerificationStatus::kNoStatus);
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_AND_DEPENDENT_STREET_NAME, base::ASCIIToUTF16(""),
+      structured_address::VerificationStatus::kNoStatus);
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
+      .WillOnce(QuitMessageLoop(&run_loop));
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(1);
+  personal_data_manager_->AddProfile(profile);
+  run_loop.Run();
+
+  // Simulate a form submission with conflicting info.
+  FormData form;
+  form.url = GURL("https://wwww.foo.com");
+
+  FormFieldData field;
+  test::CreateTestFormField("First name:", "first_name", "Marion Mitchell",
+                            "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Last name:", "last_name", "Morrison", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "johnwayne@me.xyz", "text",
+                            &field);
+  form.fields.push_back(field);
+  // This forms contains structured address information.
+  test::CreateTestFormField("Street Name:", "street_name", "Zoo St.", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("House Number:", "house_number", "123", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "Hollywood", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "CA", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "91601", "text", &field);
+  form.fields.push_back(field);
+
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
+
+  // The form submission should result in a change of the address structure.
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_AND_DEPENDENT_STREET_NAME,
+      base::ASCIIToUTF16("Zoo St."),
+      structured_address::VerificationStatus::kFormatted);
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_NAME, base::ASCIIToUTF16("Zoo St."),
+      structured_address::VerificationStatus::kObserved);
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_HOUSE_NUMBER, base::ASCIIToUTF16("123"),
+      structured_address::VerificationStatus::kObserved);
+
+  // Expect that no new profile is saved.
+  const std::vector<AutofillProfile*>& results =
+      personal_data_manager_->GetProfiles();
+  ASSERT_EQ(1U, results.size());
+  EXPECT_EQ(0, profile.Compare(*results[0]));
+}
+
 // Tests that no profile is inferred if the country is not recognized.
 TEST_P(FormDataImporterTest, ImportAddressProfiles_UnrecognizedCountry) {
   FormData form;
@@ -1690,37 +1847,6 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_LocalizedCountryName) {
   // Set the page language to match the localized country value and try again.
   autofill_client_->GetLanguageState()->SetOriginalLanguage("de");
 
-  // TODO(crbug.com/1075604): Remove test with disabled feature.
-  // Verify that nothing is changed if using the page language feature is not
-  // enabled.
-  scoped_feature_list_.Reset();
-  if (StructuredNames()) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kAutofillEnableSupportForMoreStructureInNames},
-        {features::kAutofillUsePageLanguageToTranslateCountryNames});
-  } else {
-    scoped_feature_list_.InitWithFeatures(
-        {}, {features::kAutofillEnableSupportForMoreStructureInNames,
-             features::kAutofillUsePageLanguageToTranslateCountryNames});
-  }
-  ImportAddressProfiles(/*extraction_successful=*/false, form_structure);
-
-  // There should be no imported address profile.
-  ASSERT_EQ(0U, personal_data_manager_->GetProfiles().size());
-  ASSERT_EQ(0U, personal_data_manager_->GetCreditCards().size());
-
-  // Enable the feature and to test if the profile can now be imported.
-  scoped_feature_list_.Reset();
-  if (StructuredNames()) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kAutofillEnableSupportForMoreStructureInNames,
-         features::kAutofillUsePageLanguageToTranslateCountryNames},
-        {});
-  } else {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kAutofillUsePageLanguageToTranslateCountryNames},
-        {features::kAutofillEnableSupportForMoreStructureInNames});
-  }
   ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
 
   // There should be one imported address profile.

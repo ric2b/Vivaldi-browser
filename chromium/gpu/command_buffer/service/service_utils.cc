@@ -163,6 +163,8 @@ GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {
       command_line->HasSwitch(switches::kEnableUnsafeWebGPU);
   gpu_preferences.enable_dawn_backend_validation =
       command_line->HasSwitch(switches::kEnableDawnBackendValidation);
+  gpu_preferences.disable_dawn_robustness =
+      command_line->HasSwitch(switches::kDisableDawnRobustness);
   gpu_preferences.gr_context_type = ParseGrContextType();
   gpu_preferences.use_vulkan = ParseVulkanImplementationName(command_line);
   gpu_preferences.disable_vulkan_surface =
@@ -183,14 +185,20 @@ GrContextType ParseGrContextType() {
   return base::FeatureList::IsEnabled(features::kMetal) ? GrContextType::kMetal
                                                         : GrContextType::kGL;
 #else
-  return base::FeatureList::IsEnabled(features::kVulkan)
-             ? GrContextType::kVulkan
-             : GrContextType::kGL;
+  return features::IsUsingVulkan() ? GrContextType::kVulkan
+                                   : GrContextType::kGL;
 #endif
 }
 
 VulkanImplementationName ParseVulkanImplementationName(
     const base::CommandLine* command_line) {
+#if defined(OS_ANDROID)
+  if (command_line->HasSwitch(switches::kWebViewDrawFunctorUsesVulkan) &&
+      base::FeatureList::IsEnabled(features::kWebViewVulkan)) {
+    return VulkanImplementationName::kForcedNative;
+  }
+#endif
+
   if (command_line->HasSwitch(switches::kUseVulkan)) {
     auto value = command_line->GetSwitchValueASCII(switches::kUseVulkan);
     if (value.empty() || value == switches::kVulkanImplementationNameNative) {

@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Slegs seleksie</translation>
 <translation id="1244303850296295656">Uitbreidingsfout</translation>
 <translation id="125220115284141797">Verstek</translation>
-<translation id="1274977772557788323">Bewaarinstellings vir Adobe Flash Player</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Boekmerke-HTML-lêer</translation>
 <translation id="1380436189840894976">Verlaat ingocnito-modus in elk geval?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Plak as skoonteks</translation>
 <translation id="2249605167705922988">bv. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Laat identifiseerders vir beskermde inhoud toe (rekenaar moet dalk herbegin word)</translation>
-<translation id="2263497240924215535">(Gedeaktiveer)</translation>
 <translation id="2277255602909579701">Alle koekies en werfdata</translation>
 <translation id="2280486287150724112">Regterkantlyn</translation>
 <translation id="2282146716419988068">GVE-proses</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">MIDI-toestelle</translation>
 <translation id="3021678814754966447">&amp;Bekyk Raambron</translation>
 <translation id="3036546437875325427">Aktiveer Flash</translation>
-<translation id="3038675903128704560">Laat geen werf toe om ’n inprop te gebruik om toegang tot u rekenaar te verkry nie</translation>
 <translation id="3046910703532196514">Webblad, Volledig</translation>
 <translation id="3067198360141518313">Laat hierdie inprop loop</translation>
 <translation id="3080207940057008665">’n Ander program op u rekenaar het ’n tema toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
@@ -155,12 +152,10 @@
 <translation id="3378572629723696641">Hierdie uitbreiding is moontlik beskadig.</translation>
 <translation id="3387614642886316601">Gebruik gevorderde speltoets</translation>
 <translation id="3432227430032737297">Verwyder Alle Vertoondes</translation>
-<translation id="3440761377721825626">Vra wanneer ’n werf ’n inprop wil gebruik vir toegang tot u rekenaar</translation>
 <translation id="345693547134384690">Open &amp;beeld in nuwe oortjie</translation>
 <translation id="3494769164076977169">Vra wanneer ’n werf lêers outomaties probeer aflaai na die eerste lêer (aanbeveel)</translation>
 <translation id="3505030558724226696">Herroep toesteltoegang</translation>
 <translation id="3511307672085573050">Kopieer Skakeladr&amp;es</translation>
-<translation id="3523642406908660543">Vra wanneer ’n werf ’n inprop wil gebruik vir toegang tot u rekenaar (aanbeveel)</translation>
 <translation id="354068948465830244">Dit kan werfdata lees en verander</translation>
 <translation id="3560034655160545939">&amp;Speltoets</translation>
 <translation id="3574917942258583917">Verlaat ingocnito-modus in elk geval?</translation>
@@ -219,7 +214,6 @@
 <translation id="4423376891418188461">Stel Instellings Terug</translation>
 <translation id="4434045419905280838">Opwippe en herleidings</translation>
 <translation id="4478664379124702289">Bewaar &amp;Skakel As…</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Kan nie <ph name="HOST_NAME" /> send nie.</translation>
 <translation id="4593021220803146968">&amp;Gaan na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Toeps en uitbreidings kan slegs deur die bestuurder (<ph name="CUSTODIAN_NAME" />) aangepas word.</translation>
@@ -300,7 +294,6 @@
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5860491529813859533">Aktiveer</translation>
 <translation id="5867841422488265304">Soek of tik webadres in</translation>
-<translation id="5908769186679515905">Versper Flash op werwe</translation>
 <translation id="5910363049092958439">Be&amp;waar Beeld As…</translation>
 <translation id="5956585768868398362">Is dit die soekblad wat u verwag het?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
@@ -373,7 +366,6 @@
 <translation id="7287143125007575591">Toegang geweier.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Toon &amp;kontroles</translation>
-<translation id="7311079019872751559">Inproptoegang sonder sandput</translation>
 <translation id="7385854874724088939">Iets het skeefgeloop tydens afdruk.  Gaan u drukker na en probeer weer.</translation>
 <translation id="7412226954991670867">GVE-geheue</translation>
 <translation id="7421925624202799674">&amp;Bekyk Bladsybron</translation>

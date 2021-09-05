@@ -19,6 +19,7 @@
 #include "crypto/aead.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
+#include "third_party/boringssl/src/include/openssl/aes.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
 #include "third_party/boringssl/src/include/openssl/ec.h"
@@ -79,6 +80,12 @@ std::array<uint8_t, 32> PairingSignature(
   return expected_signature;
 }
 
+// ReservedBitsAreZero returns true if the currently unused bits in |eid| are
+// all set to zero.
+bool ReservedBitsAreZero(const CableEidArray& eid) {
+  return eid[6] == 0 && eid[7] == 0 && (eid[2] >> 6) == 0;
+}
+
 }  // namespace
 
 namespace tunnelserver {
@@ -86,7 +93,7 @@ namespace tunnelserver {
 std::string DecodeDomain(uint32_t domain) {
   static const char kBase32Chars[33] = "abcdefghijklmnopqrstuvwxyz234567";
 
-  std::string ret;
+  std::string ret = "cable.";
   ret.push_back(kBase32Chars[(domain >> 17) & 0x1f]);
   ret.push_back(kBase32Chars[(domain >> 12) & 0x1f]);
   ret.push_back(kBase32Chars[(domain >> 7) & 0x1f]);
@@ -139,6 +146,68 @@ GURL GetContactURL(const std::string& tunnel_server,
 
 namespace eid {
 
+std::array<uint8_t, kAdvertSize> Encrypt(
+    const CableEidArray& eid,
+    base::span<const uint8_t, kEIDKeySize> key) {
+  // |eid| is encrypted as an AES block and a 4-byte HMAC is appended. The |key|
+  // is a pair of 256-bit keys, concatenated.
+  DCHECK(ReservedBitsAreZero(eid));
+
+  std::array<uint8_t, kAdvertSize> ret;
+  static_assert(EXTENT(ret) == AES_BLOCK_SIZE + 4, "");
+
+  AES_KEY aes_key;
+  static_assert(EXTENT(key) == 32 + 32, "");
+  CHECK(AES_set_encrypt_key(key.data(), /*bits=*/8 * 32, &aes_key) == 0);
+  static_assert(EXTENT(eid) == AES_BLOCK_SIZE, "EIDs are not AES blocks");
+  AES_encrypt(/*in=*/eid.data(), /*out=*/ret.data(), &aes_key);
+
+  uint8_t hmac[SHA256_DIGEST_LENGTH];
+  unsigned hmac_len;
+  CHECK(HMAC(EVP_sha256(), key.data() + 32, 32, ret.data(), AES_BLOCK_SIZE,
+             hmac, &hmac_len) != nullptr);
+  CHECK_EQ(hmac_len, sizeof(hmac));
+
+  static_assert(sizeof(hmac) >= 4, "");
+  memcpy(ret.data() + AES_BLOCK_SIZE, hmac, 4);
+
+  return ret;
+}
+
+base::Optional<CableEidArray> Decrypt(
+    const std::array<uint8_t, kAdvertSize>& advert,
+    base::span<const uint8_t, kEIDKeySize> key) {
+  // See |Encrypt| about the format.
+  static_assert(EXTENT(advert) == AES_BLOCK_SIZE + 4, "");
+  static_assert(EXTENT(key) == 32 + 32, "");
+
+  uint8_t calculated_hmac[SHA256_DIGEST_LENGTH];
+  unsigned calculated_hmac_len;
+  CHECK(HMAC(EVP_sha256(), key.data() + 32, 32, advert.data(), AES_BLOCK_SIZE,
+             calculated_hmac, &calculated_hmac_len) != nullptr);
+  CHECK_EQ(calculated_hmac_len, sizeof(calculated_hmac));
+
+  if (CRYPTO_memcmp(calculated_hmac, advert.data() + AES_BLOCK_SIZE, 4) != 0) {
+    return base::nullopt;
+  }
+
+  AES_KEY aes_key;
+  CHECK(AES_set_decrypt_key(key.data(), /*bits=*/8 * 32, &aes_key) == 0);
+  CableEidArray plaintext;
+  static_assert(EXTENT(plaintext) == AES_BLOCK_SIZE, "EIDs are not AES blocks");
+  AES_decrypt(/*in=*/advert.data(), /*out=*/plaintext.data(), &aes_key);
+
+  // Ensure that reserved bits are zero. They might be used for new features in
+  // the future but support for those features must be advertised in the QR
+  // code, thus authenticators should not be unilaterally setting any of these
+  // bits.
+  if (!ReservedBitsAreZero(plaintext)) {
+    return base::nullopt;
+  }
+
+  return plaintext;
+}
+
 CableEidArray FromComponents(const Components& components) {
   DCHECK_EQ(components.tunnel_server_domain >> 22, 0u);
 
@@ -159,14 +228,7 @@ CableEidArray FromComponents(const Components& components) {
   return eid;
 }
 
-bool IsValid(const CableEidArray& eid) {
-  static_assert(EXTENT(eid) >= 8, "");
-  return eid[6] == 0 && eid[7] == 0 && (eid[2] >> 6) == 0;
-}
-
 Components ToComponents(const CableEidArray& eid) {
-  DCHECK(IsValid(eid));
-
   Components ret;
   static_assert(EXTENT(eid) == 16, "");
   ret.tunnel_server_domain = static_cast<uint32_t>(eid[0]) |
@@ -182,6 +244,126 @@ Components ToComponents(const CableEidArray& eid) {
 }
 
 }  // namespace eid
+
+namespace qr {
+
+constexpr char kPrefix[] = "fido://";
+
+// DecompressPublicKey converts a compressed public key (from a scanned QR
+// code) into a standard, uncompressed one.
+static base::Optional<std::array<uint8_t, device::kP256X962Length>>
+DecompressPublicKey(base::span<const uint8_t> compressed_public_key) {
+  if (compressed_public_key.size() !=
+      device::cablev2::kCompressedPublicKeySize) {
+    return base::nullopt;
+  }
+
+  bssl::UniquePtr<EC_GROUP> p256(
+      EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
+  bssl::UniquePtr<EC_POINT> point(EC_POINT_new(p256.get()));
+  if (!EC_POINT_oct2point(p256.get(), point.get(), compressed_public_key.data(),
+                          compressed_public_key.size(), /*ctx=*/nullptr)) {
+    return base::nullopt;
+  }
+  std::array<uint8_t, device::kP256X962Length> ret;
+  CHECK_EQ(
+      ret.size(),
+      EC_POINT_point2oct(p256.get(), point.get(), POINT_CONVERSION_UNCOMPRESSED,
+                         ret.data(), ret.size(), /*ctx=*/nullptr));
+  return ret;
+}
+
+static std::array<uint8_t, device::cablev2::kCompressedPublicKeySize>
+SeedToCompressedPublicKey(base::span<const uint8_t, 32> seed) {
+  bssl::UniquePtr<EC_GROUP> p256(
+      EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
+  bssl::UniquePtr<EC_KEY> key(
+      EC_KEY_derive_from_secret(p256.get(), seed.data(), seed.size()));
+  const EC_POINT* public_key = EC_KEY_get0_public_key(key.get());
+
+  std::array<uint8_t, device::cablev2::kCompressedPublicKeySize> ret;
+  CHECK_EQ(ret.size(), EC_POINT_point2oct(
+                           p256.get(), public_key, POINT_CONVERSION_COMPRESSED,
+                           ret.data(), ret.size(), /*ctx=*/nullptr));
+  return ret;
+}
+
+// static
+base::Optional<Components> Parse(const std::string& qr_url) {
+  if (qr_url.find(kPrefix) != 0) {
+    return base::nullopt;
+  }
+
+  base::StringPiece qr_url_base64(qr_url);
+  qr_url_base64 = qr_url_base64.substr(sizeof(kPrefix) - 1);
+  std::string qr_data_str;
+  if (!base::Base64UrlDecode(qr_url_base64,
+                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                             &qr_data_str)) {
+    return base::nullopt;
+  }
+
+  base::Optional<cbor::Value> qr_contents =
+      cbor::Reader::Read(base::span<const uint8_t>(
+          reinterpret_cast<const uint8_t*>(qr_data_str.data()),
+          qr_data_str.size()));
+  if (!qr_contents || !qr_contents->is_map()) {
+    return base::nullopt;
+  }
+  const cbor::Value::MapValue& qr_contents_map(qr_contents->GetMap());
+
+  base::span<const uint8_t> values[2];
+  for (size_t i = 0; i < base::size(values); i++) {
+    const cbor::Value::MapValue::const_iterator it =
+        qr_contents_map.find(cbor::Value(static_cast<int>(i)));
+    if (it == qr_contents_map.end() || !it->second.is_bytestring()) {
+      return base::nullopt;
+    }
+    values[i] = it->second.GetBytestring();
+  }
+
+  base::span<const uint8_t> compressed_public_key = values[0];
+  base::span<const uint8_t> qr_secret = values[1];
+
+  Components ret;
+  if (qr_secret.size() != ret.secret.size()) {
+    return base::nullopt;
+  }
+  std::copy(qr_secret.begin(), qr_secret.end(), ret.secret.begin());
+
+  base::Optional<std::array<uint8_t, device::kP256X962Length>> peer_identity =
+      DecompressPublicKey(compressed_public_key);
+  if (!peer_identity) {
+    FIDO_LOG(ERROR) << "Invalid compressed public key in QR data";
+    return base::nullopt;
+  }
+
+  ret.peer_identity = *peer_identity;
+  return ret;
+}
+
+std::string Encode(base::span<const uint8_t, kQRKeySize> qr_key) {
+  cbor::Value::MapValue qr_contents;
+  qr_contents.emplace(
+      0, SeedToCompressedPublicKey(
+             base::span<const uint8_t, device::cablev2::kQRSeedSize>(
+                 qr_key.data(), device::cablev2::kQRSeedSize)));
+
+  qr_contents.emplace(1, qr_key.subspan(device::cablev2::kQRSeedSize));
+
+  const base::Optional<std::vector<uint8_t>> qr_data =
+      cbor::Writer::Write(cbor::Value(std::move(qr_contents)));
+
+  std::string base64_qr_data;
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(qr_data->data()),
+                        qr_data->size()),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &base64_qr_data);
+
+  return std::string(kPrefix) + base64_qr_data;
+}
+
+}  // namespace qr
 
 namespace internal {
 
@@ -359,11 +541,8 @@ HandshakeInitiator::HandshakeInitiator(
 HandshakeInitiator::~HandshakeInitiator() = default;
 
 std::vector<uint8_t> HandshakeInitiator::BuildInitialMessage(
-    base::span<const uint8_t, kCableEphemeralIdSize> eid,
     base::span<const uint8_t> get_info_bytes) {
-  uint8_t prologue[1 + kCableEphemeralIdSize];
-  DCHECK_EQ(kCableEphemeralIdSize, eid.size());
-  memcpy(&prologue[1], eid.data(), kCableEphemeralIdSize);
+  uint8_t prologue[1];
 
   if (peer_identity_) {
     noise_.Init(Noise::HandshakeType::kNKpsk0);
@@ -488,7 +667,6 @@ ResponderResult::ResponderResult(ResponderResult&&) = default;
 
 base::Optional<ResponderResult> RespondToHandshake(
     base::span<const uint8_t, 32> psk,
-    base::span<const uint8_t, kCableEphemeralIdSize> eid,
     base::Optional<base::span<const uint8_t, kQRSeedSize>> identity_seed,
     base::Optional<base::span<const uint8_t, kP256X962Length>> peer_identity,
     base::span<const uint8_t> in,
@@ -511,8 +689,7 @@ base::Optional<ResponderResult> RespondToHandshake(
   }
 
   Noise noise;
-  uint8_t prologue[1 + EXTENT(eid)];
-  memcpy(&prologue[1], eid.data(), eid.size());
+  uint8_t prologue[1];
   if (identity) {
     noise.Init(device::Noise::HandshakeType::kNKpsk0);
     prologue[0] = 0;

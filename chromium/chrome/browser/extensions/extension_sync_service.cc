@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/one_shot_event.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -20,10 +20,10 @@
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/sync_helper.h"
-#include "chrome/common/web_application_info.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "extensions/browser/app_sorting.h"
@@ -523,7 +523,7 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
     icon_info.url = icon.url;
     icon_info.square_size_px = icon.size;
     // Web apps in Extensions system supports Purpose::ANY icons only.
-    icon_info.purpose = blink::Manifest::ImageResource::Purpose::ANY;
+    icon_info.purpose = blink::mojom::ManifestImageResource_Purpose::ANY;
     web_app_info->icon_infos.push_back(icon_info);
   }
 

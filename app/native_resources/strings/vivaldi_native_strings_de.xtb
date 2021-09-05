@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Link per Mail senden</translation>
 <translation id="1454726940098520109">Nicht mehr nachfragen</translation>
 <translation id="1462666970065907900">Wollen Sie dieses Fenster wirklich schließen?</translation>
+<translation id="1526344461589023948">Beim Versuch, ein heruntergeladenes Update zu speichern, ist ein Fehler aufgetreten. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Neues privates Fenster</translation>
+<translation id="1702758681952953055">Wenn der Fehler weiterhin besteht, melden Sie ihn bitte unter Angabe der folgenden Details:</translation>
 <translation id="1728549374069268714">Einfügen und aufrufen</translation>
 <translation id="1756026472674246267">Link in neuem Tab öffnen</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Landschaft 15</translation>
 <translation id="19598411548897379">Allgemein</translation>
 <translation id="2079036669923635404">Hier klicken, um Vivaldi auf Version <ph name="VERSION" /> zu aktualisieren.</translation>
+<translation id="2141974047387702305">Beim Herunterladen der Update-Dateien ist ein Fehler aufgetreten. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es später erneut.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Notiz einfügen</translation>
 <translation id="2486841023299517366">Tier 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Link in neuem Fenster öffnen</translation>
 <translation id="3588820906588687999">Bild in neuem Tab öffnen</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3708982624815781692">Der Download wurde abgebrochen.</translation>
 <translation id="3732157130969736834">Link zu Lesezeichen hinzufügen</translation>
 <translation id="3732388226447288666">Tier 2</translation>
 <translation id="3732439195215136813">Tier 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera Version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Bild in neuem Fenster öffnen</translation>
+<translation id="5656371807944747581">Fehler bei der Aktualisierung!</translation>
 <translation id="5716238312826274098">Deaktiviere Benachrichtigungen</translation>
 <translation id="5770433027661640693">Landschaft 10</translation>
 <translation id="5857090052475505287">Neuer Ordner</translation>
 <translation id="588258955323874662">Vollbild</translation>
 <translation id="5916080360077521750">Leider stehen Ihre Chrome Einstellungen nicht zur Verfügung solange der Browser noch läuft. Um die Einstellungen nach Vivaldi zu importieren, speichern Sie Ihre Dokumente, beenden Sie alle Chrome Fenster und klicken dann auf Fortsetzen.</translation>
+<translation id="6040143037577758943">Schließen</translation>
 <translation id="6229528619562190452">Klicken Sie hier, um Vivaldi zu aktualisieren.</translation>
 <translation id="6234173136417926046">Bild als Schnellwahl-Hintergrund verwenden</translation>
 <translation id="630690498669249215">Opera Lesezeichen-Datei</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Landschaft 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi wird durch das <ph name="BEGIN_LINK_CHROMIUM" />Chromium Open Source Projekt<ph name="END_LINK_CHROMIUM" /> und andere <ph name="BEGIN_LINK_OSS" />Open Source Software<ph name="END_LINK_OSS" /> ermöglicht.</translation>
+<translation id="7581266044164103589">Das Update-Installationsprogramm konnte nicht gestartet werden. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="7715497554424665066">Update &amp;ignorieren</translation>
 <translation id="7724603315864178912">Ausschneiden</translation>
 <translation id="7793738202466490491">Als Kalender Ereignis hinzufügen</translation>
+<translation id="7848222781052558334">Die digitale Signatur der heruntergeladenen Dateien konnte nicht überprüft werden.</translation>
 <translation id="7865983598101744945">Beenden bestätigen</translation>
 <translation id="7957213167373139414">Mein Kalender</translation>
 <translation id="8027581147000338959">In neuem Fenster öffnen</translation>

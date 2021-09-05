@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -51,6 +52,7 @@ component("fido") {
   defines = [ "IS_DEVICE_FIDO_IMPL" ]
 
   deps = [
+    "//build:chromeos_buildflags",
     "//components/apdu",
     "//components/cbor",
     "//components/device_event_log",
@@ -82,6 +84,8 @@ component("fido") {
       "attestation_statement.h",
       "attestation_statement_formats.cc",
       "attestation_statement_formats.h",
+      "auth_token_requester.cc",
+      "auth_token_requester.h",
       "authenticator_data.cc",
       "authenticator_data.h",
       "authenticator_get_assertion_response.cc",
@@ -125,8 +129,6 @@ component("fido") {
       "credential_management_handler.cc",
       "credential_management_handler.h",
       "ctap2_device_operation.h",
-      "ctap_empty_authenticator_request.cc",
-      "ctap_empty_authenticator_request.h",
       "ctap_get_assertion_request.cc",
       "ctap_get_assertion_request.h",
       "ctap_make_credential_request.cc",
@@ -173,6 +175,8 @@ component("fido") {
       "opaque_attestation_statement.h",
       "pin.cc",
       "pin.h",
+      "pin_internal.cc",
+      "pin_internal.h",
       "platform_credential_store.h",
       "reset_request_handler.cc",
       "reset_request_handler.h",
@@ -251,7 +255,7 @@ component("fido") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_ash) {
     sources += [
       "cros/authenticator.cc",
       "cros/authenticator.h",
@@ -310,7 +314,7 @@ static_library("cablev2_test_util") {
   ]
 }
 
-if (is_chromeos) {
+if (is_ash) {
   proto_library("u2f_proto") {
     sources = [ "//third_party/cros_system_api/dbus/u2f/u2f_interface.proto" ]
 

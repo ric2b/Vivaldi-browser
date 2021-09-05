@@ -5,6 +5,7 @@
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
+import("//tools/grit/grit_rule.gni")
 import("//weblayer/variables.gni")
 
 _bundle_utils_output =
@@ -18,6 +19,11 @@ jinja_template("weblayer_bundle_utils") {
 
 android_resources("weblayer_resources") {
   sources = [
+    "res/drawable-hdpi/amp_icon.png",
+    "res/drawable-mdpi/amp_icon.png",
+    "res/drawable-xhdpi/amp_icon.png",
+    "res/drawable-xxhdpi/amp_icon.png",
+    "res/drawable-xxxhdpi/amp_icon.png",
     "res/drawable/weblayer_tab_indicator.xml",
     "res/layout/site_settings_layout.xml",
     "res/layout/weblayer_infobar_translate_compact_content.xml",
@@ -37,8 +43,15 @@ android_resources("weblayer_resources") {
     "//components/browser_ui/strings/android:browser_ui_strings_grd",
     "//components/browser_ui/styles/android:java_resources",
     "//components/infobars/android:java_resources",
+    "//components/omnibox/browser:java_resources",
     "//components/page_info/android:java_resources",
     "//components/permissions/android:java_resources",
+
+    # TODO(crbug.com/1137713): Determine why the creation of
+    # //components/subresource_filter Java resources caused //weblayer's BundlePackageTest
+    # to fail without this dep even in advance of //weblayer depending on the code that uses these
+    # resources.
+    "//components/subresource_filter/android:java_resources",
     "//components/translate/content/android:java_resources",
     "//third_party/android_deps:material_design_java",
     "//weblayer:components_java_strings",
@@ -51,13 +64,16 @@ generate_product_config_srcjar("weblayer_product_config") {
 
 java_cpp_template("resource_id_javagen") {
   sources = [ "ResourceId.template" ]
-  package_path = "org/chromium/weblayer_private/resources"
   inputs = [
     "//components/resources/android/blocked_content_resource_id.h",
     "//components/resources/android/page_info_resource_id.h",
     "//components/resources/android/permissions_resource_id.h",
     "//components/resources/android/sms_resource_id.h",
+    "//components/resources/android/webxr_resource_id.h",
+    "$root_gen_dir/device/vr/buildflags/buildflags.h",
   ]
+
+  deps = [ "//device/vr/buildflags" ]
 }
 
 java_strings_grd("weblayer_strings_grd") {
@@ -145,9 +161,12 @@ android_library("java") {
     "org/chromium/weblayer_private/media/MediaRouteDialogFragmentImpl.java",
     "org/chromium/weblayer_private/media/MediaRouterClientImpl.java",
     "org/chromium/weblayer_private/media/MediaSessionManager.java",
+    "org/chromium/weblayer_private/media/MediaSessionNotificationHelper.java",
     "org/chromium/weblayer_private/media/MediaStreamManager.java",
     "org/chromium/weblayer_private/metrics/MetricsServiceClient.java",
     "org/chromium/weblayer_private/metrics/UmaUtils.java",
+    "org/chromium/weblayer_private/payments/WebLayerPaymentRequestFactory.java",
+    "org/chromium/weblayer_private/payments/WebLayerPaymentRequestService.java",
     "org/chromium/weblayer_private/permissions/PermissionRequestUtils.java",
     "org/chromium/weblayer_private/resources/ResourceMapper.java",
     _bundle_utils_output,
@@ -199,25 +218,33 @@ android_library("java") {
     "//components/infobars/core:infobar_enums_java",
     "//components/javascript_dialogs/android:java",
     "//components/location/android:settings_java",
+    "//components/media_router/browser/android:cast_options_provider_java",
     "//components/media_router/browser/android:java",
     "//components/metrics:metrics_java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/omnibox/browser:browser_java",
     "//components/page_info/android:java",
+    "//components/payments/content/android:java",
+    "//components/payments/mojom:mojom_java",
     "//components/permissions/android:java",
+    "//components/prefs/android:java",
     "//components/safe_browsing/android:safe_browsing_java",
     "//components/security_interstitials/content/android:java",
+    "//components/security_state/core:security_state_enums_java",
     "//components/signin/core/browser:signin_enums_java",
     "//components/spellcheck/browser/android:java",
     "//components/translate/content/android:java",
     "//components/translate/content/android:translate_android_enums_java",
+    "//components/translate/core/common:translate_infobar_event_enum_java",
     "//components/url_formatter/android:url_formatter_java",
+    "//components/user_prefs/android:java",
     "//components/variations/android:variations_java",
     "//components/version_info/android:version_constants_java",
     "//components/webrtc/android:java",
     "//content/public/android:content_java",
     "//mojo/public/java:bindings_java",
+    "//mojo/public/java:system_java",
     "//net/android:net_java",
     "//services/network/public/mojom:cookies_mojom_java",
     "//services/network/public/mojom:mojom_java",
@@ -277,6 +304,8 @@ android_library("test_java") {
     "//base:jni_java",
     "//components/infobars/android:java",
     "//components/location/android:location_java",
+    "//components/media_router/browser/android:java",
+    "//components/media_router/browser/android:test_support_java",
     "//components/permissions/android:java",
     "//content/public/test/android:content_java_test_support",
     "//net/android:net_java",
@@ -348,6 +377,7 @@ generate_jni("jni") {
 android_library("interfaces_java") {
   sources = [
     "org/chromium/weblayer_private/interfaces/APICallException.java",
+    "org/chromium/weblayer_private/interfaces/ActionModeItemType.java",
     "org/chromium/weblayer_private/interfaces/BrowserFragmentArgs.java",
     "org/chromium/weblayer_private/interfaces/BrowsingDataType.java",
     "org/chromium/weblayer_private/interfaces/CookieChangeCause.java",
@@ -359,6 +389,7 @@ android_library("interfaces_java") {
     "org/chromium/weblayer_private/interfaces/NavigationState.java",
     "org/chromium/weblayer_private/interfaces/NewTabType.java",
     "org/chromium/weblayer_private/interfaces/ObjectWrapper.java",
+    "org/chromium/weblayer_private/interfaces/RemoteMediaServiceConstants.java",
     "org/chromium/weblayer_private/interfaces/ScrollNotificationType.java",
     "org/chromium/weblayer_private/interfaces/SettingType.java",
     "org/chromium/weblayer_private/interfaces/SiteSettingsFragmentArgs.java",
@@ -407,6 +438,7 @@ android_aidl("aidl") {
     "org/chromium/weblayer_private/interfaces/IChildProcessService.aidl",
     "org/chromium/weblayer_private/interfaces/IClientDownload.aidl",
     "org/chromium/weblayer_private/interfaces/IClientNavigation.aidl",
+    "org/chromium/weblayer_private/interfaces/IContextMenuParams.aidl",
     "org/chromium/weblayer_private/interfaces/ICookieChangedCallbackClient.aidl",
     "org/chromium/weblayer_private/interfaces/ICookieManager.aidl",
     "org/chromium/weblayer_private/interfaces/ICrashReporterController.aidl",

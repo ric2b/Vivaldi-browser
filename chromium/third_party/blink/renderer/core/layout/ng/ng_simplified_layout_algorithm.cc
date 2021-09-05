@@ -69,6 +69,18 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
 
     if (physical_fragment.LastBaseline())
       container_builder_.SetLastBaseline(*physical_fragment.LastBaseline());
+
+    if (ConstraintSpace().IsTableCell()) {
+      if (physical_fragment.HasCollapsedBorders())
+        container_builder_.SetHasCollapsedBorders(true);
+
+      if (!ConstraintSpace().IsLegacyTableCell()) {
+        container_builder_.SetTableCellColumnIndex(
+            physical_fragment.TableCellColumnIndex());
+      }
+    } else {
+      DCHECK(!physical_fragment.HasCollapsedBorders());
+    }
   } else {
     // Only block-flow layout sets the following fields.
     DCHECK(physical_fragment.IsFormattingContextRoot());
@@ -102,11 +114,19 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
     container_builder_.SetCustomLayoutData(result.CustomLayoutData());
   }
 
+  // TODO(atotic,ikilpatrick): Copy across table related data for table,
+  // table-row, table-section.
+  DCHECK(!physical_fragment.IsTable());
+  DCHECK(!physical_fragment.IsTableNGRow());
+  DCHECK(!physical_fragment.IsTableNGSection());
+
   if (physical_fragment.IsHiddenForPaint())
     container_builder_.SetIsHiddenForPaint(true);
 
   if (physical_fragment.Baseline())
     container_builder_.SetBaseline(*physical_fragment.Baseline());
+  if (physical_fragment.IsTableNGPart())
+    container_builder_.SetIsTableNGPart();
 
   container_builder_.SetIntrinsicBlockSize(result.IntrinsicBlockSize());
   container_builder_.SetOverflowBlockSize(result.OverflowBlockSize());
@@ -121,8 +141,7 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
     container_builder_.SetFragmentBlockSize(new_block_size);
   } else {
     LayoutUnit old_block_size =
-        NGFragment(writing_direction_.GetWritingMode(), physical_fragment)
-            .BlockSize();
+        NGFragment(writing_direction_, physical_fragment).BlockSize();
     DCHECK_EQ(old_block_size, new_block_size);
     container_builder_.SetFragmentBlockSize(old_block_size);
   }
@@ -157,7 +176,7 @@ scoped_refptr<const NGLayoutResult> NGSimplifiedLayoutAlgorithm::Layout() {
 
     // Add the (potentially updated) layout result.
     scoped_refptr<const NGLayoutResult> result =
-        NGBlockNode(ToLayoutBox(child_fragment.GetMutableLayoutObject()))
+        NGBlockNode(To<LayoutBox>(child_fragment.GetMutableLayoutObject()))
             .SimplifiedLayout(child_fragment);
 
     // The child may have failed "simplified" layout! (Due to adding/removing
@@ -166,7 +185,13 @@ scoped_refptr<const NGLayoutResult> NGSimplifiedLayoutAlgorithm::Layout() {
     if (!result)
       return nullptr;
 
-    AddChildFragment(child_link, result->PhysicalFragment());
+    const NGMarginStrut end_margin_strut = result->EndMarginStrut();
+    // No margins should pierce outside formatting-context roots.
+    DCHECK(!result->PhysicalFragment().IsFormattingContextRoot() ||
+           end_margin_strut.IsEmpty());
+
+    AddChildFragment(child_link, result->PhysicalFragment(), &end_margin_strut,
+                     result->IsSelfCollapsing());
   }
 
   // Iterate through all our OOF-positioned children and add them as candidates.
@@ -193,8 +218,7 @@ scoped_refptr<const NGLayoutResult> NGSimplifiedLayoutAlgorithm::Layout() {
       auto* items_builder = container_builder_.ItemsBuilder();
       DCHECK(items_builder);
       DCHECK_EQ(items_builder->GetWritingDirection(), writing_direction_);
-      items_builder->AddPreviousItems(*previous_items,
-                                      previous_physical_container_size_);
+      items_builder->AddPreviousItems(previous_fragment, *previous_items);
     }
   }
 
@@ -224,7 +248,9 @@ NGSimplifiedLayoutAlgorithm::LayoutWithItemsBuilder() {
 
 void NGSimplifiedLayoutAlgorithm::AddChildFragment(
     const NGLink& old_fragment,
-    const NGPhysicalContainerFragment& new_fragment) {
+    const NGPhysicalContainerFragment& new_fragment,
+    const NGMarginStrut* margin_strut,
+    bool is_self_collapsing) {
   DCHECK_EQ(old_fragment->Size(), new_fragment.Size());
 
   // Determine the previous position in the logical coordinate system.
@@ -243,7 +269,9 @@ void NGSimplifiedLayoutAlgorithm::AddChildFragment(
   }
 
   // Add the new fragment to the builder.
-  container_builder_.AddChild(new_fragment, child_offset);
+  container_builder_.AddChild(new_fragment, child_offset,
+                              /* inline_container */ nullptr, margin_strut,
+                              is_self_collapsing);
 }
 
 }  // namespace blink

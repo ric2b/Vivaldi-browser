@@ -149,7 +149,9 @@ std::string GetOnTrackStartedLogString(
 void InitializeAudioTrackControls(UserMediaRequest* user_media_request,
                                   TrackControls* track_controls) {
   if (user_media_request->MediaRequestType() ==
-      UserMediaRequest::MediaType::kDisplayMedia) {
+          UserMediaRequest::MediaType::kDisplayMedia ||
+      user_media_request->MediaRequestType() ==
+          UserMediaRequest::MediaType::kGetCurrentBrowsingContextMedia) {
     track_controls->requested = true;
     track_controls->stream_type = MediaStreamType::DISPLAY_AUDIO_CAPTURE;
     return;
@@ -186,6 +188,12 @@ void InitializeVideoTrackControls(UserMediaRequest* user_media_request,
       UserMediaRequest::MediaType::kDisplayMedia) {
     track_controls->requested = true;
     track_controls->stream_type = MediaStreamType::DISPLAY_VIDEO_CAPTURE;
+    return;
+  } else if (user_media_request->MediaRequestType() ==
+             UserMediaRequest::MediaType::kGetCurrentBrowsingContextMedia) {
+    track_controls->requested = true;
+    track_controls->stream_type =
+        MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB;
     return;
   }
 
@@ -642,15 +650,21 @@ void UserMediaProcessor::SelectAudioDeviceSettings(
         audio_input_capabilities) {
   blink::AudioDeviceCaptureCapabilities capabilities;
   for (const auto& device : audio_input_capabilities) {
-    // Find the first occurrence of blink::MediaStreamAudioSource that matches
-    // the same device ID as |device|. If more than one exists, any such source
-    // will contain the same non-reconfigurable settings that limit the
-    // associated capabilities.
+    // Find the first occurrence of blink::ProcessedLocalAudioSource that
+    // matches the same device ID as |device|. If more than one exists, any
+    // such source will contain the same non-reconfigurable settings that limit
+    // the associated capabilities.
     blink::MediaStreamAudioSource* audio_source = nullptr;
     auto* it = std::find_if(local_sources_.begin(), local_sources_.end(),
                             [&device](MediaStreamSource* source) {
                               DCHECK(source);
-                              return source->Id() == device->device_id;
+                              MediaStreamAudioSource* platform_source =
+                                  MediaStreamAudioSource::From(source);
+                              ProcessedLocalAudioSource* processed_source =
+                                  ProcessedLocalAudioSource::From(
+                                      platform_source);
+                              return processed_source &&
+                                     source->Id() == device->device_id;
                             });
     if (it != local_sources_.end()) {
       WebPlatformMediaStreamSource* const source = (*it)->GetPlatformSource();
@@ -891,8 +905,11 @@ void UserMediaProcessor::SelectVideoContentSettings() {
         failed_constraint_name);
     return;
   }
-  if (current_request_info_->stream_controls()->video.stream_type !=
-      MediaStreamType::DISPLAY_VIDEO_CAPTURE) {
+
+  const MediaStreamType stream_type =
+      current_request_info_->stream_controls()->video.stream_type;
+  if (stream_type != MediaStreamType::DISPLAY_VIDEO_CAPTURE &&
+      stream_type != MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB) {
     current_request_info_->stream_controls()->video.device_id =
         settings.device_id();
   }
@@ -1188,6 +1205,48 @@ void UserMediaProcessor::OnDeviceChanged(const MediaStreamDevice& old_device,
   source_impl->ChangeSource(new_device);
 }
 
+void UserMediaProcessor::OnDeviceRequestStateChange(
+    const MediaStreamDevice& device,
+    const mojom::blink::MediaStreamStateChange new_state) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  SendLogMessage(base::StringPrintf(
+      "OnDeviceRequestStateChange({session_id=%s}, {device_id=%s}, "
+      "{new_state=%s})",
+      device.session_id().ToString().c_str(), device.id.c_str(),
+      (new_state == mojom::blink::MediaStreamStateChange::PAUSE ? "PAUSE"
+                                                                : "PLAY")));
+
+  MediaStreamSource* source = FindLocalSource(device);
+  if (!source) {
+    // This happens if the same device is used in several guM requests or
+    // if a user happens to stop a track from JS at the same time
+    // as the underlying media device is unplugged from the system.
+    return;
+  }
+
+  WebPlatformMediaStreamSource* const source_impl = source->GetPlatformSource();
+  source_impl->SetSourceMuted(new_state ==
+                              mojom::blink::MediaStreamStateChange::PAUSE);
+  MediaStreamVideoSource* video_source =
+      static_cast<blink::MediaStreamVideoSource*>(source_impl);
+  if (!video_source) {
+    return;
+  }
+  if (new_state == mojom::blink::MediaStreamStateChange::PAUSE) {
+    if (video_source->IsRunning()) {
+      video_source->StopForRestart(base::DoNothing(),
+                                   /*send_black_frame=*/true);
+    }
+  } else if (new_state == mojom::blink::MediaStreamStateChange::PLAY) {
+    if (video_source->IsStoppedForRestart()) {
+      video_source->Restart(*video_source->GetCurrentFormat(),
+                            base::DoNothing());
+    }
+  } else {
+    NOTREACHED();
+  }
+}
+
 void UserMediaProcessor::Trace(Visitor* visitor) const {
   visitor->Trace(dispatcher_host_);
   visitor->Trace(frame_);
@@ -1271,8 +1330,14 @@ MediaStreamSource* UserMediaProcessor::InitializeAudioSourceObject(
     if (platform_source->device().id == audio_source->device().id) {
       auto* audio_platform_source =
           static_cast<MediaStreamAudioSource*>(platform_source);
-      DCHECK(audio_source->HasSameNonReconfigurableSettings(
-          audio_platform_source));
+      auto* processed_existing_source =
+          ProcessedLocalAudioSource::From(audio_platform_source);
+      auto* processed_new_source =
+          ProcessedLocalAudioSource::From(audio_source.get());
+      if (processed_new_source && processed_existing_source) {
+        DCHECK(audio_source->HasSameNonReconfigurableSettings(
+            audio_platform_source));
+      }
     }
   }
 #endif  // DCHECK_IS_ON()
@@ -1383,6 +1448,8 @@ void UserMediaProcessor::StartTracks(const String& label) {
         WTF::BindRepeating(&UserMediaProcessor::OnDeviceStopped,
                            WrapWeakPersistent(this)),
         WTF::BindRepeating(&UserMediaProcessor::OnDeviceChanged,
+                           WrapWeakPersistent(this)),
+        WTF::BindRepeating(&UserMediaProcessor::OnDeviceRequestStateChange,
                            WrapWeakPersistent(this)));
   }
 

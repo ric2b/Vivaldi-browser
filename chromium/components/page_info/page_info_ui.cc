@@ -211,18 +211,27 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
 }
 
 std::unique_ptr<PageInfoUI::SecurityDescription>
-CreateSecurityDescriptionForLookalikeSafetyTip(const GURL& safe_url) {
+CreateSecurityDescriptionForSafetyTip(
+    const security_state::SafetyTipStatus& safety_tip_status,
+    const GURL& safe_url) {
   auto security_description =
       std::make_unique<PageInfoUI::SecurityDescription>();
   security_description->summary_style = PageInfoUI::SecuritySummaryColor::RED;
 
-  const base::string16 safe_host =
-      security_interstitials::common_string_util::GetFormattedHostName(
-          safe_url);
-  security_description->summary = l10n_util::GetStringFUTF16(
-      IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_TITLE, safe_host);
+  if (safety_tip_status == security_state::SafetyTipStatus::kBadReputation ||
+      safety_tip_status ==
+          security_state::SafetyTipStatus::kBadReputationIgnored) {
+    security_description->summary = l10n_util::GetStringUTF16(
+        IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE);
+  } else {
+    const base::string16 safe_host =
+        security_interstitials::common_string_util::GetFormattedHostName(
+            safe_url);
+    security_description->summary = l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_TITLE, safe_host);
+  }
   security_description->details =
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_DESCRIPTION);
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_DESCRIPTION);
   security_description->type = PageInfoUI::SecurityDescriptionType::SAFETY_TIP;
   return security_description;
 }
@@ -270,6 +279,10 @@ PageInfoUI::PageFeatureInfo::PageFeatureInfo()
 
 std::unique_ptr<PageInfoUI::SecurityDescription>
 PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
+  bool page_info_v2_enabled = false;
+#if defined(OS_ANDROID)
+  page_info_v2_enabled = base::FeatureList::IsEnabled(page_info::kPageInfoV2);
+#endif
   switch (identity_info.safe_browsing_status) {
     case PageInfo::SAFE_BROWSING_STATUS_NONE:
       break;
@@ -329,29 +342,37 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
     case PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       switch (identity_info.connection_status) {
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
-          return CreateSecurityDescription(SecuritySummaryColor::RED,
-                                           IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
-                                           IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+          return CreateSecurityDescription(
+              SecuritySummaryColor::RED,
+              page_info_v2_enabled ? IDS_PAGE_INFO_NOT_SECURE_SUMMARY_SHORT
+                                   : IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
+              IDS_PAGE_INFO_NOT_SECURE_DETAILS,
+              SecurityDescriptionType::CONNECTION);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION:
-          return CreateSecurityDescription(SecuritySummaryColor::RED,
-                                           IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
-                                           IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+          return CreateSecurityDescription(
+              SecuritySummaryColor::RED,
+              page_info_v2_enabled ? IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY_SHORT
+                                   : IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
+              IDS_PAGE_INFO_NOT_SECURE_DETAILS,
+              SecurityDescriptionType::CONNECTION);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
-          return CreateSecurityDescription(SecuritySummaryColor::RED,
-                                           IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
-                                           IDS_PAGE_INFO_MIXED_CONTENT_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+          return CreateSecurityDescription(
+              SecuritySummaryColor::RED,
+              page_info_v2_enabled ? IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY_SHORT
+                                   : IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
+              IDS_PAGE_INFO_MIXED_CONTENT_DETAILS,
+              SecurityDescriptionType::CONNECTION);
         case PageInfo::SITE_CONNECTION_STATUS_LEGACY_TLS:
-          return CreateSecurityDescription(SecuritySummaryColor::RED,
-                                           IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
-                                           IDS_PAGE_INFO_LEGACY_TLS_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+          return CreateSecurityDescription(
+              SecuritySummaryColor::RED,
+              page_info_v2_enabled ? IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY_SHORT
+                                   : IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
+              IDS_PAGE_INFO_LEGACY_TLS_DETAILS,
+              SecurityDescriptionType::CONNECTION);
         default:
           int secure_details = IDS_PAGE_INFO_SECURE_DETAILS;
 #if defined(OS_ANDROID)
-          if (base::FeatureList::IsEnabled(page_info::kPageInfoV2)) {
+          if (page_info_v2_enabled) {
             // Do not show details for secure connections.
             secure_details = 0;
           }
@@ -364,10 +385,12 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
     case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
     case PageInfo::SITE_IDENTITY_STATUS_NO_CERT:
     default:
-      return CreateSecurityDescription(SecuritySummaryColor::RED,
-                                       IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
-                                       IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                       SecurityDescriptionType::CONNECTION);
+      return CreateSecurityDescription(
+          SecuritySummaryColor::RED,
+          page_info_v2_enabled ? IDS_PAGE_INFO_NOT_SECURE_SUMMARY_SHORT
+                               : IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
+          IDS_PAGE_INFO_NOT_SECURE_DETAILS,
+          SecurityDescriptionType::CONNECTION);
   }
 }
 
@@ -389,7 +412,8 @@ base::string16 PageInfoUI::PermissionActionToUIString(
     ContentSettingsType type,
     ContentSetting setting,
     ContentSetting default_setting,
-    content_settings::SettingSource source) {
+    content_settings::SettingSource source,
+    bool is_one_time) {
   ContentSetting effective_setting =
       GetEffectiveSetting(type, setting, default_setting);
   const int* button_text_ids = nullptr;
@@ -413,7 +437,6 @@ base::string16 PageInfoUI::PermissionActionToUIString(
           break;
         }
 #endif
-
         button_text_ids = kPermissionButtonTextIDDefaultSetting;
         break;
       }
@@ -427,7 +450,6 @@ base::string16 PageInfoUI::PermissionActionToUIString(
         break;
       }
 #endif
-
       button_text_ids = kPermissionButtonTextIDUserManaged;
       break;
     case content_settings::SETTING_SOURCE_ALLOWLIST:
@@ -437,6 +459,13 @@ base::string16 PageInfoUI::PermissionActionToUIString(
       return base::string16();
   }
   int button_text_id = button_text_ids[effective_setting];
+
+  if (is_one_time) {
+    DCHECK_EQ(source, content_settings::SETTING_SOURCE_USER);
+    DCHECK_EQ(type, ContentSettingsType::GEOLOCATION);
+    DCHECK_EQ(button_text_id, IDS_PAGE_INFO_BUTTON_TEXT_ALLOWED_BY_USER);
+    button_text_id = IDS_PAGE_INFO_BUTTON_TEXT_ALLOWED_ONCE_BY_USER;
+  }
   DCHECK_NE(button_text_id, kInvalidResourceID);
   return l10n_util::GetStringUTF16(button_text_id);
 }
@@ -494,6 +523,23 @@ SkColor PageInfoUI::GetSecondaryTextColor() {
 #if defined(OS_ANDROID)
 // static
 int PageInfoUI::GetIdentityIconID(PageInfo::SiteIdentityStatus status) {
+  if (base::FeatureList::IsEnabled(page_info::kPageInfoV2)) {
+    switch (status) {
+      case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
+      case PageInfo::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
+      case PageInfo::SITE_IDENTITY_STATUS_CERT:
+      case PageInfo::SITE_IDENTITY_STATUS_EV_CERT:
+        return IDR_PAGEINFO_GOOD_V2;
+      case PageInfo::SITE_IDENTITY_STATUS_NO_CERT:
+      case PageInfo::SITE_IDENTITY_STATUS_ERROR:
+      case PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
+      case PageInfo::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
+        return IDR_PAGEINFO_BAD_V2;
+    }
+
+    return 0;
+  }
+
   int resource_id = IDR_PAGEINFO_INFO;
   switch (status) {
     case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
@@ -519,12 +565,31 @@ int PageInfoUI::GetIdentityIconID(PageInfo::SiteIdentityStatus status) {
       NOTREACHED();
       break;
   }
+
   return resource_id;
 }
 
 // static
 int PageInfoUI::GetConnectionIconID(PageInfo::SiteConnectionStatus status) {
+  if (base::FeatureList::IsEnabled(page_info::kPageInfoV2)) {
+    switch (status) {
+      case PageInfo::SITE_CONNECTION_STATUS_UNKNOWN:
+      case PageInfo::SITE_CONNECTION_STATUS_INTERNAL_PAGE:
+      case PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED:
+        return IDR_PAGEINFO_GOOD_V2;
+      case PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
+      case PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION:
+      case PageInfo::SITE_CONNECTION_STATUS_LEGACY_TLS:
+      case PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED:
+      case PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
+      case PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED_ERROR:
+        return IDR_PAGEINFO_BAD_V2;
+    }
+
+    return 0;
+  }
   int resource_id = IDR_PAGEINFO_INFO;
+
   switch (status) {
     case PageInfo::SITE_CONNECTION_STATUS_UNKNOWN:
     case PageInfo::SITE_CONNECTION_STATUS_INTERNAL_PAGE:
@@ -545,8 +610,46 @@ int PageInfoUI::GetConnectionIconID(PageInfo::SiteConnectionStatus status) {
       resource_id = IDR_PAGEINFO_BAD;
       break;
   }
+
   return resource_id;
 }
+
+int PageInfoUI::GetIdentityIconColorID(PageInfo::SiteIdentityStatus status) {
+  switch (status) {
+    case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
+    case PageInfo::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
+    case PageInfo::SITE_IDENTITY_STATUS_CERT:
+    case PageInfo::SITE_IDENTITY_STATUS_EV_CERT:
+      return IDR_PAGEINFO_GOOD_COLOR;
+    case PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
+    case PageInfo::SITE_IDENTITY_STATUS_NO_CERT:
+    case PageInfo::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
+      return IDR_PAGEINFO_WARNING_COLOR;
+    case PageInfo::SITE_IDENTITY_STATUS_ERROR:
+      return IDR_PAGEINFO_BAD_COLOR;
+  }
+  return 0;
+}
+
+int PageInfoUI::GetConnectionIconColorID(
+    PageInfo::SiteConnectionStatus status) {
+  switch (status) {
+    case PageInfo::SITE_CONNECTION_STATUS_UNKNOWN:
+    case PageInfo::SITE_CONNECTION_STATUS_INTERNAL_PAGE:
+    case PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED:
+      return IDR_PAGEINFO_GOOD_COLOR;
+    case PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
+    case PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION:
+    case PageInfo::SITE_CONNECTION_STATUS_LEGACY_TLS:
+    case PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED:
+      return IDR_PAGEINFO_WARNING_COLOR;
+    case PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
+    case PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED_ERROR:
+      return IDR_PAGEINFO_BAD_COLOR;
+  }
+  return 0;
+}
+
 #else  // !defined(OS_ANDROID)
 // static
 const gfx::ImageSkia PageInfoUI::GetPermissionIcon(
@@ -743,14 +846,9 @@ PageInfoUI::CreateSafetyTipSecurityDescription(
   switch (info.status) {
     case security_state::SafetyTipStatus::kBadReputation:
     case security_state::SafetyTipStatus::kBadReputationIgnored:
-      return CreateSecurityDescription(
-          SecuritySummaryColor::RED,
-          IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE,
-          IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_DESCRIPTION,
-          PageInfoUI::SecurityDescriptionType::SAFETY_TIP);
     case security_state::SafetyTipStatus::kLookalike:
     case security_state::SafetyTipStatus::kLookalikeIgnored:
-      return CreateSecurityDescriptionForLookalikeSafetyTip(info.safe_url);
+      return CreateSecurityDescriptionForSafetyTip(info.status, info.safe_url);
 
     case security_state::SafetyTipStatus::kBadKeyword:
       // Keyword safety tips are only used to collect metrics for now and are

@@ -132,7 +132,9 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
 
     // If non-empty external data stored on the tab.
     std::string ext_data;
-  };
+
+    std::map<std::string, bool> page_action_overrides;
+};
 
   // Represents a previously open window.
   // If you add a new field that can allocate memory, please also add

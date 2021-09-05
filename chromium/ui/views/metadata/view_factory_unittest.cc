@@ -15,6 +15,7 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 using ViewFactoryTest = views::test::WidgetTest;
 
@@ -43,8 +44,7 @@ TEST_F(ViewFactoryTest, TestViewBuilder) {
                    .CopyAddressTo(&button)
                    .SetIsDefault(true)
                    .SetEnabled(true)
-                   .SetText(base::ASCIIToUTF16("Test"))
-                   .SetFocusForPlatform(),
+                   .SetText(base::ASCIIToUTF16("Test")),
                views::Builder<views::ScrollView>()
                    .CopyAddressTo(&scroll_view)
                    .SetContents(views::Builder<views::LabelButton>()
@@ -52,12 +52,12 @@ TEST_F(ViewFactoryTest, TestViewBuilder) {
                                     .SetText(base::ASCIIToUTF16("ScrollTest")))
                    .SetHeader(views::Builder<views::View>().SetID(2))})
           .Build();
-  EXPECT_NE(view.get(), nullptr);
+  ASSERT_TRUE(view.get());
   EXPECT_NE(parent, nullptr);
   EXPECT_NE(button, nullptr);
   EXPECT_TRUE(view->GetVisible());
   EXPECT_FALSE(view->GetEnabled());
-  EXPECT_GT(view->children().size(), size_t{0});
+  ASSERT_GT(view->children().size(), size_t{2});
   EXPECT_EQ(view->children()[1]->GetFocusBehavior(),
             views::View::FocusBehavior::NEVER);
   EXPECT_EQ(view->children()[2], button);

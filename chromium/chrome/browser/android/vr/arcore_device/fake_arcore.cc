@@ -17,12 +17,24 @@ FakeArCore::FakeArCore()
 
 FakeArCore::~FakeArCore() = default;
 
-bool FakeArCore::Initialize(
+ArCore::MinMaxRange FakeArCore::GetTargetFramerateRange() {
+  return {30.f, 30.f};
+}
+
+base::Optional<ArCore::InitializeResult> FakeArCore::Initialize(
     base::android::ScopedJavaLocalRef<jobject> application_context,
     const std::unordered_set<device::mojom::XRSessionFeature>&
-        enabled_features) {
+        required_features,
+    const std::unordered_set<device::mojom::XRSessionFeature>&
+        optional_features,
+    const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images) {
   DCHECK(IsOnGlThread());
-  return true;
+
+  std::unordered_set<device::mojom::XRSessionFeature> enabled_features;
+  enabled_features.insert(required_features.begin(), required_features.end());
+  enabled_features.insert(optional_features.begin(), optional_features.end());
+
+  return ArCore::InitializeResult(enabled_features);
 }
 
 void FakeArCore::SetDisplayGeometry(
@@ -335,6 +347,11 @@ void FakeArCore::ProcessAnchorCreationRequests(
 void FakeArCore::DetachAnchor(uint64_t anchor_id) {
   auto count = anchors_.erase(anchor_id);
   DCHECK_EQ(1u, count);
+}
+
+mojom::XRTrackedImagesDataPtr FakeArCore::GetTrackedImages() {
+  std::vector<mojom::XRTrackedImageDataPtr> images_data;
+  return mojom::XRTrackedImagesData::New(std::move(images_data), base::nullopt);
 }
 
 void FakeArCore::Pause() {

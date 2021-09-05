@@ -15,6 +15,7 @@ enum CSSSampleId {
 
     // These internal properties exist but are mapped to 0 to ensure they don't get
     // reported in use counter.
+    kInternalAlignSelfBlock = 0,
     kInternalEmptyLineHeight = 0,
     kInternalVisitedBackgroundColor = 0,
     kInternalVisitedBorderBlockEndColor = 0,
@@ -721,6 +722,20 @@ enum CSSSampleId {
     kLineGapOverride = 675,
     kMathShift = 676,
     kMathDepth = 677,
+    kAdvanceProportionalOverride = 678,
+    kOverflowClipMargin = 679,
+    kScrollbarWidth = 680,
+    // @counter-style descriptors
+    kSystem = 681,
+    kNegative = 682,
+    kPrefix = 683,
+    kSuffix = 684,
+    kRange = 685,
+    kPad = 686,
+    kFallback = 687,
+    kSymbols = 688,
+    kAdditiveSymbols = 689,
+    kSpeakAs = 690,
     // 1. Add new features above this line (don't change the assigned numbers of
     //    the existing items).
     // 2. Run the src/tools/metrics/histograms/update_use_counter_css.py script

@@ -329,7 +329,7 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
 }
 
 void CreateOrUpdateShortcuts(const base::FilePath& target,
-                             const MasterPreferences& prefs,
+                             const InitialPreferences& prefs,
                              InstallShortcutLevel install_level,
                              InstallShortcutOperation install_operation) {
   bool do_not_create_any_shortcuts = false;
@@ -342,7 +342,7 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
   if (is_vivaldi_standalone) {
     do_not_create_any_shortcuts = true;
   } else {
-  prefs.GetBool(master_preferences::kDoNotCreateAnyShortcuts,
+  prefs.GetBool(initial_preferences::kDoNotCreateAnyShortcuts,
                 &do_not_create_any_shortcuts);
   }
   if (do_not_create_any_shortcuts)
@@ -352,11 +352,11 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
   bool do_not_create_desktop_shortcut = false;
   bool do_not_create_quick_launch_shortcut = false;
   bool do_not_create_taskbar_shortcut = false;
-  prefs.GetBool(master_preferences::kDoNotCreateDesktopShortcut,
+  prefs.GetBool(initial_preferences::kDoNotCreateDesktopShortcut,
                 &do_not_create_desktop_shortcut);
-  prefs.GetBool(master_preferences::kDoNotCreateQuickLaunchShortcut,
+  prefs.GetBool(initial_preferences::kDoNotCreateQuickLaunchShortcut,
                 &do_not_create_quick_launch_shortcut);
-  prefs.GetBool(master_preferences::kDoNotCreateTaskbarShortcut,
+  prefs.GetBool(initial_preferences::kDoNotCreateTaskbarShortcut,
                 &do_not_create_taskbar_shortcut);
 
   // The default operation on update is to overwrite shortcuts with the
@@ -474,7 +474,7 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
       level = level | ShellUtil::SYSTEM_LEVEL;
     ShellUtil::MakeChromeDefault(level, chrome_exe, true);
   } else {
-    ShellUtil::RegisterChromeBrowser(chrome_exe, base::string16(), false);
+    ShellUtil::RegisterChromeBrowserBestEffort(chrome_exe);
   }
 
   base::string16 command;
@@ -494,7 +494,7 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
 
 InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
                                      const base::FilePath& prefs_path,
-                                     const MasterPreferences& prefs) {
+                                     const InitialPreferences& prefs) {
   const InstallationState& original_state = install_params.installation_state;
   const InstallerState& installer_state = install_params.installer_state;
   const base::FilePath& setup_path = install_params.setup_path;
@@ -565,7 +565,8 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
     installer_state.SetStage(REGISTERING_CHROME);
 
     bool make_chrome_default = false;
-    prefs.GetBool(master_preferences::kMakeChromeDefault, &make_chrome_default);
+    prefs.GetBool(initial_preferences::kMakeChromeDefault,
+                  &make_chrome_default);
 
     // If this is not the user's first Chrome install, but they have chosen
     // Chrome to become their default browser on the download page, we must
@@ -574,7 +575,7 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
     bool force_chrome_default_for_user = false;
     if (result == NEW_VERSION_UPDATED || result == INSTALL_REPAIRED ||
         result == OLD_VERSION_DOWNGRADE || result == IN_USE_DOWNGRADE) {
-      prefs.GetBool(master_preferences::kMakeChromeDefaultForUser,
+      prefs.GetBool(initial_preferences::kMakeChromeDefaultForUser,
                     &force_chrome_default_for_user);
     }
 
@@ -675,7 +676,7 @@ void HandleOsUpgradeForBrowser(const InstallerState& installer_state,
   VLOG(1) << "Updating and registering shortcuts for --on-os-upgrade.";
 
   // Read master_preferences copied beside chrome.exe at install.
-  const MasterPreferences prefs(
+  const InitialPreferences prefs(
       installer_state.target_path().AppendASCII(kDefaultMasterPrefs));
 
   // Update shortcuts at this install level (per-user shortcuts on system-level
@@ -753,7 +754,7 @@ void HandleActiveSetupForBrowser(const InstallerState& installer_state,
   // Read master_preferences copied beside chrome.exe at install for the sake of
   // creating/updating shortcuts.
   const base::FilePath installation_root = installer_state.target_path();
-  MasterPreferences prefs(installation_root.AppendASCII(kDefaultMasterPrefs));
+  InitialPreferences prefs(installation_root.AppendASCII(kDefaultMasterPrefs));
   base::FilePath chrome_exe(installation_root.Append(kChromeExe));
   CreateOrUpdateShortcuts(chrome_exe, prefs, CURRENT_USER, install_operation);
 

@@ -42,6 +42,8 @@ const char kNearbySharingSchedulerDownloadDeviceDataPrefName[] =
     "nearby_sharing.scheduler.download_device_data";
 const char kNearbySharingSchedulerDownloadPublicCertificatesPrefName[] =
     "nearby_sharing.scheduler.download_public_certificates";
+const char kNearbySharingSchedulerPeriodicContactUploadPrefName[] =
+    "nearby_sharing.scheduler.periodic_contact_upload";
 const char kNearbySharingSchedulerPrivateCertificateExpirationPrefName[] =
     "nearby_sharing.scheduler.private_certificate_expiration";
 const char kNearbySharingSchedulerPublicCertificateExpirationPrefName[] =
@@ -56,10 +58,8 @@ const char kNearbySharingSchedulerUploadLocalDeviceCertificatesPrefName[] =
 void RegisterNearbySharingPrefs(PrefRegistrySimple* registry) {
   // These prefs are not synced across devices on purpose.
 
-  // TODO(vecore): Change the default to false after the settings ui is
-  // available.
   registry->RegisterBooleanPref(prefs::kNearbySharingEnabledPrefName,
-                                /*default_value=*/true);
+                                /*default_value=*/false);
   registry->RegisterBooleanPref(prefs::kNearbySharingOnboardingCompletePrefName,
                                 /*default_value=*/false);
   registry->RegisterIntegerPref(
@@ -92,6 +92,8 @@ void RegisterNearbySharingPrefs(PrefRegistrySimple* registry) {
       prefs::kNearbySharingSchedulerDownloadDeviceDataPrefName);
   registry->RegisterDictionaryPref(
       prefs::kNearbySharingSchedulerDownloadPublicCertificatesPrefName);
+  registry->RegisterDictionaryPref(
+      prefs::kNearbySharingSchedulerPeriodicContactUploadPrefName);
   registry->RegisterDictionaryPref(
       prefs::kNearbySharingSchedulerPrivateCertificateExpirationPrefName);
   registry->RegisterDictionaryPref(

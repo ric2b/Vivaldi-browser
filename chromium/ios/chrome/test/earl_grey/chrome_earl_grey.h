@@ -47,16 +47,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 #pragma mark - Device Utilities
 
-// Simulate the user action to rotate the device to a certain orientation.
-// TODO(crbug.com/1017265): Remove along EG1 support.
-- (void)rotateDeviceToOrientation:(UIDeviceOrientation)deviceOrientation
-                            error:(NSError**)error;
-
-// Returns |YES| if the keyboard is on screen. |error| is only supported if the
-// test is running in EG2.
-// TODO(crbug.com/1017281): Remove along EG1 support.
-- (BOOL)isKeyboardShownWithError:(NSError**)error;
-
 // Returns YES if running on an iPad.
 - (BOOL)isIPadIdiom;
 
@@ -82,8 +72,12 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // cleared within a timeout.
 - (void)clearBrowsingHistory;
 
-// Gets the number of entries in the browsing history database.
-- (NSInteger)getBrowsingHistoryEntryCount;
+// Gets the number of entries in the browsing history database. GREYAssert is
+// induced on error.
+- (NSInteger)browsingHistoryEntryCount;
+
+// Gets the number of items in the back list.
+- (NSInteger)navigationBackListItemsCount;
 
 // Clears browsing cache. Raises an EarlGrey exception if history is not
 // cleared within a timeout.
@@ -543,6 +537,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns whether the app is configured to, and running in an environment which
 // can, open multiple windows.
 - (BOOL)areMultipleWindowsSupported;
+
+// Returns whether the Close All Tabs Confirmation feature is enabled.
+- (BOOL)isCloseAllTabsConfirmationEnabled;
 
 #pragma mark - Popup Blocking
 

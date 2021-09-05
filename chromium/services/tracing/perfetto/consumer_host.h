@@ -54,7 +54,7 @@ class ConsumerHost : public perfetto::Consumer, public mojom::ConsumerHost {
     void OnPerfettoEvents(const perfetto::ObservableEvents&);
     void OnTraceData(std::vector<perfetto::TracePacket> packets, bool has_more);
     void OnTraceStats(bool success, const perfetto::TraceStats&);
-    void OnTracingDisabled();
+    void OnTracingDisabled(const std::string& error);
     void OnConsumerClientDisconnected();
     void Flush(uint32_t timeout, base::OnceCallback<void(bool)> callback);
 
@@ -94,6 +94,7 @@ class ConsumerHost : public perfetto::Consumer, public mojom::ConsumerHost {
     mojo::Remote<mojom::TracingSessionClient> tracing_session_client_;
     mojo::Receiver<mojom::TracingSessionHost> receiver_;
     bool privacy_filtering_enabled_ = false;
+    bool convert_to_legacy_json_ = false;
     base::SequenceBound<StreamWriter> read_buffers_stream_writer_;
     RequestBufferUsageCallback request_buffer_usage_callback_;
     std::unique_ptr<perfetto::trace_processor::TraceProcessorStorage>
@@ -137,15 +138,14 @@ class ConsumerHost : public perfetto::Consumer, public mojom::ConsumerHost {
   void EnableTracing(
       mojo::PendingReceiver<mojom::TracingSessionHost> tracing_session_host,
       mojo::PendingRemote<mojom::TracingSessionClient> tracing_session_client,
-      const perfetto::TraceConfig& config,
-      mojom::TracingClientPriority priority) override;
+      const perfetto::TraceConfig& config) override;
 
   // perfetto::Consumer implementation.
   // This gets called by the Perfetto service as control signals,
   // and to send finished protobufs over.
   void OnConnect() override;
   void OnDisconnect() override;
-  void OnTracingDisabled() override;
+  void OnTracingDisabled(const std::string& error) override;
   void OnTraceData(std::vector<perfetto::TracePacket> packets,
                    bool has_more) override;
   void OnObservableEvents(const perfetto::ObservableEvents&) override;

@@ -67,7 +67,7 @@ enum class WebSchedulerTrackedFeature {
 
   kIndexedDBConnection = 28,
 
-  kWebGL = 29,
+  // kWebGL = 29. Removed after implementing WebGL support.
   kWebVR = 30,
   kWebXR = 31,
 
@@ -95,7 +95,7 @@ enum class WebSchedulerTrackedFeature {
   kPaymentManager = 49,
   kSpeechSynthesis = 50,
   kKeyboardLock = 51,
-  kSmsService = 52,
+  kWebOTPService = 52,
   kOutstandingNetworkRequestDirectSocket = 53,
 
   // NB: This enum is used in a bitmask, so kMaxValue must be less than 64.

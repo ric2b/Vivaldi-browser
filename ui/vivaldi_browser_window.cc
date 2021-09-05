@@ -163,7 +163,7 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
   std::unique_ptr<content::WebContents> web_contents =
       content::WebContents::Create(create_params);
 
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents->GetMutableRendererPrefs();
   DCHECK(render_prefs);
 
@@ -772,10 +772,6 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
 std::unique_ptr<FindBar> VivaldiBrowserWindow::CreateFindBar() {
   return std::unique_ptr<FindBar>();
 }
-
-void VivaldiBrowserWindow::ExecuteExtensionCommand(
-    const extensions::Extension* extension,
-    const extensions::Command& command) {}
 
 ExclusiveAccessContext* VivaldiBrowserWindow::GetExclusiveAccessContext() {
   return this;

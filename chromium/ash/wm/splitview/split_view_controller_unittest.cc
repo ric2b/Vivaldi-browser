@@ -57,6 +57,7 @@
 #include "base/stl_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -4613,12 +4614,12 @@ TEST_P(SplitViewTabDraggingTestWithClamshellSupport,
                        ->target_bounds())
                    .CenterPoint());
   CompleteDrag(std::move(resizer));
-  EXPECT_TRUE(dragged_tab->GetProperty(kIsShowingInOverviewKey));
+  EXPECT_TRUE(dragged_tab->GetProperty(chromeos::kIsShowingInOverviewKey));
 
   // Switch to clamshell mode and check that |snapped_window| keeps its snapped
   // window state.
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
-  EXPECT_EQ(WindowStateType::kLeftSnapped,
+  EXPECT_EQ(chromeos::WindowStateType::kLeftSnapped,
             WindowState::Get(snapped_window.get())->GetStateType());
 }
 
@@ -4818,7 +4819,7 @@ TEST_P(SplitViewAppDraggingTest, ShelfVisibilityIfDraggingFullscreenedWindow) {
   const WMEvent fullscreen_event(WM_EVENT_TOGGLE_FULLSCREEN);
   window_state->OnWMEvent(&fullscreen_event);
   window_state->SetHideShelfWhenFullscreen(false);
-  window()->SetProperty(kImmersiveIsActive, true);
+  window()->SetProperty(chromeos::kImmersiveIsActive, true);
   shelf_layout_manager->UpdateVisibilityState();
   EXPECT_TRUE(window_state->IsFullscreen());
   EXPECT_FALSE(shelf_layout_manager->IsVisible());

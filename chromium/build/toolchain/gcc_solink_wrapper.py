@@ -139,6 +139,8 @@ def main():
   if link_only or collect_inputs_only:
     open(args.output, 'w').close()
     open(args.tocfile, 'w').close()
+    if args.dwp:
+      open(args.sofile + '.dwp', 'w').close()
 
   # Instead of linking, records all inputs to a file. This is used by
   # enable_resource_allowlist_generation in order to avoid needing to
@@ -162,9 +164,13 @@ def main():
   # If dwp is set, then package debug info for this SO.
   dwp_proc = None
   if args.dwp:
-    dwp_proc = subprocess.Popen(
-        wrapper_utils.CommandToRun(
-            [args.dwp, '-e', args.sofile, '-o', args.sofile + '.dwp']))
+    # Suppress output here because it doesn't seem to be useful. The most
+    # common error is a segfault, which will happen if files are missing.
+    with open(os.devnull, "w") as devnull:
+      dwp_proc = subprocess.Popen(wrapper_utils.CommandToRun(
+          [args.dwp, '-e', args.sofile, '-o', args.sofile + '.dwp']),
+                                  stdout=devnull,
+                                  stderr=subprocess.STDOUT)
 
   # Next, generate the contents of the TOC file.
   result, toc = CollectTOC(args)

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/location.h"
 #include "base/task_runner_util.h"
@@ -25,22 +25,6 @@ mojom::ActivationState ComputeActivationState(
     const mojom::ActivationState& parent_activation_state,
     const MemoryMappedRuleset* ruleset) {
   DCHECK(ruleset);
-
-  SCOPED_UMA_HISTOGRAM_MICRO_TIMER(
-      "SubresourceFilter.DocumentLoad.Activation.WallDuration");
-  SCOPED_UMA_HISTOGRAM_MICRO_THREAD_TIMER(
-      "SubresourceFilter.DocumentLoad.Activation.CPUDuration");
-
-  auto page_wall_duration_timer = ScopedTimers::StartIf(
-      parent_document_origin.opaque(), [](base::TimeDelta delta) {
-        UMA_HISTOGRAM_MICRO_TIMES(
-            "SubresourceFilter.PageLoad.Activation.WallDuration", delta);
-      });
-  auto page_cpu_duration_timer = ScopedThreadTimers::StartIf(
-      parent_document_origin.opaque(), [](base::TimeDelta delta) {
-        UMA_HISTOGRAM_MICRO_TIMES(
-            "SubresourceFilter.PageLoad.Activation.CPUDuration", delta);
-      });
 
   IndexedRulesetMatcher matcher(ruleset->data(), ruleset->length());
   mojom::ActivationState activation_state = parent_activation_state;

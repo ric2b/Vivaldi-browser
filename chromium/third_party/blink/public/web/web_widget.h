@@ -50,7 +50,6 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
@@ -71,7 +70,6 @@ class LatencyInfo;
 }
 
 namespace blink {
-class SynchronousCompositorRegistry;
 struct VisualProperties;
 class WebCoalescedInputEvent;
 
@@ -107,10 +105,10 @@ class WebWidget {
   virtual void SetCompositorVisible(bool visible) = 0;
 
   // Returns the current size of the WebWidget.
-  virtual WebSize Size() { return WebSize(); }
+  virtual gfx::Size Size() { return gfx::Size(); }
 
   // Called to resize the WebWidget.
-  virtual void Resize(const WebSize&) {}
+  virtual void Resize(const gfx::Size&) {}
 
   // Called to run through the entire set of document lifecycle phases needed
   // to render a frame of the web widget. This MUST be called before Paint,
@@ -130,11 +128,6 @@ class WebWidget {
   virtual void UpdateLifecycle(WebLifecycleUpdate requested_update,
                                DocumentUpdateReason reason) {}
 
-  // Called to inform the WebWidget of a change in theme.
-  // Implementors that cache rendered copies of widgets need to re-render
-  // on receiving this message
-  virtual void ThemeChanged() {}
-
   // Do a hit test at given point and return the WebHitTestResult.
   virtual WebHitTestResult HitTestResultAt(const gfx::PointF&) = 0;
 
@@ -150,9 +143,6 @@ class WebWidget {
     return WebInputEventResult::kNotHandled;
   }
 
-  // Called to inform the WebWidget that mouse capture was lost.
-  virtual void MouseCaptureLost() {}
-
   // Called to inform the WebWidget of the mouse cursor's visibility.
   virtual void SetCursorVisibilityState(bool is_visible) {}
 
@@ -162,34 +152,9 @@ class WebWidget {
   // Returns the state of focus for the WebWidget.
   virtual bool HasFocus() { return false; }
 
-  // Returns the anchor and focus bounds of the current selection.
-  // If the selection range is empty, it returns the caret bounds.
-  virtual bool SelectionBounds(WebRect& anchor, WebRect& focus) const {
-    return false;
-  }
-
-  // Calling WebWidgetClient::requestPointerLock() will result in one
-  // return call to didAcquirePointerLock() or didNotAcquirePointerLock().
-  virtual void DidAcquirePointerLock() {}
-  virtual void DidNotAcquirePointerLock() {}
-
-  // Pointer lock was held, but has been lost. This may be due to a
-  // request via WebWidgetClient::requestPointerUnlock(), or for other
-  // reasons such as the user exiting lock, window focus changing, etc.
-  virtual void DidLosePointerLock() {}
-
   // Accessor to the WebWidget scheduing state.
   virtual scheduler::WebRenderWidgetSchedulingState*
   RendererWidgetSchedulingState() = 0;
-
-  // When the WebWidget is part of a frame tree, returns the active url for
-  // main frame of that tree, if the main frame is local in that tree. When
-  // the WebWidget is of a different kind (e.g. a popup) it returns the active
-  // url for the main frame of the frame tree that spawned the WebWidget, if
-  // the main frame is local in that tree. When the relevant main frame is
-  // remote in that frame tree, then the url is not known, and an empty url is
-  // returned.
-  virtual WebURL GetURLForDebugTrace() = 0;
 
   virtual void SetCursor(const ui::Cursor& cursor) = 0;
 
@@ -223,17 +188,6 @@ class WebWidget {
   // Requests the text input state be updated. If anything has changed the
   // updated state will be sent to the browser.
   virtual void UpdateTextInputState() = 0;
-
-  // Request Mouse Lock. This can be removed eventually when the mouse lock
-  // dispatcher is moved into blink.
-  virtual void RequestMouseLock(
-      bool has_transient_user_activation,
-      bool priviledged,
-      bool request_unadjusted_movement,
-      base::OnceCallback<
-          void(mojom::PointerLockResult,
-               CrossVariantMojoRemote<mojom::PointerLockContextInterfaceBase>)>
-          callback) = 0;
 
   // Flush any pending input.
   virtual void FlushInputProcessedCallback() = 0;
@@ -277,17 +231,6 @@ class WebWidget {
 
   // Returns the emulator scale.
   virtual float GetEmulatorScale() { return 1.0f; }
-
-  // Sets the pending window rects (in screen coordinates). This is used because
-  // the window rect is delivered asynchronously to the browser. Pass in nullptr
-  // to clear the pending window rect once the browser has acknowledged the
-  // request.
-  virtual void SetPendingWindowRect(const gfx::Rect* window_screen_rect) = 0;
-
-#if defined(OS_ANDROID)
-  // Return the synchronous compositor registry.
-  virtual SynchronousCompositorRegistry* GetSynchronousCompositorRegistry() = 0;
-#endif
 
   virtual bool IsHidden() const = 0;
 

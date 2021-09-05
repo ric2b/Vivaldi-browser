@@ -7,9 +7,11 @@
 
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/browser_signin_policy_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/signin/profile_creation_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/signin/profile_picker_handler.h"
@@ -21,6 +23,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/profile_picker_resources.h"
 #include "chrome/grit/profile_picker_resources_map.h"
+#include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_service.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -44,6 +49,26 @@ bool IsGuestModeEnabled() {
   PrefService* service = g_browser_process->local_state();
   DCHECK(service);
   return service->GetBoolean(prefs::kBrowserGuestModeEnabled);
+}
+
+bool IsBrowserSigninAllowed() {
+  policy::PolicyService* policy_service = g_browser_process->policy_service();
+  DCHECK(policy_service);
+  const policy::PolicyMap& policies = policy_service->GetPolicies(
+      policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
+
+  const base::Value* browser_signin_value =
+      policies.GetValue(policy::key::kBrowserSignin);
+
+  if (!browser_signin_value)
+    return true;
+
+  int int_browser_signin_value;
+  bool success = browser_signin_value->GetAsInteger(&int_browser_signin_value);
+  DCHECK(success);
+
+  return static_cast<policy::BrowserSigninMode>(int_browser_signin_value) !=
+         policy::BrowserSigninMode::kDisabled;
 }
 
 void AddStrings(content::WebUIDataSource* html_source) {
@@ -95,6 +120,13 @@ void AddStrings(content::WebUIDataSource* html_source) {
       {"uninstallThirdPartyThemeButton", IDS_NTP_CUSTOMIZE_3PT_THEME_UNINSTALL},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  ProfilePicker::AvailabilityOnStartup availability_on_startup =
+      static_cast<ProfilePicker::AvailabilityOnStartup>(
+          g_browser_process->local_state()->GetInteger(
+              prefs::kBrowserProfilePickerAvailabilityOnStartup));
+  html_source->AddBoolean("disableAskOnStartup",
+                          availability_on_startup !=
+                              ProfilePicker::AvailabilityOnStartup::kEnabled);
   html_source->AddBoolean("askOnStartup",
                           g_browser_process->local_state()->GetBoolean(
                               prefs::kBrowserShowProfilePickerOnStartup));
@@ -106,6 +138,7 @@ void AddStrings(content::WebUIDataSource* html_source) {
                          base::StringPrintf("%ipx", kMinimumPickerSizePx));
 
   // Add policies.
+  html_source->AddBoolean("isBrowserSigninAllowed", IsBrowserSigninAllowed());
   html_source->AddBoolean("isForceSigninEnabled",
                           signin_util::IsForceSigninEnabled());
   html_source->AddBoolean("isGuestModeEnabled", IsGuestModeEnabled());
@@ -135,42 +168,11 @@ ProfilePickerUI::ProfilePickerUI(content::WebUI* web_ui)
     raw_handler->EnableStartupMetrics();
   }
 
-  std::string generated_path =
-      "@out_folder@/gen/chrome/browser/resources/signin/profile_picker/";
-
   AddStrings(html_source);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(
-      html_source, "profile_picker.js",
-      IDR_PROFILE_PICKER_PROFILE_PICKER_ROLLUP_JS,
-      IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
-  html_source->AddResourcePath("lazy_load.js",
-                               IDR_PROFILE_PICKER_LAZY_LOAD_ROLLUP_JS);
-  html_source->AddResourcePath("shared.rollup.js",
-                               IDR_PROFILE_PICKER_SHARED_ROLLUP_JS);
-  html_source->AddResourcePath("images/left_banner_image.svg",
-                               IDR_PROFILE_PICKER_IMAGES_LEFT_BANNER_IMAGE);
-  html_source->AddResourcePath("images/right_banner_image.svg",
-                               IDR_PROFILE_PICKER_IMAGES_RIGHT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "images/dark_mode_left_banner_image.svg",
-      IDR_PROFILE_PICKER_IMAGES_DARK_MODE_LEFT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "images/dark_mode_right_banner_image.svg",
-      IDR_PROFILE_PICKER_IMAGES_DARK_MODE_RIGHT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "profile_creation_flow/images/banner_light_image.svg",
-      IDR_PROFILE_PICKER_PROFILE_CREATION_FLOW_IMAGES_BANNER_LIGHT_IMAGE);
-  html_source->AddResourcePath(
-      "profile_creation_flow/images/banner_dark_image.svg",
-      IDR_PROFILE_PICKER_PROFILE_CREATION_FLOW_IMAGES_BANNER_DARK_IMAGE);
-#else
-  html_source->AddResourcePath("signin_icons.js", IDR_SIGNIN_ICONS_JS);
   webui::SetupWebUIDataSource(
       html_source,
-      base::make_span(kProfilePickerResources, kProfilePickerResourcesSize),
-      generated_path, IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
-#endif
+      base::make_span(kProfilePickerResources, kProfilePickerResourcesSize), "",
+      IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
   content::WebUIDataSource::Add(profile, html_source);
 }
 

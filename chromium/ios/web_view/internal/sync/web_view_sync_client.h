@@ -47,6 +47,7 @@ class WebViewSyncClient : public browser_sync::BrowserSyncClient {
   history::HistoryService* GetHistoryService() override;
   send_tab_to_self::SendTabToSelfSyncService* GetSendTabToSelfSyncService()
       override;
+  sync_preferences::PrefServiceSyncable* GetPrefServiceSyncable() override;
   sync_sessions::SessionSyncService* GetSessionSyncService() override;
   base::RepeatingClosure GetPasswordStateChangedCallback() override;
   syncer::DataTypeController::TypeVector CreateDataTypeControllers(
@@ -56,14 +57,11 @@ class WebViewSyncClient : public browser_sync::BrowserSyncClient {
   syncer::TrustedVaultClient* GetTrustedVaultClient() override;
   BookmarkUndoService* GetBookmarkUndoService() override;
   scoped_refptr<syncer::ExtensionsActivity> GetExtensionsActivity() override;
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override;
   base::WeakPtr<syncer::ModelTypeControllerDelegate>
   GetControllerDelegateForModelType(syncer::ModelType type) override;
-  scoped_refptr<syncer::ModelSafeWorker> CreateModelWorkerForGroup(
-      syncer::ModelSafeGroup group) override;
   syncer::SyncApiComponentFactory* GetSyncApiComponentFactory() override;
   syncer::SyncTypePreferenceProvider* GetPreferenceProvider() override;
+  void OnLocalSyncTransportDataCleared() override;
 
  private:
   autofill::AutofillWebDataService* profile_web_data_service_;
@@ -77,8 +75,6 @@ class WebViewSyncClient : public browser_sync::BrowserSyncClient {
   invalidation::InvalidationService* invalidation_service_;
   syncer::SyncInvalidationsService* sync_invalidations_service_;
 
-  // TODO(crbug.com/915154): Revert to SyncApiComponentFactory once common
-  // controller creation is moved elsewhere.
   std::unique_ptr<browser_sync::ProfileSyncComponentsFactoryImpl>
       component_factory_;
 

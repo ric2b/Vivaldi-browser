@@ -111,7 +111,8 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantManagerServiceImpl
       std::unique_ptr<AssistantManagerServiceDelegate> delegate,
       std::unique_ptr<network::PendingSharedURLLoaderFactory>
           pending_url_loader_factory,
-      base::Optional<std::string> s3_server_uri_override);
+      base::Optional<std::string> s3_server_uri_override,
+      base::Optional<std::string> device_id_override);
 
   ~AssistantManagerServiceImpl() override;
 
@@ -196,8 +197,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantManagerServiceImpl
   void OnRespondingStarted(bool is_error_response) override;
 
   // AssistantManagerDelegate overrides:
-  bool IsSettingSupported(const std::string& setting_id) override;
-  bool SupportsModifySettings() override;
   void OnConversationTurnStartedInternal(
       const assistant_client::ConversationTurnMetadata& metadata) override;
   void OnNotificationRemoved(const std::string& grouping_key) override;
@@ -279,9 +278,9 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantManagerServiceImpl
   // Record the response type for each query. Note that query on device
   // actions (e.g. turn on Bluetooth, turn on WiFi) will cause duplicate
   // record because it interacts with server twice on on the same query.
-  // The first round interaction checks IsSettingSupported with no responses
-  // sent back and ends normally (will be recorded as kUnspecified), and
-  // settings modification proto along with any text/voice responses would
+  // The first round interaction checks if a setting is supported with no
+  // responses sent back and ends normally (will be recorded as kUnspecified),
+  // and settings modification proto along with any text/voice responses would
   // be sent back in the second round (recorded as kDeviceAction).
   void RecordQueryResponseTypeUMA();
 

@@ -21,9 +21,9 @@
 #include "ash/system/palette/palette_tool_manager.h"
 #include "ash/system/palette/palette_utils.h"
 #include "ash/system/palette/palette_welcome_bubble.h"
+#include "ash/system/tray/tray_background_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_container.h"
-#include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/unified/top_shortcut_button.h"
@@ -40,7 +40,6 @@
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/stylus_state.h"
 #include "ui/events/event_constants.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
@@ -88,7 +87,7 @@ bool ShouldShowOnDisplay(PaletteTray* palette_tray) {
   return display.IsInternal();
 }
 
-class TitleView : public views::View, public views::ButtonListener {
+class TitleView : public views::View {
  public:
   explicit TitleView(PaletteTray* palette_tray) : palette_tray_(palette_tray) {
     // TODO(tdanderson|jdufault): Use TriView to handle the layout of the title.
@@ -100,21 +99,30 @@ class TitleView : public views::View, public views::ButtonListener {
         views::BoxLayout::CrossAxisAlignment::kCenter);
     views::BoxLayout* layout_ptr = SetLayoutManager(std::move(box_layout));
 
-    auto* title_label =
-        new views::Label(l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
+    auto* title_label = AddChildView(std::make_unique<views::Label>(
+        l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE)));
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    AddChildView(title_label);
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SMALL_TITLE,
-                             true /* use_unified_theme */);
-    style.SetupLabel(title_label);
+    title_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary));
+    TrayPopupUtils::SetLabelFontList(title_label,
+                                     TrayPopupUtils::FontStyle::kSmallTitle);
     layout_ptr->SetFlexForView(title_label, 1);
-    help_button_ = new TopShortcutButton(this, kSystemMenuHelpIcon,
-                                         IDS_ASH_STATUS_TRAY_HELP);
-    settings_button_ = new TopShortcutButton(this, kSystemMenuSettingsIcon,
-                                             IDS_ASH_PALETTE_SETTINGS);
-
-    AddChildView(help_button_);
-    AddChildView(settings_button_);
+    help_button_ = AddChildView(std::make_unique<TopShortcutButton>(
+        base::BindRepeating(
+            &TitleView::ButtonPressed, base::Unretained(this),
+            PaletteTrayOptions::PALETTE_HELP_BUTTON,
+            base::BindRepeating(
+                &SystemTrayClient::ShowPaletteHelp,
+                base::Unretained(Shell::Get()->system_tray_model()->client()))),
+        kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP));
+    settings_button_ = AddChildView(std::make_unique<TopShortcutButton>(
+        base::BindRepeating(
+            &TitleView::ButtonPressed, base::Unretained(this),
+            PaletteTrayOptions::PALETTE_SETTINGS_BUTTON,
+            base::BindRepeating(
+                &SystemTrayClient::ShowPaletteSettings,
+                base::Unretained(Shell::Get()->system_tray_model()->client()))),
+        kSystemMenuSettingsIcon, IDS_ASH_PALETTE_SETTINGS));
   }
 
   ~TitleView() override = default;
@@ -123,23 +131,12 @@ class TitleView : public views::View, public views::ButtonListener {
   const char* GetClassName() const override { return "TitleView"; }
 
  private:
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    if (sender == settings_button_) {
-      palette_tray_->RecordPaletteOptionsUsage(
-          PaletteTrayOptions::PALETTE_SETTINGS_BUTTON,
-          PaletteInvocationMethod::MENU);
-      Shell::Get()->system_tray_model()->client()->ShowPaletteSettings();
-      palette_tray_->HidePalette();
-    } else if (sender == help_button_) {
-      palette_tray_->RecordPaletteOptionsUsage(
-          PaletteTrayOptions::PALETTE_HELP_BUTTON,
-          PaletteInvocationMethod::MENU);
-      Shell::Get()->system_tray_model()->client()->ShowPaletteHelp();
-      palette_tray_->HidePalette();
-    } else {
-      NOTREACHED();
-    }
+  void ButtonPressed(PaletteTrayOptions option,
+                     base::RepeatingClosure callback) {
+    palette_tray_->RecordPaletteOptionsUsage(option,
+                                             PaletteInvocationMethod::MENU);
+    std::move(callback).Run();
+    palette_tray_->HidePalette();
   }
 
   // Unowned pointers to button views so we can determine which button was
@@ -291,6 +288,11 @@ void PaletteTray::ClickedOutsideBubble() {
                               PaletteInvocationMethod::MENU);
   }
   HidePalette();
+}
+
+void PaletteTray::OnThemeChanged() {
+  TrayBackgroundView::OnThemeChanged();
+  UpdateTrayIcon();
 }
 
 base::string16 PaletteTray::GetAccessibleNameForTray() {
@@ -564,7 +566,9 @@ void PaletteTray::UpdateTrayIcon() {
   icon_->SetImage(CreateVectorIcon(
       palette_tool_manager_->GetActiveTrayIcon(
           palette_tool_manager_->GetActiveTool(PaletteGroup::MODE)),
-      kTrayIconSize, ShelfConfig::Get()->shelf_icon_color()));
+      kTrayIconSize,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorPrimary)));
 }
 
 void PaletteTray::OnPaletteEnabledPrefChanged() {

@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
+
 extensions_api_schema_files_ = [
   "alarms.idl",
   "app_current_window_internal.idl",
@@ -60,17 +62,16 @@ extensions_api_schema_files_ = [
 ]
 
 extensions_manifest_only_schema_files_ = [
+  "content_scripts.idl",
   "extensions_manifest_types.json",
   "incognito.json",
 ]
 
-if (is_chromeos) {
+if (is_chromeos_ash) {
   extensions_api_schema_files_ += [
-    "crash_report_private.idl",
     "diagnostics.idl",
     "lock_screen_data.idl",
     "media_perception_private.idl",
-    "networking_config.idl",
     "vpn_provider.idl",
     "webcam_private.idl",
   ]

@@ -43,13 +43,9 @@ class ServiceConnectionImpl : public ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunUrandomRoutineCallback callback)
       override;
   void RunBatteryCapacityRoutine(
-      uint32_t low_mah,
-      uint32_t high_mah,
       mojom::CrosHealthdDiagnosticsService::RunBatteryCapacityRoutineCallback
           callback) override;
   void RunBatteryHealthRoutine(
-      uint32_t maximum_cycle_count,
-      uint32_t percent_battery_wear_allowed,
       mojom::CrosHealthdDiagnosticsService::RunBatteryHealthRoutineCallback
           callback) override;
   void RunSmartctlCheckRoutine(
@@ -109,6 +105,27 @@ class ServiceConnectionImpl : public ServiceConnection {
           callback) override;
   void RunSignalStrengthRoutine(
       mojom::CrosHealthdDiagnosticsService::RunSignalStrengthRoutineCallback
+          callback) override;
+  void RunGatewayCanBePingedRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunGatewayCanBePingedRoutineCallback
+          callback) override;
+  void RunHasSecureWiFiConnectionRoutine(
+      mojom::CrosHealthdDiagnosticsService::
+          RunHasSecureWiFiConnectionRoutineCallback callback) override;
+  void RunDnsResolverPresentRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsResolverPresentRoutineCallback
+          callback) override;
+  void RunDnsLatencyRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsLatencyRoutineCallback
+          callback) override;
+  void RunDnsResolutionRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsResolutionRoutineCallback
+          callback) override;
+  void RunCaptivePortalRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunCaptivePortalRoutineCallback
+          callback) override;
+  void RunHttpFirewallRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
           callback) override;
   void AddBluetoothObserver(
       mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> pending_observer)
@@ -217,25 +234,21 @@ void ServiceConnectionImpl::RunUrandomRoutine(
 }
 
 void ServiceConnectionImpl::RunBatteryCapacityRoutine(
-    uint32_t low_mah,
-    uint32_t high_mah,
     mojom::CrosHealthdDiagnosticsService::RunBatteryCapacityRoutineCallback
         callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
   cros_healthd_diagnostics_service_->RunBatteryCapacityRoutine(
-      low_mah, high_mah, std::move(callback));
+      std::move(callback));
 }
 
 void ServiceConnectionImpl::RunBatteryHealthRoutine(
-    uint32_t maximum_cycle_count,
-    uint32_t percent_battery_wear_allowed,
     mojom::CrosHealthdDiagnosticsService::RunBatteryHealthRoutineCallback
         callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
   cros_healthd_diagnostics_service_->RunBatteryHealthRoutine(
-      maximum_cycle_count, percent_battery_wear_allowed, std::move(callback));
+      std::move(callback));
 }
 
 void ServiceConnectionImpl::RunSmartctlCheckRoutine(
@@ -374,6 +387,68 @@ void ServiceConnectionImpl::RunSignalStrengthRoutine(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
   cros_healthd_diagnostics_service_->RunSignalStrengthRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunGatewayCanBePingedRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunGatewayCanBePingedRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunGatewayCanBePingedRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunHasSecureWiFiConnectionRoutine(
+    mojom::CrosHealthdDiagnosticsService::
+        RunHasSecureWiFiConnectionRoutineCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunHasSecureWiFiConnectionRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunDnsResolverPresentRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunDnsResolverPresentRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunDnsResolverPresentRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunDnsLatencyRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunDnsLatencyRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunDnsLatencyRoutine(std::move(callback));
+}
+
+void ServiceConnectionImpl::RunDnsResolutionRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunDnsResolutionRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunDnsResolutionRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunCaptivePortalRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunCaptivePortalRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunCaptivePortalRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunHttpFirewallRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunHttpFirewallRoutine(
       std::move(callback));
 }
 

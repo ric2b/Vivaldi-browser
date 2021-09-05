@@ -19,7 +19,7 @@
 #include "base/task/sequence_manager/test/fake_task.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
 #include "base/task/task_executor.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -29,6 +29,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
@@ -70,9 +71,11 @@ using InputEventState = WebThreadScheduler::InputEventState;
 // returns the PageScheduler as a PageSchedulerImpl.
 std::unique_ptr<PageSchedulerImpl> CreatePageScheduler(
     PageScheduler::Delegate* page_scheduler_delegate,
-    ThreadSchedulerImpl* scheduler) {
+    ThreadSchedulerImpl* scheduler,
+    WebAgentGroupScheduler& agent_group_scheduler) {
   std::unique_ptr<PageScheduler> page_scheduler =
-      scheduler->CreatePageScheduler(page_scheduler_delegate);
+      agent_group_scheduler.AsAgentGroupScheduler().CreatePageScheduler(
+          page_scheduler_delegate);
   std::unique_ptr<PageSchedulerImpl> page_scheduler_impl(
       static_cast<PageSchedulerImpl*>(page_scheduler.release()));
   return page_scheduler_impl;
@@ -302,11 +305,12 @@ void AnticipationTestTask(MainThreadSchedulerImpl* scheduler,
 
 class MockPageSchedulerImpl : public PageSchedulerImpl {
  public:
-  explicit MockPageSchedulerImpl(AgentGroupSchedulerImpl& agent_group_scheduler)
+  explicit MockPageSchedulerImpl(MainThreadSchedulerImpl* main_thread_scheduler,
+                                 AgentGroupSchedulerImpl& agent_group_scheduler)
       : PageSchedulerImpl(nullptr, agent_group_scheduler) {
     // This would normally be called by
     // MainThreadSchedulerImpl::CreatePageScheduler.
-    agent_group_scheduler.GetMainThreadScheduler().AddPageScheduler(this);
+    main_thread_scheduler->AddPageScheduler(this);
 
     ON_CALL(*this, IsWaitingForMainFrameContentfulPaint)
         .WillByDefault(Return(true));
@@ -438,13 +442,18 @@ class MainThreadSchedulerImplTest : public testing::Test {
       scheduler_->use_cases_.clear();
     }
 
-    default_task_runner_ = scheduler_->DefaultTaskQueue()->task_runner();
-    compositor_task_runner_ = scheduler_->CompositorTaskQueue()->task_runner();
+    default_task_runner_ =
+        scheduler_->DefaultTaskQueue()->GetTaskRunnerWithDefaultTaskType();
+    compositor_task_runner_ =
+        scheduler_->CompositorTaskQueue()->GetTaskRunnerWithDefaultTaskType();
     idle_task_runner_ = scheduler_->IdleTaskRunner();
-    v8_task_runner_ = scheduler_->V8TaskQueue()->task_runner();
+    v8_task_runner_ =
+        scheduler_->V8TaskQueue()->GetTaskRunnerWithDefaultTaskType();
 
+    agent_group_scheduler_ = scheduler_->CreateAgentGroupScheduler();
     page_scheduler_ = std::make_unique<NiceMock<MockPageSchedulerImpl>>(
-        scheduler_->EnsureAgentGroupScheduler());
+        scheduler_.get(),
+        static_cast<AgentGroupSchedulerImpl&>(*agent_group_scheduler_));
     main_frame_scheduler_ =
         CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
                              FrameScheduler::FrameType::kMainFrame);
@@ -456,22 +465,23 @@ class MainThreadSchedulerImplTest : public testing::Test {
         main_frame_scheduler_->FrameTaskQueueControllerForTest()
             ->GetTaskQueue(
                 main_frame_scheduler_->LoadingControlTaskQueueTraits())
-            ->task_runner();
-    throttleable_task_runner_ = throttleable_task_queue()->task_runner();
+            ->GetTaskRunnerWithDefaultTaskType();
+    throttleable_task_runner_ =
+        throttleable_task_queue()->GetTaskRunnerWithDefaultTaskType();
     find_in_page_task_runner_ = main_frame_scheduler_->GetTaskRunner(
         blink::TaskType::kInternalFindInPage);
     prioritised_local_frame_task_runner_ = main_frame_scheduler_->GetTaskRunner(
         blink::TaskType::kInternalHighPriorityLocalFrame);
   }
 
-  TaskQueue* loading_task_queue() {
+  MainThreadTaskQueue* loading_task_queue() {
     auto queue_traits = FrameSchedulerImpl::LoadingTaskQueueTraits();
     return main_frame_scheduler_->FrameTaskQueueControllerForTest()
         ->GetTaskQueue(queue_traits)
         .get();
   }
 
-  TaskQueue* throttleable_task_queue() {
+  MainThreadTaskQueue* throttleable_task_queue() {
     auto* frame_task_queue_controller =
         main_frame_scheduler_->FrameTaskQueueControllerForTest();
     return frame_task_queue_controller
@@ -500,6 +510,7 @@ class MainThreadSchedulerImplTest : public testing::Test {
     widget_scheduler_.reset();
     main_frame_scheduler_.reset();
     page_scheduler_.reset();
+    agent_group_scheduler_.reset();
     scheduler_->Shutdown();
     base::RunLoop().RunUntilIdle();
     scheduler_.reset();
@@ -821,7 +832,7 @@ class MainThreadSchedulerImplTest : public testing::Test {
                                         String::FromUTF8(task)));
           break;
         case 'L':
-          loading_task_queue()->task_runner()->PostTask(
+          loading_task_queue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
               FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
                                         String::FromUTF8(task)));
           break;
@@ -916,7 +927,7 @@ class MainThreadSchedulerImplTest : public testing::Test {
                                   &MainThreadSchedulerImpl::UseCaseToString);
   }
 
-  static scoped_refptr<TaskQueue> ThrottleableTaskQueue(
+  static scoped_refptr<MainThreadTaskQueue> ThrottleableTaskQueue(
       FrameSchedulerImpl* scheduler) {
     auto* frame_task_queue_controller =
         scheduler->FrameTaskQueueControllerForTest();
@@ -924,15 +935,7 @@ class MainThreadSchedulerImplTest : public testing::Test {
     return frame_task_queue_controller->GetTaskQueue(queue_traits);
   }
 
-  static scoped_refptr<TaskQueue> ForegroundOnlyTaskQueue(
-      FrameSchedulerImpl* scheduler) {
-    auto* frame_task_queue_controller =
-        scheduler->FrameTaskQueueControllerForTest();
-    auto queue_traits = FrameSchedulerImpl::ForegroundOnlyTaskQueueTraits();
-    return frame_task_queue_controller->GetTaskQueue(queue_traits);
-  }
-
-  static scoped_refptr<TaskQueue> QueueForTaskType(
+  static scoped_refptr<MainThreadTaskQueue> QueueForTaskType(
       FrameSchedulerImpl* scheduler,
       TaskType task_type) {
     return scheduler->GetTaskQueue(task_type);
@@ -943,6 +946,7 @@ class MainThreadSchedulerImplTest : public testing::Test {
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
 
   std::unique_ptr<MainThreadSchedulerImplForTest> scheduler_;
+  std::unique_ptr<WebAgentGroupScheduler> agent_group_scheduler_;
   std::unique_ptr<MockPageSchedulerImpl> page_scheduler_;
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler_;
   std::unique_ptr<WebWidgetScheduler> widget_scheduler_;
@@ -1109,7 +1113,7 @@ TEST_F(MainThreadSchedulerImplTest, TestDelayedEndIdlePeriodCanceled) {
 
   // Post a task which simulates running until after the previous end idle
   // period delayed task was scheduled for
-  scheduler_->DefaultTaskQueue()->task_runner()->PostTask(
+  scheduler_->DefaultTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE, base::BindOnce(NullTask));
   test_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(300));
   EXPECT_EQ(1, run_count);  // We should still be in the new idle period.
@@ -2482,7 +2486,7 @@ TEST_F(MainThreadSchedulerImplTest, StopAndThrottleThrottleableQueue) {
   auto pause_handle = scheduler_->PauseRenderer();
   base::RunLoop().RunUntilIdle();
   scheduler_->task_queue_throttler()->IncreaseThrottleRefCount(
-      throttleable_task_queue());
+      throttleable_task_queue()->GetTaskQueue());
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(run_order, testing::ElementsAre());
 }
@@ -2492,7 +2496,7 @@ TEST_F(MainThreadSchedulerImplTest, ThrottleAndPauseRenderer) {
   PostTestTasks(&run_order, "T1 T2");
 
   scheduler_->task_queue_throttler()->IncreaseThrottleRefCount(
-      throttleable_task_queue());
+      throttleable_task_queue()->GetTaskQueue());
   base::RunLoop().RunUntilIdle();
   auto pause_handle = scheduler_->PauseRenderer();
   base::RunLoop().RunUntilIdle();
@@ -2753,7 +2757,8 @@ TEST_F(
     bool expect_queue_enabled = (i == 0) || (Now() > first_throttled_run_time);
     if (paused)
       expect_queue_enabled = false;
-    EXPECT_EQ(expect_queue_enabled, throttleable_task_queue()->IsQueueEnabled())
+    EXPECT_EQ(expect_queue_enabled,
+              throttleable_task_queue()->GetTaskQueue()->IsQueueEnabled())
         << "i = " << i;
 
     // After we've run any expensive tasks suspend the queue.  The throttling
@@ -2800,7 +2805,8 @@ TEST_F(MainThreadSchedulerImplTest,
 
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(UseCase::kSynchronizedGesture, CurrentUseCase()) << "i = " << i;
-    EXPECT_TRUE(throttleable_task_queue()->IsQueueEnabled()) << "i = " << i;
+    EXPECT_TRUE(throttleable_task_queue()->GetTaskQueue()->IsQueueEnabled())
+        << "i = " << i;
   }
 
   // Task is not throttled.
@@ -2877,8 +2883,9 @@ TEST_F(MainThreadSchedulerImplTest, SYNCHRONIZED_GESTURE_CompositingExpensive) {
 
   // Throttleable tasks should not have been starved by the expensive compositor
   // tasks.
-  EXPECT_EQ(TaskQueue::kNormalPriority,
-            scheduler_->CompositorTaskQueue()->GetQueuePriority());
+  EXPECT_EQ(
+      TaskQueue::kNormalPriority,
+      scheduler_->CompositorTaskQueue()->GetTaskQueue()->GetQueuePriority());
   EXPECT_EQ(1000u, run_order.size());
 }
 
@@ -2919,8 +2926,9 @@ TEST_F(MainThreadSchedulerImplTest, MAIN_THREAD_CUSTOM_INPUT_HANDLING) {
 
   // Throttleable tasks should not have been starved by the expensive compositor
   // tasks.
-  EXPECT_EQ(TaskQueue::kNormalPriority,
-            scheduler_->CompositorTaskQueue()->GetQueuePriority());
+  EXPECT_EQ(
+      TaskQueue::kNormalPriority,
+      scheduler_->CompositorTaskQueue()->GetTaskQueue()->GetQueuePriority());
   EXPECT_EQ(1000u, run_order.size());
 }
 
@@ -2959,8 +2967,9 @@ TEST_F(MainThreadSchedulerImplTest, MAIN_THREAD_GESTURE) {
     EXPECT_EQ(UseCase::kMainThreadGesture, CurrentUseCase()) << "i = " << i;
   }
 
-  EXPECT_EQ(TaskQueue::kHighestPriority,
-            scheduler_->CompositorTaskQueue()->GetQueuePriority());
+  EXPECT_EQ(
+      TaskQueue::kHighestPriority,
+      scheduler_->CompositorTaskQueue()->GetTaskQueue()->GetQueuePriority());
   EXPECT_EQ(279u, run_order.size());
 }
 
@@ -3062,7 +3071,8 @@ TEST_F(MainThreadSchedulerImplTest, UnthrottledTaskRunner) {
   // Ensure neither suspension nor throttleable task throttling affects an
   // unthrottled task runner.
   SimulateCompositorGestureStart(TouchEventPolicy::kSendTouchStart);
-  scoped_refptr<TaskQueue> unthrottled_task_queue = NewUnpausableTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> unthrottled_task_queue =
+      NewUnpausableTaskQueue();
 
   size_t throttleable_count = 0;
   size_t unthrottled_count = 0;
@@ -3070,10 +3080,11 @@ TEST_F(MainThreadSchedulerImplTest, UnthrottledTaskRunner) {
       FROM_HERE,
       base::BindOnce(SlowCountingTask, &throttleable_count, test_task_runner_,
                      7, throttleable_task_runner_));
-  unthrottled_task_queue->task_runner()->PostTask(
+  unthrottled_task_queue->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE,
-      base::BindOnce(SlowCountingTask, &unthrottled_count, test_task_runner_, 7,
-                     unthrottled_task_queue->task_runner()));
+      base::BindOnce(
+          SlowCountingTask, &unthrottled_count, test_task_runner_, 7,
+          unthrottled_task_queue->GetTaskRunnerWithDefaultTaskType()));
   auto handle = scheduler_->PauseRenderer();
 
   for (int i = 0; i < 1000; i++) {
@@ -3109,7 +3120,7 @@ TEST_F(
       PageSchedulerImpl::VirtualTimePolicy::kPause);
   scoped_refptr<MainThreadTaskQueue> throttleable_tq =
       scheduler_->NewThrottleableTaskQueueForTest(nullptr);
-  EXPECT_FALSE(throttleable_tq->HasActiveFence());
+  EXPECT_FALSE(throttleable_tq->GetTaskQueue()->HasActiveFence());
 }
 
 TEST_F(MainThreadSchedulerImplTest, EnableVirtualTime) {
@@ -3120,91 +3131,100 @@ TEST_F(MainThreadSchedulerImplTest, EnableVirtualTime) {
   scoped_refptr<MainThreadTaskQueue> loading_tq =
       scheduler_->NewLoadingTaskQueue(
           MainThreadTaskQueue::QueueType::kFrameLoading, nullptr);
-  scoped_refptr<TaskQueue> loading_control_tq = scheduler_->NewLoadingTaskQueue(
-      MainThreadTaskQueue::QueueType::kFrameLoadingControl, nullptr);
+  scoped_refptr<MainThreadTaskQueue> loading_control_tq =
+      scheduler_->NewLoadingTaskQueue(
+          MainThreadTaskQueue::QueueType::kFrameLoadingControl, nullptr);
   scoped_refptr<MainThreadTaskQueue> throttleable_tq =
       scheduler_->NewThrottleableTaskQueueForTest(nullptr);
   scoped_refptr<MainThreadTaskQueue> unthrottled_tq = NewUnpausableTaskQueue();
 
-  EXPECT_EQ(scheduler_->DefaultTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->DefaultTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(scheduler_->CompositorTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->CompositorTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(loading_task_queue()->GetTimeDomain(),
+  EXPECT_EQ(loading_task_queue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(throttleable_task_queue()->GetTimeDomain(),
+  EXPECT_EQ(throttleable_task_queue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(scheduler_->VirtualTimeControlTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->VirtualTimeControlTaskQueue()
+                ->GetTaskQueue()
+                ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
 
   // The main control task queue remains in the real time domain.
-  EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
 
-  EXPECT_EQ(loading_tq->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(loading_control_tq->GetTimeDomain(),
+  EXPECT_EQ(loading_tq->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(throttleable_tq->GetTimeDomain(),
+  EXPECT_EQ(loading_control_tq->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(unthrottled_tq->GetTimeDomain(),
+  EXPECT_EQ(throttleable_tq->GetTaskQueue()->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(unthrottled_tq->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
 
   EXPECT_EQ(scheduler_
                 ->NewLoadingTaskQueue(
                     MainThreadTaskQueue::QueueType::kFrameLoading, nullptr)
+                ->GetTaskQueue()
                 ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(
-      scheduler_->NewThrottleableTaskQueueForTest(nullptr)->GetTimeDomain(),
-      scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(NewUnpausableTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->NewThrottleableTaskQueueForTest(nullptr)
+                ->GetTaskQueue()
+                ->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(NewUnpausableTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
   EXPECT_EQ(scheduler_
                 ->NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
                     MainThreadTaskQueue::QueueType::kTest))
+                ->GetTaskQueue()
                 ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
 }
 
 TEST_F(MainThreadSchedulerImplTest, EnableVirtualTimeAfterThrottling) {
-  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
+  auto page_scheduler =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
       CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
                            FrameScheduler::FrameType::kSubframe);
 
-  TaskQueue* throttleable_tq =
+  scoped_refptr<MainThreadTaskQueue> throttleable_tq =
       ThrottleableTaskQueue(frame_scheduler.get()).get();
 
   frame_scheduler->SetCrossOriginToMainFrame(true);
   frame_scheduler->SetFrameVisible(false);
-  EXPECT_TRUE(scheduler_->task_queue_throttler()->IsThrottled(throttleable_tq));
+  EXPECT_TRUE(scheduler_->task_queue_throttler()->IsThrottled(
+      throttleable_tq->GetTaskQueue()));
 
   scheduler_->EnableVirtualTime(
       MainThreadSchedulerImpl::BaseTimeOverridePolicy::DO_NOT_OVERRIDE);
-  EXPECT_EQ(throttleable_tq->GetTimeDomain(),
+  EXPECT_EQ(throttleable_tq->GetTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_FALSE(
-      scheduler_->task_queue_throttler()->IsThrottled(throttleable_tq));
+  EXPECT_FALSE(scheduler_->task_queue_throttler()->IsThrottled(
+      throttleable_tq->GetTaskQueue()));
 }
 
 TEST_F(MainThreadSchedulerImplTest, DisableVirtualTimeForTesting) {
   scheduler_->EnableVirtualTime(
       MainThreadSchedulerImpl::BaseTimeOverridePolicy::DO_NOT_OVERRIDE);
   scheduler_->DisableVirtualTimeForTesting();
-  EXPECT_EQ(scheduler_->DefaultTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->DefaultTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
-  EXPECT_EQ(scheduler_->CompositorTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->CompositorTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
-  EXPECT_EQ(loading_task_queue()->GetTimeDomain(),
+  EXPECT_EQ(loading_task_queue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
-  EXPECT_EQ(throttleable_task_queue()->GetTimeDomain(),
+  EXPECT_EQ(throttleable_task_queue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
-  EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
-  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
   EXPECT_FALSE(scheduler_->VirtualTimeControlTaskQueue());
 }
@@ -3279,7 +3299,7 @@ TEST_F(MainThreadSchedulerImplTest, VirtualTimeWithOneQueueWithoutVirtualTime) {
   int counter = 0;
 
   for (const auto& task_queue : task_queues) {
-    task_queue->task_runner()->PostTask(
+    task_queue->GetTaskRunnerWithDefaultTaskType()->PostTask(
         FROM_HERE, base::BindOnce([](int* counter) { ++*counter; }, &counter));
   }
 
@@ -3299,7 +3319,7 @@ TEST_F(MainThreadSchedulerImplTest, Tracing) {
   // traced value. This test checks that no internal checks fire during this.
 
   std::unique_ptr<PageSchedulerImpl> page_scheduler1 =
-      CreatePageScheduler(nullptr, scheduler_.get());
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
   scheduler_->AddPageScheduler(page_scheduler1.get());
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
@@ -3307,21 +3327,84 @@ TEST_F(MainThreadSchedulerImplTest, Tracing) {
                            FrameScheduler::FrameType::kSubframe);
 
   std::unique_ptr<PageSchedulerImpl> page_scheduler2 =
-      CreatePageScheduler(nullptr, scheduler_.get());
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
   scheduler_->AddPageScheduler(page_scheduler2.get());
 
   CPUTimeBudgetPool* time_budget_pool =
       scheduler_->task_queue_throttler()->CreateCPUTimeBudgetPool("test");
 
-  time_budget_pool->AddQueue(base::TimeTicks(), throttleable_task_queue());
+  time_budget_pool->AddQueue(base::TimeTicks(),
+                             throttleable_task_queue()->GetTaskQueue());
 
   throttleable_task_runner_->PostTask(FROM_HERE, base::BindOnce(NullTask));
 
-  loading_task_queue()->task_runner()->PostDelayedTask(
+  loading_task_queue()->GetTaskRunnerWithDefaultTaskType()->PostDelayedTask(
       FROM_HERE, base::BindOnce(NullTask),
       base::TimeDelta::FromMilliseconds(10));
 
   EXPECT_FALSE(scheduler_->ToString().empty());
+}
+
+TEST_F(MainThreadSchedulerImplTest,
+       LogIpcsPostedToDocumentsInBackForwardCache) {
+  base::HistogramTester histogram_tester;
+
+  // Start recording IPCs immediately.
+  base::FieldTrialParams params;
+  params["delay_before_tracking_ms"] = "0";
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      blink::features::kLogUnexpectedIPCPostedToBackForwardCachedDocuments,
+      params);
+
+  // Store documents inside the back-forward cache. IPCs are only tracked IFF
+  // all pages are in the back-forward cache.
+  PageSchedulerImpl* page_scheduler = page_scheduler_.get();
+  page_scheduler->SetPageBackForwardCached(true);
+  base::RunLoop().RunUntilIdle();
+  {
+    base::TaskAnnotator::ScopedSetIpcHash scoped_set_ipc_hash(1);
+    default_task_runner_->PostTask(FROM_HERE, base::DoNothing());
+  }
+  base::RunLoop().RunUntilIdle();
+
+  // Adding a new page scheduler results in IPCs not being logged, as this
+  // page scheduler is not in the cache.
+  std::unique_ptr<PageSchedulerImpl> page_scheduler1 =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
+  scheduler_->AddPageScheduler(page_scheduler1.get());
+  base::RunLoop().RunUntilIdle();
+  {
+    base::TaskAnnotator::ScopedSetIpcHash scoped_set_ipc_hash(2);
+    default_task_runner_->PostTask(FROM_HERE, base::DoNothing());
+  }
+  base::RunLoop().RunUntilIdle();
+
+  // Removing an un-cached page scheduler results in IPCs being logged, as all
+  // page schedulers are now in the cache.
+  page_scheduler1.reset();
+  base::RunLoop().RunUntilIdle();
+  {
+    base::TaskAnnotator::ScopedSetIpcHash scoped_set_ipc_hash(3);
+    default_task_runner_->PostTask(FROM_HERE, base::DoNothing());
+  }
+  base::RunLoop().RunUntilIdle();
+
+  // When a page is restored from the back-forward cache, IPCs should not be
+  // recorded anymore, as not all pages are in the cache.
+  page_scheduler->SetPageBackForwardCached(false);
+  base::RunLoop().RunUntilIdle();
+  {
+    base::TaskAnnotator::ScopedSetIpcHash scoped_set_ipc_hash(4);
+    default_task_runner_->PostTask(FROM_HERE, base::DoNothing());
+  }
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "BackForwardCache.Experimental."
+          "UnexpectedIPCMessagePostedToCachedFrame.MethodHash"),
+      testing::UnorderedElementsAre(base::Bucket(1, 1), base::Bucket(3, 1)));
 }
 
 void RecordingTimeTestTask(
@@ -3393,10 +3476,12 @@ TEST_F(MainThreadSchedulerImplTest, FreezesCompositorQueueWhenAllPagesFrozen) {
   page_scheduler_.reset();
 
   std::unique_ptr<PageScheduler> sched_1 =
-      scheduler_->CreatePageScheduler(nullptr);
+      agent_group_scheduler_->AsAgentGroupScheduler().CreatePageScheduler(
+          nullptr);
   sched_1->SetPageVisible(false);
   std::unique_ptr<PageScheduler> sched_2 =
-      scheduler_->CreatePageScheduler(nullptr);
+      agent_group_scheduler_->AsAgentGroupScheduler().CreatePageScheduler(
+          nullptr);
   sched_2->SetPageVisible(false);
 
   Vector<String> run_order;
@@ -3415,7 +3500,8 @@ TEST_F(MainThreadSchedulerImplTest, FreezesCompositorQueueWhenAllPagesFrozen) {
 
   run_order.clear();
   std::unique_ptr<PageScheduler> sched_3 =
-      scheduler_->CreatePageScheduler(nullptr);
+      agent_group_scheduler_->AsAgentGroupScheduler().CreatePageScheduler(
+          nullptr);
   sched_3->SetPageVisible(false);
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(run_order, testing::ElementsAre("C2"));
@@ -3496,8 +3582,10 @@ TEST_F(MainThreadSchedulerImplTest, TaskQueueReferenceClearedOnShutdown) {
   scoped_refptr<MainThreadTaskQueue> queue2 =
       scheduler_->NewThrottleableTaskQueueForTest(nullptr);
 
-  EXPECT_EQ(queue1->GetTimeDomain(), scheduler_->real_time_domain());
-  EXPECT_EQ(queue2->GetTimeDomain(), scheduler_->real_time_domain());
+  EXPECT_EQ(queue1->GetTaskQueue()->GetTimeDomain(),
+            scheduler_->real_time_domain());
+  EXPECT_EQ(queue2->GetTaskQueue()->GetTimeDomain(),
+            scheduler_->real_time_domain());
 
   scheduler_->OnShutdownTaskQueue(queue1);
 
@@ -3506,8 +3594,10 @@ TEST_F(MainThreadSchedulerImplTest, TaskQueueReferenceClearedOnShutdown) {
 
   // Virtual time should be enabled for queue2, as it is a regular queue and
   // nothing should change for queue1 because it was shut down.
-  EXPECT_EQ(queue1->GetTimeDomain(), scheduler_->real_time_domain());
-  EXPECT_EQ(queue2->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(queue1->GetTaskQueue()->GetTimeDomain(),
+            scheduler_->real_time_domain());
+  EXPECT_EQ(queue2->GetTaskQueue()->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
 }
 
 TEST_F(MainThreadSchedulerImplTest, MicrotaskCheckpointTiming) {
@@ -3556,7 +3646,7 @@ TEST_F(MainThreadSchedulerImplTest, NonWakingTaskQueue) {
   std::vector<std::pair<std::string, base::TimeTicks>> log;
   base::TimeTicks start = scheduler_->GetTickClock()->NowTicks();
 
-  scheduler_->DefaultTaskQueue()->task_runner()->PostTask(
+  scheduler_->DefaultTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE,
       base::BindOnce(
           [](std::vector<std::pair<std::string, base::TimeTicks>>* log,
@@ -3573,15 +3663,17 @@ TEST_F(MainThreadSchedulerImplTest, NonWakingTaskQueue) {
           },
           &log, scheduler_->GetTickClock()),
       base::TimeDelta::FromSeconds(3));
-  scheduler_->DefaultTaskQueue()->task_runner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](std::vector<std::pair<std::string, base::TimeTicks>>* log,
-             const base::TickClock* clock) {
-            log->emplace_back("regular (delayed)", clock->NowTicks());
-          },
-          &log, scheduler_->GetTickClock()),
-      base::TimeDelta::FromSeconds(5));
+  scheduler_->DefaultTaskQueue()
+      ->GetTaskRunnerWithDefaultTaskType()
+      ->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](std::vector<std::pair<std::string, base::TimeTicks>>* log,
+                 const base::TickClock* clock) {
+                log->emplace_back("regular (delayed)", clock->NowTicks());
+              },
+              &log, scheduler_->GetTickClock()),
+          base::TimeDelta::FromSeconds(5));
 
   test_task_runner_->FastForwardUntilNoTasksRemain();
 
@@ -3909,37 +4001,39 @@ class DisableNonMainTimerQueuesUntilFMPTest
 };
 
 TEST_F(DisableNonMainTimerQueuesUntilFMPTest, DisablesOnlyNonMainTimerQueue) {
-  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
+  auto page_scheduler =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
 
   NiceMock<MockFrameDelegate> frame_delegate{};
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
       CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
                            FrameScheduler::FrameType::kSubframe);
 
-  scoped_refptr<TaskQueue> throttleable_tq = QueueForTaskType(
+  scoped_refptr<MainThreadTaskQueue> throttleable_tq = QueueForTaskType(
       frame_scheduler.get(), TaskType::kJavascriptTimerDelayedLowNesting);
   ForceUpdatePolicyAndGetCurrentUseCase();
 
-  EXPECT_FALSE(throttleable_tq->IsQueueEnabled());
+  EXPECT_FALSE(throttleable_tq->GetTaskQueue()->IsQueueEnabled());
 
   ignore_result(
       scheduler_->agent_scheduling_strategy().OnMainFrameFirstMeaningfulPaint(
           *main_frame_scheduler_));
   ForceUpdatePolicyAndGetCurrentUseCase();
 
-  EXPECT_TRUE(throttleable_tq->IsQueueEnabled());
+  EXPECT_TRUE(throttleable_tq->GetTaskQueue()->IsQueueEnabled());
 }
 
 TEST_F(DisableNonMainTimerQueuesUntilFMPTest,
        ShouldNotifyAgentStrategyOnInput) {
-  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
+  auto page_scheduler =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
 
   NiceMock<MockFrameDelegate> frame_delegate{};
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
       CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
                            FrameScheduler::FrameType::kSubframe);
 
-  scoped_refptr<TaskQueue> timer_tq = QueueForTaskType(
+  scoped_refptr<MainThreadTaskQueue> timer_tq = QueueForTaskType(
       frame_scheduler.get(), TaskType::kJavascriptTimerDelayedLowNesting);
 
   FakeInputEvent mouse_move_event{WebInputEvent::Type::kMouseMove,
@@ -3952,14 +4046,14 @@ TEST_F(DisableNonMainTimerQueuesUntilFMPTest,
   scheduler_->DidHandleInputEventOnCompositorThread(mouse_move_event,
                                                     event_state);
   ForceUpdatePolicyAndGetCurrentUseCase();
-  EXPECT_FALSE(timer_tq->IsQueueEnabled());
+  EXPECT_FALSE(timer_tq->GetTaskQueue()->IsQueueEnabled());
 
   // Mouse down should cause MTSI to notify the agent scheduling strategy, which
   // should re-enable the throttleable queue.
   scheduler_->DidHandleInputEventOnCompositorThread(mouse_down_event,
                                                     event_state);
   base::RunLoop().RunUntilIdle();  // Notification is posted to the main thread.
-  EXPECT_TRUE(timer_tq->IsQueueEnabled());
+  EXPECT_TRUE(timer_tq->GetTaskQueue()->IsQueueEnabled());
 }
 
 class BestEffortNonMainQueuesUntilOnLoadTest
@@ -3973,22 +4067,23 @@ class BestEffortNonMainQueuesUntilOnLoadTest
 };
 
 TEST_F(BestEffortNonMainQueuesUntilOnLoadTest, DeprioritizesAllNonMainQueues) {
-  auto page_scheduler = CreatePageScheduler(nullptr, scheduler_.get());
+  auto page_scheduler =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
 
   NiceMock<MockFrameDelegate> frame_delegate{};
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
       CreateFrameScheduler(page_scheduler.get(), &frame_delegate, nullptr,
                            FrameScheduler::FrameType::kSubframe);
 
-  scoped_refptr<TaskQueue> non_timer_tq =
+  scoped_refptr<MainThreadTaskQueue> non_timer_tq =
       QueueForTaskType(frame_scheduler.get(), TaskType::kNetworking);
   ForceUpdatePolicyAndGetCurrentUseCase();
-  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+  EXPECT_EQ(non_timer_tq->GetTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kBestEffortPriority);
 
   scheduler_->OnMainFrameLoad(*main_frame_scheduler_);
 
-  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+  EXPECT_EQ(non_timer_tq->GetTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kNormalPriority);
 }
 
@@ -4006,17 +4101,18 @@ class BestEffortNonMainQueuesUntilOnFMPTimeoutTest
 TEST_F(BestEffortNonMainQueuesUntilOnFMPTimeoutTest,
        DeprioritizesNonMainQueues) {
   auto page_scheduler = CreatePageScheduler(
-      /* page_scheduler_delegate= */ nullptr, scheduler_.get());
+      /* page_scheduler_delegate= */ nullptr, scheduler_.get(),
+      *agent_group_scheduler_);
 
   NiceMock<MockFrameDelegate> frame_delegate{};
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler = CreateFrameScheduler(
       page_scheduler.get(), &frame_delegate, /* blame_context= */ nullptr,
       FrameScheduler::FrameType::kSubframe);
 
-  scoped_refptr<TaskQueue> non_timer_tq =
+  scoped_refptr<MainThreadTaskQueue> non_timer_tq =
       QueueForTaskType(frame_scheduler.get(), TaskType::kNetworking);
   ForceUpdatePolicyAndGetCurrentUseCase();
-  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+  EXPECT_EQ(non_timer_tq->GetTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kBestEffortPriority);
 
   ignore_result(
@@ -4025,12 +4121,12 @@ TEST_F(BestEffortNonMainQueuesUntilOnFMPTimeoutTest,
 
   // Queue should still have lower priority, since we just started counting
   // towards the timeout.
-  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+  EXPECT_EQ(non_timer_tq->GetTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kBestEffortPriority);
 
   test_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(1000));
 
-  EXPECT_EQ(non_timer_tq->GetQueuePriority(),
+  EXPECT_EQ(non_timer_tq->GetTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kNormalPriority);
 }
 

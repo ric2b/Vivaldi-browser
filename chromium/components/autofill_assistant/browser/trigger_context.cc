@@ -16,9 +16,16 @@ const char kOverlayColorParameterName[] = "OVERLAY_COLORS";
 // TODO(b/151401974): Eliminate duplicate parameter definitions.
 const char kPasswordChangeUsernameParameterName[] = "PASSWORD_CHANGE_USERNAME";
 
+// Legacy, remove as soon as possible.
 // Parameter that contains the path of the lite script that was used to trigger
 // this flow (may be empty).
 const char kLiteScriptPathParamaterName[] = "TRIGGER_SCRIPT_USED";
+
+// Parameter that contains a base64-encoded GetTriggerScriptsResponseProto
+// message. This allows callers to directly inject trigger scripts, rather than
+// fetching them from a remote backend.
+const char kBase64TriggerScriptsResponseProtoParameterName[] =
+    "TRIGGER_SCRIPTS_BASE64";
 
 // static
 std::unique_ptr<TriggerContext> TriggerContext::CreateEmpty() {
@@ -49,8 +56,13 @@ base::Optional<std::string> TriggerContext::GetPasswordChangeUsername() const {
   return GetParameter(kPasswordChangeUsernameParameterName);
 }
 
-bool TriggerContext::WasStartedByTriggerScript() const {
+bool TriggerContext::WasStartedByLegacyTriggerScript() const {
   return GetParameter(kLiteScriptPathParamaterName).has_value();
+}
+
+base::Optional<std::string>
+TriggerContext::GetBase64TriggerScriptsResponseProto() const {
+  return GetParameter(kBase64TriggerScriptsResponseProtoParameterName);
 }
 
 TriggerContextImpl::TriggerContextImpl() {}

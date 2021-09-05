@@ -5,7 +5,9 @@
 #import "ios/chrome/app/main_application_delegate.h"
 
 #include "base/ios/ios_util.h"
+#include "base/ios/multi_window_buildflags.h"
 #include "base/mac/foundation_util.h"
+#include "base/metrics/user_metrics.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/browser_launcher.h"
 #import "ios/chrome/app/application_delegate/memory_warning_helper.h"
@@ -22,7 +24,6 @@
 #import "ios/chrome/browser/ui/main/scene_controller.h"
 #import "ios/chrome/browser/ui/main/scene_delegate.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
-#include "ios/chrome/browser/ui/util/multi_window_buildflags.h"
 #include "ios/chrome/browser/ui/util/multi_window_support.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
@@ -31,6 +32,12 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// The time delay after firstSceneWillEnterForeground: before checking for main
+// intent signals.
+const int kMainIntentCheckDelay = 1;
+}  // namespace
 
 @interface MainApplicationDelegate () {
   MainController* _mainController;
@@ -279,6 +286,13 @@
 
 - (void)lastSceneDidEnterBackground:(NSNotification*)notification {
   DCHECK(IsSceneStartupSupported());
+  // Reset |startupHadExternalIntent| for all Scenes in case external intents
+  // were triggered while the application was in the foreground.
+  for (SceneState* scene in self.appState.connectedScenes) {
+    if (scene.startupHadExternalIntent) {
+      scene.startupHadExternalIntent = NO;
+    }
+  }
   if (@available(iOS 13, *)) {
     [_appState applicationDidEnterBackground:UIApplication.sharedApplication
                                 memoryHelper:_memoryHelper];
@@ -288,6 +302,31 @@
 - (void)firstSceneWillEnterForeground:(NSNotification*)notification {
   DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
+    __weak MainApplicationDelegate* weakSelf = self;
+    // Delay Main Intent check since signals for intents like spotlight actions
+    // are not guaranteed to occur before firstSceneWillEnterForeground.
+    dispatch_after(
+        dispatch_time(
+            DISPATCH_TIME_NOW,
+            static_cast<int64_t>(kMainIntentCheckDelay * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          MainApplicationDelegate* strongSelf = weakSelf;
+          if (!strongSelf) {
+            return;
+          }
+
+          BOOL appStartupFromExternalIntent = NO;
+          for (SceneState* scene in strongSelf.appState.connectedScenes) {
+            if (scene.startupHadExternalIntent) {
+              appStartupFromExternalIntent = YES;
+              scene.startupHadExternalIntent = NO;
+            }
+          }
+          if (!appStartupFromExternalIntent) {
+            base::RecordAction(
+                base::UserMetricsAction("IOSOpenByMainIntent"));
+          }
+        });
     [_appState applicationWillEnterForeground:UIApplication.sharedApplication
                               metricsMediator:_metricsMediator
                                  memoryHelper:_memoryHelper];

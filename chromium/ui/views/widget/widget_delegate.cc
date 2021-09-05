@@ -14,6 +14,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
@@ -21,13 +22,39 @@
 
 namespace views {
 
+namespace {
+
+std::unique_ptr<ClientView> CreateDefaultClientView(WidgetDelegate* delegate,
+                                                    Widget* widget) {
+  return std::make_unique<ClientView>(
+      widget, delegate->TransferOwnershipOfContentsView());
+}
+
+std::unique_ptr<NonClientFrameView> CreateDefaultNonClientFrameView(
+    Widget* widget) {
+  return nullptr;
+}
+
+std::unique_ptr<View> CreateDefaultOverlayView() {
+  return nullptr;
+}
+
+}  // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // WidgetDelegate:
 
 WidgetDelegate::Params::Params() = default;
 WidgetDelegate::Params::~Params() = default;
 
-WidgetDelegate::WidgetDelegate() = default;
+WidgetDelegate::WidgetDelegate()
+    : widget_initializing_callbacks_(std::make_unique<ClosureVector>()),
+      widget_initialized_callbacks_(std::make_unique<ClosureVector>()),
+      client_view_factory_(
+          base::BindOnce(&CreateDefaultClientView, base::Unretained(this))),
+      non_client_frame_view_factory_(
+          base::BindRepeating(&CreateDefaultNonClientFrameView)),
+      overlay_view_factory_(base::BindOnce(&CreateDefaultOverlayView)) {}
 WidgetDelegate::~WidgetDelegate() {
   CHECK(can_delete_this_) << "A WidgetDelegate must outlive its Widget";
 }
@@ -159,10 +186,16 @@ bool WidgetDelegate::GetSavedWindowPlacement(
 
 void WidgetDelegate::WidgetInitializing(Widget* widget) {
   widget_ = widget;
+  for (auto&& callback : *widget_initializing_callbacks_)
+    std::move(callback).Run();
+  widget_initializing_callbacks_.reset();
   OnWidgetInitializing();
 }
 
 void WidgetDelegate::WidgetInitialized() {
+  for (auto&& callback : *widget_initialized_callbacks_)
+    std::move(callback).Run();
+  widget_initialized_callbacks_.reset();
   OnWidgetInitialized();
 }
 
@@ -199,6 +232,8 @@ const Widget* WidgetDelegate::GetWidget() const {
 }
 
 View* WidgetDelegate::GetContentsView() {
+  if (unowned_contents_view_)
+    return unowned_contents_view_;
   if (!default_contents_view_)
     default_contents_view_ = new View;
   return default_contents_view_;
@@ -207,20 +242,25 @@ View* WidgetDelegate::GetContentsView() {
 View* WidgetDelegate::TransferOwnershipOfContentsView() {
   DCHECK(!contents_view_taken_);
   contents_view_taken_ = true;
+  if (owned_contents_view_)
+    owned_contents_view_.release();
   return GetContentsView();
 }
 
 ClientView* WidgetDelegate::CreateClientView(Widget* widget) {
-  return new ClientView(widget, TransferOwnershipOfContentsView());
+  DCHECK(client_view_factory_);
+  return std::move(client_view_factory_).Run(widget).release();
 }
 
 std::unique_ptr<NonClientFrameView> WidgetDelegate::CreateNonClientFrameView(
     Widget* widget) {
-  return nullptr;
+  DCHECK(non_client_frame_view_factory_);
+  return non_client_frame_view_factory_.Run(widget);
 }
 
 View* WidgetDelegate::CreateOverlayView() {
-  return nullptr;
+  DCHECK(overlay_view_factory_);
+  return std::move(overlay_view_factory_).Run().release();
 }
 
 bool WidgetDelegate::WidgetHasHitTestMask() const {
@@ -246,15 +286,21 @@ void WidgetDelegate::SetAccessibleTitle(base::string16 title) {
 }
 
 void WidgetDelegate::SetCanMaximize(bool can_maximize) {
-  params_.can_maximize = can_maximize;
+  std::exchange(params_.can_maximize, can_maximize);
+  if (GetWidget() && params_.can_maximize != can_maximize)
+    GetWidget()->OnSizeConstraintsChanged();
 }
 
 void WidgetDelegate::SetCanMinimize(bool can_minimize) {
-  params_.can_minimize = can_minimize;
+  std::exchange(params_.can_minimize, can_minimize);
+  if (GetWidget() && params_.can_minimize != can_minimize)
+    GetWidget()->OnSizeConstraintsChanged();
 }
 
 void WidgetDelegate::SetCanResize(bool can_resize) {
-  params_.can_resize = can_resize;
+  std::exchange(params_.can_resize, can_resize);
+  if (GetWidget() && params_.can_resize != can_resize)
+    GetWidget()->OnSizeConstraintsChanged();
 }
 
 void WidgetDelegate::SetOwnedByWidget(bool owned) {
@@ -263,6 +309,11 @@ void WidgetDelegate::SetOwnedByWidget(bool owned) {
 
 void WidgetDelegate::SetFocusTraversesOut(bool focus_traverses_out) {
   params_.focus_traverses_out = focus_traverses_out;
+}
+
+void WidgetDelegate::SetEnableArrowKeyTraversal(
+    bool enable_arrow_key_traversal) {
+  params_.enable_arrow_key_traversal = enable_arrow_key_traversal;
 }
 
 void WidgetDelegate::SetIcon(const gfx::ImageSkia& icon) {
@@ -319,6 +370,18 @@ void WidgetDelegate::SetHasWindowSizeControls(bool has_controls) {
   SetCanResize(has_controls);
 }
 
+void WidgetDelegate::RegisterWidgetInitializingCallback(
+    base::OnceClosure callback) {
+  DCHECK(widget_initializing_callbacks_);
+  widget_initializing_callbacks_->emplace_back(std::move(callback));
+}
+
+void WidgetDelegate::RegisterWidgetInitializedCallback(
+    base::OnceClosure callback) {
+  DCHECK(widget_initialized_callbacks_);
+  widget_initialized_callbacks_->emplace_back(std::move(callback));
+}
+
 void WidgetDelegate::RegisterWindowWillCloseCallback(
     base::OnceClosure callback) {
   window_will_close_callbacks_.emplace_back(std::move(callback));
@@ -331,6 +394,31 @@ void WidgetDelegate::RegisterWindowClosingCallback(base::OnceClosure callback) {
 void WidgetDelegate::RegisterDeleteDelegateCallback(
     base::OnceClosure callback) {
   delete_delegate_callbacks_.emplace_back(std::move(callback));
+}
+
+void WidgetDelegate::SetClientViewFactory(ClientViewFactory factory) {
+  DCHECK(!GetWidget());
+  client_view_factory_ = std::move(factory);
+}
+
+void WidgetDelegate::SetNonClientFrameViewFactory(
+    NonClientFrameViewFactory factory) {
+  DCHECK(!GetWidget());
+  non_client_frame_view_factory_ = std::move(factory);
+}
+
+void WidgetDelegate::SetOverlayViewFactory(OverlayViewFactory factory) {
+  DCHECK(!GetWidget());
+  overlay_view_factory_ = std::move(factory);
+}
+
+void WidgetDelegate::SetContentsViewImpl(View* contents) {
+  // Note: DCHECKing the ownership of contents is done in the public setters,
+  // which are inlined in the header.
+  DCHECK(!unowned_contents_view_);
+  if (!contents->owned_by_client())
+    owned_contents_view_ = base::WrapUnique(contents);
+  unowned_contents_view_ = contents;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

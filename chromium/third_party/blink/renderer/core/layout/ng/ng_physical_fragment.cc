@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
@@ -132,7 +133,7 @@ class FragmentTreeDumper {
       bool has_fragment_items = false;
       if (flags_ & NGPhysicalFragment::DumpItems) {
         if (const NGFragmentItems* fragment_items = box->Items()) {
-          NGInlineCursor cursor(*fragment_items);
+          NGInlineCursor cursor(*box, *fragment_items);
           Append(&cursor, indent + 2);
           has_fragment_items = true;
         }
@@ -276,8 +277,10 @@ NGPhysicalFragment::NGPhysicalFragment(NGFragmentBuilder* builder,
       style_variant_((unsigned)builder->style_variant_),
       is_hidden_for_paint_(builder->is_hidden_for_paint_),
       is_fieldset_container_(false),
+      is_table_ng_part_(false),
       is_legacy_layout_root_(false),
       is_painted_atomically_(false),
+      has_collapsed_borders_(builder->has_collapsed_borders_),
       has_baseline_(false) {
   CHECK(builder->layout_object_);
 }
@@ -298,8 +301,10 @@ NGPhysicalFragment::NGPhysicalFragment(LayoutObject* layout_object,
       style_variant_((unsigned)style_variant),
       is_hidden_for_paint_(false),
       is_fieldset_container_(false),
+      is_table_ng_part_(false),
       is_legacy_layout_root_(false),
       is_painted_atomically_(false),
+      has_collapsed_borders_(false),
       has_baseline_(false),
       has_last_baseline_(false) {
   CHECK(layout_object);
@@ -335,12 +340,15 @@ NGPhysicalFragment::NGPhysicalFragment(const NGPhysicalFragment& other)
       style_variant_(other.style_variant_),
       is_hidden_for_paint_(other.is_hidden_for_paint_),
       is_math_fraction_(other.is_math_fraction_),
+      is_math_operator_(other.is_math_operator_),
       base_or_resolved_direction_(other.base_or_resolved_direction_),
       may_have_descendant_above_block_start_(
           other.may_have_descendant_above_block_start_),
       is_fieldset_container_(other.is_fieldset_container_),
+      is_table_ng_part_(other.is_table_ng_part_),
       is_legacy_layout_root_(other.is_legacy_layout_root_),
       is_painted_atomically_(other.is_painted_atomically_),
+      has_collapsed_borders_(other.has_collapsed_borders_),
       has_baseline_(other.has_baseline_),
       has_last_baseline_(other.has_last_baseline_),
       ink_overflow_computed_(other.ink_overflow_computed_) {
@@ -372,6 +380,10 @@ bool NGPhysicalFragment::IsBlockFlow() const {
   return !IsLineBox() && layout_object_->IsLayoutBlockFlow();
 }
 
+bool NGPhysicalFragment::IsTextControlPlaceholder() const {
+  return blink::IsTextControlPlaceholder(layout_object_->GetNode());
+}
+
 bool NGPhysicalFragment::IsPlacedByLayoutNG() const {
   // TODO(kojii): Move this to a flag for |LayoutNGBlockFlow::UpdateBlockLayout|
   // to set.
@@ -387,7 +399,7 @@ bool NGPhysicalFragment::IsPlacedByLayoutNG() const {
 
 const FragmentData* NGPhysicalFragment::GetFragmentData() const {
   DCHECK(CanTraverse());
-  const LayoutBox* box = ToLayoutBoxOrNull(GetLayoutObject());
+  const LayoutBox* box = DynamicTo<LayoutBox>(GetLayoutObject());
   if (!box) {
     DCHECK(!GetLayoutObject());
     return nullptr;
@@ -534,8 +546,7 @@ const Vector<NGInlineItem>& NGPhysicalFragment::InlineItemsOfContainingBlock()
     const {
   DCHECK(IsInline());
   DCHECK(GetLayoutObject());
-  LayoutBlockFlow* block_flow =
-      GetLayoutObject()->RootInlineFormattingContext();
+  LayoutBlockFlow* block_flow = GetLayoutObject()->ContainingNGBlockFlow();
   // TODO(xiaochengh): Code below is copied from ng_offset_mapping.cc with
   // modification. Unify them.
   DCHECK(block_flow);
@@ -551,6 +562,11 @@ const Vector<NGInlineItem>& NGPhysicalFragment::InlineItemsOfContainingBlock()
 TouchAction NGPhysicalFragment::EffectiveAllowedTouchAction() const {
   DCHECK(layout_object_);
   return layout_object_->EffectiveAllowedTouchAction();
+}
+
+bool NGPhysicalFragment::InsideBlockingWheelEventHandler() const {
+  DCHECK(layout_object_);
+  return layout_object_->InsideBlockingWheelEventHandler();
 }
 
 UBiDiLevel NGPhysicalFragment::BidiLevel() const {

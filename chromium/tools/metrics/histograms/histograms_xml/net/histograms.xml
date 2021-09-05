@@ -394,7 +394,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Cors.AccessCheckError" enum="CorsAccessCheckError"
-    expires_after="M86">
+    expires_after="M90">
   <owner>toyoshim@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
   <summary>
@@ -405,7 +405,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Cors.AccessCheckResult" enum="CorsAccessCheckResult"
-    expires_after="M86">
+    expires_after="M90">
   <owner>toyoshim@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
   <summary>
@@ -415,7 +415,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Cors.PreflightCacheKeySize" units="bytes"
-    expires_after="M86">
+    expires_after="M90">
   <owner>toyoshim@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
   <summary>
@@ -425,7 +425,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Cors.PreflightCacheResult" enum="CorsPreflightCacheResult"
-    expires_after="M86">
+    expires_after="M90">
   <owner>toyoshim@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
   <summary>
@@ -435,7 +435,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Cors.PreflightCheckError" enum="CorsAccessCheckError"
-    expires_after="M86">
+    expires_after="M90">
   <owner>toyoshim@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
   <summary>
@@ -527,12 +527,34 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.DnsConfig.SecureDnsMode" enum="SecureDnsModeDetails"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
     Records details of the secure DNS mode used to configure the host resolver
     at construction of the network service.
+  </summary>
+</histogram>
+
+<histogram name="Net.DNS.DnsTask.AdditionalHttps.Requested"
+    enum="UnsolicitedHttpsRecordStatus" expires_after="2021-08-06">
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Status of HTTPS DNS records received as additional records in a DnsTask
+    querying for HTTPS. This would represent a recurssive resolver that is
+    HTTPS-aware and performing followup queries on behalf of the client.
+    Recorded as DNS responses are parsed.
+  </summary>
+</histogram>
+
+<histogram name="Net.DNS.DnsTask.AdditionalHttps.Unsolicited"
+    enum="UnsolicitedHttpsRecordStatus" expires_after="2021-08-06">
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Status of HTTPS DNS records received as additional records in a DnsTask
+    querying for a type other than HTTPS. Recorded as DNS responses are parsed.
   </summary>
 </histogram>
 
@@ -718,7 +740,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.DnsTransaction.UDP.IdMismatch"
-    enum="DNS.UdpIdMismatchStatus" expires_after="2021-01-31">
+    enum="DNS.UdpIdMismatchStatus" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
@@ -729,7 +751,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.DnsTransaction.UDP.IdMismatch.OldestMatchTime"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
@@ -752,7 +774,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.DnsTransaction.UDP.ReusedPort.Count"
-    units="num recent uses" expires_after="2021-01-31">
+    units="num recent uses" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
@@ -762,13 +784,114 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.DnsTransaction.UDP.ReusedPort.MostRecentAge"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
     Time between use of a local port number for DNS over UDP and the most recent
     DNS over UDP use of the same port. Logged for every DNS over UDP query sent
     with at least 1 recognized previous use of the local port.
+  </summary>
+</histogram>
+
+<histogram
+    name="Net.DNS.HTTPSSVC.RecordHttps.AnyProvider.ExpectNoerror.Parsable"
+    enum="BooleanValid" expires_after="2021-08-05">
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Indicates whether the result of an HTTPS query was validly parsable or
+    mangled. Only recorded when DnsRcode indicates NoError. Histograms are
+    emitted at the completion of a DnsTask's final transaction.
+  </summary>
+</histogram>
+
+<histogram
+    name="Net.DNS.HTTPSSVC.RecordHttps.AnyProvider.ExpectNoerror.RecordWithError"
+    enum="Boolean" expires_after="2021-08-05">
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Records true when we receive an HTTPS record and an error RCODE at the same
+    time. Only recorded for true. Histograms are emitted at the completion of a
+    DnsTask's final transaction.
+  </summary>
+</histogram>
+
+<histogram base="true" name="Net.DNS.HTTPSSVC.RecordHttps.DnsRcode"
+    enum="HttpssvcDnsRcode" expires_after="2021-08-05">
+<!-- Name completed by histogram_suffixes
+  name="DohProviderId" and name="HttpssvcIntegrityExpectation" -->
+
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Records which RCODE the DNS server specified when it responded to our HTTPS
+    query. If the query timed out before getting a response,
+    &quot;TimedOut&quot; is recorded instead of an RCODE value. Histograms are
+    emitted at the completion of a DnsTask's final transaction.
+  </summary>
+</histogram>
+
+<histogram base="true"
+    name="Net.DNS.HTTPSSVC.RecordHttps.ExpectIntact.Parsable"
+    enum="BooleanValid" expires_after="2021-08-05">
+<!-- Name completed by histogram_suffixes
+  name="DohProviderId" -->
+
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Indicates whether the result of an HTTPS query was validly parsable or
+    mangled. Only recorded when DnsRcode indicates NoError. Histograms are
+    emitted at the completion of a DnsTask's final transaction.
+  </summary>
+</histogram>
+
+<histogram base="true"
+    name="Net.DNS.HTTPSSVC.RecordHttps.ExpectIntact.RecordWithError"
+    units="records" expires_after="2021-08-05">
+<!-- Name completed by histogram_suffixes
+  name="DohProviderId" -->
+
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Records a sample of one when we receive an HTTPS record and an error RCODE
+    at the same time. Histograms are emitted at the completion of a DnsTask's
+    final transaction.
+  </summary>
+</histogram>
+
+<histogram base="true"
+    name="Net.DNS.HTTPSSVC.RecordHttps.ResolveTimeHttpsRecord" units="ms"
+    expires_after="2021-08-05">
+<!-- Name completed by histogram_suffixes
+  name="DohProviderId" and name="HttpssvcIntegrityExpectation" -->
+
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Records how many ms the DNS server took to respond to an HTTPS query.
+    Histograms are emitted at the completion of a DnsTask's final transaction.
+  </summary>
+</histogram>
+
+<histogram base="true" name="Net.DNS.HTTPSSVC.RecordHttps.ResolveTimeRatio"
+    units="scaled ratio (% / 10)" expires_after="2021-08-05">
+<!-- Name completed by histogram_suffixes
+  name="DohProviderId" and name="HttpssvcIntegrityExpectation" -->
+
+  <owner>ericorth@chromium.org</owner>
+  <owner>dmcardle@chromium.org</owner>
+  <summary>
+    Records a ratio indicating the relative HTTPS resolve time compared to the
+    slower A or AAAA resolve time, where A/AAAA/HTTPS belong to the same
+    DnsTask. Multiply this value by 10 to obtain a percentage P. The HTTPS query
+    completed in roughly P% of the slower A/AAAA resolve time. Values smaller
+    than 10 indicate that HTTPS query was faster than A/AAAA. Values larger than
+    10 indicate that the HTTPS query was slower than A/AAAA. Histograms are
+    emitted at the completion of a DnsTask's final transaction.
   </summary>
 </histogram>
 
@@ -881,7 +1004,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.InsecureDnsTask.FailureTime" units="ms"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
@@ -925,7 +1048,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.ProbeSequence.ConfigChange.Failure.AttemptTime"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -935,7 +1058,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.ProbeSequence.ConfigChange.Success.AttemptTime"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -945,7 +1068,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.ProbeSequence.NetworkChange.Failure.AttemptTime"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -955,7 +1078,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.ProbeSequence.NetworkChange.Success.AttemptTime"
-    units="ms" expires_after="2021-01-31">
+    units="ms" expires_after="2021-04-04">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1056,7 +1179,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.SecureDnsMode.Automatic.ResolveTime" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1068,7 +1191,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.SecureDnsMode.Off.ResolveTime" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1080,7 +1203,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.SecureDnsMode.Secure.ResolveTime" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1092,7 +1215,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.SecureDnsTask.DnsModeAutomatic.FailureTime" units="ms"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1103,7 +1226,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.SecureDnsTask.DnsModeSecure.FailureTime" units="ms"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1134,7 +1257,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Net.DNS.UI.DropdownSelectionEvent"
-    enum="DohProviderId" expires_after="2021-02-28">
+    enum="DohProviderId" expires_after="2021-05-02">
 <!-- Name completed by histogram_suffixes
    name="DnsDropdownSelectionEvent" -->
 
@@ -1147,7 +1270,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UI.ProbeAttemptSuccess" enum="Boolean"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1157,7 +1280,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UI.ValidationAttemptSuccess" enum="Boolean"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1167,7 +1290,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UpgradeConfig.DotUpgradeSucceeded" enum="Boolean"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1177,7 +1300,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UpgradeConfig.HasPublicInsecureNameserver"
-    enum="Boolean" expires_after="2021-02-28">
+    enum="Boolean" expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1188,7 +1311,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UpgradeConfig.Ineligible.DohSpecified" enum="Boolean"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1209,7 +1332,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.UpgradeConfig.InsecureUpgradeSucceeded" enum="Boolean"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1432,7 +1555,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.HttpAuthCount" enum="HttpAuthCount"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>asanka@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -1454,13 +1577,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.HttpAuthPromptType" enum="HttpAuthPromptType"
-    expires_after="M80">
+    expires_after="M90">
   <owner>meacer@chromium.org</owner>
+  <owner>src/chrome/browser/ui/login/OWNERS</owner>
   <summary>Type of the HTTP auth prompt displayed.</summary>
 </histogram>
 
 <histogram name="Net.HttpAuthTarget" enum="HttpAuthTarget"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>asanka@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -2768,21 +2892,32 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Net.QuicSession.FailToSerializePacketLocation"
-    enum="QuicFailToSerializePacketLocation" expires_after="2021-05-21">
-  <owner>renjietang@chromium.org</owner>
-  <owner>src/net/quic/OWNERS</owner>
-  <summary>
-    Record where exactly packet serialization fails for investigation.
-  </summary>
-</histogram>
-
 <histogram name="Net.QuicSession.FinalTcpCwnd" units="units"
     expires_after="2021-05-11">
   <owner>dschinazi@chromium.org</owner>
   <owner>src/net/quic/OWNERS</owner>
   <summary>
     The value of the TCP cubic sender's CWND when the session is closed.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.FinchConfigIsValid" enum="Boolean"
+    expires_after="2021-05-11">
+  <owner>dschinazi@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Logged every time we parse a QUIC Finch config, and logs whether the config
+    was valid. Invalid configs are most likely to be obsolete configs.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.FinchObsoleteVersion" enum="Boolean"
+    expires_after="2021-05-11">
+  <owner>dschinazi@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Triggered any time Finch configures an obsolete QUIC version. Only recorded
+    when obsolete versions are not allowed (which is the default).
   </summary>
 </histogram>
 
@@ -2925,6 +3060,78 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.KeyUpdate.PerConnection" units="count"
+    expires_after="2021-05-11">
+  <obsolete>
+    Replaced 2020-10-22 with Net.QuicSession.KeyUpdate.PerConnection2 that is
+    only logged for connections which supported key update.
+  </obsolete>
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    The number of key updates processed per connection, recorded on connection
+    close. Only logged for connections which reached the 1-RTT level.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.KeyUpdate.PerConnection2" units="count"
+    expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    The number of key updates processed per connection, recorded on connection
+    close. Only logged for connections which reached the 1-RTT level and
+    supported key update.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.KeyUpdate.PotentialPeerKeyUpdateAttemptCount"
+    units="count" expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Count of packets received that appeared to attempt a key update but failed
+    decryption which have been received since the last successfully decrypted
+    packet, recorded on connection close. Only logged for connections which
+    reached the 1-RTT level and supported key update.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.KeyUpdate.Reason" enum="QuicKeyUpdateReason"
+    expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>The reason why each key update occured.</summary>
+</histogram>
+
+<histogram name="Net.QuicSession.KeyUpdate.Success.{Group}"
+    enum="QuicKeyUpdateSuccess" expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Records the success or failure of the last key update for connections where
+    the key update was initiated by the {Group} side. Failure is defined as
+    having sent at least one packet in the new key phase but never receiving an
+    ack for any packet sent in the new key phase before the connection was
+    closed.
+  </summary>
+  <token key="Group">
+    <variant name="Local"/>
+    <variant name="Remote"/>
+  </token>
+</histogram>
+
+<histogram name="Net.QuicSession.KeyUpdate.Supported"
+    enum="QuicKeyUpdateSupported" expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Whether key update was supported by either or both sides of the connection,
+    recorded on connection close. Only logged for connections which reached the
+    1-RTT level.
+  </summary>
+</histogram>
+
 <histogram
     name="Net.QuicSession.LastInFlightPacketSentTimeFromHandshakeCompletionWithPublicReset"
     units="ms" expires_after="2021-05-11">
@@ -2994,6 +3201,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.MigrateToSocketSuccess" enum="Boolean"
+    expires_after="2021-05-11">
+  <owner>renjietang@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Records whether the migration of the QuicSession to a new socket is
+    successful.
+  </summary>
+</histogram>
+
 <histogram name="Net.QuicSession.MinRTT" units="ms" expires_after="2021-05-11">
   <owner>dschinazi@chromium.org</owner>
   <owner>src/net/quic/OWNERS</owner>
@@ -3020,6 +3237,13 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     The number of active streams when idle timeout is detected and connection is
     being closed.
   </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.NumMigrations" units="units"
+    expires_after="2021-05-11">
+  <owner>renjietang@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>The number of successful migrations for a QUIC session.</summary>
 </histogram>
 
 <histogram name="Net.QuicSession.NumMigrationsExercisedBeforePublicReset"
@@ -3698,7 +3922,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>src/net/quic/OWNERS</owner>
   <summary>
     The number of undecryptable packets recevied by a QuicSession when the
-    sesesion is closed.
+    session is closed. Includes packets where a decryption key was not present.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.UndecryptablePacketsReceivedWithDecrypter"
+    units="units" expires_after="2021-05-11">
+  <owner>mattm@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    The number of undecryptable packets recevied by a QuicSession when the
+    session is closed. Only includes packets where a decryption key was present
+    for the packet's encryption level.
   </summary>
 </histogram>
 
@@ -4404,8 +4639,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.SSLKeyLogFileUse" enum="SSLKeyLogFileAction"
-    expires_after="M88">
+    expires_after="M92">
   <owner>cthomp@chromium.org</owner>
+  <owner>security-enamel@chromium.org</owner>
   <summary>
     Counts when the SSLKEYLOGFILE environment variable or --ssl-key-log-file
     command-line flag are set, and when they enable the SSLKeyLogger feature.
@@ -4413,7 +4649,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.SSLLegacyCryptoFallback" enum="SSLLegacyCryptoFallback"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>davidben@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>
@@ -4472,7 +4708,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.SSLVersionGoogle" enum="SSLOrQUICVersion"
-    expires_after="2021-01-31">
+    expires_after="2021-05-09">
   <owner>davidben@chromium.org</owner>
   <owner>rsleevi@chromium.org</owner>
   <summary>
@@ -4589,6 +4825,35 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram base="true" name="Net.TrustTokens.FetchFailedReason"
+    enum="FetchFailedReasonOrResourceRequestBlockedReason"
+    expires_after="2021-03-30">
+<!-- Name completed by histogram_suffixes name="TrustTokenOperationType" -->
+
+  <owner>davidvc@chromium.org</owner>
+  <owner>yhirano@chromium.org</owner>
+  <owner>privacy-sandbox-dev@chromium.org</owner>
+  <summary>
+    A descriptive reason why a Fetch API call with an associated Trust Tokens
+    operation failed. This might help debug a surfeit of 'TypeError: failed to
+    fetch' observed in live testing.
+  </summary>
+</histogram>
+
+<histogram base="true" name="Net.TrustTokens.NetErrorForFetchFailure"
+    enum="NetErrorCodes" expires_after="2021-03-30">
+<!-- Name completed by histogram_suffixes name="TrustTokenOperationType" -->
+
+  <owner>davidvc@chromium.org</owner>
+  <owner>yhirano@chromium.org</owner>
+  <owner>privacy-sandbox-dev@chromium.org</owner>
+  <summary>
+    The net error for a failed Fetch API call with an associated Trust Tokens
+    operation. This might help debug a surfeit of 'TypeError: failed to fetch'
+    observed in live testing.
+  </summary>
+</histogram>
+
 <histogram base="true" name="Net.TrustTokens.NetErrorForTrustTokenOperation"
     enum="NetErrorCodes" expires_after="2021-03-30">
 <!-- Name completed by histogram_suffixes name="TrustTokenOperationType" -->
@@ -4692,7 +4957,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.URLRequest.ReferrerHasInformativePath"
-    enum="BooleanPathIsInformative" expires_after="2021-02-28">
+    enum="BooleanPathIsInformative" expires_after="2021-05-02">
 <!-- Name completed by histogram_suffixes name="ReferrerPolicySameOrigin" -->
 
   <owner>davidvc@chromium.org</owner>
@@ -4706,7 +4971,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.URLRequest.ReferrerPolicyForRequest"
-    enum="URLRequestReferrerPolicy" expires_after="2021-02-28">
+    enum="URLRequestReferrerPolicy" expires_after="2021-05-02">
 <!-- Name completed by histogram_suffixes name="ReferrerPolicySameOrigin" -->
 
   <owner>davidvc@chromium.org</owner>

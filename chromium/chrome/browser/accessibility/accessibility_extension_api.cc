@@ -34,6 +34,7 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/image_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -338,8 +339,24 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   }
 
   int flags = 0;
-  if (type != ui::ET_MOUSE_MOVED)
-    flags |= ui::EF_LEFT_MOUSE_BUTTON;
+  if (type != ui::ET_MOUSE_MOVED) {
+    switch (mouse_data->mouse_button) {
+      case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_MIDDLE:
+        flags |= ui::EF_MIDDLE_MOUSE_BUTTON;
+        break;
+      case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_RIGHT:
+        flags |= ui::EF_RIGHT_MOUSE_BUTTON;
+        break;
+      case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_BACK:
+        flags |= ui::EF_BACK_MOUSE_BUTTON;
+        break;
+      case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_FOWARD:
+        flags |= ui::EF_FORWARD_MOUSE_BUTTON;
+        break;
+      default:
+        flags |= ui::EF_LEFT_MOUSE_BUTTON;
+    }
+  }
 
   int changed_button_flags = flags;
 
@@ -404,8 +421,8 @@ AccessibilityPrivateHandleScrollableBoundsForPointFoundFunction::Run() {
       params = accessibility_private::HandleScrollableBoundsForPointFound::
           Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
-  accessibility_private::ScreenRect rect = std::move(params->rect);
-  gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
+  gfx::Rect bounds(params->rect.left, params->rect.top, params->rect.width,
+                   params->rect.height);
   ash::AccessibilityController::Get()->HandleAutoclickScrollableBoundsFound(
       bounds);
   return RespondNow(NoArguments());
@@ -416,8 +433,11 @@ AccessibilityPrivateMoveMagnifierToRectFunction::Run() {
   std::unique_ptr<accessibility_private::MoveMagnifierToRect::Params> params =
       accessibility_private::MoveMagnifierToRect::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
-  accessibility_private::ScreenRect rect = std::move(params->rect);
-  gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
+  if (!features::IsMagnifierNewFocusFollowingEnabled()) {
+    return RespondNow(NoArguments());
+  }
+  gfx::Rect bounds(params->rect.left, params->rect.top, params->rect.width,
+                   params->rect.height);
 
   chromeos::MagnificationManager* magnification_manager =
       chromeos::MagnificationManager::Get();
@@ -501,6 +521,12 @@ AccessibilityPrivateUpdateSwitchAccessBubbleFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction
+AccessibilityPrivateActivatePointScanFunction::Run() {
+  ash::AccessibilityController::Get()->ActivatePointScan();
+  return RespondNow(NoArguments());
+}
+
 AccessibilityPrivateGetBatteryDescriptionFunction::
     AccessibilityPrivateGetBatteryDescriptionFunction() {}
 
@@ -509,7 +535,7 @@ AccessibilityPrivateGetBatteryDescriptionFunction::
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateGetBatteryDescriptionFunction::Run() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       ash::AccessibilityController::Get()->GetBatteryDescription())));
 }
 
@@ -547,6 +573,50 @@ AccessibilityPrivatePerformAcceleratorActionFunction::Run() {
 
   ash::AccessibilityController::Get()->PerformAcceleratorAction(
       accelerator_action);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateIsFeatureEnabledFunction::Run() {
+  std::unique_ptr<accessibility_private::IsFeatureEnabled::Params> params =
+      accessibility_private::IsFeatureEnabled::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  accessibility_private::AccessibilityFeature params_feature = params->feature;
+  bool enabled;
+  switch (params_feature) {
+    case accessibility_private::AccessibilityFeature::
+        ACCESSIBILITY_FEATURE_SELECTTOSPEAKNAVIGATIONCONTROL:
+      enabled = ::features::IsSelectToSpeakNavigationControlEnabled();
+      break;
+    case accessibility_private::AccessibilityFeature::
+        ACCESSIBILITY_FEATURE_NONE:
+      return RespondNow(Error("Unrecognized feature"));
+  }
+
+  return RespondNow(OneArgument(base::Value(enabled)));
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateUpdateSelectToSpeakPanelFunction::Run() {
+  std::unique_ptr<accessibility_private::UpdateSelectToSpeakPanel::Params>
+      params = accessibility_private::UpdateSelectToSpeakPanel::Params::Create(
+          *args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (!params->show) {
+    ash::AccessibilityController::Get()->HideSelectToSpeakPanel();
+    return RespondNow(NoArguments());
+  }
+
+  if (!params->anchor || !params->is_paused)
+    return RespondNow(Error("Required parameters missing to show panel."));
+
+  const gfx::Rect anchor =
+      gfx::Rect(params->anchor->left, params->anchor->top,
+                params->anchor->width, params->anchor->height);
+  ash::AccessibilityController::Get()->ShowSelectToSpeakPanel(
+      anchor, *params->is_paused);
+
   return RespondNow(NoArguments());
 }
 

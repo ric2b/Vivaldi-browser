@@ -169,7 +169,7 @@ class CORE_EXPORT LayoutReplaced : public LayoutBox {
 
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutReplaced || LayoutBox::IsOfType(type);
+    return type == kLayoutObjectReplaced || LayoutBox::IsOfType(type);
   }
 
  private:
@@ -183,7 +183,12 @@ class CORE_EXPORT LayoutReplaced : public LayoutBox {
   mutable LayoutSize intrinsic_size_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutReplaced, IsLayoutReplaced());
+template <>
+struct DowncastTraits<LayoutReplaced> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsLayoutReplaced();
+  }
+};
 
 }  // namespace blink
 

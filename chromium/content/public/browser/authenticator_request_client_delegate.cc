@@ -88,6 +88,14 @@ AuthenticatorRequestClientDelegate::GetTouchIdAuthenticatorConfig() {
 }
 #endif  // defined(OS_MAC)
 
+#if defined(OS_CHROMEOS)
+AuthenticatorRequestClientDelegate::ChromeOSGenerateRequestIdCallback
+AuthenticatorRequestClientDelegate::GetGenerateRequestIdCallback(
+    RenderFrameHost* render_frame_host) {
+  return base::NullCallback();
+}
+#endif
+
 base::Optional<bool> AuthenticatorRequestClientDelegate::
     IsUserVerifyingPlatformAuthenticatorAvailableOverride() {
   return base::nullopt;
@@ -135,9 +143,7 @@ void AuthenticatorRequestClientDelegate::StartBioEnrollment(
 void AuthenticatorRequestClientDelegate::OnSampleCollected(
     int bio_samples_remaining) {}
 
-void AuthenticatorRequestClientDelegate::FinishCollectToken() {
-  NOTREACHED();
-}
+void AuthenticatorRequestClientDelegate::FinishCollectToken() {}
 
 void AuthenticatorRequestClientDelegate::OnRetryUserVerification(int attempts) {
 }

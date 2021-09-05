@@ -30,9 +30,6 @@ const char kAllowCrossOriginAuthPrompt[]    = "allow-cross-origin-auth-prompt";
 // extension API.
 const char kAllowHttpScreenCapture[] = "allow-http-screen-capture";
 
-// Don't block outdated plugins.
-const char kAllowOutdatedPlugins[]          = "allow-outdated-plugins";
-
 // Allows profiles to be created outside of the user data dir.
 // TODO(https://crbug.com/1060366): Various places in Chrome assume that all
 // profiles are within the user data dir. Some tests need to violate that
@@ -185,9 +182,6 @@ const char kDisableAutoReload[] = "disable-auto-reload";
 // This is for use when doing network performance testing to avoid noise in the
 // measurements.
 const char kDisableBackgroundNetworking[]   = "disable-background-networking";
-
-// Disables the bundled PPAPI version of Flash.
-const char kDisableBundledPpapiFlash[]      = "disable-bundled-ppapi-flash";
 
 // Disables the client-side phishing detection feature. Note that even if
 // client-side phishing detection is enabled, it will only be active if the
@@ -439,13 +433,10 @@ const char kPermissionRequestApiScope[]     = "permission-request-api-scope";
 // TODO(bauerb): Remove when this flag is not needed anymore.
 const char kPermissionRequestApiUrl[]       = "permission-request-api-url";
 
-// Use the PPAPI (Pepper) Flash found at the given path.
-const char kPpapiFlashPath[]                = "ppapi-flash-path";
-
-// Report the given version for the PPAPI (Pepper) Flash. The version should be
-// numbers separated by '.'s (e.g., "12.3.456.78"). If not specified, it
-// defaults to "10.2.999.999".
-const char kPpapiFlashVersion[]             = "ppapi-flash-version";
+// Used to mock the response received from the Web Permission Prediction
+// Service. Used for testing.
+const char kPredictionServiceMockLikelihood[] =
+    "prediction-service-mock-likelihood";
 
 // Use IPv6 only for privet HTTP.
 const char kPrivetIPv6Only[]                   = "privet-ipv6-only";
@@ -649,9 +640,6 @@ const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
 // Sets the market URL for Chrome for use in testing.
 const char kMarketUrlForTesting[] = "market-url-for-testing";
 
-// Specifies a base URL for the trusted CDN for tests.
-const char kTrustedCDNBaseURLForTests[] = "trusted-cdn-base-url-for-tests";
-
 // Custom WebAPK server URL for the sake of testing.
 const char kWebApkServerUrl[] = "webapk-server-url";
 #endif  // defined(OS_ANDROID)
@@ -817,11 +805,6 @@ const char kGuest[] = "guest";
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-// Enables Machine level user cloud policy on Chromium build. This policy is
-// always enabled on the branded builds.
-const char kEnableChromeBrowserCloudManagement[] =
-    "enable-chrome-browser-cloud-management";
-
 // Uses the system default printer as the initially selected destination in
 // print preview, instead of the most recently used destination.
 const char kUseSystemDefaultPrinter[] = "use-system-default-printer";

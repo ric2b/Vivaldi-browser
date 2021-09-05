@@ -53,6 +53,7 @@ using LargestContentState =
 using LargestContentType =
     page_load_metrics::ContentfulPaintTimingInfo::LargestContentType;
 using PageLoad = ukm::builders::PageLoad;
+using MobileFriendliness = ukm::builders::MobileFriendliness;
 using PageLoad_Internal = ukm::builders::PageLoad_Internal;
 
 const char kTestUrl1[] = "https://www.google.com/";
@@ -120,23 +121,21 @@ class UkmPageLoadMetricsObserverTest
     tester()->test_ukm_recorder().ExpectEntrySourceHasUrl(entry,
                                                           GURL(kTestUrl1));
     tester()->test_ukm_recorder().ExpectEntryMetric(
-        entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName,
+        entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name,
         value);
     tester()->test_ukm_recorder().ExpectEntryMetric(
-        entry,
-        PageLoad::
-            kPaintTiming_NavigationToExperimentalLargestContentfulPaintName,
+        entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName,
         value);
     if (test_main_frame) {
       tester()->test_ukm_recorder().ExpectEntryMetric(
           entry,
           PageLoad::
-              kPaintTiming_NavigationToLargestContentfulPaint_MainFrameName,
+              kPaintTiming_NavigationToLargestContentfulPaint2_MainFrameName,
           value);
       tester()->test_ukm_recorder().ExpectEntryMetric(
           entry,
           PageLoad::
-              kPaintTiming_NavigationToExperimentalLargestContentfulPaint_MainFrameName,
+              kPaintTiming_NavigationToLargestContentfulPaint_MainFrameName,
           value);
     }
     EXPECT_TRUE(tester()->test_ukm_recorder().EntryHasMetric(
@@ -178,19 +177,17 @@ class UkmPageLoadMetricsObserverTest
     EXPECT_EQ(1ul, merged_entries.size());
     const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
     EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
+        entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name));
+    EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
         entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName));
     EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
         entry,
         PageLoad::
-            kPaintTiming_NavigationToExperimentalLargestContentfulPaintName));
+            kPaintTiming_NavigationToLargestContentfulPaint2_MainFrameName));
     EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
         entry,
         PageLoad::
             kPaintTiming_NavigationToLargestContentfulPaint_MainFrameName));
-    EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-        entry,
-        PageLoad::
-            kPaintTiming_NavigationToExperimentalLargestContentfulPaint_MainFrameName));
 
     std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> internal_merged_entries =
         tester()->test_ukm_recorder().GetMergedEntriesByName(
@@ -478,7 +475,7 @@ TEST_F(UkmPageLoadMetricsObserverTest,
   EXPECT_EQ(1ul, merged_entries.size());
   const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-      entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName));
+      entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name));
   tester()->test_ukm_recorder().ExpectEntryMetric(
       entry, PageLoad::kNavigation_PageEndReason2Name,
       page_load_metrics::END_CLOSE);
@@ -553,7 +550,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, FCPPlusPlus_DiscardBackgroundResult) {
   EXPECT_EQ(1ul, merged_entries.size());
   const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-      entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName));
+      entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name));
   tester()->test_ukm_recorder().ExpectEntryMetric(
       entry, PageLoad::kNavigation_PageEndReason2Name,
       page_load_metrics::END_CLOSE);
@@ -809,11 +806,11 @@ TEST_F(UkmPageLoadMetricsObserverTest,
   const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
       entry,
-      PageLoad::kPaintTiming_NavigationToLargestContentfulPaint_MainFrameName));
+      PageLoad::
+          kPaintTiming_NavigationToLargestContentfulPaint2_MainFrameName));
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
       entry,
-      PageLoad::
-          kPaintTiming_NavigationToExperimentalLargestContentfulPaint_MainFrameName));
+      PageLoad::kPaintTiming_NavigationToLargestContentfulPaint_MainFrameName));
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest,
@@ -1032,6 +1029,40 @@ TEST_F(UkmPageLoadMetricsObserverTest, InputTiming) {
     tester()->test_ukm_recorder().ExpectEntryMetric(
         kv.second.get(),
         PageLoad::kInteractiveTiming_TotalAdjustedInputDelayName, 10);
+  }
+}
+
+TEST_F(UkmPageLoadMetricsObserverTest, MobileFriendliness) {
+  NavigateAndCommit(GURL(kTestUrl1));
+  blink::MobileFriendliness mobile_friendliness;
+  mobile_friendliness.viewport_hardcoded_width = 533;
+  mobile_friendliness.viewport_initial_scale = 0.123456;
+  mobile_friendliness.allow_user_zoom = true;
+  const int expected_viewport_hardcoded_width = 520;
+  const double expected_viewport_initial_scale = 1;
+
+  tester()->SimulateMobileFriendlinessUpdate(mobile_friendliness);
+
+  // Simulate closing the tab.
+  DeleteContents();
+
+  std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
+      tester()->test_ukm_recorder().GetMergedEntriesByName(
+          MobileFriendliness::kEntryName);
+  EXPECT_EQ(1ul, merged_entries.size());
+  for (const auto& kv : merged_entries) {
+    tester()->test_ukm_recorder().ExpectEntrySourceHasUrl(kv.second.get(),
+                                                          GURL(kTestUrl1));
+    tester()->test_ukm_recorder().ExpectEntryMetric(
+        kv.second.get(), MobileFriendliness::kViewportDeviceWidthName, false);
+    tester()->test_ukm_recorder().ExpectEntryMetric(
+        kv.second.get(), MobileFriendliness::kViewportHardcodedWidthName,
+        expected_viewport_hardcoded_width);
+    tester()->test_ukm_recorder().ExpectEntryMetric(
+        kv.second.get(), MobileFriendliness::kViewportInitialScaleX10Name,
+        expected_viewport_initial_scale);
+    tester()->test_ukm_recorder().ExpectEntryMetric(
+        kv.second.get(), MobileFriendliness::kAllowUserZoomName, true);
   }
 }
 
@@ -1424,7 +1455,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
   NavigateAndCommit(GURL(kTestUrl1));
 
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
-                                                              0);
+                                                              0, {});
   tester()->SimulateRenderDataUpdate(render_data);
 
   // Simulate hiding the tab (the report should include shifts after hide).
@@ -1545,7 +1576,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstabilitySubframeAggregation) {
 
   // Simulate layout instability in the main frame.
   page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
-                                                              0);
+                                                              0, {});
   tester()->SimulateRenderDataUpdate(render_data);
 
   RenderFrameHost* subframe =
@@ -1859,4 +1890,96 @@ TEST_F(UkmPageLoadMetricsObserverTest, NavigationTiming) {
                                                                metric));
     }
   }
+}
+
+class CLSUkmPageLoadMetricsObserverTest
+    : public UkmPageLoadMetricsObserverTest {
+ protected:
+  void RunBeforeInputOrScrollCase(bool input_in_subframe);
+  void SimulateShiftDelta(float delta, content::RenderFrameHost* frame);
+  RenderFrameHost* NavigateSubframe();
+  void VerifyUKMBuckets(int total, int before_input_or_scroll);
+  void InitPageLoadTimingWithInputOrScroll(
+      page_load_metrics::mojom::PageLoadTiming& timing,
+      base::TimeDelta timestamp);
+};
+
+void CLSUkmPageLoadMetricsObserverTest::SimulateShiftDelta(
+    float delta,
+    content::RenderFrameHost* frame) {
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(delta, delta, 0,
+                                                              0, 0, 0, {});
+  tester()->SimulateRenderDataUpdate(render_data, frame);
+}
+
+RenderFrameHost* CLSUkmPageLoadMetricsObserverTest::NavigateSubframe() {
+  return NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL(kSubframeTestUrl),
+      RenderFrameHostTester::For(web_contents()->GetMainFrame())
+          ->AppendChild("subframe"));
+}
+
+void CLSUkmPageLoadMetricsObserverTest::VerifyUKMBuckets(
+    int total,
+    int before_input_or_scroll) {
+  const char* total_name =
+      PageLoad::kLayoutInstability_CumulativeShiftScoreName;
+  const char* before_input_or_scroll_name =
+      PageLoad::kLayoutInstability_CumulativeShiftScore_BeforeInputOrScrollName;
+
+  const auto& ukm_recorder = tester()->test_ukm_recorder();
+  std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
+      ukm_recorder.GetMergedEntriesByName(PageLoad::kEntryName);
+  EXPECT_EQ(1ul, merged_entries.size());
+
+  for (const auto& kv : merged_entries) {
+    const ukm::mojom::UkmEntry* ukm_entry = kv.second.get();
+    ukm_recorder.ExpectEntrySourceHasUrl(ukm_entry, GURL(kTestUrl1));
+
+    ukm_recorder.ExpectEntryMetric(ukm_entry, total_name, total);
+    ukm_recorder.ExpectEntryMetric(ukm_entry, before_input_or_scroll_name,
+                                   before_input_or_scroll);
+  }
+}
+
+void CLSUkmPageLoadMetricsObserverTest::InitPageLoadTimingWithInputOrScroll(
+    page_load_metrics::mojom::PageLoadTiming& timing,
+    base::TimeDelta timestamp) {
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  PopulateRequiredTimingFields(&timing);
+  timing.paint_timing->first_input_or_scroll_notified_timestamp = timestamp;
+}
+
+void CLSUkmPageLoadMetricsObserverTest::RunBeforeInputOrScrollCase(
+    bool input_in_subframe) {
+  NavigateAndCommit(GURL(kTestUrl1));
+
+  RenderFrameHost* main_frame = web_contents()->GetMainFrame();
+  RenderFrameHost* subframe = NavigateSubframe();
+
+  SimulateShiftDelta(1.0, main_frame);
+  SimulateShiftDelta(1.5, subframe);
+
+  // Simulate input.
+  page_load_metrics::mojom::PageLoadTiming timing;
+  InitPageLoadTimingWithInputOrScroll(timing, base::TimeDelta::FromSeconds(1));
+  tester()->SimulateTimingUpdate(timing,
+                                 input_in_subframe ? subframe : main_frame);
+
+  SimulateShiftDelta(1.2, main_frame);
+  SimulateShiftDelta(0.8, subframe);
+
+  DeleteContents();
+
+  // Total CLS: 1.0 + 1.5 + 1.2 + 0.8 = 4.5 (bucket 450).
+  // Before input: 1.0 + 1.5 = 2.5 (bucket 250).
+  VerifyUKMBuckets(450, 250);
+}
+
+TEST_F(CLSUkmPageLoadMetricsObserverTest, BeforeInputOrScroll_Main) {
+  RunBeforeInputOrScrollCase(false);
+}
+
+TEST_F(CLSUkmPageLoadMetricsObserverTest, BeforeInputOrScroll_Sub) {
+  RunBeforeInputOrScrollCase(true);
 }

@@ -78,8 +78,10 @@
 /flac
 /flatbuffers/src
 /fontconfig/src
+/freetype-testing/src
 /freetype/src
 /fuchsia-sdk/images
+/fuchsia-sdk/images-internal
 /fuchsia-sdk/sdk
 /gles2_conform
 /glfw/src
@@ -255,3 +257,4 @@
 /xdg-utils
 /xstream/lib/
 /xulrunner-sdk
+/zstd

@@ -59,15 +59,6 @@ enum class NGTableCellChildLayoutMode {
   kLayout              // A table cell child, in the "layout" mode.
 };
 
-// Percentages are frequently the same as the available-size, zero, or
-// indefinite (thanks non-quirks mode)! This enum encodes this information.
-enum NGPercentageStorage {
-  kSameAsAvailable,
-  kZero,
-  kIndefinite,
-  kRareDataPercentage
-};
-
 // Some layout algorithms (flow, tables) calculate their alignment baseline
 // differently if they are within an atomic-inline context.
 //
@@ -96,6 +87,15 @@ class CORE_EXPORT NGConstraintSpace final {
   USING_FAST_MALLOC(NGConstraintSpace);
 
  public:
+  // Percentages are frequently the same as the available-size, zero, or
+  // indefinite (thanks non-quirks mode)! This enum encodes this information.
+  enum NGPercentageStorage {
+    kSameAsAvailable,
+    kZero,
+    kIndefinite,
+    kRareDataPercentage
+  };
+
   // To ensure that the bfc_offset_, rare_data_ union doesn't get polluted,
   // always initialize the bfc_offset_.
   NGConstraintSpace() : bfc_offset_() {}
@@ -318,6 +318,11 @@ class CORE_EXPORT NGConstraintSpace final {
 
   bool IsTableCellHiddenForPaint() const {
     return HasRareData() ? rare_data_->IsTableCellHiddenForPaint() : false;
+  }
+
+  bool IsTableCellWithCollapsedBorders() const {
+    return HasRareData() ? rare_data_->IsTableCellWithCollapsedBorders()
+                         : false;
   }
 
   const NGTableConstraintSpaceData* TableData() const {
@@ -603,6 +608,9 @@ class CORE_EXPORT NGConstraintSpace final {
     return HasRareData() ? rare_data_->ClearanceOffset() : LayoutUnit::Min();
   }
 
+  // Return true if this is participating within a -webkit-line-clamp context.
+  bool IsLineClampContext() const { return bitfields_.is_line_clamp_context; }
+
   base::Optional<int> LinesUntilClamp() const {
     return HasRareData() ? rare_data_->LinesUntilClamp() : base::nullopt;
   }
@@ -675,6 +683,12 @@ class CORE_EXPORT NGConstraintSpace final {
       return false;
 
     return true;
+  }
+
+  void ReplaceTableConstraintSpaceData(
+      const NGTableConstraintSpaceData& table_data) {
+    DCHECK(HasRareData());
+    rare_data_->ReplaceTableConstraintSpaceData(table_data);
   }
 
   String ToString() const;
@@ -967,6 +981,15 @@ class CORE_EXPORT NGConstraintSpace final {
       EnsureTableCellData()->is_hidden_for_paint = is_hidden_for_paint;
     }
 
+    bool IsTableCellWithCollapsedBorders() const {
+      return data_union_type == kTableCellData &&
+             table_cell_data_.has_collapsed_borders;
+    }
+
+    void SetIsTableCellWithCollapsedBorders(bool has_collapsed_borders) {
+      EnsureTableCellData()->has_collapsed_borders = has_collapsed_borders;
+    }
+
     void SetTableRowData(
         scoped_refptr<const NGTableConstraintSpaceData> table_data,
         wtf_size_t row_index) {
@@ -979,6 +1002,14 @@ class CORE_EXPORT NGConstraintSpace final {
         wtf_size_t section_index) {
       EnsureTableSectionData()->table_data = std::move(table_data);
       EnsureTableSectionData()->section_index = section_index;
+    }
+
+    void ReplaceTableConstraintSpaceData(
+        const NGTableConstraintSpaceData& table_data) {
+      DCHECK_EQ(data_union_type, kTableRowData);
+      DCHECK(table_data.IsTableSpecificDataEqual(
+          *(EnsureTableRowData()->table_data)));
+      EnsureTableRowData()->table_data = &table_data;
     }
 
     const NGTableConstraintSpaceData* TableData() {
@@ -1078,24 +1109,24 @@ class CORE_EXPORT NGConstraintSpace final {
 
     struct TableCellData {
       bool MaySkipLayout(const TableCellData& other) const {
+        // NOTE: We don't compare |table_cell_alignment_baseline| as it is
+        // still possible to hit the cache if this differs.
         return table_cell_borders == other.table_cell_borders &&
                table_cell_intrinsic_padding_block_start ==
                    other.table_cell_intrinsic_padding_block_start &&
                table_cell_intrinsic_padding_block_end ==
                    other.table_cell_intrinsic_padding_block_end &&
-               table_cell_alignment_baseline ==
-                   other.table_cell_alignment_baseline &&
                table_cell_column_index == other.table_cell_column_index &&
-               is_hidden_for_paint == other.is_hidden_for_paint;
+               is_hidden_for_paint == other.is_hidden_for_paint &&
+               has_collapsed_borders == other.has_collapsed_borders;
       }
 
       bool IsInitialForMaySkipLayout() const {
         return table_cell_borders == NGBoxStrut() &&
                table_cell_intrinsic_padding_block_start == LayoutUnit() &&
                table_cell_intrinsic_padding_block_end == LayoutUnit() &&
-               table_cell_column_index == kNotFound &&
-               table_cell_alignment_baseline == base::nullopt &&
-               !is_hidden_for_paint;
+               table_cell_column_index == kNotFound && !is_hidden_for_paint &&
+               !has_collapsed_borders;
       }
 
       NGBoxStrut table_cell_borders;
@@ -1104,12 +1135,13 @@ class CORE_EXPORT NGConstraintSpace final {
       wtf_size_t table_cell_column_index = kNotFound;
       base::Optional<LayoutUnit> table_cell_alignment_baseline;
       bool is_hidden_for_paint = false;
+      bool has_collapsed_borders = false;
     };
 
     struct TableRowData {
       bool MaySkipLayout(const TableRowData& other) const {
-        return table_data->EqualTableSpecificData(other.table_data.get()) &&
-               table_data->MaySkipRowLayout(other.table_data.get(), row_index);
+        return table_data->IsTableSpecificDataEqual(*other.table_data) &&
+               table_data->MaySkipRowLayout(*other.table_data, row_index);
       }
       bool IsInitialForMaySkipLayout() const {
         return !table_data && row_index == kNotFound;
@@ -1121,8 +1153,8 @@ class CORE_EXPORT NGConstraintSpace final {
 
     struct TableSectionData {
       bool MaySkipLayout(const TableSectionData& other) const {
-        return table_data->EqualTableSpecificData(other.table_data.get()) &&
-               table_data->MaySkipSectionLayout(other.table_data.get(),
+        return table_data->IsTableSpecificDataEqual(*other.table_data) &&
+               table_data->MaySkipSectionLayout(*other.table_data,
                                                 section_index);
       }
       bool IsInitialForMaySkipLayout() const {
@@ -1232,18 +1264,21 @@ class CORE_EXPORT NGConstraintSpace final {
     DISALLOW_NEW();
 
    public:
-    Bitfields() : Bitfields(WritingMode::kHorizontalTb) {}
+    Bitfields()
+        : Bitfields({WritingMode::kHorizontalTb, TextDirection::kLtr}) {}
 
-    explicit Bitfields(WritingMode writing_mode)
+    explicit Bitfields(WritingDirectionMode writing_direction)
         : has_rare_data(false),
           adjoining_object_types(static_cast<unsigned>(kAdjoiningNone)),
-          writing_mode(static_cast<unsigned>(writing_mode)),
-          direction(static_cast<unsigned>(TextDirection::kLtr)),
+          writing_mode(
+              static_cast<unsigned>(writing_direction.GetWritingMode())),
+          direction(static_cast<unsigned>(writing_direction.Direction())),
           is_table_cell(false),
           is_legacy_table_cell(false),
           is_anonymous(false),
           is_new_formatting_context(false),
           is_orthogonal_writing_mode_root(false),
+          is_line_clamp_context(false),
           is_painted_atomically(false),
           use_first_line_style(false),
           ancestor_has_clearance_past_adjoining_floats(false),
@@ -1271,6 +1306,7 @@ class CORE_EXPORT NGConstraintSpace final {
              is_new_formatting_context == other.is_new_formatting_context &&
              is_orthogonal_writing_mode_root ==
                  other.is_orthogonal_writing_mode_root &&
+             is_line_clamp_context == other.is_line_clamp_context &&
              is_painted_atomically == other.is_painted_atomically &&
              use_first_line_style == other.use_first_line_style &&
              ancestor_has_clearance_past_adjoining_floats ==
@@ -1299,6 +1335,7 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned is_anonymous : 1;
     unsigned is_new_formatting_context : 1;
     unsigned is_orthogonal_writing_mode_root : 1;
+    unsigned is_line_clamp_context : 1;
 
     unsigned is_painted_atomically : 1;
     unsigned use_first_line_style : 1;
@@ -1321,8 +1358,8 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned replaced_percentage_block_storage : 2;   // NGPercentageStorage
   };
 
-  explicit NGConstraintSpace(WritingMode writing_mode)
-      : bfc_offset_(), bitfields_(writing_mode) {}
+  explicit NGConstraintSpace(WritingDirectionMode writing_direction)
+      : bfc_offset_(), bitfields_(writing_direction) {}
 
   inline bool HasRareData() const { return bitfields_.has_rare_data; }
 

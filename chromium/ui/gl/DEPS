@@ -6,6 +6,7 @@ include_rules = [
   "+ui/events",
   "+ui/base/x",
   "+ui/gfx",
+  "+ui/ozone/buildflags.h",
 ]
 
 specific_include_rules = {
@@ -20,6 +21,9 @@ specific_include_rules = {
   "gl_angle_util_win.cc": [
     "+third_party/angle/include/EGL/egl.h",
     "+third_party/angle/include/EGL/eglext.h",
+  ],
+  "gl_fence_win_unittest.cc": [
+    "+media/base/win/d3d11_mocks.h",
   ],
   "gl_surface_egl_unittest.cc": [
     "+ui/platform_window",

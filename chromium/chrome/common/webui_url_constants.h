@@ -219,6 +219,8 @@ extern const char kChromeUIArcGraphicsTracingHost[];
 extern const char kChromeUIArcGraphicsTracingURL[];
 extern const char kChromeUIArcOverviewTracingHost[];
 extern const char kChromeUIArcOverviewTracingURL[];
+extern const char kChromeUIArcPowerControlHost[];
+extern const char kChromeUIArcPowerControlURL[];
 extern const char kChromeUIAssistantOptInHost[];
 extern const char kChromeUIAssistantOptInURL[];
 extern const char kChromeUIAppDisabledHost[];
@@ -237,7 +239,6 @@ extern const char kChromeUICrostiniUpgraderHost[];
 extern const char kChromeUICrostiniUpgraderUrl[];
 extern const char kChromeUICryptohomeHost[];
 extern const char kChromeUIDeviceEmulatorHost[];
-extern const char kChromeUIDiscoverURL[];
 extern const char kChromeUIFirstRunHost[];
 extern const char kChromeUIFirstRunURL[];
 extern const char kChromeUIIntenetConfigDialogURL[];
@@ -291,15 +292,17 @@ bool IsSystemWebUIHost(base::StringPiece host);
 
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+extern const char kChromeUIWebUIJsExceptionHost[];
+extern const char kChromeUIWebUIJsExceptionURL[];
+#endif
+
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 extern const char kChromeUIDiscardsHost[];
 extern const char kChromeUIDiscardsURL[];
 extern const char kChromeUIHatsHost[];
 extern const char kChromeUIHatsURL[];
-extern const char kChromeUIProfilePickerHost[];
-extern const char kChromeUIProfilePickerUrl[];
-extern const char kChromeUIProfilePickerStartupQuery[];
 #endif
 
 #if !defined(OS_ANDROID)
@@ -320,6 +323,11 @@ extern const char kChromeUISandboxHost[];
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 extern const char kChromeUIBrowserSwitchHost[];
 extern const char kChromeUIBrowserSwitchURL[];
+extern const char kChromeUIProfileCustomizationHost[];
+extern const char kChromeUIProfileCustomizationURL[];
+extern const char kChromeUIProfilePickerHost[];
+extern const char kChromeUIProfilePickerUrl[];
+extern const char kChromeUIProfilePickerStartupQuery[];
 #endif
 
 #if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(TOOLKIT_VIEWS)) || \

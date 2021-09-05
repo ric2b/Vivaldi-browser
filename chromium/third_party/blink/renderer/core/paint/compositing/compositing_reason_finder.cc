@@ -134,7 +134,7 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
 
   reasons |= CompositingReasonsFor3DTransform(object);
 
-  auto* layer = ToLayoutBoxModelObject(object).Layer();
+  auto* layer = To<LayoutBoxModelObject>(object).Layer();
   if (layer->Has3DTransformedDescendant()) {
     // Perspective (specified either by perspective or transform properties)
     // with 3d descendants need a render surface for flattening purposes.
@@ -195,15 +195,10 @@ CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(
 
   const ComputedStyle& style = object.StyleRef();
   auto reasons = CompositingReasonsForAnimation(object);
-  if (reasons != CompositingReason::kNone &&
-      To<SVGElement>(object.GetNode())->HasMainThreadAnimations()) {
-    // TODO(crbug.com/1134652): For now we disable compositing if there are
-    // both compositor-supported animations and main-thread animations.
-    // The better way might be to allow compositing but disable composited
-    // animation.
-    return CompositingReason::kNone;
-  }
   reasons |= CompositingReasonsForWillChange(style);
+  // Exclude will-change for other properties some of which don't apply to SVG
+  // children, e.g. 'top'.
+  reasons &= ~CompositingReason::kWillChangeOther;
   if (style.HasBackdropFilter())
     reasons |= CompositingReason::kBackdropFilter;
   return reasons;
@@ -295,27 +290,10 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
   return direct_reasons;
 }
 
-static bool SupportsCompositedTransformAnimation(const LayoutObject& object) {
-  if (object.IsSVGChild()) {
-    if (!RuntimeEnabledFeatures::CompositeSVGEnabled())
-      return false;
-    // Embedded SVG doesn't support transforms for now.
-    if (object.IsSVGViewportContainer())
-      return false;
-    // TODO(crbug.com/1134775): If a foreignObject's effect zoom is not 1,
-    // its transform node contains an additional scale, and composited
-    // animation would remove the scale.
-    if (object.IsSVGForeignObject() && object.StyleRef().EffectiveZoom() != 1)
-      return false;
-    // TODO(crbug.com/1134775): Similarly, composited animation would also
-    // remove the additional translation of LayoutSVGTransformableContainer.
-    if (object.IsSVGTransformableContainer() &&
-        !ToLayoutSVGTransformableContainer(object)
-             .AdditionalTranslation()
-             .IsZero())
-      return false;
-    return true;
-  }
+static bool ObjectTypeSupportsCompositedTransformAnimation(
+    const LayoutObject& object) {
+  if (object.IsSVGChild())
+    return RuntimeEnabledFeatures::CompositeSVGEnabled();
   // Transforms don't apply on non-replaced inline elements.
   return object.IsBox();
 }
@@ -328,7 +306,7 @@ CompositingReasons CompositingReasonFinder::CompositingReasonsForAnimation(
     return reasons;
 
   if (style.HasCurrentTransformAnimation() &&
-      SupportsCompositedTransformAnimation(object))
+      ObjectTypeSupportsCompositedTransformAnimation(object))
     reasons |= CompositingReason::kActiveTransformAnimation;
   if (style.HasCurrentOpacityAnimation())
     reasons |= CompositingReason::kActiveOpacityAnimation;

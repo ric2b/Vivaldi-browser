@@ -885,8 +885,14 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_SIGN_IN_DETAIL_TEXT" desc="Invite the user to sign-in and explains the benefit. [iOS only]">
         Sync and personalize across devices.
       </message>
-      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE" desc="Title for the view in the Settings for enabling/disabling Sync and all the Google services. [Length: 26em] [iOS only]">
+      <message name="IDS_IOS_GOOGLE_SERVICES_SYNC_SETTINGS_TITLE" desc="Title for the view in the Settings for enabling/disabling Sync and all the Google services. [Length: 26em] [iOS only]">
         Sync and Google Services
+      </message>
+      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE" desc="Title for the view in the Settings for enabling/disabling Google services. [Length: 26em] [iOS only]">
+        Google Services
+      </message>
+      <message name="IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE" desc="Title for the view in the Settings for enabling/disabling Sync. [Length: 26em] [iOS only]">
+        Sync
       </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_DISABLBED_BY_ADMINISTRATOR_STATUS" desc="Error displayed when the sync is disabled by the enterprise policy. The user doesn't have a regular gmail account.">
         Sync is disabled by your administrator
@@ -987,6 +993,9 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_TITLE" desc="Siri Shortcut for search in chrome title [iOS only].">
           Search in Chrome
       </message>
+      <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_SUGGEST_TITLE" desc="Siri Shortcut for search in chrome title [iOS only].">
+        Search in Chrome
+      </message>
       <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_PARAMETER_COMBINATION_TITLE" desc="Apple Shortcuts App's format for displaying the user search phrase input, shown by the Siri Shortcut app when the
           user is adding or editing a Search in Chrome shortcut[iOS only].">
           Search ${searchPhrase} in Chrome
@@ -1020,6 +1029,12 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       </message>
       <message name="IDS_IOS_KEYBOARD_PREVIOUS_TAB" desc="Title of the keyboard shortcut to switch to the previous tab in the tab strip. [Length: 20 em] [iOS only]">
         Previous Tab
+      </message>
+      <message name="IDS_IOS_LOCATION_MODAL_TITLE" desc="The title of the locaton permissions modal [Length: unlimited] [iOS only].">
+          Use Your Current Location
+      </message>
+      <message name="IDS_IOS_LOCATION_MODAL_PRIMARY_BUTTON" desc="The primary button of the locaton permissions modal [Length: unlimited] [iOS only].">
+          Allow Location...
       </message>
       <message name="IDS_IOS_LONG_PRESS_TOOLBAR_IPH_PROMOTION_TEXT" desc="Text for the LongPress Toolbar Tip in-product help promotion, explaining that the user can long press on the toolbar's button to display more options. [iOS only]">
         Touch &amp; hold for more tab options
@@ -1750,6 +1765,9 @@ Follow the steps below:
       <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD" desc="Button which is shown on Password Details Screen when password is compromised. [iOS only]" meaning="Telling user to change password on a website since it is compromised.">
         Change Password on Website
       </message>
+      <message name="IDS_IOS_DELETE_PASSWORD_DESCRIPTION" desc="Message at the top of the confirmation alert when the user tapped delete password button. [iOS only]" meaning="Explaining to the user that deleting password locally won't delete account on a website.">
+        Deleting this password will not delete your account on <ph name="WEBSITE">$1<ex>twitter.com</ex></ph>.
+      </message>
       <message name="IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION" desc="Message on top of the confirmation alert when the user tapped delete password button. [iOS only]" meaning="Explaining to the user that deleting password locally won't delete account on a website.">
         Deleting this password will not delete your account on <ph name="WEBSITE">$1<ex>twitter.com</ex></ph>. Change your password on <ph name="WEBSITE">$1<ex>twitter.com</ex></ph> to keep it safe from others.
       </message>
@@ -1762,8 +1780,22 @@ Follow the steps below:
       <message name="IDS_IOS_CONFIRM_PASSWORD_EDIT" desc="Confirm button inside confirmation alert when the user is trying to edit password [iOS only]" meaning="Save edited password">
         Save Password
       </message>
+      <message name="IDS_IOS_USERNAME_ALREADY_USED" desc="Error description telling the user that entered username is already used for this site [iOS only]">
+        You already saved this username for this site
+      </message>
       <message name="IDS_IOS_CANCEL_PASSWORD_EDIT" desc="Cancel button inside confirmation alert when the user is trying to edit password [iOS only]" meaning="Cancels editing">
         Cancel
+      </message>
+      <message name="IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_TITLE" desc="Title for the confirmation dialog which is shown when user wants to use other passwords. [iOS only]">
+        Use other password
+      </message>
+      <message name="IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_DESCRIPTION" desc="Description for the confirmation dialog which is shown when user wants to use other passwords. [iOS only]">
+        If you trust <ph name="TIME">$1<ex>example.com</ex></ph>, you can use a saved password from another site.
+
+Try to use a unique password for every site.
+      </message>
+      <message name="IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_CONTINUE" desc="Action button for confirmation dialog which is shown when user wants to use other passwords. [iOS only]" meaning="User acknowledge warning and wants to proceed.">
+        Continue
       </message>
       <message name="IDS_IOS_LAST_COMPLETED_CHECK" desc="Footer for Password Check section which shows the timestamp of the last check." meaning="Time when passwords were checked last time.">
         Last checked <ph name="TIME">$1<ex>10 minutes ago</ex></ph>.
@@ -2070,6 +2102,12 @@ Follow the steps below:
       </message>
       <message name="IDS_IOS_SIGN_TRUSTED_VAULT_ERROR_DIALOG_MESSAGE" desc="Alert message to display an error after a reauthentication, related to IDS_IOS_SIGN_TRUSTED_VAULT_ERROR_DIALOG_TITLE [iOS only]">
         Error code: <ph name="ERROR_CODE">$1<ex>2</ex></ph>
+      </message>
+      <message name="IDS_IOS_SIGNIN_ACCOUNT_NOTIFICATION_TITLE" desc="Notification title for the user's signed-in state [iOS only]">
+      Signed in to Chrome
+      </message>
+      <message name="IDS_IOS_SIGNIN_ACCOUNT_NOTIFICATION_TITLE_WITH_USERNAME" desc="Notification title for the user's signed-in state that includes the user's full name [iOS only]">
+      Signed in as <ph name="USER">$1<ex>Jane Doe</ex></ph>
       </message>
       <message name="IDS_IOS_SPOTLIGHT_KEYWORD_EIGHT" desc="Keyword used in Spotlight that will be linked to the Chrome App. [iOS only]">
         Online

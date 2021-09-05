@@ -13,4 +13,12 @@ interface IWebLayerClient {
 
   // Since Version 86.
   Intent createImageDecoderServiceIntent() = 3;
+
+  // Since Version 88.
+  long getClassLoaderCreationTime() = 4;
+  long getContextCreationTime() = 5;
+  long getWebLayerLoaderCreationTime() = 6;
+  Intent createRemoteMediaServiceIntent() = 7;
+  int getPresentationApiNotificationId() = 8;
+  int getRemotePlaybackApiNotificationId() = 9;
 }

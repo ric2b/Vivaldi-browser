@@ -171,8 +171,8 @@ public class ShareIntentTest {
         RootUiCoordinator rootUiCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
             return new RootUiCoordinator(mockActivity, null,
                     mockActivity.getShareDelegateSupplier(), mockActivity.getActivityTabProvider(),
-                    null, null, mockActivity.getOverviewModeBehaviorSupplier(), null, null,
-                    new OneshotSupplierImpl<>());
+                    null, null, null, null, new OneshotSupplierImpl<>(),
+                    new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(), () -> null);
         });
         ShareHelper.setLastShareComponentName(new ComponentName("test.package", "test.activity"));
         // Skips the capture of screenshot and notifies with an empty file.

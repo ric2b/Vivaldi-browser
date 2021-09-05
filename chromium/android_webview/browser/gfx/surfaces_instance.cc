@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "android_webview/browser/gfx/aw_render_thread_context_provider.h"
-#include "android_webview/browser/gfx/aw_vulkan_context_provider.h"
 #include "android_webview/browser/gfx/deferred_gpu_command_service.h"
 #include "android_webview/browser/gfx/gpu_service_web_view.h"
 #include "android_webview/browser/gfx/output_surface_provider_webview.h"
@@ -61,7 +60,8 @@ scoped_refptr<SurfacesInstance> SurfacesInstance::GetOrCreateInstance() {
 
 SurfacesInstance::SurfacesInstance()
     : frame_sink_id_allocator_(kDefaultClientId),
-      frame_sink_id_(AllocateFrameSinkId()) {
+      frame_sink_id_(AllocateFrameSinkId()),
+      output_surface_provider_(nullptr) {
   // The SharedBitmapManager is null as we do not support or use software
   // compositing on Android.
   frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
@@ -73,20 +73,27 @@ SurfacesInstance::SurfacesInstance()
   support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
       this, frame_sink_manager_.get(), frame_sink_id_, is_root);
 
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+      display_controller = output_surface_provider_.CreateDisplayController();
   std::unique_ptr<viz::OutputSurface> output_surface =
-      output_surface_provider_.CreateOutputSurface();
+      output_surface_provider_.CreateOutputSurface(display_controller.get());
 
   begin_frame_source_ = std::make_unique<viz::StubBeginFrameSource>();
   auto scheduler = std::make_unique<viz::DisplayScheduler>(
       begin_frame_source_.get(), nullptr /* current_task_runner */,
       output_surface->capabilities().max_frames_pending);
   auto overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
+  // Android WebView has no overlay processor, and does not need to share
+  // gpu_task_scheduler, so it is passed in as nullptr.
+  // TODO(weiliangc): Android WebView should support overlays. Change
+  // initialize order to make this happen.
   display_ = std::make_unique<viz::Display>(
       nullptr /* shared_bitmap_manager */,
       output_surface_provider_.renderer_settings(),
       output_surface_provider_.debug_settings(), frame_sink_id_,
-      std::move(output_surface), std::move(overlay_processor),
-      std::move(scheduler), nullptr /* current_task_runner */);
+      std::move(display_controller), std::move(output_surface),
+      std::move(overlay_processor), std::move(scheduler),
+      nullptr /* current_task_runner */);
   display_->Initialize(this, frame_sink_manager_->surface_manager(),
                        output_surface_provider_.enable_shared_image());
   frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
@@ -230,7 +237,7 @@ void SurfacesInstance::SetSolidColorRootFrame() {
                       gfx::Transform());
   viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  quad_state->SetAll(gfx::Transform(), rect, rect, gfx::RRectF(), rect,
+  quad_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(), rect,
                      is_clipped, are_contents_opaque, 1.f,
                      SkBlendMode::kSrcOver, 0);
   viz::SolidColorDrawQuad* solid_quad =

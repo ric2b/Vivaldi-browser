@@ -159,6 +159,9 @@ class AppLauncherHandler
   // Handles "pageSelected" message with |args| containing [page_index].
   void HandlePageSelected(const base::ListValue* args);
 
+  // Handles "runOnOsLogin" message with |args| containing [app_id, mode]
+  void HandleRunOnOsLogin(const base::ListValue* args);
+
  private:
   struct AppInstallInfo {
     AppInstallInfo();
@@ -208,6 +211,9 @@ class AppLauncherHandler
 
   // True if the extension should be displayed.
   bool ShouldShow(const extensions::Extension* extension) const;
+
+  // Handle installing OS hooks for Web App installs from chrome://apps page.
+  void InstallOsHooks(const web_app::AppId& app_id);
 
   // The apps are represented in the extensions model, which
   // outlives us since it's owned by our containing profile.

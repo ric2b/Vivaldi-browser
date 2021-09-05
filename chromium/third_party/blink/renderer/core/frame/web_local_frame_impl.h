@@ -54,8 +54,8 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/exported/web_input_method_controller_impl.h"
-#include "third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -135,14 +135,6 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetReferrerForRequest(WebURLRequest&, const WebURL& referrer) override;
   bool IsNavigationScheduledWithin(base::TimeDelta interval) const override;
   void BlinkFeatureUsageReport(blink::mojom::WebFeature feature) override;
-  void MixedContentFound(const WebURL& main_resource_url,
-                         const WebURL& mixed_content_url,
-                         mojom::RequestContextType,
-                         bool was_allowed,
-                         const WebURL& url_before_redirects,
-                         bool had_redirect,
-                         const WebSourceLocation&) override;
-  void SendOrientationChangeEvent() override;
   PageSizeType GetPageSizeType(uint32_t page_index) override;
   void GetPageDescription(uint32_t page_index,
                           WebPrintPageDescription*) override;
@@ -274,9 +266,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   void UsageCountChromeLoadTimes(const WebString& metric) override;
   bool DispatchedPagehideAndStillHidden() const override;
   FrameScheduler* Scheduler() const override;
+  scheduler::WebAgentGroupScheduler* GetAgentGroupScheduler() const override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
   WebInputMethodController* GetInputMethodController() override;
-  WebAssociatedURLLoader* CreateAssociatedURLLoader(
+  std::unique_ptr<WebAssociatedURLLoader> CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;
   void DeprecatedStopLoading() override;
   WebSize GetScrollOffset() const override;
@@ -355,6 +348,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       const AtomicString& name,
       WindowAgentFactory*,
       WebFrame* opener,
+      std::unique_ptr<blink::WebPolicyContainer> policy_container,
       network::mojom::blink::WebSandboxFlags sandbox_flags =
           network::mojom::blink::WebSandboxFlags::kNone,
       const FeaturePolicyFeatureState& opener_feature_state =
@@ -373,6 +367,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       WebFrame* opener,
       const WebString& name,
       network::mojom::blink::WebSandboxFlags,
+      std::unique_ptr<blink::WebPolicyContainer>,
       const FeaturePolicyFeatureState&);
   static WebLocalFrameImpl* CreateProvisional(
       WebLocalFrameClient*,
@@ -422,6 +417,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   LocalFrameView* GetFrameView() const {
     return GetFrame() ? GetFrame()->View() : nullptr;
   }
+
+  void SendOrientationChangeEvent();
 
   void SetDevToolsAgentImpl(WebDevToolsAgentImpl*);
   WebDevToolsAgentImpl* DevToolsAgentImpl();
@@ -511,6 +508,21 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   Node* ContextMenuNodeInner() const;
 
+  void InitializeCoreFrameInternal(
+      Page&,
+      FrameOwner*,
+      WebFrame* parent,
+      WebFrame* previous_sibling,
+      FrameInsertType,
+      const AtomicString& name,
+      WindowAgentFactory*,
+      WebFrame* opener,
+      std::unique_ptr<PolicyContainer> policy_container,
+      network::mojom::blink::WebSandboxFlags sandbox_flags =
+          network::mojom::blink::WebSandboxFlags::kNone,
+      const FeaturePolicyFeatureState& opener_feature_state =
+          FeaturePolicyFeatureState());
+
   WebLocalFrameClient* client_;
 
   // TODO(dcheng): Inline this field directly rather than going through Member.
@@ -559,11 +571,11 @@ class CORE_EXPORT WebLocalFrameImpl final
   // cleared upon close().
   SelfKeepAlive<WebLocalFrameImpl> self_keep_alive_;
 
+#if DCHECK_IS_ON()
   // True if DispatchBeforePrintEvent() was called, and
   // DispatchAfterPrintEvent() is not called yet.
-  // TODO(crbug.com/1121077) After fixing the bug, make this member variable
-  // only available when DCHECK_IS_ON().
   bool is_in_printing_ = false;
+#endif
 };
 
 template <>

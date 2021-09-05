@@ -7,6 +7,8 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
@@ -99,6 +101,16 @@ using signin_metrics::PromoAction;
 
 - (void)start {
   [super start];
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  // For AddAccountSigninIntentAddSecondaryAccount, the coordinator can be used
+  // to add a secondary account in the settings while being signed in, or
+  // from the user consent view while being not signed in.
+  // For AddAccountSigninIntentReauthPrimaryAccount, the coordinator can only
+  // be used when the user is signed in.
+  DCHECK(authenticationService->IsAuthenticated() ||
+         self.signinIntent == AddAccountSigninIntentAddSecondaryAccount);
   self.identityInteractionManager =
       ios::GetChromeBrowserProvider()
           ->GetChromeIdentityService()
@@ -148,14 +160,13 @@ using signin_metrics::PromoAction;
 
 #pragma mark - AddAccountSigninManagerDelegate
 
-- (void)addAccountSigninManagerFailedWithError:(NSError*)error
-                                      identity:(ChromeIdentity*)identity {
+- (void)addAccountSigninManagerFailedWithError:(NSError*)error {
   DCHECK(error);
   __weak AddAccountSigninCoordinator* weakSelf = self;
   ProceduralBlock dismissAction = ^{
     [weakSelf addAccountSigninManagerFinishedWithSigninResult:
                   SigninCoordinatorResultCanceledByUser
-                                                     identity:identity];
+                                                     identity:nil];
   };
 
   self.alertCoordinator = ErrorCoordinator(
@@ -192,6 +203,9 @@ using signin_metrics::PromoAction;
                               identity:(ChromeIdentity*)identity {
   DCHECK(!self.alertCoordinator);
   DCHECK(!self.userSigninCoordinator);
+  // |identity| is set, only and only if the sign-in is successful.
+  DCHECK(((signinResult == SigninCoordinatorResultSuccess) && identity) ||
+         ((signinResult != SigninCoordinatorResultSuccess) && !identity));
   self.identityInteractionManager = nil;
   [self runCompletionCallbackWithSigninResult:signinResult
                                      identity:identity

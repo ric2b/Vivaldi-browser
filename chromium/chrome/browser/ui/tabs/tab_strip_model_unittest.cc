@@ -29,11 +29,11 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/reading_list/core/reading_list_model_observer.h"
+#include "components/reading_list/features/reading_list_switches.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -380,7 +380,8 @@ class TabStripModelTest : public testing::Test {
   std::unique_ptr<WebContents> CreateWebContentsWithSharedRPH(
       WebContents* web_contents) {
     WebContents::CreateParams create_params(
-        profile(), web_contents->GetRenderViewHost()->GetSiteInstance());
+        profile(),
+        web_contents->GetMainFrame()->GetRenderViewHost()->GetSiteInstance());
     std::unique_ptr<WebContents> retval = WebContents::Create(create_params);
     EXPECT_EQ(retval->GetMainFrame()->GetProcess(),
               web_contents->GetMainFrame()->GetProcess());
@@ -4122,10 +4123,27 @@ TEST_F(TabStripModelTest, MoveTabsToNewWindow) {
   strip.CloseAllTabs();
 }
 
+TEST_F(TabStripModelTest, SurroundingGroupAtIndex) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel strip(&delegate, profile());
+  PrepareTabs(&strip, 4);
+
+  auto group1 = strip.AddToNewGroup({1, 2});
+  strip.AddToNewGroup({3});
+
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(0));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(1));
+  EXPECT_EQ(group1, strip.GetSurroundingTabGroup(2));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(3));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(4));
+
+  strip.CloseAllTabs();
+}
+
 class TabStripModelTestWithReadLaterEnabled : public BrowserWithTestWindowTest {
  public:
   TabStripModelTestWithReadLaterEnabled() {
-    feature_list_.InitAndEnableFeature(features::kReadLater);
+    feature_list_.InitAndEnableFeature(reading_list::switches::kReadLater);
   }
   TabStripModelTestWithReadLaterEnabled(
       const TabStripModelTestWithReadLaterEnabled&) = delete;
@@ -4171,11 +4189,10 @@ TEST_F(TabStripModelTestWithReadLaterEnabled, AddToReadLater) {
   TabStripModel* tabstrip = browser()->tab_strip_model();
   EXPECT_EQ(tabstrip->count(), 2);
 
-  // Add first tab to Read Later and verify it has been added and the tab has
-  // been closed.
+  // Add first tab to Read Later and verify it has been added.
   GURL expected_url = tabstrip->GetWebContentsAt(0)->GetURL();
   tabstrip->AddToReadLater({0});
   EXPECT_EQ(reading_list_model->size(), 1u);
   EXPECT_NE(reading_list_model->GetEntryByURL(expected_url), nullptr);
-  EXPECT_EQ(tabstrip->count(), 1);
+  EXPECT_EQ(tabstrip->count(), 2);
 }

@@ -19,6 +19,8 @@
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -65,6 +67,8 @@
 namespace ash {
 
 namespace {
+
+using ::chromeos::WindowStateType;
 
 // Three fixed position ratios of the divider, which means the divider can
 // always be moved to these three positions.
@@ -1353,14 +1357,6 @@ void SplitViewController::OnOverviewModeEnding(
     OverviewSession* overview_session) {
   DCHECK(InSplitViewMode());
 
-  // Early exit if overview is ended while swiping up on the shelf to avoid
-  // snapping a window or showing a toast.
-  if (overview_session->enter_exit_overview_type() ==
-      OverviewEnterExitType::kSwipeFromShelf) {
-    EndSplitView();
-    return;
-  }
-
   // If overview is ended because of a window getting snapped, suppress the
   // overview exiting animation.
   if (state_ == State::kBothSnapped)
@@ -1633,7 +1629,8 @@ void SplitViewController::UpdateBlackScrim(
   if (!black_scrim_layer_) {
     // Create an invisible black scrim layer.
     black_scrim_layer_ = std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
-    black_scrim_layer_->SetColor(SK_ColorBLACK);
+    black_scrim_layer_->SetColor(
+        DeprecatedGetBackgroundColor(kSplitviewBlackScrimLayerColor));
     root_window_->layer()->Add(black_scrim_layer_.get());
     root_window_->layer()->StackAtTop(black_scrim_layer_.get());
   }

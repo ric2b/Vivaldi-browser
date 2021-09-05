@@ -19,6 +19,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
+#include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -145,29 +146,12 @@ JavaScriptDialogManager* WebContentsDelegate::GetJavaScriptDialogManager(
   return nullptr;
 }
 
-std::unique_ptr<BluetoothChooser> WebContentsDelegate::RunBluetoothChooser(
-    RenderFrameHost* frame,
-    const BluetoothChooser::EventHandler& event_handler) {
-  return nullptr;
-}
-
 void WebContentsDelegate::CreateSmsPrompt(
     RenderFrameHost* host,
     const url::Origin& origin,
     const std::string& one_time_code,
     base::OnceCallback<void()> on_confirm,
     base::OnceCallback<void()> on_cancel) {}
-
-std::unique_ptr<BluetoothScanningPrompt>
-WebContentsDelegate::ShowBluetoothScanningPrompt(
-    RenderFrameHost* frame,
-    const BluetoothScanningPrompt::EventHandler& event_handler) {
-  return nullptr;
-}
-
-bool WebContentsDelegate::EmbedsFullscreenWidget() {
-  return false;
-}
 
 bool WebContentsDelegate::IsFullscreenForTabOrPending(
     const WebContents* web_contents) {
@@ -177,6 +161,11 @@ bool WebContentsDelegate::IsFullscreenForTabOrPending(
 blink::mojom::DisplayMode WebContentsDelegate::GetDisplayMode(
     const WebContents* web_contents) {
   return blink::mojom::DisplayMode::kBrowser;
+}
+
+blink::ProtocolHandlerSecurityLevel
+WebContentsDelegate::GetProtocolHandlerSecurityLevel(RenderFrameHost*) {
+  return blink::ProtocolHandlerSecurityLevel::kStrict;
 }
 
 ColorChooser* WebContentsDelegate::OpenColorChooser(

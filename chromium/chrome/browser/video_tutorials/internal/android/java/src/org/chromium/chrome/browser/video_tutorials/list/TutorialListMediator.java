@@ -12,6 +12,7 @@ import org.chromium.base.Callback;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.video_tutorials.Tutorial;
 import org.chromium.chrome.browser.video_tutorials.VideoTutorialService;
+import org.chromium.chrome.browser.video_tutorials.VideoTutorialUtils;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -54,23 +55,28 @@ public class TutorialListMediator {
     }
 
     private PropertyModel buildModelFromTutorial(Tutorial tutorial) {
-        return new PropertyModel.Builder(TutorialCardProperties.ALL_KEYS)
-                .with(TutorialCardProperties.TITLE, tutorial.displayTitle)
-                // TODO(shaktisahu): Provide a string in mm:ss format.
-                .with(TutorialCardProperties.VIDEO_LENGTH, Integer.toString(tutorial.videoLength))
-                .with(TutorialCardProperties.CLICK_CALLBACK,
-                        () -> mClickCallback.onResult(tutorial))
-                .with(TutorialCardProperties.VISUALS_PROVIDER,
-                        callback -> getBitmap(tutorial, callback))
-                .build();
+        PropertyModel.Builder builder =
+                new PropertyModel.Builder(TutorialCardProperties.ALL_KEYS)
+                        .with(TutorialCardProperties.TITLE, tutorial.title)
+                        .with(TutorialCardProperties.VIDEO_LENGTH,
+                                VideoTutorialUtils.getVideoLengthString(tutorial.videoLength))
+                        .with(TutorialCardProperties.CLICK_CALLBACK,
+                                () -> mClickCallback.onResult(tutorial));
+
+        builder.with(TutorialCardProperties.VISUALS_PROVIDER, (consumer, widthPx, heightPx) -> {
+            fetchImage(consumer, widthPx, heightPx, tutorial);
+            return () -> {};
+        });
+        return builder.build();
     }
 
-    private void getBitmap(Tutorial tutorial, Callback<Drawable> callback) {
-        ImageFetcher.Params params = ImageFetcher.Params.create(
-                tutorial.posterUrl, ImageFetcher.VIDEO_TUTORIALS_LIST_UMA_CLIENT_NAME);
+    private void fetchImage(
+            Callback<Drawable> consumer, int widthPx, int heightPx, Tutorial tutorial) {
+        ImageFetcher.Params params = ImageFetcher.Params.create(tutorial.thumbnailUrl,
+                ImageFetcher.VIDEO_TUTORIALS_LIST_UMA_CLIENT_NAME, widthPx, heightPx);
         mImageFetcher.fetchImage(params, bitmap -> {
             Drawable drawable = new BitmapDrawable(mContext.getResources(), bitmap);
-            callback.onResult(drawable);
+            consumer.onResult(drawable);
         });
     }
 }

@@ -28,9 +28,25 @@ namespace blink {
 
 // static
 std::unique_ptr<AudioDecoderTraits::MediaDecoderType>
-AudioDecoderTraits::CreateDecoder(ExecutionContext& execution_context,
-                                  media::MediaLog* media_log) {
-  return std::make_unique<AudioDecoderBroker>(execution_context);
+AudioDecoderTraits::CreateDecoder(
+    ExecutionContext& execution_context,
+    media::GpuVideoAcceleratorFactories* gpu_factories,
+    media::MediaLog* media_log) {
+  return std::make_unique<AudioDecoderBroker>(media_log, execution_context);
+}
+
+// static
+void AudioDecoderTraits::UpdateDecoderLog(const MediaDecoderType& decoder,
+                                          const MediaConfigType& media_config,
+                                          media::MediaLog* media_log) {
+  media_log->SetProperty<media::MediaLogProperty::kFrameTitle>(
+      std::string("AudioDecoder(WebCodecs)"));
+  media_log->SetProperty<media::MediaLogProperty::kAudioDecoderName>(
+      decoder.GetDisplayName());
+  media_log->SetProperty<media::MediaLogProperty::kIsPlatformAudioDecoder>(
+      decoder.IsPlatformDecoder());
+  media_log->SetProperty<media::MediaLogProperty::kAudioTracks>(
+      std::vector<MediaConfigType>{media_config});
 }
 
 // static
@@ -92,14 +108,14 @@ CodecConfigEval AudioDecoder::MakeMediaConfig(const ConfigType& config,
     if (config.description().IsArrayBuffer()) {
       DOMArrayBuffer* buffer = config.description().GetAsArrayBuffer();
       uint8_t* start = static_cast<uint8_t*>(buffer->Data());
-      size_t size = buffer->ByteLengthAsSizeT();
+      size_t size = buffer->ByteLength();
       extra_data.assign(start, start + size);
     } else {
       DCHECK(config.description().IsArrayBufferView());
       DOMArrayBufferView* view =
           config.description().GetAsArrayBufferView().Get();
       uint8_t* start = static_cast<uint8_t*>(view->BaseAddress());
-      size_t size = view->byteLengthAsSizeT();
+      size_t size = view->byteLength();
       extra_data.assign(start, start + size);
     }
   }
@@ -119,11 +135,10 @@ CodecConfigEval AudioDecoder::MakeMediaConfig(const ConfigType& config,
   return CodecConfigEval::kSupported;
 }
 
-scoped_refptr<media::DecoderBuffer> AudioDecoder::MakeDecoderBuffer(
-    const InputType& chunk) {
+media::StatusOr<scoped_refptr<media::DecoderBuffer>>
+AudioDecoder::MakeDecoderBuffer(const InputType& chunk) {
   auto decoder_buffer = media::DecoderBuffer::CopyFrom(
-      static_cast<uint8_t*>(chunk.data()->Data()),
-      chunk.data()->ByteLengthAsSizeT());
+      static_cast<uint8_t*>(chunk.data()->Data()), chunk.data()->ByteLength());
   decoder_buffer->set_timestamp(
       base::TimeDelta::FromMicroseconds(chunk.timestamp()));
   decoder_buffer->set_is_key_frame(chunk.type() == "key");

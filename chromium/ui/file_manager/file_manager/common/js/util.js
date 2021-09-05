@@ -6,7 +6,21 @@
  * @fileoverview This file should contain utility functions used only by the
  * files app. Other shared utility functions can be found in base/*_util.js,
  * which allows finer-grained control over introducing dependencies.
+ * @suppress {uselessCode} Temporary suppress because of the line exporting.
  */
+
+// clang-format off
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {queryRequiredElement} from 'chrome://resources/js/util.m.js';
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import * as wrappedVolumeManagerCommon from '../../../base/js/volume_manager_types.m.js'; const {VolumeManagerCommon} = wrappedVolumeManagerCommon;
+// #import {decorate} from 'chrome://resources/js/cr/ui.m.js';
+// #import {FilesAppEntry, FakeEntry} from '../../../externs/files_app_entry_interfaces.m.js';
+// #import {EntryList} from './files_app_entry_types.m.js';
+// #import {VolumeInfo} from '../../../externs/volume_info.m.js';
+// #import {EntryLocation} from '../../../externs/entry_location.m.js';
+// #import {VolumeManager} from '../../../externs/volume_manager.m.js';
+// clang-format on
 
 /**
  * Namespace for utility functions.
@@ -375,7 +389,7 @@ util.queryDecoratedElement = (query, type) => {
  * @param {string} id The id of the string to return.
  * @return {string} The translated string.
  */
-function str(id) {
+/* #export */ function str(id) {
   return loadTimeData.getString(id);
 }
 
@@ -389,7 +403,7 @@ function str(id) {
  * @param {...*} var_args The values to replace into the string.
  * @return {string} The translated string with replaced values.
  */
-function strf(id, var_args) {
+/* #export */ function strf(id, var_args) {
   return loadTimeData.getStringF.apply(loadTimeData, arguments);
 }
 
@@ -1755,3 +1769,11 @@ util.isHoldingSpaceEnabled = () => {
   return loadTimeData.valueExists('HOLDING_SPACE_ENABLED') &&
       loadTimeData.getBoolean('HOLDING_SPACE_ENABLED');
 };
+
+util.isDriveDssPinEnabled = () => {
+  return loadTimeData.valueExists('DRIVE_DSS_PIN_ENABLED') &&
+      loadTimeData.getBoolean('DRIVE_DSS_PIN_ENABLED');
+};
+
+// eslint-disable-next-line semi,no-extra-semi
+/* #export */ {util};

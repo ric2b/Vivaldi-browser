@@ -15,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/video_frame.h"
 #include "media/gpu/buildflags.h"
 #include "media/gpu/macros.h"
@@ -133,24 +134,12 @@ void VideoFrameValidator::ProcessVideoFrameTask(
     // not allow us to map GpuMemoryBuffers easily for testing. Therefore, we
     // extract the dma-buf FDs. Alternatively, we could consider creating our
     // own ClientNativePixmapFactory for testing.
-    gfx::GpuMemoryBuffer* gmb = video_frame->GetGpuMemoryBuffer();
-    gfx::GpuMemoryBufferHandle gmb_handle = gmb->CloneHandle();
-    ASSERT_EQ(gmb_handle.type, gfx::GpuMemoryBufferType::NATIVE_PIXMAP);
-    std::vector<ColorPlaneLayout> planes;
-    std::vector<base::ScopedFD> dmabuf_fds;
-    for (auto& plane : gmb_handle.native_pixmap_handle.planes) {
-      planes.emplace_back(plane.stride, plane.offset, plane.size);
-      dmabuf_fds.emplace_back(plane.fd.release());
+    frame = CreateDmabufVideoFrame(frame.get());
+    if (!frame) {
+      LOG(ERROR) << "Failed to create Dmabuf-backed VideoFrame from "
+                 << "GpuMemoryBuffer-based VideoFrame";
+      return;
     }
-    auto layout = VideoFrameLayout::CreateWithPlanes(
-        frame->format(), video_frame->coded_size(), std::move(planes),
-        VideoFrameLayout::kBufferAddressAlignment,
-        gmb_handle.native_pixmap_handle.modifier);
-    ASSERT_TRUE(layout);
-    frame = VideoFrame::WrapExternalDmabufs(
-        *layout, frame->visible_rect(), frame->natural_size(),
-        std::move(dmabuf_fds), frame->timestamp());
-    ASSERT_TRUE(frame);
   }
 
   if (frame->storage_type() == VideoFrame::STORAGE_DMABUFS) {
@@ -236,7 +225,7 @@ std::unique_ptr<VideoFrameValidator::MismatchedFrameInfo>
 MD5VideoFrameValidator::Validate(scoped_refptr<const VideoFrame> frame,
                                  size_t frame_index) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(validator_thread_sequence_checker_);
-#if BUILDFLAG(USE_VAAPI)
+#if BUILDFLAG(IS_ASH) || BUILDFLAG(IS_LACROS)
   // b/149808895: There is a bug in the synchronization on mapped buffers, which
   // causes the frame validation failure. The bug is due to some missing i915
   // patches in kernel v3.18. The bug will be fixed if the kernel is upreved to
@@ -256,7 +245,7 @@ MD5VideoFrameValidator::Validate(scoped_refptr<const VideoFrame> frame,
     if (is_skylake)
       usleep(10);
   }
-#endif  // BUILDFLAG(USE_VAAPI)
+#endif  // BUILDFLAG(IS_ASH) || BUILDFLAG(IS_LACROS)
   if (frame->format() != validation_format_) {
     frame = ConvertVideoFrame(frame.get(), validation_format_);
   }

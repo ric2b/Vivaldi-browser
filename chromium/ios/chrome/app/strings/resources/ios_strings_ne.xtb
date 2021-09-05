@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">छाप्न सकिएन।</translation>
 <translation id="1125564390852150847">नयाँ ट्याब सिर्जना गर्नुहोस्।</translation>
 <translation id="1145536944570833626">विद्यमान डेटा मेट्नुहोस्।</translation>
+<translation id="1147031633655575115">तपाईंले <ph name="USER" /> का नामबाट साइन इन गर्नुभएको छ</translation>
 <translation id="1154690515305205900">हाइलाइट गरिएको पाठको लिंक बनाउन सकिएन।</translation>
+<translation id="1157749421655780457">स्थानसम्बन्धी जानकारी प्रयोग गर्ने अनुमति दिनुहोस्...</translation>
 <translation id="1165039591588034296">त्रुटि</translation>
 <translation id="1172898394251786223">अर्को क्षेत्र</translation>
 <translation id="1176932207622159128">छविलाई सुरक्षित गर्न सकिदैन</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">पासवर्ड लुकाउनुहोस्</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> वस्तुहरू</translation>
 <translation id="1491277525950327607">सेटिङ टगल गर्न डबल ट्याप गर्नुहोस्</translation>
+<translation id="1492417797159476138">तपाईंले यो साइटका लागि यो युजरनेम सुरक्षित गरिसक्नुभएको छ</translation>
 <translation id="1509486075633541495">वेबसाइटमा साइन इन गर्नुहोस्</translation>
 <translation id="1509960214886564027">कयौँ साइटका सुविधाहरूले काम नगर्न सक्छन्</translation>
 <translation id="152234381334907219">कहिल्यै सुरक्षित गरिँदैन</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">पछाडि जानुहोस्</translation>
 <translation id="3892144330757387737">तपाईंले गर्नुभएका क्रियाकलापको इतिहास यहाँ देखिने छ</translation>
 <translation id="3897092660631435901">मेनु</translation>
+<translation id="3913386780052199712">तपाईंले Chrome मा साइन इन गर्नुभएको छ</translation>
 <translation id="3915450441834151894">साइटको जानकारी</translation>
 <translation id="3922310737605261887">प्रतिलिपि गरिएको पाठको खोजी गर्नुहोस्</translation>
 <translation id="3928666092801078803">मेरो डेटालाई संयोजन गर्नुहोस्</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">नयाँ इन्कोग्निटो ट्याब</translation>
 <translation id="4758977202923349869">क्रेडिट कार्डलाई यस फ्रेमभित्र पार्नुहोस्</translation>
 <translation id="4775879719735953715">पूर्वनिर्धारित ब्राउजर</translation>
+<translation id="4778644898150334464">अर्को पासवर्ड प्रयोग गर्नुहोस्</translation>
 <translation id="4802417911091824046">पासफ्रेजमार्फत इन्क्रिप्सन गर्ने कार्यअन्तर्गत Google Pay का भुक्तानी विधि र ठेगानाहरू समावेश हुँदैनन्।
 
 यो सेटिङ परिवर्तन गर्न <ph name="BEGIN_LINK" />सिंक रिसेट गर्नुहोस्<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">ठिक छ</translation>
 <translation id="5062321486222145940">Google ड्राइभ स्थापना गर्नुहोस्</translation>
 <translation id="5083464117946352670">फाइल आकार निर्धारण गर्न सकिदैन।</translation>
+<translation id="5090832849094901128">तपाईंले यो पासवर्ड मेटाउनुभयो भने <ph name="WEBSITE" /> मा रहेको तपाईंको खाता मेटिने छैन।</translation>
 <translation id="5094827893301452931">ट्विट पूरा भयो।</translation>
 <translation id="5118764316110575523">निष्क्रिय छ</translation>
 <translation id="5127805178023152808">सिंक बन्द छ</translation>
@@ -397,7 +403,7 @@
 <translation id="5409365236829784218">यस फाइल खोल्न सक्ने कुनै पनि एपहरू स्थापना गरिएको छैन्।</translation>
 <translation id="5416022985862681400">पछिल्ला ७ दिन</translation>
 <translation id="543338862236136125">पासवर्ड सम्पादन गर्नुहोस्</translation>
-<translation id="5433691172869980887">प्रयोगकर्ताको नाम प्रतिलिपि गरियो</translation>
+<translation id="5433691172869980887">युजरनेम प्रतिलिपि गरियो</translation>
 <translation id="54401264925851789">पृष्ठ सुरक्षा जानकारी</translation>
 <translation id="5443952882982198570">क्रेडिट कार्डहरू</translation>
 <translation id="5457226814769348910">अफलाइन संस्करण खोल्नुहोस्</translation>
@@ -486,7 +492,7 @@
 <translation id="6344783595350022745">पाठ खाली गर्नुहोस्</translation>
 <translation id="6346549652287021269">नयाँ डाउनलोड सुरु गर्ने हो?</translation>
 <translation id="6362362396625799311">कुनै इन्कोग्निटो ट्याबहरू छैनन्</translation>
-<translation id="6363526231572697780">प्रयोगकर्ताको नाम नामक क्षेत्रमा कुनै पनि नाम छैन</translation>
+<translation id="6363526231572697780">युजरनेम नामक क्षेत्रमा कुनै पनि नाम छैन</translation>
 <translation id="6374469231428023295">फेरि प्रयास गर्नुहोस्</translation>
 <translation id="6377118281273296434">साइटको सुरक्षा</translation>
 <translation id="6380866119319257197">यदि तपाईँले आफ्नो पासफ्रेज बिर्सनुभयो वा यस सेटिङलाई परिवर्तन गर्न चाहनुहुन्छ भने <ph name="BEGIN_LINK" />सिंकलाई रिसेट गर्नुहोस्<ph name="END_LINK" /></translation>
@@ -511,6 +517,9 @@
 <translation id="6476800141292307438">पृष्ठलाई <ph name="LANGUAGE" /> भाषामा अनुवाद गर्दै। विकल्पहरू स्क्रिनका पुछारमा उपलब्ध छन्।</translation>
 <translation id="648164694371393720">प्रमाणीकरणसम्बन्धी त्रुटि</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> वस्तुहरू मेटाइयो</translation>
+<translation id="6497772452874122664">तपाईंलाई <ph name="TIME" /> माथि विश्वास छ भने तपाईं कुनै अर्को साइटको सुरक्षित गरिएको पासवर्ड प्रयोग गर्न सक्नुहुन्छ।
+
+हरेक साइटमा एउटा अद्वितीय पासवर्ड प्रयोग गर्ने प्रयास गर्नुहोस्।</translation>
 <translation id="651505212789431520">सिंक गर्ने कार्य रद्द गर्ने हो? तपाईं सेटिङमा गई जुनसुकै बेला सिंक गर्ने सुविधा सक्रिय गर्न सक्नुहुन्छ।</translation>
 <translation id="6561262006871132942">जुम बढाउनुहोस्</translation>
 <translation id="6585618849026997638">तपाईं आफ्ना लागि महत्त्वपूर्ण पृष्ठ बुकमार्क गरी सजिलैसँग उक्त पृष्ठमा फर्कन सक्नुहुन्छ</translation>
@@ -590,6 +599,7 @@
 <translation id="739941347996872055">अघिल्लो ट्याब</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> वटा नपढिएका लेखहरू।</translation>
+<translation id="7412027924265291969">जारी राख्नुहोस्</translation>
 <translation id="7425346204213733349">तपाईँका पुस्तक चिन्ह, इतिहास, पासवर्ड र अन्य सेटिङहरूका परिवर्तनहरू अब उप्रान्त तपाईँको Google खातामा सिंक हुने छैनन्। तैपनि तपाईँको विद्यमान डेटा तपाईँको Google खातामा भण्डारण गरिएको अवस्थामा रहिरहनेछ।</translation>
 <translation id="7435356471928173109">तपाईंका एड्मिनले अफ गर्नुभएको</translation>
 <translation id="7454057999980797137">राज्य / काउन्टी</translation>
@@ -600,6 +610,7 @@
 <translation id="7472734401283673885">कम्पनीको नाम</translation>
 <translation id="7473891865547856676">पर्दैन, धन्यवाद</translation>
 <translation id="7481312909269577407">अगाडि</translation>
+<translation id="7483467499335917849">मेरो हालको स्थान प्रयोग गरियोस्</translation>
 <translation id="750493650310597496">0 चयन गरियो</translation>
 <translation id="7514365320538308">डाउनलोड गर्नुहोस्</translation>
 <translation id="7537586195939242955">माफ गर्नुहोस्, यस समयमा तपाईंको पासलाई पासबुकमा स्थापना गर्न सकिदैन।</translation>
@@ -733,6 +744,7 @@
 <translation id="9094033019050270033">पासवर्ड अपडेट गर्नुहोस्</translation>
 <translation id="9100610230175265781">पासफ्रेज आवश्यक छ</translation>
 <translation id="9107664647686727385">अरूले पासवर्डहरू देखेका छन् कि छैनन् भनी जाँच्नुहोस्</translation>
+<translation id="9137526406337347448">Google का सेवाहरू</translation>
 <translation id="9148126808321036104">पुन: साइन इन गर्नुहोस्</translation>
 <translation id="9152539721251340337">QR कोड सिर्जना गर्नुहोस्</translation>
 <translation id="9157836665414082580">संवादहरू रोक्नुहोस्</translation>

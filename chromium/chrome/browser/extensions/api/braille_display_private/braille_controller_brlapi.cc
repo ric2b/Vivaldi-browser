@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/stl_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -42,12 +42,6 @@ constexpr base::TimeDelta kConnectRetryTimeout =
 
 }  // namespace
 
-BrailleController::BrailleController() {
-}
-
-BrailleController::~BrailleController() {
-}
-
 // static
 BrailleController* BrailleController::GetInstance() {
   return BrailleControllerImpl::GetInstance();
@@ -60,16 +54,13 @@ BrailleControllerImpl* BrailleControllerImpl::GetInstance() {
       base::LeakySingletonTraits<BrailleControllerImpl>>::get();
 }
 
-BrailleControllerImpl::BrailleControllerImpl()
-    : started_connecting_(false),
-      connect_scheduled_(false) {
+BrailleControllerImpl::BrailleControllerImpl() {
   create_brlapi_connection_function_ = base::Bind(
       &BrailleControllerImpl::CreateBrlapiConnection,
       base::Unretained(this));
 }
 
-BrailleControllerImpl::~BrailleControllerImpl() {
-}
+BrailleControllerImpl::~BrailleControllerImpl() = default;
 
 void BrailleControllerImpl::TryLoadLibBrlApi() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);

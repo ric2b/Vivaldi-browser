@@ -48,7 +48,7 @@ ScopedJavaLocalRef<jobject> JniPaymentApp::Create(
   ScopedJavaLocalRef<jobject> icon;
   if (app->payment_app_->icon_bitmap() &&
       !app->payment_app_->icon_bitmap()->drawsNothing()) {
-    icon = gfx::ConvertToJavaBitmap(app->payment_app_->icon_bitmap());
+    icon = gfx::ConvertToJavaBitmap(*app->payment_app_->icon_bitmap());
   }
 
   return Java_JniPaymentApp_Constructor(
@@ -111,7 +111,7 @@ ScopedJavaLocalRef<jstring> JniPaymentApp::GetCountryCode(JNIEnv* env) {
 }
 
 bool JniPaymentApp::CanMakePayment(JNIEnv* env) {
-  // PaymentRequestImpl.java uses this value to determine whether
+  // ChromePaymentRequestService.java uses this value to determine whether
   // PaymentRequest.hasEnrolledInstrument() should return true.
   return payment_app_->HasEnrolledInstrument();
 }

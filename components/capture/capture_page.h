@@ -75,7 +75,8 @@ class CapturePage : private content::WebContentsObserver {
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
 
-  bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
 
   void OnRequestThumbnailForFrameResponse(
       int callback_id,

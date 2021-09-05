@@ -18,6 +18,7 @@
 #include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
+#include "components/viz/service/display/aggregated_frame.h"
 #include "components/viz/service/display/delegated_ink_point_renderer_base.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/overlay_candidate.h"
@@ -72,7 +73,8 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   void DrawFrame(AggregatedRenderPassList* render_passes_in_draw_order,
                  float device_scale_factor,
                  const gfx::Size& device_viewport_size,
-                 const gfx::DisplayColorSpaces& display_color_spaces);
+                 const gfx::DisplayColorSpaces& display_color_spaces,
+                 SurfaceDamageRectList* surface_damage_rect_list);
 
   // The renderer might expand the damage (e.g: HW overlays were used,
   // invalidation rects on previous buffers). This function returns a
@@ -139,7 +141,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     return last_root_render_pass_scissor_rect_;
   }
 
-  DelegatedInkPointRendererBase* GetDelegatedInkPointRenderer();
+  virtual DelegatedInkPointRendererBase* GetDelegatedInkPointRenderer();
   void SetDelegatedInkMetadata(std::unique_ptr<DelegatedInkMetadata> metadata);
 
   // Returns true if composite time tracing is enabled. This measures a detailed
@@ -149,9 +151,13 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // Puts the draw time wall in trace file relative to the |ready_timestamp|.
   virtual void AddCompositeTimeTraces(base::TimeTicks ready_timestamp);
 
+  // Return the bounding rect of previously drawn delegated ink trail.
+  gfx::Rect GetDelegatedInkTrailDamageRect();
+
  protected:
   friend class BspWalkActionDrawPolygon;
-  FRIEND_TEST_ALL_PREFIXES(DisplayTest, SkiaDelegatedInkRenderer);
+  friend class SkiaDelegatedInkRendererTest;
+  friend class DelegatedInkPointPixelTestHelper;
 
   enum SurfaceInitializationMode {
     SURFACE_INITIALIZATION_MODE_PRESERVE,
@@ -331,9 +337,10 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // actually created or not. If the renderer doesn't support drawing delegated
   // ink trails, then the delegated ink renderer won't be created.
   virtual bool CreateDelegatedInkPointRenderer();
-  std::unique_ptr<DelegatedInkPointRendererBase> delegated_ink_point_renderer_;
 
  private:
+  virtual void DrawDelegatedInkTrail();
+
   bool initialized_ = false;
 #if DCHECK_IS_ON()
   bool overdraw_feedback_support_missing_logged_once_ = false;

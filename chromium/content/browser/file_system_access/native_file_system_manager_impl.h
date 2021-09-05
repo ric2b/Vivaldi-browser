@@ -171,6 +171,7 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
   // associated remote can be redeemed for a NativeFileSystemEntry object by a
   // process with ID matching `renderer_id`.
   void CreateNativeFileSystemDragDropToken(
+      PathType path_type,
       const base::FilePath& file_path,
       int renderer_id,
       mojo::PendingReceiver<blink::mojom::NativeFileSystemDragDropToken>
@@ -204,8 +205,13 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
     permission_context_ = permission_context;
   }
 
-  // Remove |token| from |transfer_tokens_|. It is an error to try to remove a
-  // token that doesn't exist.
+  void SetFilePickerResultForTesting(
+      base::Optional<FileSystemChooser::ResultEntry> result_entry) {
+    auto_file_picker_result_for_test_ = result_entry;
+  }
+
+  // Remove |token| from |transfer_tokens_|. It is an error to try to remove
+  // a token that doesn't exist.
   void RemoveToken(const base::UnguessableToken& token);
 
   // Remove `token` from `drag_drop_tokens_`. It is an error to try to remove a
@@ -307,6 +313,7 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
   void ResolveDragDropTokenWithFileType(
       const BindingContext& binding_context,
       const base::FilePath& file_path,
+      FileSystemURLAndFSHandle url,
       GetEntryFromDragDropTokenCallback token_resolved_callback,
       NativeFileSystemPermissionContext::HandleType file_type);
 
@@ -351,6 +358,9 @@ class CONTENT_EXPORT NativeFileSystemManagerImpl
   std::map<base::UnguessableToken,
            std::unique_ptr<NativeFileSystemDragDropTokenImpl>>
       drag_drop_tokens_;
+
+  base::Optional<FileSystemChooser::ResultEntry>
+      auto_file_picker_result_for_test_;
 
   base::WeakPtrFactory<NativeFileSystemManagerImpl> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(NativeFileSystemManagerImpl);

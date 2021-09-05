@@ -9,7 +9,6 @@ import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -27,27 +26,16 @@ import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.browser.customtabs.CustomTabsClient;
-import androidx.browser.customtabs.CustomTabsIntent;
-import androidx.browser.customtabs.CustomTabsService;
-import androidx.browser.customtabs.CustomTabsServiceConnection;
-import androidx.browser.customtabs.CustomTabsSession;
-
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 import java.util.Collections;
 import java.util.List;
 
 /**
- * A convenience class for adding site setting shortcuts into WebApks.
- * The shortcut opens the web browser's site settings for the url
- * associated to the WebApk.
+ * Handles site settings shortcuts for WebApks. The shortcut opens the web
+ * browser's site settings for the start url associated with the WebApk.
  */
 public class ManageDataLauncherActivity extends Activity {
-    private static final String TAG = "ManageDataLauncher";
-
     public static final String ACTION_SITE_SETTINGS =
             "android.support.customtabs.action.ACTION_MANAGE_TRUSTED_WEB_ACTIVITY_DATA";
 
@@ -60,55 +48,34 @@ public class ManageDataLauncherActivity extends Activity {
     private static final String CATEGORY_LAUNCH_WEBAPK_SITE_SETTINGS =
             "androidx.browser.trusted.category.LaunchWebApkSiteSettings";
 
-    @Nullable
+    private static final String ACTION_CUSTOM_TABS_CONNECTION =
+            "android.support.customtabs.action.CustomTabsService";
+
     private String mProviderPackage;
 
-    @Nullable
-    private CustomTabsServiceConnection mConnection;
-
-    @Nullable
+    /**
+     * The url of the page for which the settings will be shown. Must be provided as an intent
+     * extra to {@link ManageDataLauncherActivity}.
+     */
     private Uri mUrl;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mProviderPackage = getIntent().getStringExtra(EXTRA_PROVIDER_PACKAGE);
         mUrl = Uri.parse(getIntent().getStringExtra(EXTRA_SITE_SETTINGS_URL));
 
-        if (!supportsWebApkManageSpace(this, mProviderPackage)) {
-            handleNoSupportForManageSpace();
+        if (!supportsLaunchSettings(this, mProviderPackage)) {
+            handleNoSupportForLaunchSettings();
             return;
         }
         setContentView(createLoadingView());
-
-        mConnection = new CustomTabsServiceConnection() {
-            @Override
-            public void onCustomTabsServiceConnected(
-                    ComponentName componentName, CustomTabsClient client) {
-                if (!isFinishing()) {
-                    launchSettings(client.newSession(null));
-                }
-            }
-
-            @Override
-            public void onServiceDisconnected(ComponentName componentName) {}
-        };
-        CustomTabsClient.bindCustomTabsService(this, mProviderPackage, mConnection);
-    }
-
-    /**
-     * Returns the url of the page for which the settings will be shown.
-     * The url must be provided as an intent extra to {@link ManageDataLauncherActivity}.
-     */
-    @Nullable
-    private Uri getWebApkStartUrl() {
-        return mUrl;
+        launchSettings();
     }
 
     /**
      * Returns a view with a loading spinner.
      */
-    @NonNull
     private View createLoadingView() {
         ProgressBar progressBar = new ProgressBar(this);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
@@ -120,10 +87,10 @@ public class ManageDataLauncherActivity extends Activity {
     }
 
     /**
-     * Called if a TWA provider doesn't support manage space feature. The default behavior is to
-     * show a toast telling the user where the data is stored.
+     * Called if a provider doesn't support the launch settings feature. Shows a toast telling the
+     * user how to fix it, then finishes the activity.
      */
-    private void handleNoSupportForManageSpace() {
+    private void handleNoSupportForLaunchSettings() {
         String appName;
         try {
             ApplicationInfo info = getPackageManager().getApplicationInfo(mProviderPackage, 0);
@@ -132,7 +99,7 @@ public class ManageDataLauncherActivity extends Activity {
             appName = mProviderPackage;
         }
 
-        Toast.makeText(this, getString(R.string.no_support_for_manage_space, appName),
+        Toast.makeText(this, getString(R.string.no_support_for_launch_settings, appName),
                      Toast.LENGTH_LONG)
                 .show();
         finish();
@@ -141,44 +108,30 @@ public class ManageDataLauncherActivity extends Activity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (mConnection != null) {
-            unbindService(mConnection);
-        }
         finish();
     }
 
-    private void launchSettings(CustomTabsSession session) {
-        boolean success =
-                launchBrowserSiteSettings(this, session, mProviderPackage, getWebApkStartUrl());
-        if (success) {
-            finish();
-        } else {
-            handleNoSupportForManageSpace();
-        }
-    }
-
-    private static boolean launchBrowserSiteSettings(
-            Activity activity, CustomTabsSession session, String packageName, Uri defaultUri) {
-        // A Custom Tabs Session is required so that the browser can verify this app's identity.
-        Intent intent = new CustomTabsIntent.Builder().setSession(session).build().intent;
+    private void launchSettings() {
+        Intent intent = new Intent();
         intent.setAction(ACTION_SITE_SETTINGS);
-        intent.setPackage(packageName);
-        intent.setData(defaultUri);
+        intent.setPackage(mProviderPackage);
+        intent.setData(mUrl);
         intent.putExtra(WebApkConstants.EXTRA_IS_WEBAPK, true);
+
         try {
-            activity.startActivity(intent);
-            return true;
+            startActivityForResult(intent, 0 /* requestCode */);
+            finish();
         } catch (ActivityNotFoundException e) {
-            return false;
+            handleNoSupportForLaunchSettings();
         }
     }
 
-    private static boolean supportsWebApkManageSpace(Context context, String providerPackage) {
-        Intent customTabsIntent = new Intent(CustomTabsService.ACTION_CUSTOM_TABS_CONNECTION);
-        customTabsIntent.addCategory(CATEGORY_LAUNCH_WEBAPK_SITE_SETTINGS);
-        customTabsIntent.setPackage(providerPackage);
+    private static boolean supportsLaunchSettings(Context context, String providerPackage) {
+        Intent intent = new Intent(ACTION_CUSTOM_TABS_CONNECTION);
+        intent.addCategory(CATEGORY_LAUNCH_WEBAPK_SITE_SETTINGS);
+        intent.setPackage(providerPackage);
         List<ResolveInfo> services = context.getPackageManager().queryIntentServices(
-                customTabsIntent, PackageManager.GET_RESOLVED_FILTER);
+                intent, PackageManager.GET_RESOLVED_FILTER);
         return services.size() > 0;
     }
 
@@ -194,7 +147,6 @@ public class ManageDataLauncherActivity extends Activity {
      * the app's main activity will be used by default. This activity needs to define the
      * MAIN action and LAUNCHER category in order to attach the shortcut.
      */
-    @NonNull
     @TargetApi(Build.VERSION_CODES.N_MR1)
     private static ShortcutInfo createSiteSettingsShortcutInfo(
             Context context, String url, String providerPackage) {
@@ -213,7 +165,7 @@ public class ManageDataLauncherActivity extends Activity {
     }
 
     /**
-     * Adds dynamic shortcut to site settings if the twa provider and android version supports it.
+     * Adds dynamic shortcut to site settings if the provider and android version support it.
      *
      * Removes previously added site settings shortcut if it is no longer supported, e.g. the user
      * changed their default browser.
@@ -225,7 +177,7 @@ public class ManageDataLauncherActivity extends Activity {
         ShortcutManager shortcutManager = context.getSystemService(ShortcutManager.class);
 
         // Remove potentially existing shortcut if package does not support shortcuts.
-        if (!supportsWebApkManageSpace(context, params.getHostBrowserPackageName())) {
+        if (!supportsLaunchSettings(context, params.getHostBrowserPackageName())) {
             shortcutManager.removeDynamicShortcuts(Collections.singletonList(
                     ManageDataLauncherActivity.SITE_SETTINGS_SHORTCUT_ID));
             return;

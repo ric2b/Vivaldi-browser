@@ -103,8 +103,7 @@ PhysicalRect ComputeLocalCaretRectAtTextOffset(const NGInlineCursor& cursor,
                                   cursor.Current().OffsetInContainerBlock();
   const PhysicalSize caret_size(caret_width, caret_height);
 
-  const NGPhysicalBoxFragment& fragmentainer =
-      *cursor.Current().GetLayoutObject()->ContainingBlockFlowFragment();
+  const NGPhysicalBoxFragment& fragment = cursor.BoxFragment();
   NGInlineCursor line_box(cursor);
   line_box.MoveToContainingLine();
   const PhysicalOffset line_box_offset =
@@ -115,10 +114,10 @@ PhysicalRect ComputeLocalCaretRectAtTextOffset(const NGInlineCursor& cursor,
       *line_box.Current().InlineBreakToken();
   const bool is_last_line =
       break_token.IsFinished() || break_token.IsForcedBreak();
-  const ComputedStyle& block_style = fragmentainer.Style();
+  const ComputedStyle& block_style = fragment.Style();
   bool should_align_caret_right =
       ShouldAlignCaretRight(block_style.GetTextAlign(is_last_line),
-                            block_style.Direction()) &&
+                            line_box.Current().BaseDirection()) &&
       (style.GetUnicodeBidi() != UnicodeBidi::kPlaintext ||
        IsLtr(cursor.Current().ResolvedDirection()));
 
@@ -133,7 +132,7 @@ PhysicalRect ComputeLocalCaretRectAtTextOffset(const NGInlineCursor& cursor,
           std::min(caret_location.left, line_box_rect.Right() - caret_width);
     } else {
       const LayoutUnit right_edge =
-          std::max(fragmentainer.Size().width, line_box_rect.Right());
+          std::max(fragment.Size().width, line_box_rect.Right());
       caret_location.left =
           std::min(caret_location.left, right_edge - caret_width);
       caret_location.left = std::max(caret_location.left, line_box_rect.X());
@@ -146,7 +145,7 @@ PhysicalRect ComputeLocalCaretRectAtTextOffset(const NGInlineCursor& cursor,
   const LayoutUnit min_y = std::min(LayoutUnit(), line_box_offset.top);
   caret_location.top = std::max(caret_location.top, min_y);
   const LayoutUnit max_y =
-      std::max(fragmentainer.Size().height, line_box_rect.Bottom());
+      std::max(fragment.Size().height, line_box_rect.Bottom());
   caret_location.top = std::min(caret_location.top, max_y - caret_height);
   caret_location.top = LayoutUnit(caret_location.top.Round());
   return PhysicalRect(caret_location, caret_size);

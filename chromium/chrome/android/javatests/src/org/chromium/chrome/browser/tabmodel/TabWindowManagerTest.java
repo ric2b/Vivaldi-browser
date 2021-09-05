@@ -10,6 +10,7 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -19,11 +20,11 @@ import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
+import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
-import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -32,8 +33,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Test for {@link TabWindowManager} APIs.  Makes sure the class handles multiple {@link Activity}s
- * requesting {@link TabModelSelector}s, {@link Activity}s getting destroyed, etc..
+ * Test for {@link TabWindowManagerImpl} through {@link TabWindowManagerSingleton}.
+ *
+ * Makes sure the class handles multiple {@link Activity}s requesting {@link TabModelSelector}s,
+ * {@link Activity}s getting destroyed, etc.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class TabWindowManagerTest {
@@ -48,6 +51,12 @@ public class TabWindowManagerTest {
                 }
             };
 
+    @Before
+    public void setUp() {
+        TabWindowManagerSingleton.setTabModelSelectorFactoryForTesting(
+                mMockTabModelSelectorFactory);
+    }
+
     private ChromeActivity buildActivity() {
         ChromeActivity activity = new CustomTabActivity();
         mActivities.add(activity);
@@ -61,8 +70,7 @@ public class TabWindowManagerTest {
     }
 
     private MockTabModelSelector requestSelector(ChromeActivity activity, int requestedIndex) {
-        final TabWindowManager manager = TabWindowManager.getInstance();
-        manager.setTabModelSelectorFactory(mMockTabModelSelectorFactory);
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
         return (MockTabModelSelector) manager.requestSelector(
                 activity, activity, () -> NextTabPolicy.HIERARCHICAL, requestedIndex);
     }
@@ -85,7 +93,7 @@ public class TabWindowManagerTest {
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testSingleActivity() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         TabModelSelector selector0 = requestSelector(activity0, 0);
@@ -103,7 +111,7 @@ public class TabWindowManagerTest {
     @UiThreadTest
     public void testMultipleActivities() {
         Assert.assertTrue("Not enough selectors", TabWindowManager.MAX_SIMULTANEOUS_SELECTORS >= 2);
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -146,7 +154,7 @@ public class TabWindowManagerTest {
     public void testIndexFallback() {
         Assert.assertTrue("Not enough selectors", TabWindowManager.MAX_SIMULTANEOUS_SELECTORS >= 2);
 
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -171,7 +179,7 @@ public class TabWindowManagerTest {
     public void testIndexFallback2() {
         Assert.assertTrue("Not enough selectors", TabWindowManager.MAX_SIMULTANEOUS_SELECTORS >= 3);
 
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -186,14 +194,15 @@ public class TabWindowManagerTest {
     }
 
     /**
-     * Test that a destroyed {@link Activity} properly gets removed from {@link TabWindowManager}.
+     * Test that a destroyed {@link Activity} properly gets removed from {@link
+     * TabWindowManagerImpl}.
      */
     @Test
     @SmallTest
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testActivityDeathRemovesSingle() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         TabModelSelector selector0 = requestSelector(activity0, 0);
@@ -216,7 +225,7 @@ public class TabWindowManagerTest {
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testActivityDeathLetsModelReassign() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         TabModelSelector selector0 = requestSelector(activity0, 0);
@@ -248,7 +257,7 @@ public class TabWindowManagerTest {
     public void testActivityDeathWithMultipleActivities() {
         Assert.assertTrue("Not enough selectors", TabWindowManager.MAX_SIMULTANEOUS_SELECTORS >= 2);
 
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -281,7 +290,7 @@ public class TabWindowManagerTest {
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testTabExistsInAnySelector() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -290,20 +299,20 @@ public class TabWindowManagerTest {
         Tab tab1 = selector0.addMockTab();
         Tab tab2 = selector1.addMockIncognitoTab();
 
-        Assert.assertFalse(manager.tabExistsInAnySelector(tab1.getId() - 1));
-        Assert.assertTrue(manager.tabExistsInAnySelector(tab1.getId()));
-        Assert.assertTrue(manager.tabExistsInAnySelector(tab2.getId()));
-        Assert.assertFalse(manager.tabExistsInAnySelector(tab2.getId() + 1));
+        Assert.assertNull(manager.getTabById(tab1.getId() - 1));
+        Assert.assertNotNull(manager.getTabById(tab1.getId()));
+        Assert.assertNotNull(manager.getTabById(tab2.getId()));
+        Assert.assertNull(manager.getTabById(tab2.getId() + 1));
 
         AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManagerSingleton.getInstance();
         asyncTabParamsManager.getAsyncTabParams().clear();
         final int asyncTabId = 123;
         final TabReparentingParams dummyParams =
                 new TabReparentingParams(new MockTab(0, false), null);
-        Assert.assertFalse(manager.tabExistsInAnySelector(asyncTabId));
+        Assert.assertNull(manager.getTabById(asyncTabId));
         asyncTabParamsManager.add(asyncTabId, dummyParams);
         try {
-            Assert.assertTrue(manager.tabExistsInAnySelector(asyncTabId));
+            Assert.assertNotNull(manager.getTabById(asyncTabId));
         } finally {
             asyncTabParamsManager.getAsyncTabParams().clear();
         }
@@ -317,7 +326,7 @@ public class TabWindowManagerTest {
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testGetTabById() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();
@@ -353,7 +362,7 @@ public class TabWindowManagerTest {
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void getTabModelForTab() {
-        final TabWindowManager manager = TabWindowManager.getInstance();
+        final TabWindowManager manager = TabWindowManagerSingleton.getInstance();
 
         ChromeActivity activity0 = buildActivity();
         ChromeActivity activity1 = buildActivity();

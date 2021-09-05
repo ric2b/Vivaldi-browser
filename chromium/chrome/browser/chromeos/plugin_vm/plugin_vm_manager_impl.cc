@@ -5,7 +5,7 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_impl.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_share_path.h"
@@ -31,6 +31,28 @@
 namespace plugin_vm {
 
 namespace {
+
+PluginVmLaunchResult ConvertToLaunchResult(int result_code) {
+  switch (result_code) {
+    case PRL_ERR_SUCCESS:
+      return PluginVmLaunchResult::kSuccess;
+    case PRL_ERR_LICENSE_NOT_VALID:
+    case PRL_ERR_LICENSE_WRONG_VERSION:
+    case PRL_ERR_LICENSE_WRONG_PLATFORM:
+    case PRL_ERR_LICENSE_BETA_KEY_RELEASE_PRODUCT:
+    case PRL_ERR_LICENSE_RELEASE_KEY_BETA_PRODUCT:
+    case PRL_ERR_JLIC_WRONG_HWID:
+    case PRL_ERR_JLIC_LICENSE_DISABLED:
+      return PluginVmLaunchResult::kInvalidLicense;
+    case PRL_ERR_LICENSE_EXPIRED:
+    case PRL_ERR_LICENSE_SUBSCR_EXPIRED:
+      return PluginVmLaunchResult::kExpiredLicense;
+    case PRL_ERR_JLIC_WEB_PORTAL_ACCESS_REQUIRED:
+      return PluginVmLaunchResult::kNetworkError;
+    default:
+      return PluginVmLaunchResult::kError;
+  }
+}
 
 // Checks if the VM is in a state in which we can't immediately start it.
 bool VmIsStopping(vm_tools::plugin_dispatcher::VmState state) {
@@ -92,10 +114,15 @@ PluginVmManagerImpl::~PluginVmManagerImpl() {
       ->RemoveObserver(this);
 }
 
-void PluginVmManagerImpl::OnPrimaryUserProfilePrepared() {
+void PluginVmManagerImpl::OnPrimaryUserSessionStarted() {
   vm_tools::plugin_dispatcher::ListVmRequest request;
   request.set_owner_id(owner_id_);
   request.set_vm_name_uuid(kPluginVmName);
+
+  // TODO(b/167491603): We need to reset these permissions until we have
+  // permission indicators/notifications working.
+  profile_->GetPrefs()->SetBoolean(prefs::kPluginVmCameraAllowed, false);
+  profile_->GetPrefs()->SetBoolean(prefs::kPluginVmMicAllowed, false);
 
   // Probe the dispatcher.
   chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient()->ListVms(
@@ -473,15 +500,8 @@ void PluginVmManagerImpl::OnStartVm(
       case vm_tools::plugin_dispatcher::VmErrorCode::VM_SUCCESS:
         result = PluginVmLaunchResult::kSuccess;
         break;
-      case vm_tools::plugin_dispatcher::VmErrorCode::VM_ERR_LIC_NOT_VALID:
-        result = PluginVmLaunchResult::kInvalidLicense;
-        break;
-      case vm_tools::plugin_dispatcher::VmErrorCode::VM_ERR_LIC_EXPIRED:
-        result = PluginVmLaunchResult::kExpiredLicense;
-        break;
-      case vm_tools::plugin_dispatcher::VmErrorCode::
-          VM_ERR_LIC_WEB_PORTAL_UNAVAILABLE:
-        result = PluginVmLaunchResult::kNetworkError;
+      case vm_tools::plugin_dispatcher::VmErrorCode::VM_ERR_NATIVE_RESULT_CODE:
+        result = ConvertToLaunchResult(reply->result_code());
         break;
       default:
         result = PluginVmLaunchResult::kError;

@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
@@ -17,11 +18,15 @@
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/icc_profile.h"
 
 namespace gfx {
 
 namespace {
+
+const base::Feature kIOSurfaceUseNamedSRGBForREC709{
+    "IOSurfaceUseNamedSRGBForREC709", base::FEATURE_ENABLED_BY_DEFAULT};
 
 void AddIntegerValue(CFMutableDictionaryRef dictionary,
                      const CFStringRef key,
@@ -133,7 +138,9 @@ bool IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
   // Prefer using named spaces.
   CFStringRef color_space_name = nullptr;
   if (__builtin_available(macos 10.12, *)) {
-    if (color_space == ColorSpace::CreateSRGB()) {
+    if (color_space == ColorSpace::CreateSRGB() ||
+        (base::FeatureList::IsEnabled(kIOSurfaceUseNamedSRGBForREC709) &&
+         color_space == ColorSpace::CreateREC709())) {
       color_space_name = kCGColorSpaceSRGB;
     } else if (color_space == ColorSpace::CreateDisplayP3D65()) {
       color_space_name = kCGColorSpaceDisplayP3;
@@ -191,6 +198,7 @@ bool IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
   base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(CFDataCreate(
       nullptr, reinterpret_cast<const UInt8*>(icc_profile_data.data()),
       icc_profile_data.size()));
+
   IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"),
                     cf_data_icc_profile);
   return true;

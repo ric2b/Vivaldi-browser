@@ -51,6 +51,10 @@ ASH_PUBLIC_EXPORT extern const base::Feature kDragToSnapInClamshellMode;
 // TODO(crbug.com/1111445): Remove this when the feature is fully launched.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnhancedDeskAnimations;
 
+// Enables the full restore feature. If this is enabled, we will restore apps
+// and app windows after a crash or reboot.
+ASH_PUBLIC_EXPORT extern const base::Feature kFullRestore;
+
 // Limits the windows listed in Alt-Tab to the ones in the currently active
 // desk.
 ASH_PUBLIC_EXPORT extern const base::Feature kLimitAltTabToActiveDesk;
@@ -124,6 +128,10 @@ ASH_PUBLIC_EXPORT extern const base::Feature kPipRoundedCorners;
 // Enables suppression of Displays notifications other than resolution change.
 ASH_PUBLIC_EXPORT extern const base::Feature kReduceDisplayNotifications;
 
+// Enables desks restoring, including an active desk and windows belonging to
+// them.
+ASH_PUBLIC_EXPORT extern const base::Feature kDesksRestore;
+
 // Enables displaying separate network icons for different networks types.
 // https://crbug.com/902409
 ASH_PUBLIC_EXPORT extern const base::Feature kSeparateNetworkIcons;
@@ -139,9 +147,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kUseBluetoothSystemInAsh;
 // launched.
 ASH_PUBLIC_EXPORT extern const base::Feature
     kSwapSideVolumeButtonsForOrientation;
-
-// Enables shelf app scaling.
-ASH_PUBLIC_EXPORT extern const base::Feature kShelfAppScaling;
 
 // Enables background blur for the app list, shelf, unified system tray,
 // autoclick menu, etc. Also enables the AppsGridView mask layer, slower devices
@@ -159,6 +164,12 @@ ASH_PUBLIC_EXPORT extern const base::Feature kHideShelfControlsInTabletMode;
 // TODO(https://crbug.com/1107183): Remove this after the feature is launched.
 ASH_PUBLIC_EXPORT extern const base::Feature kReverseScrollGestures;
 
+// When enabled, there will be an alert bubble showing up when the device
+// returns from low brightness (e.g., sleep, closed cover) without a lock screen
+// and the active window is in fullscreen.
+// TODO(https://crbug.com/1107185): Remove this after the feature is launched.
+ASH_PUBLIC_EXPORT extern const base::Feature kFullscreenAlertBubble;
+
 // Enables sliders for setting mic gain levels in the more audio settings
 // section in the system tray.
 ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayMicGainSetting;
@@ -172,14 +183,14 @@ ASH_PUBLIC_EXPORT extern const base::Feature kWebUITabStripTabDragIntegration;
 // Enables notifications to be shown within context menus.
 ASH_PUBLIC_EXPORT extern const base::Feature kNotificationsInContextMenu;
 
-// Preserve shelf state when entering and exiting overview mode.
-ASH_PUBLIC_EXPORT extern const base::Feature
-    kMaintainShelfStateWhenEnteringOverview;
-
 // Enables the experimental productivity feature that aims to reduce context
 // switching by enabling users to collect content and transfer or access it
 // later.
 ASH_PUBLIC_EXPORT extern const base::Feature kTemporaryHoldingSpace;
+
+// Enables previews in the shelf for the `kTemporaryHoldingSpace` feature. Note
+// that this has no effect if the `kTemporaryHoldingSpace` feature is disabled.
+ASH_PUBLIC_EXPORT extern const base::Feature kTemporaryHoldingSpacePreviews;
 
 // Enables dragging an unpinned open app to pinned app side to pin.
 ASH_PUBLIC_EXPORT extern const base::Feature kDragUnpinnedAppToPin;
@@ -196,7 +207,11 @@ ASH_PUBLIC_EXPORT bool IsCaptureModeEnabled();
 
 ASH_PUBLIC_EXPORT bool IsDarkLightModeEnabled();
 
+ASH_PUBLIC_EXPORT bool IsDesksRestoreEnabled();
+
 ASH_PUBLIC_EXPORT bool IsEnhancedDeskAnimations();
+
+ASH_PUBLIC_EXPORT bool IsFullRestoreEnabled();
 
 ASH_PUBLIC_EXPORT bool IsHideArcMediaNotificationsEnabled();
 
@@ -228,13 +243,13 @@ ASH_PUBLIC_EXPORT bool IsSwapSideVolumeButtonsForOrientationEnabled();
 
 ASH_PUBLIC_EXPORT bool IsBackgroundBlurEnabled();
 
-ASH_PUBLIC_EXPORT bool IsDragFromShelfToHomeOrOverviewEnabled();
-
 ASH_PUBLIC_EXPORT bool IsReduceDisplayNotificationsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsHideShelfControlsInTabletModeEnabled();
 
 ASH_PUBLIC_EXPORT bool IsReverseScrollGesturesEnabled();
+
+ASH_PUBLIC_EXPORT bool IsFullscreenAlertBubbleEnabled();
 
 ASH_PUBLIC_EXPORT bool AreContextualNudgesEnabled();
 
@@ -248,13 +263,11 @@ ASH_PUBLIC_EXPORT bool IsDisplayAlignmentAssistanceEnabled();
 
 ASH_PUBLIC_EXPORT bool IsMovablePartialScreenshotEnabled();
 
-ASH_PUBLIC_EXPORT bool IsAppScalingEnabled();
-
 ASH_PUBLIC_EXPORT bool IsNotificationsInContextMenuEnabled();
 
-ASH_PUBLIC_EXPORT bool IsMaintainShelfStateWhenEnteringOverviewEnabled();
-
 ASH_PUBLIC_EXPORT bool IsTemporaryHoldingSpaceEnabled();
+
+ASH_PUBLIC_EXPORT bool IsTemporaryHoldingSpacePreviewsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsDragUnpinnedAppToPinEnabled();
 

@@ -55,8 +55,6 @@ const char* ToString(ax::mojom::Event event) {
       return "hover";
     case ax::mojom::Event::kImageFrameUpdated:
       return "imageFrameUpdated";
-    case ax::mojom::Event::kInvalidStatusChanged:
-      return "invalidStatusChanged";
     case ax::mojom::Event::kLayoutComplete:
       return "layoutComplete";
     case ax::mojom::Event::kLiveRegionCreated:
@@ -75,8 +73,6 @@ const char* ToString(ax::mojom::Event event) {
       return "mediaStoppedPlaying";
     case ax::mojom::Event::kMenuEnd:
       return "menuEnd";
-    case ax::mojom::Event::kMenuListItemSelected:
-      return "menuListItemSelected";
     case ax::mojom::Event::kMenuListValueChanged:
       return "menuListValueChanged";
     case ax::mojom::Event::kMenuPopupEnd:
@@ -125,16 +121,16 @@ const char* ToString(ax::mojom::Event event) {
       return "tooltipClosed";
     case ax::mojom::Event::kTooltipOpened:
       return "tooltipOpened";
+    case ax::mojom::Event::kTreeChanged:
+      return "treeChanged";
+    case ax::mojom::Event::kValueChanged:
+      return "valueChanged";
     case ax::mojom::Event::kWindowActivated:
       return "windowActivated";
     case ax::mojom::Event::kWindowDeactivated:
       return "windowDeactivated";
     case ax::mojom::Event::kWindowVisibilityChanged:
       return "windowVisibilityChanged";
-    case ax::mojom::Event::kTreeChanged:
-      return "treeChanged";
-    case ax::mojom::Event::kValueChanged:
-      return "valueChanged";
   }
 
   return "";
@@ -280,6 +276,10 @@ const char* ToString(ax::mojom::Role role) {
       return "docNotice";
     case ax::mojom::Role::kDocPageBreak:
       return "docPageBreak";
+    case ax::mojom::Role::kDocPageFooter:
+      return "docPageFooter";
+    case ax::mojom::Role::kDocPageHeader:
+      return "docPageHeader";
     case ax::mojom::Role::kDocPageList:
       return "docPageList";
     case ax::mojom::Role::kDocPart:
@@ -688,7 +688,7 @@ const char* ToString(ax::mojom::DefaultActionVerb default_action_verb) {
     case ax::mojom::DefaultActionVerb::kClickAncestor:
       // Some screen readers, such as Jaws, expect the following spelling of
       // this verb.
-      return "click-ancestor";
+      return "clickAncestor";
     case ax::mojom::DefaultActionVerb::kJump:
       return "jump";
     case ax::mojom::DefaultActionVerb::kOpen:
@@ -758,6 +758,8 @@ const char* ToString(ax::mojom::StringAttribute string_attribute) {
       return "ariaInvalidValue";
     case ax::mojom::StringAttribute::kAutoComplete:
       return "autoComplete";
+    case ax::mojom::StringAttribute::kCheckedStateDescription:
+      return "checkedStateDescription";
     case ax::mojom::StringAttribute::kChildTreeId:
       return "childTreeId";
     case ax::mojom::StringAttribute::kClassName:

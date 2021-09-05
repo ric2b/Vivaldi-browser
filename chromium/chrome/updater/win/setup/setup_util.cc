@@ -5,6 +5,7 @@
 #include "chrome/updater/win/setup/setup_util.h"
 
 #include <string>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
@@ -75,8 +76,23 @@ base::string16 GetComTypeLibRegistryPath(REFIID iid) {
       {L"Software\\Classes\\TypeLib\\", base::win::WStringFromGUID(iid)});
 }
 
+std::vector<GUID> GetInterfaces() {
+  return {
+      __uuidof(IAppBundleWeb),
+      __uuidof(IAppWeb),
+      __uuidof(ICompleteStatus),
+      __uuidof(ICurrentState),
+      __uuidof(IGoogleUpdate3Web),
+      __uuidof(IUpdateState),
+      __uuidof(IUpdater),
+      __uuidof(IUpdaterControl),
+      __uuidof(IUpdaterControlCallback),
+      __uuidof(IUpdaterObserver),
+  };
+}
+
 std::vector<base::FilePath> ParseFilesFromDeps(const base::FilePath& deps) {
-  constexpr size_t kDepsFileSizeMax = 0x2000;  // 8KB.
+  constexpr size_t kDepsFileSizeMax = 0x4000;  // 16KB.
   std::string contents;
   if (!base::ReadFileToStringWithMaxSize(deps, &contents, kDepsFileSizeMax))
     return {};

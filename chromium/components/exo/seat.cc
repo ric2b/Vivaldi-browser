@@ -14,7 +14,7 @@
 #include "base/auto_reset.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -28,9 +28,9 @@
 #include "components/exo/xkb_tracker.h"
 #include "services/data_decoder/public/cpp/decode_image.h"
 #include "ui/aura/client/focus_client.h"
-#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 
@@ -105,13 +105,14 @@ Surface* Seat::GetFocusedSurface() {
   return GetEffectiveFocus(WMHelper::GetInstance()->GetFocusedWindow());
 }
 
-void Seat::StartDrag(DataSource* source,
+void Seat::StartDrag(FileHelper* file_helper,
+                     DataSource* source,
                      Surface* origin,
                      Surface* icon,
                      ui::mojom::DragEventSource event_source) {
   // DragDropOperation manages its own lifetime.
   drag_drop_operation_ = DragDropOperation::Create(
-      source, origin, icon, last_pointer_location_, event_source);
+      file_helper, source, origin, icon, last_pointer_location_, event_source);
 }
 
 void Seat::SetLastPointerLocation(const gfx::PointF& last_pointer_location) {
@@ -151,6 +152,8 @@ void Seat::SetSelection(DataSource* source) {
                      data_read_callback),
       base::BindOnce(&Seat::OnImageRead, weak_ptr_factory_.GetWeakPtr(), writer,
                      data_read_callback),
+      base::BindOnce(&Seat::OnFilenamesRead, weak_ptr_factory_.GetWeakPtr(),
+                     writer, data_read_callback),
       data_read_callback);
 }
 
@@ -160,7 +163,7 @@ class Seat::RefCountedScopedClipboardWriter
  public:
   explicit RefCountedScopedClipboardWriter()
       : ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste,
-                              std::make_unique<ui::ClipboardDataEndpoint>(
+                              std::make_unique<ui::DataTransferEndpoint>(
                                   ui::EndpointType::kGuestOs)) {}
 
  private:
@@ -217,6 +220,14 @@ void Seat::OnImageDecoded(base::OnceClosure callback,
   std::move(callback).Run();
 }
 #endif  // defined(OS_CHROMEOS)
+
+void Seat::OnFilenamesRead(
+    scoped_refptr<RefCountedScopedClipboardWriter> writer,
+    base::OnceClosure callback,
+    const std::string& mime_type,
+    const std::vector<uint8_t>& data) {
+  std::move(callback).Run();
+}
 
 void Seat::OnAllReadsFinished(
     scoped_refptr<RefCountedScopedClipboardWriter> writer) {

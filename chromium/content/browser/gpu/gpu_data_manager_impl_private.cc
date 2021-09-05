@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -88,7 +88,6 @@
 #endif  // OS_MAC
 #if defined(OS_WIN)
 #include "base/base_paths_win.h"
-#include "base/win/windows_version.h"
 #include "ui/display/win/screen_win.h"
 #endif  // OS_WIN
 #if BUILDFLAG(IS_CHROMECAST)
@@ -116,23 +115,6 @@ NOINLINE void FatalGpuProcessLaunchFailureOnBackground() {
 #endif
 
 #if defined(OS_WIN)
-int GetGpuBlocklistHistogramValueWin(gpu::GpuFeatureStatus status) {
-  // The enums are defined as:
-  //   Enabled VERSION_PRE_XP = 0,
-  //   Blocklisted VERSION_PRE_XP = 1,
-  //   Disabled VERSION_PRE_XP = 2,
-  //   Software VERSION_PRE_XP = 3,
-  //   Unknown VERSION_PRE_XP = 4,
-  //   Enabled VERSION_XP = 5,
-  //   ...
-  static const base::win::Version version = base::win::GetVersion();
-  if (version == base::win::Version::WIN_LAST)
-    return -1;
-  DCHECK_NE(gpu::kGpuFeatureStatusMax, status);
-  int entry_index = static_cast<int>(version) * gpu::kGpuFeatureStatusMax;
-  return entry_index + static_cast<int>(status);
-}
-
 // This function checks the created file to ensure it wasn't redirected
 // to another location using a symbolic link or a hard link.
 bool ValidateFileHandle(HANDLE cache_file_handle,
@@ -281,15 +263,6 @@ void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
       command_line.HasSwitch(switches::kDisableWebGL),
       (command_line.HasSwitch(switches::kDisableWebGL) ||
        command_line.HasSwitch(switches::kDisableWebGL2))};
-#if defined(OS_WIN)
-  const std::string kGpuBlocklistFeatureHistogramNamesWin[] = {
-      "GPU.BlacklistFeatureTestResultsWindows2.Accelerated2dCanvas",
-      "GPU.BlacklistFeatureTestResultsWindows2.GpuCompositing",
-      "GPU.BlacklistFeatureTestResultsWindows2.GpuRasterization",
-      "GPU.BlacklistFeatureTestResultsWindows2.OopRasterization",
-      "GPU.BlacklistFeatureTestResultsWindows2.Webgl",
-      "GPU.BlacklistFeatureTestResultsWindows2.Webgl2"};
-#endif
   const size_t kNumFeatures =
       sizeof(kGpuFeatures) / sizeof(gpu::GpuFeatureType);
   for (size_t i = 0; i < kNumFeatures; ++i) {
@@ -304,17 +277,6 @@ void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
         gpu::kGpuFeatureStatusMax + 1,
         base::HistogramBase::kUmaTargetedHistogramFlag);
     histogram_pointer->Add(value);
-#if defined(OS_WIN)
-    int value_win = GetGpuBlocklistHistogramValueWin(value);
-    if (value_win >= 0) {
-      int32_t max_sample = static_cast<int32_t>(base::win::Version::WIN_LAST) *
-                           gpu::kGpuFeatureStatusMax;
-      histogram_pointer = base::LinearHistogram::FactoryGet(
-          kGpuBlocklistFeatureHistogramNamesWin[i], 1, max_sample,
-          max_sample + 1, base::HistogramBase::kUmaTargetedHistogramFlag);
-      histogram_pointer->Add(value_win);
-    }
-#endif
   }
 }
 
@@ -760,6 +722,8 @@ void GpuDataManagerImplPrivate::RequestGpuSupportedDx12Version(bool delayed) {
                   // NotifyGpuInfoUpdate().
                   manager->UpdateDevicePerfInfo(device_perf_info);
                   manager->TerminateInfoCollectionGpuProcess();
+                  gpu::RecordGpuSupportedDx12VersionHistograms(
+                      d3d12_feature_level);
                 }));
       },
       delta);
@@ -1106,7 +1070,7 @@ void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
 }
 
 void GpuDataManagerImplPrivate::UpdateGpuExtraInfo(
-    const gpu::GpuExtraInfo& gpu_extra_info) {
+    const gfx::GpuExtraInfo& gpu_extra_info) {
   gpu_extra_info_ = gpu_extra_info;
   observer_list_->Notify(FROM_HERE,
                          &GpuDataManagerObserver::OnGpuExtraInfoUpdate);
@@ -1121,7 +1085,7 @@ gpu::GpuFeatureInfo GpuDataManagerImplPrivate::GetGpuFeatureInfoForHardwareGpu()
   return gpu_feature_info_for_hardware_gpu_;
 }
 
-gpu::GpuExtraInfo GpuDataManagerImplPrivate::GetGpuExtraInfo() const {
+gfx::GpuExtraInfo GpuDataManagerImplPrivate::GetGpuExtraInfo() const {
   return gpu_extra_info_;
 }
 
@@ -1370,6 +1334,32 @@ void GpuDataManagerImplPrivate::OnDisplayRemoved(
                            base::BindOnce([](GpuProcessHost* host) {
                              if (host)
                                host->gpu_service()->DisplayRemoved();
+                           }));
+}
+
+void GpuDataManagerImplPrivate::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+#if defined(OS_WIN)
+  if (gpu_info_dx_diag_requested_) {
+    // Reset DxDiag flags so the data can be updated again
+    gpu_info_dx_diag_requested_ = false;
+    gpu_info_.dx_diagnostics = gpu::DxDiagNode();
+    // This DxDiag request goes to the unsandboxed GPU info collection GPU
+    // process while the notification below goes to the sandboxed GPU process.
+    RequestDxDiagNodeData();
+  }
+#endif
+
+  base::AutoUnlock unlock(owner_->lock_);
+
+  // Notify observers in the browser process.
+  ui::GpuSwitchingManager::GetInstance()->NotifyDisplayMetricsChanged();
+  // Pass the notification to the GPU process to notify observers there.
+  GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+                           base::BindOnce([](GpuProcessHost* host) {
+                             if (host)
+                               host->gpu_service()->DisplayMetricsChanged();
                            }));
 }
 

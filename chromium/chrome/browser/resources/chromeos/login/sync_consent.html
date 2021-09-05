@@ -8,7 +8,12 @@
   <link rel="import" href="chrome://oobe/sync-consent-icons.html">
 </if>
 
-<dom-module id="sync-consent">
+<link rel="import" href="/components/common_styles.html">
+<link rel="import" href="/components/hd_iron_icon.html">
+<link rel="import" href="/components/oobe_i18n_behavior.html">
+<link rel="import" href="/components/throbber_notice.html">
+
+<dom-module id="sync-consent-element">
   <template>
     <style include="oobe-dialog-host"></style>
     <link rel="stylesheet" href="sync_consent.css">
@@ -61,8 +66,11 @@
         </cr-checkbox>
       </div>
       <div slot="bottom-buttons" class="layout horizontal end-justified">
-        <oobe-text-button id="settingsSaveAndContinueButton" on-tap="onSettingsSaveAndContinue_" class="focus-on-show"
-          inverse>
+        <oobe-text-button class="focus-on-show" inverse
+            id="settingsSaveAndContinueButton"
+            on-click="onSettingsSaveAndContinue_"
+            label-for-aria="[[i18nDynamic(locale,
+                                          'syncConsentAcceptAndContinue')]]">
           <div slot="text" consent-description consent-confirmation>
             [[i18nDynamic(locale, 'syncConsentAcceptAndContinue')]]
           </div>
@@ -86,7 +94,8 @@
 
         <!-- "Chrome OS settings sync" -->
         <div class="overview-list-item layout horizontal center">
-          <img class="overview-list-item-icon" src="images/settings_gear.svg" width="24" height="24">
+          <img class="overview-list-item-icon" src="images/settings_gear.svg"
+              width="24" height="24" aria-hidden="true">
           <div class="flex layout vertical center-justified">
             <div role="heading" aria-level="2" class="overview-list-item-title" id="osSyncName" consent-description>
               [[i18nDynamic(locale, 'syncConsentScreenOsSyncName')]]
@@ -99,7 +108,8 @@
 
         <!-- "Chrome browser sync" -->
         <div class="overview-list-item layout horizontal center">
-          <img class="overview-list-item-icon" src="images/browser_sync.svg" width="24" height="24">
+          <img class="overview-list-item-icon" src="images/browser_sync.svg"
+              width="24" height="24" aria-hidden="true">
           <div class="flex layout vertical center-justified">
             <div role="heading" aria-level="2" class="overview-list-item-title" consent-description
               id="browserSyncName">
@@ -133,13 +143,17 @@
         </div>
       </div>
       <div slot="bottom-buttons" class="layout horizontal end-justified">
-        <oobe-text-button id="declineButton" on-tap="onDeclineTap_">
+        <oobe-text-button id="declineButton" on-click="onDeclineTap_"
+            label-for-aria="[[i18nDynamic(locale,
+                                          'syncConsentScreenDecline')]]">
           <div slot="text" consent-description consent-confirmation>
             [[i18nDynamic(locale, 'syncConsentScreenDecline')]]
           </div>
         </oobe-text-button>
-        <oobe-text-button id="acceptButton" on-tap="onAcceptTap_"
-          class="focus-on-show" inverse>
+        <oobe-text-button id="acceptButton" on-click="onAcceptTap_"
+            class="focus-on-show" inverse
+            label-for-aria="[[i18nDynamic(locale,
+                                          'syncConsentScreenAccept')]]">
           <div slot="text" consent-description consent-confirmation>
             [[i18nDynamic(locale, 'syncConsentScreenAccept')]]
           </div>

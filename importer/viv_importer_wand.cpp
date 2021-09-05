@@ -14,7 +14,7 @@
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 
@@ -400,7 +400,7 @@ struct wand_field_entry {
 bool OperaImporter::ImportWand_ReadEntryHTML(
     std::string::iterator* buffer,
     const std::string::iterator& buffer_end,
-    std::vector<autofill::PasswordForm>* passwords,
+    std::vector<importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
   base::string16 guid;
   base::string16 date_used;
@@ -463,11 +463,10 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
   rep.ClearUsername();
   rep.ClearPassword();
 
-  autofill::PasswordForm password;
+  importer::ImportedPasswordForm password;
 
-  password.scheme = autofill::PasswordForm::Scheme::kHtml;
+  password.scheme = importer::ImportedPasswordForm::Scheme::kHtml;
 
-  password.submit_element = submit_button;
   password.url = GURL(url).ReplaceComponents(rep);
   if (!password.url.is_valid())
     return true;  // Ignore this entry, no URL
@@ -485,13 +484,6 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
     password.password_value = fields[first_pass].fieldvalue;
   }
 
-  for (uint32_t i = 0; i < field_count; i++) {
-    if (static_cast<int>(i) != first_field &&
-        static_cast<int>(i) != first_pass && !fields[first_pass].is_password)
-      password.all_possible_usernames.push_back(
-          autofill::ValueElementPair(fields[first_pass].fieldvalue,
-                                         submit_button));
-  }
   passwords->push_back(password);
 
   return true;
@@ -500,7 +492,7 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
 bool OperaImporter::ImportWand_ReadEntryAuth(
     std::string::iterator* buffer,
     const std::string::iterator& buffer_end,
-    std::vector<autofill::PasswordForm>* passwords,
+    std::vector<importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
   base::string16 guid;
   base::string16 date_used;
@@ -557,15 +549,11 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
   rep.ClearUsername();
   rep.ClearPassword();
 
-  autofill::PasswordForm password;
+  importer::ImportedPasswordForm password;
 
-  password.scheme = autofill::PasswordForm::Scheme::kOther;
-  /*
-  if(http_auth)
-    password.scheme = autofill::PasswordForm::Scheme::kOther;
-  else if (mail_url)
-    password.scheme = autofill::PasswordForm::Scheme::kOther;
-    */
+  password.scheme = importer::ImportedPasswordForm::Scheme::kHtml;
+  if (http_auth || mail_url)
+    password.scheme = importer::ImportedPasswordForm::Scheme::kBasic;
 
   password.url = GURL(url8).ReplaceComponents(rep);
   password.signon_realm = password.url.GetOrigin().spec();
@@ -581,14 +569,16 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
     password.password_value = fields[first_pass].fieldvalue;
   }
 
+  /*
   for (uint32_t i = 0; i < field_count; i++) {
     if (static_cast<int>(i) != first_field &&
         static_cast<int>(i) != first_pass && !fields[first_pass].is_password) {
       password.all_possible_usernames.push_back(
-        autofill::ValueElementPair(fields[first_pass].fieldvalue,
-                                       base::string16()));
+          password_manager::ValueElementPair(fields[first_pass].fieldvalue,
+                                             base::string16()));
     }
   }
+  */
 
   passwords->push_back(password);
 
@@ -709,7 +699,7 @@ bool OperaImporter::ImportWand(std::string* error) {
   if (wand_version_ < 5 || wand_version_ > 6)
     return WandFormatError(error);
 
-  std::vector<autofill::PasswordForm> passwords;
+  std::vector<importer::ImportedPasswordForm> passwords;
 
   uint32_t masterpass_used = 0;
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &masterpass_used))
@@ -781,7 +771,8 @@ bool OperaImporter::ImportWand(std::string* error) {
   }
 
   if (!cancelled()) {
-    for (std::vector<autofill::PasswordForm>::iterator it = passwords.begin();
+    for (std::vector<importer::ImportedPasswordForm>::iterator it =
+             passwords.begin();
          it < passwords.end(); it++)
       bridge_->SetPasswordForm(*it);
   }

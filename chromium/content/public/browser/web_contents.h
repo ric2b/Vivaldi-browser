@@ -23,7 +23,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/accessibility_tree_formatter.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/mhtml_generation_result.h"
 #include "content/public/browser/navigation_controller.h"
@@ -52,14 +51,12 @@
 #endif
 
 namespace blink {
-namespace mojom {
-class RendererPreferences;
-}
 namespace web_pref {
 struct WebPreferences;
 }
 struct Manifest;
 struct UserAgentOverride;
+struct RendererPreferences;
 }  // namespace blink
 
 namespace base {
@@ -78,6 +75,10 @@ struct LoadStateWithParam;
 
 namespace service_manager {
 class InterfaceProvider;
+}
+
+namespace ui {
+struct AXPropertyFilter;
 }
 
 namespace content {
@@ -262,6 +263,10 @@ class WebContents : public PageNavigator,
 
   // Returns the WebContents for the RenderFrameHost. It is unsafe to call this
   // function with an invalid (e.g. destructed) `rfh`.
+  // Warning: Be careful when `rfh->IsCurrent()` is false, since this implies
+  // that `rfh` may not be visible to the user (in bfcache or pending deletion),
+  // so it should not be triggering state changes that affect the whole
+  // WebContents.
   CONTENT_EXPORT static WebContents* FromRenderFrameHost(RenderFrameHost* rfh);
 
   // Returns the WebContents associated with the |frame_tree_node_id|. This may
@@ -382,10 +387,6 @@ class WebContents : public PageNavigator,
   // handler.
   virtual void ClosePage() = 0;
 
-  // Returns the currently active fullscreen widget. If there is none, returns
-  // nullptr.
-  virtual RenderWidgetHostView* GetFullscreenRenderWidgetHostView() = 0;
-
   // Returns the theme color for the underlying content as set by the
   // theme-color meta tag if any.
   virtual base::Optional<SkColor> GetThemeColor() = 0;
@@ -436,8 +437,7 @@ class WebContents : public PageNavigator,
 
   virtual std::string DumpAccessibilityTree(
       bool internal,
-      std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
-          property_filters) = 0;
+      std::vector<ui::AXPropertyFilter> property_filters) = 0;
 
   // A callback that takes a string which contains accessibility event
   // information.
@@ -845,7 +845,7 @@ class WebContents : public PageNavigator,
   virtual const std::string& GetContentsMimeType() = 0;
 
   // Returns the settings which get passed to the renderer.
-  virtual blink::mojom::RendererPreferences* GetMutableRendererPrefs() = 0;
+  virtual blink::RendererPreferences* GetMutableRendererPrefs() = 0;
 
   // Tells the tab to close now. The tab will take care not to close until it's
   // out of nested run loops.
@@ -877,6 +877,10 @@ class WebContents : public PageNavigator,
   // Wrapper around GotResponseToLockMouseRequest to fit into
   // ChromeWebViewPermissionHelperDelegate's structure.
   virtual void GotLockMousePermissionResponse(bool allowed) = 0;
+
+  // Drop the mouse lock if it is currently locked, or reject an
+  // outstanding request if it is pending.
+  virtual void DropMouseLockForTesting() = 0;
 
   // Called when the response to a keyboard mouse lock request has arrived.
   // Returns false if the request is no longer valid, otherwise true.

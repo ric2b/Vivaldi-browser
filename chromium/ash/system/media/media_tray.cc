@@ -4,6 +4,7 @@
 
 #include "ash/system/media/media_tray.h"
 
+#include "ash/focus_cycler.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/media_notification_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -18,10 +19,13 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_utils.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
+#include "components/media_message_center/media_notification_view_impl.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
@@ -31,11 +35,13 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 
 namespace {
 
+constexpr int kNoMediaTextFontSizeIncrease = 2;
 constexpr int kTitleFontSizeIncrease = 4;
 constexpr int kTitleViewHeight = 56;
 
@@ -61,6 +67,21 @@ bool GetIsPinnedToShelfByDefault() {
 
   float diagonal_len = sqrt(pow(screen_width, 2) + pow(screen_height, 2));
   return diagonal_len > kMinimumScreenSizeDiagonal;
+}
+
+// Used for getting default pin state for experiment.
+bool GetIsPinnedToShelfByFeatureParams() {
+  switch (media::kCrosGlobalMediaControlsPinParam.Get()) {
+    case media::kCrosGlobalMediaControlsPinOptions::kPin:
+      return true;
+    case media::kCrosGlobalMediaControlsPinOptions::kNotPin:
+      return false;
+    case media::kCrosGlobalMediaControlsPinOptions::kHeuristic:
+      return GetIsPinnedToShelfByDefault();
+  }
+
+  NOTREACHED();
+  return false;
 }
 
 // Enum that specifies the pin state of global media controls.
@@ -131,7 +152,7 @@ bool MediaTray::IsPinnedToShelf() {
     case PinState::kUnpinned:
       return false;
     case PinState::kDefault:
-      return GetIsPinnedToShelfByDefault();
+      return GetIsPinnedToShelfByFeatureParams();
   }
 
   NOTREACHED();
@@ -149,15 +170,18 @@ void MediaTray::SetPinnedToShelf(bool pinned) {
 
 MediaTray::PinButton::PinButton()
     : TopShortcutButton(
-          this,
+          base::BindRepeating(&PinButton::ButtonPressed,
+                              base::Unretained(this)),
           MediaTray::IsPinnedToShelf() ? kPinnedIcon : kUnpinnedIcon,
           MediaTray::IsPinnedToShelf()
               ? IDS_ASH_GLOBAL_MEDIA_CONTROLS_PINNED_BUTTON_TOOLTIP_TEXT
               : IDS_ASH_GLOBAL_MEDIA_CONTROLS_UNPINNED_BUTTON_TOOLTIP_TEXT) {}
 
-void MediaTray::PinButton::ButtonPressed(views::Button* sender,
-                                         const ui::Event& event) {
+void MediaTray::PinButton::ButtonPressed() {
   MediaTray::SetPinnedToShelf(!MediaTray::IsPinnedToShelf());
+  base::UmaHistogramBoolean("Media.CrosGlobalMediaControls.PinAction",
+                            MediaTray::IsPinnedToShelf());
+
   SetImage(views::Button::STATE_NORMAL,
            CreateVectorIcon(
                MediaTray::IsPinnedToShelf() ? kPinnedIcon : kUnpinnedIcon,
@@ -233,13 +257,14 @@ bool MediaTray::PerformAction(const ui::Event& event) {
 
 void MediaTray::ShowBubble(bool show_by_click) {
   DCHECK(MediaNotificationProvider::Get());
+  SetNotificationColorTheme();
 
   TrayBubbleView::InitParams init_params;
   init_params.delegate = this;
   init_params.parent_window = GetBubbleWindowContainer();
   init_params.anchor_view = nullptr;
   init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = shelf()->GetSystemTrayAnchorRect();
+  init_params.anchor_rect = GetAnchorBoundsInScreen();
   init_params.insets = GetTrayBubbleInsets();
   init_params.shelf_alignment = shelf()->alignment();
   init_params.preferred_width = kTrayMenuWidth;
@@ -257,21 +282,31 @@ void MediaTray::ShowBubble(bool show_by_click) {
   title_view->layer()->SetFillsBoundsOpaquely(false);
   pin_button_ = title_view->pin_button();
 
-  bubble_view->AddChildView(
+  content_view_ = bubble_view->AddChildView(
       MediaNotificationProvider::Get()->GetMediaNotificationListView(
-          AshColorProvider::Get()->GetContentLayerColor(
-              AshColorProvider::ContentLayerType::kSeparatorColor),
           kMenuSeparatorWidth));
 
   bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view,
                                                 false /*is_persistent*/);
   SetIsActive(true);
+
+  // Only focus the widget if it's opened by the keyboard.
+  if (!show_by_click) {
+    views::Widget* widget = bubble_->GetBubbleWidget();
+    widget->widget_delegate()->SetCanActivate(true);
+    Shell::Get()->focus_cycler()->FocusWidget(widget);
+  }
+
+  base::UmaHistogramBoolean("Media.CrosGlobalMediaControls.RepeatUsageOnShelf",
+                            bubble_has_shown_);
+  bubble_has_shown_ = true;
 }
 
 void MediaTray::CloseBubble() {
   if (MediaNotificationProvider::Get())
     MediaNotificationProvider::Get()->OnBubbleClosing();
   SetIsActive(false);
+  empty_state_view_ = nullptr;
   bubble_.reset();
   shelf()->UpdateAutoHideState();
 }
@@ -303,19 +338,92 @@ void MediaTray::UpdateDisplayState() {
   if (!MediaNotificationProvider::Get())
     return;
 
-  bool should_show =
-      (MediaNotificationProvider::Get()->HasActiveNotifications() ||
-       MediaNotificationProvider::Get()->HasFrozenNotifications()) &&
-      !Shell::Get()->session_controller()->IsScreenLocked();
-
-  if (!should_show && bubble_)
+  if (bubble_ && Shell::Get()->session_controller()->IsScreenLocked())
     CloseBubble();
 
-  SetVisiblePreferred(should_show && IsPinnedToShelf());
+  bool has_session =
+      MediaNotificationProvider::Get()->HasActiveNotifications() ||
+      MediaNotificationProvider::Get()->HasFrozenNotifications();
+
+  if (bubble_ && !has_session)
+    ShowEmptyState();
+
+  if (bubble_ && has_session && empty_state_view_)
+    empty_state_view_->SetVisible(false);
+
+  bool should_show = has_session &&
+                     !Shell::Get()->session_controller()->IsScreenLocked() &&
+                     IsPinnedToShelf();
+
+  SetVisiblePreferred(should_show);
+}
+
+base::string16 MediaTray::GetAccessibleNameForBubble() {
+  return l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE);
+}
+
+void MediaTray::SetNotificationColorTheme() {
+  if (!MediaNotificationProvider::Get())
+    return;
+
+  media_message_center::NotificationTheme theme;
+  theme.primary_text_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+  theme.secondary_text_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary);
+  theme.enabled_icon_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
+  theme.disabled_icon_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kIconColorSecondary);
+  theme.separator_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kSeparatorColor);
+  MediaNotificationProvider::Get()->SetColorTheme(theme);
 }
 
 void MediaTray::OnGlobalMediaControlsPinPrefChanged() {
   UpdateDisplayState();
+}
+
+void MediaTray::ShowEmptyState() {
+  DCHECK(content_view_);
+  if (empty_state_view_) {
+    empty_state_view_->SetVisible(true);
+    return;
+  }
+
+  // Create and add empty state view containing a label indicating there's no
+  // active session
+  auto empty_state_view = std::make_unique<views::View>();
+  auto* layout =
+      empty_state_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal));
+  layout->set_minimum_cross_axis_size(content_view_->bounds().height());
+  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+
+  auto no_media_label = std::make_unique<views::Label>();
+  no_media_label->SetAutoColorReadabilityEnabled(false);
+  no_media_label->SetSubpixelRenderingEnabled(false);
+  no_media_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
+  no_media_label->SetText(
+      l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_NO_MEDIA_TEXT));
+  no_media_label->SetFontList(
+      views::Label::GetDefaultFontList().DeriveWithSizeDelta(
+          kNoMediaTextFontSizeIncrease));
+  empty_state_view->AddChildView(std::move(no_media_label));
+
+  empty_state_view->SetPaintToLayer();
+  empty_state_view->layer()->SetFillsBoundsOpaquely(false);
+  empty_state_view_ =
+      bubble_->GetBubbleView()->AddChildView(std::move(empty_state_view));
+}
+
+void MediaTray::AnchorUpdated() {
+  if (!bubble_)
+    return;
+
+  bubble_->GetBubbleView()->SetAnchorRect(
+      shelf()->GetStatusAreaWidget()->GetMediaTrayAnchorRect());
 }
 
 }  // namespace ash

@@ -12,9 +12,9 @@
 #include "ash/system/tray/tray_popup_ink_drop_style.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/strings/string16.h"
+#include "ui/views/controls/button/button.h"
 
 namespace views {
-class ButtonListener;
 class Button;
 class ImageView;
 class InkDrop;
@@ -35,6 +35,20 @@ class UnfocusableLabel;
 // Factory/utility functions used by the system menu.
 class TrayPopupUtils {
  public:
+  enum class FontStyle {
+    // Topmost header rows for default view and detailed view.
+    kTitle,
+    // Topmost header rows for secondary tray bubbles.
+    kSmallTitle,
+    // Text in sub-section header rows in detailed views.
+    kSubHeader,
+    // Main text used by detailed view rows.
+    kDetailedViewLabel,
+    // System information text (e.g. date/time, battery status, "Scanning for
+    // devices..." seen in the Bluetooth detailed view, etc).
+    kSystemInfo,
+  };
+
   // Creates a default container view to be used by system menu rows that are
   // either a single targetable area or not targetable at all. The caller takes
   // over ownership of the created view.
@@ -105,7 +119,7 @@ class TrayPopupUtils {
 
   // Returns a ToggleButton that has been configured for system menu layout.
   static views::ToggleButton* CreateToggleButton(
-      views::ButtonListener* listener,
+      views::Button::PressedCallback callback,
       int accessible_name_id);
 
   // Creates a default focus painter used for most things in tray popups.
@@ -128,7 +142,7 @@ class TrayPopupUtils {
   // button. For non-MD, this does the same thing as the above. Caller assumes
   // ownership.
   static views::LabelButton* CreateTrayPopupButton(
-      views::ButtonListener* listener,
+      views::Button::PressedCallback callback,
       const base::string16& text);
 
   // Creates and returns a vertical separator to be used between two items in a
@@ -187,8 +201,8 @@ class TrayPopupUtils {
   static void UpdateCheckMarkVisibility(HoverHighlightView* container,
                                         bool visible);
 
-  // Sets up the font and padding for sub labels used in some detailed views.
-  static void SetupTraySubLabel(views::Label* label);
+  // Sets the font list for |label| based on |style|.
+  static void SetLabelFontList(views::Label* label, FontStyle style);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(TrayPopupUtils);

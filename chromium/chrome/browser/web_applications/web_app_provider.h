@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -62,6 +61,8 @@ class WebAppProvider : public WebAppProviderBase {
   static WebAppProvider* GetForWebContents(content::WebContents* web_contents);
 
   explicit WebAppProvider(Profile* profile);
+  WebAppProvider(const WebAppProvider&) = delete;
+  WebAppProvider& operator=(const WebAppProvider&) = delete;
   ~WebAppProvider() override;
 
   // Start the Web App system. This will run subsystem startup tasks.
@@ -103,8 +104,11 @@ class WebAppProvider : public WebAppProviderBase {
   void CreateCommonSubsystems(Profile* profile);
   // Create extension-independent subsystems.
   void CreateWebAppsSubsystems(Profile* profile);
-  // ... or create legacy extension-based subsystems.
+
+  // Create legacy extension-based subsystems.
   void CreateBookmarkAppsSubsystems(Profile* profile);
+  std::unique_ptr<InstallFinalizer> CreateBookmarkAppInstallFinalizer(
+      Profile* profile);
 
   // Wire together subsystems but do not start them (yet).
   void ConnectSubsystems();
@@ -148,7 +152,6 @@ class WebAppProvider : public WebAppProviderBase {
 
   base::WeakPtrFactory<WebAppProvider> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppProvider);
 };
 
 }  // namespace web_app

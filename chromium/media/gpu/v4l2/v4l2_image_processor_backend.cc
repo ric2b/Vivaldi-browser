@@ -17,8 +17,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -96,13 +96,23 @@ void FillV4L2BufferByGpuMemoryBufferHandle(
 }
 
 bool AllocateV4L2Buffers(V4L2Queue* queue,
-                         size_t num_buffers,
+                         const size_t num_buffers,
                          v4l2_memory memory_type) {
   DCHECK(queue);
-  if (queue->AllocateBuffers(num_buffers, memory_type) == 0u)
+
+  size_t requested_buffers = num_buffers;
+
+  // If we are using DMABUFs, then we will try to keep using the same V4L2
+  // buffer for a given input or output frame. In that case, allocate as many
+  // V4L2 buffers as we can to avoid running out of them. Unused buffers won't
+  // use backed memory and are thus virtually free.
+  if (memory_type == V4L2_MEMORY_DMABUF)
+    requested_buffers = VIDEO_MAX_FRAME;
+
+  if (queue->AllocateBuffers(requested_buffers, memory_type) == 0u)
     return false;
 
-  if (queue->AllocatedBuffersCount() != num_buffers) {
+  if (queue->AllocatedBuffersCount() < num_buffers) {
     VLOGF(1) << "Failed to allocate buffers. Allocated number="
              << queue->AllocatedBuffersCount()
              << ", Requested number=" << num_buffers;
@@ -613,8 +623,26 @@ void V4L2ImageProcessorBackend::ProcessJobsTask() {
     }
 
     // We need one input and one output buffer to schedule the job
-    auto input_buffer = input_queue_->GetFreeBuffer();
-    auto output_buffer = output_queue_->GetFreeBuffer();
+    base::Optional<V4L2WritableBufferRef> input_buffer;
+    // If we are using DMABUF frames, try to always obtain the same V4L2 buffer.
+    if (input_memory_type_ == V4L2_MEMORY_DMABUF) {
+      const VideoFrame& input_frame =
+          *(input_job_queue_.front()->input_frame.get());
+      input_buffer = input_queue_->GetFreeBufferForFrame(input_frame);
+    }
+    if (!input_buffer)
+      input_buffer = input_queue_->GetFreeBuffer();
+
+    base::Optional<V4L2WritableBufferRef> output_buffer;
+    // If we are using DMABUF frames, try to always obtain the same V4L2 buffer.
+    if (output_memory_type_ == V4L2_MEMORY_DMABUF) {
+      const VideoFrame& output_frame =
+          *(input_job_queue_.front()->output_frame.get());
+      output_buffer = output_queue_->GetFreeBufferForFrame(output_frame);
+    }
+    if (!output_buffer)
+      output_buffer = output_queue_->GetFreeBuffer();
+
     if (!input_buffer || !output_buffer)
       break;
 
@@ -636,13 +664,15 @@ void V4L2ImageProcessorBackend::Reset() {
 
 bool V4L2ImageProcessorBackend::ApplyCrop(const gfx::Rect& visible_rect,
                                           enum v4l2_buf_type type) {
-  struct v4l2_rect rect {};
+  struct v4l2_rect rect;
+  memset(&rect, 0, sizeof(rect));
   rect.left = visible_rect.x();
   rect.top = visible_rect.y();
   rect.width = visible_rect.width();
   rect.height = visible_rect.height();
 
-  struct v4l2_selection selection_arg {};
+  struct v4l2_selection selection_arg;
+  memset(&selection_arg, 0, sizeof(selection_arg));
   // Multiplanar buffer types are messed up in S_SELECTION API, so all drivers
   // don't necessarily work with MPLANE types. This issue is resolved with
   // kernel 4.13. As we use kernel < 4.13 today, we use single planar buffer
@@ -658,7 +688,8 @@ bool V4L2ImageProcessorBackend::ApplyCrop(const gfx::Rect& visible_rect,
     rect = selection_arg.r;
   } else {
     DVLOGF(2) << "Fallback to VIDIOC_S/G_CROP";
-    struct v4l2_crop crop {};
+    struct v4l2_crop crop;
+    memset(&crop, 0, sizeof(crop));
     crop.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     crop.c = rect;
     if (device_->Ioctl(VIDIOC_S_CROP, &crop) != 0) {
@@ -683,7 +714,8 @@ bool V4L2ImageProcessorBackend::ReconfigureV4L2Format(
     const gfx::Size& size,
     const gfx::Rect& visible_rect,
     enum v4l2_buf_type type) {
-  v4l2_format format{};
+  struct v4l2_format format;
+  memset(&format, 0, sizeof(format));
   format.type = type;
   if (device_->Ioctl(VIDIOC_G_FMT, &format) != 0) {
     VPLOGF(1) << "ioctl() failed: VIDIOC_G_FMT";

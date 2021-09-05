@@ -15,7 +15,7 @@
 #include "base/scoped_observer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
@@ -490,7 +490,7 @@ TEST_F(DriveFsHostTest, OnSyncingStatusUpdate_ForwardToObservers) {
   auto status = mojom::SyncingStatus::New();
   status->item_events.emplace_back(base::in_place, 12, 34, "filename.txt",
                                    mojom::ItemEvent::State::kInProgress, 123,
-                                   456);
+                                   456, mojom::ItemEventReason::kPin);
   mojom::SyncingStatusPtr observed_status;
   EXPECT_CALL(observer, OnSyncingStatusUpdate(_))
       .WillOnce(CloneStruct(&observed_status));

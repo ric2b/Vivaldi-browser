@@ -33,11 +33,9 @@ class ContentSettingsChangeWaiter : public content_settings::Observer {
         this);
   }
 
-  void OnContentSettingChanged(
-      const ContentSettingsPattern& primary_pattern,
-      const ContentSettingsPattern& secondary_pattern,
-      ContentSettingsType content_type,
-      const std::string& resource_identifier) override {
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type) override {
     if (content_type == content_type_)
       Proceed();
   }
@@ -66,15 +64,15 @@ class CameraPanTiltZoomPermissionContextTests
     HostContentSettingsMap* content_settings =
         HostContentSettingsMapFactory::GetForProfile(profile());
     content_settings->SetContentSettingDefaultScope(
-        url, GURL(), content_settings_type, std::string(), content_setting);
+        url, GURL(), content_settings_type, content_setting);
   }
 
   ContentSetting GetContentSetting(ContentSettingsType content_settings_type) {
     GURL url("https://www.example.com");
     HostContentSettingsMap* content_settings =
         HostContentSettingsMapFactory::GetForProfile(profile());
-    return content_settings->GetContentSetting(
-        url.GetOrigin(), url.GetOrigin(), content_settings_type, std::string());
+    return content_settings->GetContentSetting(url.GetOrigin(), url.GetOrigin(),
+                                               content_settings_type);
   }
 
   DISALLOW_COPY_AND_ASSIGN(CameraPanTiltZoomPermissionContextTests);

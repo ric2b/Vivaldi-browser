@@ -97,6 +97,9 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile);
 
   if (user_manager::UserManager::Get()->GetPrimaryUser() == user) {
+    DCHECK_EQ(primary_profile_, nullptr);
+    primary_profile_ = profile;
+
     InitRlz(profile);
     InitializeCerts(profile);
     InitializeCRLSetFetcher();
@@ -144,11 +147,11 @@ void UserSessionInitializer::InitRlz(Profile* profile) {
 
 void UserSessionInitializer::InitializeCerts(Profile* profile) {
   // Now that the user profile has been initialized
-  // |GetNSSCertDatabaseForProfile| is safe to be used.
+  // `GetNSSCertDatabaseForProfile` is safe to be used.
   if (NetworkCertLoader::IsInitialized() &&
       base::SysInfo::IsRunningOnChromeOS()) {
     GetNSSCertDatabaseForProfile(profile,
-                                 base::Bind(&OnGetNSSCertDatabaseForUser));
+                                 base::BindOnce(&OnGetNSSCertDatabaseForUser));
   }
 }
 
@@ -177,19 +180,14 @@ void UserSessionInitializer::InitializePrimaryProfileServices(
   if (user->GetType() == user_manager::USER_TYPE_REGULAR) {
     // App install logs for extensions and ARC++ are uploaded via the user's
     // communication channel with the management server. This channel exists for
-    // regular users only. |AppInstallEventLogManagerWrapper| and
-    // |ExtensionInstallEventLogManagerWrapper| manages their own lifetime and
+    // regular users only. `AppInstallEventLogManagerWrapper` and
+    // `ExtensionInstallEventLogManagerWrapper` manages their own lifetime and
     // self-destruct on logout.
     policy::AppInstallEventLogManagerWrapper::CreateForProfile(profile);
     policy::ExtensionInstallEventLogManagerWrapper::CreateForProfile(profile);
   }
 
   arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(profile);
-
-  plugin_vm::PluginVmManager* plugin_vm_manager =
-      plugin_vm::PluginVmManagerFactory::GetForProfile(profile);
-  if (plugin_vm_manager)
-    plugin_vm_manager->OnPrimaryUserProfilePrepared();
 
   crostini::CrostiniManager* crostini_manager =
       crostini::CrostiniManager::GetForProfile(profile);
@@ -202,6 +200,17 @@ void UserSessionInitializer::InitializePrimaryProfileServices(
   }
 
   g_browser_process->platform_part()->InitializePrimaryProfileServices(profile);
+}
+
+void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
+  if (is_primary_user) {
+    DCHECK_NE(primary_profile_, nullptr);
+
+    plugin_vm::PluginVmManager* plugin_vm_manager =
+        plugin_vm::PluginVmManagerFactory::GetForProfile(primary_profile_);
+    if (plugin_vm_manager)
+      plugin_vm_manager->OnPrimaryUserSessionStarted();
+  }
 }
 
 void UserSessionInitializer::InitRlzImpl(Profile* profile,

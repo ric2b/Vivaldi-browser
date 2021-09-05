@@ -27,6 +27,10 @@
     'nacl_test_data/glibc/pm_exit_status_test_libs/lib64/libppapi_cpp_lib.so',
     'nacl_test_data/glibc/simple_libs/lib64/libppapi_cpp_lib.so',
     'nacl_test_data/glibc/sysconf_nprocessors_onln_test_libs/lib64/libppapi_cpp_lib.so',
+    'nacl_test_data/nonsfi/irt_exception_test_pnacl_newlib_x32_nonsfi.nexe',
+    'nacl_test_data/nonsfi/irt_manifest_file_pnacl_newlib_x32_nonsfi.nexe',
+    'ppapi_nacl_tests_pnacl_newlib_x64.nexe',
+    'test_data/ppapi/tests/extensions/packaged_app/nonsfi/ppapi_tests_extensions_packaged_app_pnacl_newlib_x32_nonsfi.nexe',
 
     # https://crbug.com/1040247
     'nacl_irt_x86_64.nexe',
@@ -61,6 +65,9 @@
     'test_data/ppapi/tests/extensions/packaged_app/newlib/ppapi_tests_extensions_packaged_app_newlib_x86_64.nexe',
     'test_data/ppapi/tests/extensions/popup/newlib/ppapi_tests_extensions_popup_newlib_x86_64.nexe',
     'test_data/ppapi/tests/extensions/socket_permissions/newlib/ppapi_tests_extensions_socket_permissions_newlib_x86_64.nexe',
+
+    # https://crbug.com/1135151
+    'args.gn',
   ],
 
   'linux_component': [

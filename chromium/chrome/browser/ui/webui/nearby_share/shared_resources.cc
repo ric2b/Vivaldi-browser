@@ -10,59 +10,7 @@
 #include "base/logging.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/nearby_share_dialog_resources.h"
-#include "chrome/grit/nearby_share_dialog_resources_map.h"
-#include "chrome/grit/nearby_shared_resources.h"
-#include "chrome/grit/nearby_shared_resources_map.h"
-#include "chrome/grit/nearby_shared_resources_v3.h"
-#include "chrome/grit/nearby_shared_resources_v3_map.h"
 #include "ui/base/webui/web_ui_util.h"
-
-const char kNearbyShareGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/nearby_share/";
-
-namespace {
-
-void RegisterResourcesWithPrefix(
-    content::WebUIDataSource* data_source,
-    const base::span<const GritResourceMap>& resources,
-    std::string prefix) {
-  std::string generate_path{kNearbyShareGeneratedPath};
-  for (const GritResourceMap& resource : resources) {
-    std::string path = resource.name;
-    if (path.rfind(generate_path, 0) == 0) {
-      path = path.substr(generate_path.size());
-    } else {
-      path = prefix + path;
-    }
-    data_source->AddResourcePath(path, resource.value);
-  }
-}
-
-}  // namespace
-
-void RegisterNearbySharedMojoResources(content::WebUIDataSource* data_source) {
-  data_source->AddResourcePath("mojo/nearby_share.mojom-lite.js",
-                               IDR_NEARBY_SHARE_MOJO_JS);
-  data_source->AddResourcePath("mojo/nearby_share_target_types.mojom-lite.js",
-                               IDR_NEARBY_SHARE_TARGET_TYPES_MOJO_JS);
-  data_source->AddResourcePath("mojo/nearby_share_settings.mojom-lite.js",
-                               IDR_NEARBY_SHARE_SETTINGS_MOJOM_LITE_JS);
-}
-
-void RegisterNearbySharedResources(content::WebUIDataSource* data_source) {
-  RegisterResourcesWithPrefix(
-      data_source,
-      /*resources=*/
-      base::make_span(kNearbySharedResources, kNearbySharedResourcesSize),
-      /*prefix=*/"shared/");
-  RegisterResourcesWithPrefix(
-      data_source,
-      /*resources=*/
-      base::make_span(kNearbySharedResourcesV3, kNearbySharedResourcesV3Size),
-      /*prefix=*/"shared/");
-  RegisterNearbySharedMojoResources(data_source);
-}
 
 void RegisterNearbySharedStrings(content::WebUIDataSource* data_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
@@ -79,12 +27,10 @@ void RegisterNearbySharedStrings(content::WebUIDataSource* data_source) {
       {"nearbyShareContactVisibilityAll", IDS_NEARBY_VISIBLITY_ALL_CONTACTS},
       {"nearbyShareContactVisibilityAllDescription",
        IDS_NEARBY_VISIBLITY_ALL_CONTACTS_DESCRIPTION},
-      {"nearbyShareContactVisibilityContactsTitle",
-       IDS_NEARBY_CONTACT_VISIBILITY_CONTACTS_TITLE},
-      {"nearbyShareContactVisibilityNearbyShareOpenOthers",
-       IDS_NEARBY_CONTACT_VISIBILITY_NEARBY_SHARE_OPEN_OTHERS},
-      {"nearbyShareContactVisibilityNearbyShareOpenOwn",
-       IDS_NEARBY_CONTACT_VISIBILITY_NEARBY_SHARE_OPEN_OWN},
+      {"nearbyShareContactVisibilityDownloadFailed",
+       IDS_NEARBY_CONTACT_VISIBILITY_DOWNLOAD_FAILED},
+      {"nearbyShareContactVisibilityDownloading",
+       IDS_NEARBY_CONTACT_VISIBILITY_DOWNLOADING},
       {"nearbyShareContactVisibilityNoContactsSubtitle",
        IDS_NEARBY_CONTACT_VISIBILITY_NO_CONTACTS_SUBTITLE},
       {"nearbyShareContactVisibilityNoContactsTitle",
@@ -120,14 +66,25 @@ void RegisterNearbySharedStrings(content::WebUIDataSource* data_source) {
       {"nearbyShareDeviceNameInvalidCharactersError",
        IDS_NEARBY_DEVICE_NAME_INVALID_CHARACTERS_ERROR},
       {"nearbyShareDiscoveryPageInfo", IDS_NEARBY_DISCOVERY_PAGE_INFO},
+      {"nearbyShareDiscoveryPagePlaceholder",
+       IDS_NEARBY_DISCOVERY_PAGE_PLACEHOLDER},
       {"nearbyShareDiscoveryPageSubtitle", IDS_NEARBY_DISCOVERY_PAGE_SUBTITLE},
       {"nearbyShareDiscoveryPageTitle", IDS_NEARBY_DISCOVERY_PAGE_TITLE},
+      {"nearbyShareErrorCantShare", IDS_NEARBY_ERROR_CANT_SHARE},
+      {"nearbyShareErrorNoResponse", IDS_NEARBY_ERROR_NO_RESPONSE},
+      {"nearbyShareErrorRejected", IDS_NEARBY_ERROR_REJECTED},
+      {"nearbyShareErrorSomethingWrong", IDS_NEARBY_ERROR_SOMETHING_WRONG},
+      {"nearbyShareErrorTimeOut", IDS_NEARBY_ERROR_TIME_OUT},
+      {"nearbyShareErrorUnsupportedFileType",
+       IDS_NEARBY_ERROR_UNSUPPORTED_FILE_TYPE},
       {"nearbyShareFeatureName", IDS_NEARBY_SHARE_FEATURE_NAME},
       {"nearbyShareOnboardingPageDeviceName",
        IDS_NEARBY_ONBOARDING_PAGE_DEVICE_NAME},
       {"nearbyShareOnboardingPageSubtitle",
        IDS_NEARBY_ONBOARDING_PAGE_SUBTITLE},
       {"nearbyShareOnboardingPageTitle", IDS_NEARBY_ONBOARDING_PAGE_TITLE},
+      {"nearbySharePreviewMultipleFileTitle",
+       IDS_NEARBY_PREVIEW_TITLE_MULTIPLE_FILE},
       {"nearbyShareSecureConnectionId", IDS_NEARBY_SECURE_CONNECTION_ID},
       {"nearbyShareVisibilityPageManageContacts",
        IDS_NEARBY_VISIBILITY_PAGE_MANAGE_CONTACTS},

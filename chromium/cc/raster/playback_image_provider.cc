@@ -4,6 +4,8 @@
 
 #include "cc/raster/playback_image_provider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -63,14 +65,12 @@ ImageProvider::ScopedResult PlaybackImageProvider::GetRasterContent(
                                            draw_image.filter_quality()));
     } else if (settings_->raster_mode == RasterMode::kGpu) {
       return ScopedResult(DecodedDrawImage(
-          paint_image.GetAcceleratedSkImage(), SkSize::Make(0, 0),
-          SkSize::Make(1.f, 1.f), draw_image.filter_quality(),
-          true /* is_budgeted */));
+          paint_image.GetAcceleratedSkImage(), nullptr, SkSize::Make(0, 0),
+          SkSize::Make(1.f, 1.f), draw_image.filter_quality()));
     } else {
-      return ScopedResult(
-          DecodedDrawImage(paint_image.GetSwSkImage(), SkSize::Make(0, 0),
-                           SkSize::Make(1.f, 1.f), draw_image.filter_quality(),
-                           true /* is_budgeted */));
+      return ScopedResult(DecodedDrawImage(
+          paint_image.GetSwSkImage(), nullptr, SkSize::Make(0, 0),
+          SkSize::Make(1.f, 1.f), draw_image.filter_quality()));
     }
   }
 

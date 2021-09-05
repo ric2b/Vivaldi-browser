@@ -10,7 +10,7 @@
 <translation id="1617663976202781617">Datos de la sincronización de Chromium</translation>
 <translation id="1736662517232558588">Datos de Chromium borrados</translation>
 <translation id="1838412507805038478">Chromium ha verificado que <ph name="ISSUER" /> emitió el certificado de este sitio web.</translation>
-<translation id="1843424232666537147">Chromium incluye funciones que te permiten administrar tus datos de Internet y la velocidad a la que se cargan las páginas web.
+<translation id="1843424232666537147">Chromium incluye funciones que te permiten gestionar tus datos de Internet y la velocidad a la que se cargan las páginas web.
 <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="2006345422933397527">Chromium no ha podido comprobar si hay actualizaciones. Revisa tu conexión a Internet.</translation>
 <translation id="2075400798887076382">Accede desde aquí a las pestañas que tengas abiertas en tu ordenador. Solo tienes que abrir Chromium en tu ordenador, ir al menú y seleccionar Iniciar sesión en Chromium…</translation>
@@ -18,6 +18,7 @@
 <translation id="2178608107313874732">Chromium no puede usar la cámara en este momento</translation>
 <translation id="2195025571279539885">¿Quieres que Chromium te ofrezca la posibilidad de traducir las páginas en <ph name="LANGUAGE_NAME" /> de este sitio web la próxima vez?</translation>
 <translation id="2590893390871230428">Sincronizar tus datos de Chromium</translation>
+<translation id="259614951763923692">Si permites que Chromium conozca tu ubicación, la enviará a tu buscador predeterminado y a los sitios que permitas. Los sitios podrían solicitar conocer tu ubicación si tienen información local que mostrarte, como tiendas cercanas o noticias.</translation>
 <translation id="2650312721222849884">Activa la sincronización para ver tus pestañas dondequiera que uses Chromium</translation>
 <translation id="2730884209570016437">Chromium no puede utilizar la cámara porque la está usando otra aplicación</translation>
 <translation id="2915596697727466327">Chromium usa Face ID para garantizar el acceso autorizado a tus contraseñas.</translation>

@@ -8,24 +8,49 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/commander/commander_view_model.h"
 
-const char CommanderHandler::Delegate::kKey[] =
-    "CommanderHandler::Delegate::kKey";
+namespace {
+// Message handler keys.
+constexpr char kTextChangedMessage[] = "textChanged";
+constexpr char kOptionSelectedMessage[] = "optionSelected";
+constexpr char kDismissMessage[] = "dismiss";
+constexpr char kHeightChangedMessage[] = "heightChanged";
+constexpr char kCompositeCommandCancelledMessage[] =
+    "compositeCommandCancelled";
+// WebUI event keys.
+constexpr char kViewModelUpdatedEvent[] = "view-model-updated";
+constexpr char kInitializeEvent[] = "initialize";
+// View model dictionary keys
+constexpr char kActionKey[] = "action";
+constexpr char kResultSetIdKey[] = "resultSetId";
+constexpr char kTitleKey[] = "title";
+constexpr char kEntityKey[] = "entity";
+constexpr char kAnnotationKey[] = "annotation";
+constexpr char kMatchedRangesKey[] = "matchedRanges";
+constexpr char kOptionsKey[] = "options";
+constexpr char kPromptTextKey[] = "promptText";
+}  // namespace
+
 CommanderHandler::CommanderHandler() = default;
 CommanderHandler::~CommanderHandler() = default;
 
 void CommanderHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "textChanged", base::BindRepeating(&CommanderHandler::HandleTextChanged,
-                                         base::Unretained(this)));
+      kTextChangedMessage,
+      base::BindRepeating(&CommanderHandler::HandleTextChanged,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "optionSelected",
+      kOptionSelectedMessage,
       base::BindRepeating(&CommanderHandler::HandleOptionSelected,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "dismiss", base::BindRepeating(&CommanderHandler::HandleDismiss,
-                                     base::Unretained(this)));
+      kCompositeCommandCancelledMessage,
+      base::BindRepeating(&CommanderHandler::HandleCompositeCommandCancelled,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "heightChanged",
+      kDismissMessage, base::BindRepeating(&CommanderHandler::HandleDismiss,
+                                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kHeightChangedMessage,
       base::BindRepeating(&CommanderHandler::HandleHeightChanged,
                           base::Unretained(this)));
 }
@@ -57,6 +82,14 @@ void CommanderHandler::HandleOptionSelected(const base::ListValue* args) {
     delegate_->OnOptionSelected(index, result_set_id);
 }
 
+void CommanderHandler::HandleCompositeCommandCancelled(
+    const base::ListValue* args) {
+  if (!delegate_)
+    return;
+  AllowJavascript();
+  delegate_->OnCompositeCommandCancelled();
+}
+
 void CommanderHandler::HandleDismiss(const base::ListValue* args) {
   if (delegate_)
     delegate_->OnDismiss();
@@ -71,19 +104,40 @@ void CommanderHandler::HandleHeightChanged(const base::ListValue* args) {
 
 void CommanderHandler::ViewModelUpdated(
     commander::CommanderViewModel view_model) {
+  base::DictionaryValue vm;
+  vm.SetIntKey(kActionKey, view_model.action);
+  vm.SetIntKey(kResultSetIdKey, view_model.result_set_id);
   if (view_model.action ==
       commander::CommanderViewModel::Action::kDisplayResults) {
-    base::Value list(base::Value::Type::LIST);
+    base::ListValue option_list;
     for (commander::CommandItemViewModel& item : view_model.items) {
-      // TODO(lgrey): This is temporary, just so we can display something.
-      // We will also need to pass on the result set id, and match ranges for
-      // each item.
-      list.Append(item.title);
+      base::DictionaryValue option;
+      option.SetStringKey(kTitleKey, item.title);
+      option.SetIntKey(kEntityKey, item.entity_type);
+      if (!item.annotation.empty())
+        option.SetStringKey(kAnnotationKey, item.annotation);
+      base::ListValue ranges;
+      for (const gfx::Range& range : item.matched_ranges) {
+        base::ListValue range_value;
+        range_value.Append(static_cast<int>(range.start()));
+        range_value.Append(static_cast<int>(range.end()));
+        ranges.Append(std::move(range_value));
+      }
+      option.SetKey(kMatchedRangesKey, std::move(ranges));
+      option_list.Append(std::move(option));
     }
-    FireWebUIListener("view-model-updated", list);
+    vm.SetKey(kOptionsKey, std::move(option_list));
   } else {
+    // kDismiss is handled higher in the stack.
     DCHECK_EQ(view_model.action,
               commander::CommanderViewModel::Action::kPrompt);
-    // TODO(lgrey): Handle kPrompt. kDismiss is handled higher up the stack.
+    vm.SetStringKey(kPromptTextKey, view_model.prompt_text);
   }
+  FireWebUIListener(kViewModelUpdatedEvent, vm);
+}
+
+void CommanderHandler::PrepareToShow(Delegate* delegate) {
+  delegate_ = delegate;
+  if (IsJavascriptAllowed())
+    FireWebUIListener(kInitializeEvent);
 }

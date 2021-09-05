@@ -187,15 +187,6 @@ void ChromeBrowserCloudManagementControllerDesktop::
   BrowserDMTokenStorage::SetDelegate(std::move(storage_delegate));
 }
 
-bool ChromeBrowserCloudManagementControllerDesktop::IsEnabled() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return true;
-#else
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableChromeBrowserCloudManagement);
-#endif
-}
-
 int ChromeBrowserCloudManagementControllerDesktop::GetUserDataDirKey() {
   return chrome::DIR_USER_DATA;
 }
@@ -311,6 +302,8 @@ void ChromeBrowserCloudManagementControllerDesktop::OnServiceAccountSet(
 void ChromeBrowserCloudManagementControllerDesktop::ShutDown() {
   if (policy_invalidator_)
     policy_invalidator_->Shutdown();
+  if (commands_invalidator_)
+    commands_invalidator_->Shutdown();
 }
 
 MachineLevelUserCloudPolicyManager*
@@ -393,7 +386,6 @@ void ChromeBrowserCloudManagementControllerDesktop::StartInvalidations() {
             ->core(),
         base::DefaultClock::GetInstance(), PolicyInvalidationScope::kCBCM);
     commands_invalidator_->Initialize(invalidation_service_.get());
-    commands_invalidator_->Start();
   }
 }
 

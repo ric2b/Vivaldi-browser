@@ -16,6 +16,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
+#include "third_party/blink/public/mojom/permissions/permission_status.mojom-shared.h"
 
 namespace content {
 
@@ -44,6 +45,12 @@ void FontAccessManagerImpl::EnumerateLocalFonts(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
 #if defined(PLATFORM_HAS_LOCAL_FONT_ENUMERATION_IMPL)
+  if (skip_privacy_checks_for_testing_) {
+    DidRequestPermission(std::move(callback),
+                         blink::mojom::PermissionStatus::GRANTED);
+    return;
+  }
+
   const BindingContext& context = receivers_.current_context();
 
   RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(context.frame_id);
@@ -101,6 +108,11 @@ void FontAccessManagerImpl::EnumerateLocalFonts(
 void FontAccessManagerImpl::DidRequestPermission(
     EnumerateLocalFontsCallback callback,
     blink::mojom::PermissionStatus status) {
+#if !defined(PLATFORM_HAS_LOCAL_FONT_ENUMERATION_IMPL)
+  std::move(callback).Run(blink::mojom::FontEnumerationStatus::kUnimplemented,
+                          base::ReadOnlySharedMemoryRegion());
+  return;
+#else
   if (status != blink::mojom::PermissionStatus::GRANTED) {
     std::move(callback).Run(
         blink::mojom::FontEnumerationStatus::kPermissionDenied,
@@ -110,7 +122,6 @@ void FontAccessManagerImpl::DidRequestPermission(
 
 // Per-platform delegation for obtaining cached font enumeration data occurs
 // here, after the permission has been granted.
-#if defined(PLATFORM_HAS_LOCAL_FONT_ENUMERATION_IMPL)
   ipc_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(
                      [](EnumerateLocalFontsCallback callback,
@@ -120,9 +131,6 @@ void FontAccessManagerImpl::DidRequestPermission(
                                results_task_runner, std::move(callback));
                      },
                      std::move(callback), results_task_runner_));
-#else
-  std::move(callback).Run(blink::mojom::FontEnumerationStatus::kUnimplemented,
-                          base::ReadOnlySharedMemoryRegion());
 #endif
 }
 

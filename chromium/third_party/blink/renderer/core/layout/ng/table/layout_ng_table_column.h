@@ -57,6 +57,11 @@ class CORE_EXPORT LayoutNGTableColumn : public LayoutBox {
 
   void ImageChanged(WrappedImagePtr, CanDeferInvalidation) final;
 
+  bool VisualRectRespectsVisibility() const final {
+    NOT_DESTROYED();
+    return false;
+  }
+
  protected:
   // Required by LayoutBox, but not used.
   MinMaxSizes ComputeIntrinsicLogicalWidths() const override {
@@ -67,7 +72,7 @@ class CORE_EXPORT LayoutNGTableColumn : public LayoutBox {
 
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutTableCol || LayoutBox::IsOfType(type);
+    return type == kLayoutObjectTableCol || LayoutBox::IsOfType(type);
   }
 
  private:

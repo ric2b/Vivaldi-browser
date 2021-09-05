@@ -8,7 +8,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -662,6 +662,55 @@ IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BlockCookiesAlsoBlocksIndexedDB) {
   }
 }
 
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BlockCookiesAlsoBlocksFileSystem) {
+  ui_test_utils::NavigateToURL(browser(), GetPageURL());
+  content_settings::CookieSettings* settings =
+      CookieSettingsFactory::GetForProfile(browser()->profile()).get();
+  settings->SetCookieSetting(GetPageURL(), CONTENT_SETTING_BLOCK);
+
+  const char kBaseExpected[] = "%s - %s";
+
+  const char kBaseScript[] = R"(
+      (async function() {
+        const name = `%s`;
+        try {
+          await %s;
+        } catch(e) {
+          return `${name} - ${e.toString()}`;
+        }
+        return `${name} - success`;
+      }())
+  )";
+
+  struct TestOp {
+    const char* name;
+    const char* code;
+    const char* error;
+  };
+
+  const TestOp kTestOps[] = {
+      {.name = "navigator.storage.getDirectory()",
+       .code = "navigator.storage.getDirectory()",
+       .error = "SecurityError: Storage directory access is denied."},
+      {.name = "window.webkitRequestFileSystem()",
+       .code = "new Promise((resolve, reject) => { "
+               " window.webkitRequestFileSystem(window.TEMPORARY,"
+               " 5*1024, () => resolve(),"
+               " (e) => reject(e));"
+               "});",
+       .error = "AbortError: An ongoing operation was aborted, typically with "
+                "a call to abort()."},
+  };
+
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  for (auto& op : kTestOps) {
+    EXPECT_EQ(base::StringPrintf(kBaseExpected, op.name, op.error),
+              EvalJs(tab, base::StringPrintf(kBaseScript, op.name, op.code)));
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
     All,
     CookieSettingsTest,
@@ -1041,7 +1090,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsWorkerModulesBrowserTest,
   content_settings_map->SetWebsiteSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(http_url),
       ContentSettingsPattern::FromURLNoWildcard(module_url),
-      ContentSettingsType::JAVASCRIPT, std::string(),
+      ContentSettingsType::JAVASCRIPT,
       std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
 
   content::WebContents* web_contents =
@@ -1169,13 +1218,6 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ASSERT_TRUE(ppapi::RegisterFlashTestPlugin(command_line));
-
-    // Plugin throttling is irrelevant to this test and just makes it harder to
-    // verify if a test Flash plugin loads successfully.
-    command_line->AppendSwitchASCII(
-        switches::kOverridePluginPowerSaverForTesting, "never");
-
 #if BUILDFLAG(ENABLE_NACL)
     // Ensure NaCl can run.
     command_line->AppendSwitch(switches::kEnableNaCl);
@@ -1279,24 +1321,12 @@ class PepperContentSettingsSpecialCasesJavaScriptBlockedTest
     HostContentSettingsMap* content_settings_map =
         HostContentSettingsMapFactory::GetForProfile(browser()->profile());
     content_settings_map->SetContentSettingDefaultScope(
-        server_root, server_root, ContentSettingsType::PLUGINS, std::string(),
+        server_root, server_root, ContentSettingsType::PLUGINS,
         CONTENT_SETTING_ALLOW);
     content_settings_map->SetDefaultContentSetting(
         ContentSettingsType::JAVASCRIPT, CONTENT_SETTING_BLOCK);
   }
 };
-
-// A sanity check to verify that the plugin that is used as a baseline below
-// can be loaded.
-IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesTest, Flash) {
-  GURL server_root = https_server_.GetURL("/");
-  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(server_root, server_root,
-                                      ContentSettingsType::PLUGINS,
-                                      std::string(), CONTENT_SETTING_ALLOW);
-
-  RunLoadPepperPluginTest(content::kFlashPluginSwfMimeType, true);
-}
 
 // The following tests verify that Pepper plugins that use JavaScript settings
 // instead of Plugins settings still work when Plugins are blocked.
@@ -1310,12 +1340,6 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
 
 // The following tests verify that those same Pepper plugins do not work when
 // JavaScript is blocked.
-
-// Flash is not blocked when JavaScript is blocked.
-IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
-                       Flash) {
-  RunJavaScriptBlockedTest("/load_flash_no_js.html", false);
-}
 
 #if BUILDFLAG(ENABLE_NACL)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,

@@ -61,7 +61,7 @@ namespace blink {
 // in order to determine if we isStacked() we have to ask the paint
 // layer about some of its state.
 PaintLayerStackingNode::PaintLayerStackingNode(PaintLayer& layer)
-    : layer_(layer), z_order_lists_dirty_(true) {
+    : layer_(layer) {
   DCHECK(layer.GetLayoutObject().IsStackingContext());
 }
 
@@ -211,7 +211,7 @@ void PaintLayerStackingNode::RebuildZOrderLists() {
       auto* child_element = DynamicTo<Element>(child->GetNode());
       if (child_element && child_element->IsInTopLayer() &&
           child->IsStacked()) {
-        pos_z_order_list_.push_back(ToLayoutBoxModelObject(child)->Layer());
+        pos_z_order_list_.push_back(To<LayoutBoxModelObject>(child)->Layer());
       }
     }
   }

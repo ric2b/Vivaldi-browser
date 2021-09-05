@@ -35,13 +35,6 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   }
   NGLayoutInputNode NextSibling() const { return nullptr; }
 
-  // True in quirks mode or limited-quirks mode, which require line-height
-  // quirks.
-  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
-  bool InLineHeightQuirksMode() const {
-    return GetDocument().InLineHeightQuirksMode();
-  }
-
   scoped_refptr<const NGLayoutResult> Layout(
       const NGConstraintSpace&,
       const NGBreakToken*,
@@ -145,6 +138,8 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   };
 
  protected:
+  FRIEND_TEST_ALL_PREFIXES(NGInlineNodeTest, SegmentBidiChangeSetsNeedsLayout);
+
   bool IsPrepareLayoutFinished() const;
 
   // Prepare inline and text content for layout. Must be called before
@@ -190,7 +185,7 @@ inline bool NGInlineNode::IsStickyImagesQuirkForContentSize() const {
   if (UNLIKELY(GetDocument().InQuirksMode())) {
     const ComputedStyle& style = Style();
     if (UNLIKELY(style.Display() == EDisplay::kTableCell &&
-                 style.LogicalWidth().IsIntrinsicOrAuto()))
+                 !style.LogicalWidth().IsSpecified()))
       return true;
   }
   return false;

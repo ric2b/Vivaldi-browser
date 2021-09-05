@@ -9,9 +9,9 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/importer_type.h"
 #include "chrome/utility/importer/importer.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 
 struct ChromiumProfile {
   ChromiumProfile();

@@ -27,13 +27,11 @@ WebViewImpl.prototype.getThumbnail = function (dimensions, callback) {
   $Function.apply(WebViewPrivate.getThumbnail, null, args);
 };
 
-WebViewImpl.prototype.setIsFullscreen = function (isFullscreen,
-                                                  skipWindowState) {
+WebViewImpl.prototype.setIsFullscreen = function (isFullscreen) {
   if (!this.guest.getId()) {
     return false;
   }
-  WebViewPrivate.setIsFullscreen(this.guest.getId(),
-      isFullscreen, skipWindowState);
+  WebViewPrivate.setIsFullscreen(this.guest.getId(), isFullscreen);
 };
 
 WebViewImpl.prototype.contextMenusCreate = function (createProperties) {

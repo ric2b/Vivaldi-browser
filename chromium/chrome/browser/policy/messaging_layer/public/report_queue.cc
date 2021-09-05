@@ -50,48 +50,75 @@ ReportQueue::ReportQueue(std::unique_ptr<ReportQueueConfiguration> config,
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
-Status ReportQueue::Enqueue(base::StringPiece record,
-                            EnqueueCallback callback) const {
-  return AddRecord(record, std::move(callback));
+void ReportQueue::Enqueue(base::StringPiece record,
+                          Priority priority,
+                          EnqueueCallback callback) const {
+  AddRecord(record, priority, std::move(callback));
 }
 
-Status ReportQueue::Enqueue(const base::Value& record,
+void ReportQueue::Enqueue(const base::Value& record,
+                          Priority priority,
+                          EnqueueCallback callback) const {
+  ASSIGN_OR_ONCE_CALLBACK_AND_RETURN(std::string json_record, callback,
+                                     ValueToJson(record));
+  AddRecord(json_record, priority, std::move(callback));
+}
+
+void ReportQueue::Enqueue(google::protobuf::MessageLite* record,
+                          Priority priority,
+                          EnqueueCallback callback) const {
+  ASSIGN_OR_ONCE_CALLBACK_AND_RETURN(std::string protobuf_record, callback,
+                                     ProtoToString(record));
+  AddRecord(protobuf_record, priority, std::move(callback));
+}
+
+void ReportQueue::AddRecord(base::StringPiece record,
+                            Priority priority,
                             EnqueueCallback callback) const {
+  const Status status = config_->CheckPolicy();
+  if (!status.ok()) {
+    std::move(callback).Run(status);
+    return;
+  }
+
+  if (priority == Priority::UNDEFINED_PRIORITY) {
+    std::move(callback).Run(
+        Status(error::INVALID_ARGUMENT, "Priority must be defined"));
+    return;
+  }
+
+  sequenced_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ReportQueue::SendRecordToStorage, base::Unretained(this),
+                     std::string(record), priority, std::move(callback)));
+}
+
+void ReportQueue::SendRecordToStorage(base::StringPiece record_data,
+                                      Priority priority,
+                                      EnqueueCallback callback) const {
+  storage_->AddRecord(priority, AugmentRecord(record_data),
+                      std::move(callback));
+}
+
+StatusOr<std::string> ReportQueue::ValueToJson(
+    const base::Value& record) const {
   std::string json_record;
   if (!base::JSONWriter::Write(record, &json_record)) {
     return Status(error::INVALID_ARGUMENT,
                   "Provided record was not convertable to a std::string");
   }
-  return AddRecord(json_record, std::move(callback));
+  return json_record;
 }
 
-Status ReportQueue::Enqueue(google::protobuf::MessageLite* record,
-                            EnqueueCallback callback) const {
+StatusOr<std::string> ReportQueue::ProtoToString(
+    google::protobuf::MessageLite* record) const {
   std::string protobuf_record;
   if (!record->SerializeToString(&protobuf_record)) {
     return Status(error::INVALID_ARGUMENT,
                   "Unabled to serialize record to string. Most likely due to "
                   "unset required fields.");
   }
-  return AddRecord(protobuf_record, std::move(callback));
-}
-
-Status ReportQueue::AddRecord(base::StringPiece record,
-                              EnqueueCallback callback) const {
-  RETURN_IF_ERROR(config_->CheckPolicy());
-  if (!sequenced_task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(&ReportQueue::SendRecordToStorage,
-                                    base::Unretained(this), std::string(record),
-                                    std::move(callback)))) {
-    return Status(error::INTERNAL, "Failed to post the record for processing.");
-  }
-  return Status::StatusOK();
-}
-
-void ReportQueue::SendRecordToStorage(base::StringPiece record_data,
-                                      EnqueueCallback callback) const {
-  storage_->AddRecord(config_->priority(), AugmentRecord(record_data),
-                      std::move(callback));
+  return protobuf_record;
 }
 
 Record ReportQueue::AugmentRecord(base::StringPiece record_data) const {

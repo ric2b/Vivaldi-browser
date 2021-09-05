@@ -16,8 +16,6 @@
 #include "ash/public/cpp/app_list/app_list_client.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/callback_forward.h"
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
@@ -43,6 +41,8 @@ class AppListClientImpl
       public TemplateURLServiceObserver {
  public:
   AppListClientImpl();
+  AppListClientImpl(const AppListClientImpl&) = delete;
+  AppListClientImpl& operator=(const AppListClientImpl&) = delete;
   ~AppListClientImpl() override;
 
   static AppListClientImpl* GetInstance();
@@ -57,8 +57,7 @@ class AppListClientImpl
                         int suggestion_index,
                         bool launch_as_default) override;
   void InvokeSearchResultAction(const std::string& result_id,
-                                int action_index,
-                                int event_flags) override;
+                                int action_index) override;
   void GetSearchResultContextMenuModel(
       const std::string& result_id,
       GetContextMenuModelCallback callback) override;
@@ -79,9 +78,6 @@ class AppListClientImpl
   void OnFolderDeleted(int profile_id,
                        std::unique_ptr<ash::AppListItemMetadata> item) override;
   void OnPageBreakItemDeleted(int profile_id, const std::string& id) override;
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visible) override;
   void OnQuickSettingsChanged(
@@ -190,8 +186,6 @@ class AppListClientImpl
   bool app_list_visible_ = false;
 
   base::WeakPtrFactory<AppListClientImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppListClientImpl);
 };
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_APP_LIST_CLIENT_IMPL_H_

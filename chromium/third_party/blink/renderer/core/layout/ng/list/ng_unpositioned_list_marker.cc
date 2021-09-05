@@ -20,7 +20,7 @@ NGUnpositionedListMarker::NGUnpositionedListMarker(
 
 NGUnpositionedListMarker::NGUnpositionedListMarker(const NGBlockNode& node)
     : NGUnpositionedListMarker(
-          ToLayoutNGOutsideListMarker(node.GetLayoutBox())) {}
+          To<LayoutNGOutsideListMarker>(node.GetLayoutBox())) {}
 
 // Compute the inline offset of the marker, relative to the list item.
 // The marker is relative to the border box of the list item and has nothing
@@ -74,7 +74,7 @@ base::Optional<LayoutUnit> NGUnpositionedListMarker::ContentAlignmentBaseline(
   // If this child content does not have any line boxes, the list marker
   // should be aligned to the first line box of next child.
   // https://github.com/w3c/csswg-drafts/issues/2417
-  return NGBoxFragment(space.GetWritingMode(), space.Direction(),
+  return NGBoxFragment(space.GetWritingDirection(),
                        To<NGPhysicalBoxFragment>(content))
       .FirstBaseline();
 }
@@ -92,7 +92,7 @@ void NGUnpositionedListMarker::AddToBox(
       To<NGPhysicalBoxFragment>(marker_layout_result.PhysicalFragment());
 
   // Compute the inline offset of the marker.
-  NGBoxFragment marker_fragment(space.GetWritingMode(), space.Direction(),
+  NGBoxFragment marker_fragment(space.GetWritingDirection(),
                                 marker_physical_fragment);
   LogicalOffset marker_offset(InlineOffset(marker_fragment.Size().inline_size),
                               content_offset->block_offset);

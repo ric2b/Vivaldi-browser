@@ -32,11 +32,11 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.FileProviderHelper;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
 
@@ -121,7 +121,7 @@ public class ShareImageFileUtilsTest extends DummyUiActivityTestCase {
     private Uri generateAnImageToClipboard(String fileExtension) throws TimeoutException {
         GenerateUriCallback imageCallback = new GenerateUriCallback();
         ShareImageFileUtils.generateTemporaryUriFromData(
-                getActivity(), TEST_IMAGE_DATA, fileExtension, imageCallback);
+                TEST_IMAGE_DATA, fileExtension, imageCallback);
         imageCallback.waitForCallback(0, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         Clipboard.getInstance().setImageUri(imageCallback.getImageUri());
         CriteriaHelper.pollInstrumentationThread(() -> {

@@ -82,13 +82,15 @@ class CORE_EXPORT NGLayoutAlgorithm : public NGLayoutAlgorithmOperations {
   // Constructor for algorithms that use NGBoxFragmentBuilder and
   // NGBlockBreakToken.
   explicit NGLayoutAlgorithm(const NGLayoutAlgorithmParams& params)
-      : node_(params.node),
+      : node_(To<NGInputNodeType>(params.node)),
         break_token_(params.break_token),
         container_builder_(
             params.node,
             &params.node.Style(),
             &params.space,
             {params.space.GetWritingMode(), params.space.Direction()}) {
+    container_builder_.SetIsNewFormattingContext(
+        params.space.IsNewFormattingContext());
     container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
     if (UNLIKELY(params.space.HasBlockFragmentation())) {
       DCHECK(params.space.IsAnonymous() || !params.node.IsMonolithic());

@@ -22,7 +22,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/process/process.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -43,7 +43,6 @@
 #include "content/browser/wake_lock/wake_lock_context_host.h"
 #include "content/browser/web_contents/file_chooser_impl.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/accessibility_tree_formatter.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/global_routing_id.h"
@@ -67,6 +66,7 @@
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "third_party/blink/public/common/frame/transient_allow_fullscreen.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
@@ -75,7 +75,6 @@
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/display_cutout.mojom.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -107,7 +106,6 @@ class JavaScriptDialogManager;
 class JavaScriptDialogNavigationDeferrer;
 class MediaWebContentsObserver;
 class NFCHost;
-class PluginContentOriginAllowlist;
 class Portal;
 class RenderFrameHost;
 class RenderViewHost;
@@ -311,6 +309,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // frame. Otherwise, returns this WebContents.
   WebContentsImpl* GetFocusedWebContents();
 
+  // TODO(lukasza): Maybe this method can be removed altogether (so that the
+  // focus of the location bar is only set in the //chrome layer).
+  void SetFocusToLocationBar();
+
   // Returns a vector containing this WebContents and all inner WebContents
   // within it (recursively).
   std::vector<WebContentsImpl*> GetWebContentsAndAllInner();
@@ -344,7 +346,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   RenderWidgetHostView* GetRenderWidgetHostView() override;
   RenderWidgetHostView* GetTopLevelRenderWidgetHostView() override;
   void ClosePage() override;
-  RenderWidgetHostView* GetFullscreenRenderWidgetHostView() override;
   base::Optional<SkColor> GetThemeColor() override;
   base::Optional<SkColor> GetBackgroundColor() override;
   WebUI* GetWebUI() override;
@@ -470,7 +471,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       base::OnceCallback<void(uint64_t, data_decoder::mojom::WebBundlerError)>
           callback) override;
   const std::string& GetContentsMimeType() override;
-  blink::mojom::RendererPreferences* GetMutableRendererPrefs() override;
+  blink::RendererPreferences* GetMutableRendererPrefs() override;
   void Close() override;
   void SetClosedByUserGesture(bool value) override;
   bool GetClosedByUserGesture() override;
@@ -481,6 +482,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool GotResponseToLockMouseRequest(
       blink::mojom::PointerLockResult result) override;
   void GotLockMousePermissionResponse(bool allowed) override;
+  void DropMouseLockForTesting() override;
   bool GotResponseToKeyboardLockRequest(bool allowed) override;
   bool HasOpener() override;
   RenderFrameHostImpl* GetOpener() override;
@@ -593,7 +595,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void DOMContentLoaded(RenderFrameHost* render_frame_host) override;
   void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host) override;
   void UpdateStateForFrame(RenderFrameHost* render_frame_host,
-                           const PageState& page_state) override;
+                           const blink::PageState& page_state) override;
   void UpdateTitle(RenderFrameHost* render_frame_host,
                    const base::string16& title,
                    base::i18n::TextDirection title_direction) override;
@@ -611,8 +613,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       const std::vector<AXLocationChangeNotificationDetails>& details) override;
   std::string DumpAccessibilityTree(
       bool internal,
-      std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
-          property_filters) override;
+      std::vector<ui::AXPropertyFilter> property_filters) override;
   void RecordAccessibilityEvents(
       bool start_recording,
       base::Optional<AccessibilityEventCallback> callback) override;
@@ -704,7 +705,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void RegisterProtocolHandler(RenderFrameHostImpl* source,
                                const std::string& protocol,
                                const GURL& url,
-                               const base::string16& title,
                                bool user_gesture) override;
   void UnregisterProtocolHandler(RenderFrameHostImpl* source,
                                  const std::string& protocol,
@@ -728,15 +728,11 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       blink::mojom::TextAutosizerPageInfoPtr page_info) override;
   bool HasSeenRecentScreenOrientationChange() override;
   bool IsTransientAllowFullscreenActive() const override;
-  void CreateNewWidget(AgentSchedulingGroupHost& agent_scheduling_group,
-                       int32_t route_id,
-                       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-                           blink_widget_host,
-                       mojo::PendingAssociatedRemote<blink::mojom::Widget>
-                           blink_widget) override;
-  void CreateNewFullscreenWidget(
+  RenderWidgetHostImpl* CreateNewPopupWidget(
       AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+          blink_popup_widget_host,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
@@ -768,6 +764,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameHost* render_frame_host,
       RenderFrameHostImpl::LifecycleState old_state,
       RenderFrameHostImpl::LifecycleState new_state) override;
+  void SetWindowRect(const gfx::Rect& new_bounds) override;
 
   // RenderViewHostDelegate ----------------------------------------------------
   RenderViewHostDelegateView* GetDelegateView() override;
@@ -783,12 +780,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                             int error_code) override;
   void RenderViewDeleted(RenderViewHost* render_view_host) override;
   void Close(RenderViewHost* render_view_host) override;
-  void RequestSetBounds(const gfx::Rect& new_bounds) override;
-  bool DidAddMessageToConsole(blink::mojom::ConsoleMessageLevel log_level,
+  bool DidAddMessageToConsole(RenderFrameHost* source_frame,
+                              blink::mojom::ConsoleMessageLevel log_level,
                               const base::string16& message,
                               int32_t line_no,
                               const base::string16& source_id) override;
-  blink::mojom::RendererPreferences GetRendererPrefs() const override;
+  const blink::RendererPreferences& GetRendererPrefs() const override;
   void DidReceiveInputEvent(RenderWidgetHostImpl* render_widget_host,
                             const blink::WebInputEvent& event) override;
   bool ShouldIgnoreInputEvents() override;
@@ -798,8 +795,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void ShowCreatedWidget(int process_id,
                          int widget_route_id,
                          const gfx::Rect& initial_rect) override;
-  void ShowCreatedFullscreenWidget(int process_id,
-                                   int widget_route_id) override;
   void RequestMediaAccessPermission(const MediaStreamRequest& request,
                                     MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(RenderFrameHost* render_frame_host,
@@ -872,8 +867,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void SetTopControlsGestureScrollInProgress(bool in_progress) override;
   void RenderWidgetCreated(RenderWidgetHostImpl* render_widget_host) override;
   void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) override;
-  void RenderWidgetGotFocus(RenderWidgetHostImpl* render_widget_host) override;
-  void RenderWidgetLostFocus(RenderWidgetHostImpl* render_widget_host) override;
   void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
                               bool width_changed) override;
   void ResizeDueToAutoResize(RenderWidgetHostImpl* render_widget_host,
@@ -954,6 +947,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderViewHost* render_view_host,
       const base::Optional<base::UnguessableToken>& opener_frame_token,
       int proxy_routing_id) override;
+  void ReattachOuterDelegateIfNeeded() override;
   void CreateRenderWidgetHostViewForRenderManager(
       RenderViewHost* render_view_host) override;
   void BeforeUnloadFiredFromRenderManager(
@@ -971,10 +965,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameHost* new_frame) override;
   NavigationControllerImpl& GetControllerForRenderManager() override;
   bool FocusLocationBarByDefault() override;
-  void SetFocusToLocationBar() override;
   bool IsHidden() override;
   int GetOuterDelegateFrameTreeNodeId() override;
-  RenderWidgetHostImpl* GetFullscreenRenderWidgetHost() const override;
 
   // blink::mojom::ColorChooserFactory ---------------------------------------
 
@@ -1032,9 +1024,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool SetDeviceEmulationSize(const gfx::Size& new_size);
   void ClearDeviceEmulationSize();
 
-  AudioStreamMonitor* audio_stream_monitor() {
-    return &audio_stream_monitor_;
-  }
+  AudioStreamMonitor* audio_stream_monitor() { return &audio_stream_monitor_; }
 
   ForwardingAudioStreamFactory* GetAudioStreamFactory();
 
@@ -1055,6 +1045,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Called by MediaWebContentsObserver when a buffer underflow occurs. See the
   // WebContentsObserver function stubs for more details.
   void MediaBufferUnderflow(const MediaPlayerId& id);
+
+  // Called by MediaWebContentsObserver when player seek event occurs.
+  void MediaPlayerSeek(const MediaPlayerId& id);
 
   int GetCurrentlyPlayingVideoCount() override;
   base::Optional<gfx::Size> GetFullscreenVideoSize() override;
@@ -1515,16 +1508,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void OnPluginCrashed(RenderFrameHostImpl* source,
                        const base::FilePath& plugin_path,
                        base::ProcessId plugin_pid);
-  void OnRequestPpapiBrokerPermission(RenderViewHostImpl* source,
-                                      int ppb_broker_route_id,
-                                      const GURL& url,
-                                      const base::FilePath& plugin_path);
-
-  // Callback function when requesting permission to access the PPAPI broker.
-  // |result| is true if permission was granted.
-  void SendPpapiBrokerPermissionResult(int process_id,
-                                       int ppb_broker_route_id,
-                                       bool result);
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
   void OnShowValidationMessage(RenderViewHostImpl* source,
                                const gfx::Rect& anchor_in_root_view,
@@ -1583,21 +1566,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // not provided since it may be invalid/changed after being committed. The
   // current navigation entry is in the NavigationController at this point.
 
-  // Helper for CreateNewWidget/CreateNewFullscreenWidget.
-  void CreateNewWidget(
-      AgentSchedulingGroupHost& agent_scheduling_group,
-      int32_t route_id,
-      bool is_fullscreen,
-      mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-          blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget);
-
-  // Helper for ShowCreatedWidget/ShowCreatedFullscreenWidget.
-  void ShowCreatedWidget(int process_id,
-                         int route_id,
-                         bool is_fullscreen,
-                         const gfx::Rect& initial_rect);
-
   // Finds the new RenderWidgetHost and returns it. Note that this can only be
   // called once as this call also removes it from the internal map.
   RenderWidgetHostView* GetCreatedWidget(int process_id, int route_id);
@@ -1608,9 +1576,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   base::Optional<CreatedWindow> GetCreatedWindow(
       int process_id,
       int main_frame_widget_route_id);
-
-  // Sends a Page message IPC.
-  void SendPageMessage(IPC::Message* msg);
 
   // Execute a PageBroadcast Mojo method.
   void ExecutePageBroadcastMethod(PageBroadcastMethodCallback callback);
@@ -1868,10 +1833,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // See getter above.
   bool is_being_destroyed_;
 
-  // Keep track of whether this WebContents is currently iterating over its list
-  // of observers, during which time it should not be deleted.
-  bool is_notifying_observers_;
-
   // Indicates whether we should notify about disconnection of this
   // WebContentsImpl. This is used to ensure disconnection notifications only
   // happen if a connection notification has happened and that they happen only
@@ -1894,7 +1855,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool is_showing_before_unload_dialog_;
 
   // Settings that get passed to the renderer process.
-  blink::mojom::RendererPreferences renderer_preferences_;
+  blink::RendererPreferences renderer_preferences_;
 
   // The time that this WebContents was last made active. The initial value is
   // the WebContents creation time.
@@ -1940,12 +1901,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Manages the guest state for browser plugin, if this WebContents is a guest;
   // NULL otherwise.
   std::unique_ptr<BrowserPluginGuest> browser_plugin_guest_;
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // Manages the allowlist of plugin content origins exempt from power saving.
-  std::unique_ptr<PluginContentOriginAllowlist>
-      plugin_content_origin_allowlist_;
-#endif
 
   // This must be at the end, or else we might get notifications and use other
   // member variables that are gone.
@@ -2120,14 +2075,17 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // with OOPIF renderers.
   blink::mojom::TextAutosizerPageInfo text_autosizer_page_info_;
 
-  // Observe native theme for changes to dark mode, and preferred color scheme.
-  // Used to notify the renderer of preferred color scheme changes.
-  ScopedObserver<ui::NativeTheme, ui::NativeThemeObserver>
-      native_theme_observer_;
+  // Observe native theme for changes to dark mode, preferred color scheme, and
+  // preferred contrast. Used to notify the renderer of preferred color scheme
+  // and preferred contrast changes.
+  base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
+      native_theme_observation_{this};
 
   bool using_dark_colors_ = false;
   ui::NativeTheme::PreferredColorScheme preferred_color_scheme_ =
       ui::NativeTheme::PreferredColorScheme::kLight;
+  ui::NativeTheme::PreferredContrast preferred_contrast_ =
+      ui::NativeTheme::PreferredContrast::kNoPreference;
 
   // Prevents navigations in this contents while a javascript modal dialog is
   // showing.

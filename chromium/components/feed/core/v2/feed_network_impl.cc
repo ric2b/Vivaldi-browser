@@ -12,6 +12,7 @@
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/feed/core/common/pref_names.h"
@@ -38,6 +39,9 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/protobuf/src/google/protobuf/io/coded_stream.h"
 #include "third_party/zlib/google/compression_utils.h"
+
+// Token override for Feedv2NewTabPageCardInstrumentationTest.java:
+// #define TOKEN_OVERRIDE_FOR_TESTING  "put-test-token-here"
 
 namespace feed {
 namespace {
@@ -312,8 +316,12 @@ class FeedNetworkImpl::NetworkFetch {
 
     variations::SignedIn signed_in_status = variations::SignedIn::kNo;
     if (!access_token_.empty()) {
+      base::StringPiece token = access_token_;
+#ifdef TOKEN_OVERRIDE_FOR_TESTING
+      token = TOKEN_OVERRIDE_FOR_TESTING;
+#endif
       request.headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
-                                "Bearer " + access_token_);
+                                base::StrCat({"Bearer ", token}));
       signed_in_status = variations::SignedIn::kYes;
     }
 
@@ -329,6 +337,7 @@ class FeedNetworkImpl::NetworkFetch {
         tick_clock_->NowTicks() - entire_send_start_ticks_;
     response_info.fetch_time = base::Time::Now();
     response_info.base_request_url = GetUrlWithoutQuery(url_);
+    response_info.was_signed_in = !access_token_.empty();
 
     // If overriding the feed host, try to grab the Bless nonce. This is
     // strictly informational, and only displayed in snippets-internals.

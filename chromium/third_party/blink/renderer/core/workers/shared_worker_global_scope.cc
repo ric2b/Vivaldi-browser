@@ -34,6 +34,7 @@
 #include "base/feature_list.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
@@ -141,7 +142,7 @@ void SharedWorkerGlobalScope::FetchAndRunClassicScript(
 
   // Step 12. "Fetch a classic worker script given url, outside settings,
   // destination, and inside settings."
-  auto context_type = mojom::RequestContextType::SHARED_WORKER;
+  auto context_type = mojom::blink::RequestContextType::SHARED_WORKER;
   network::mojom::RequestDestination destination =
       network::mojom::RequestDestination::kSharedWorker;
 
@@ -156,9 +157,8 @@ void SharedWorkerGlobalScope::FetchAndRunClassicScript(
       *this,
       CreateOutsideSettingsFetcher(outside_settings_object,
                                    outside_resource_timing_notifier),
-      script_url, std::move(worker_main_script_load_params),
-      CloneResourceLoadInfoNotifier(), context_type, destination,
-      network::mojom::RequestMode::kSameOrigin,
+      script_url, std::move(worker_main_script_load_params), context_type,
+      destination, network::mojom::RequestMode::kSameOrigin,
       network::mojom::CredentialsMode::kSameOrigin,
       WTF::Bind(&SharedWorkerGlobalScope::DidReceiveResponseForClassicScript,
                 WrapWeakPersistent(this),
@@ -185,7 +185,7 @@ void SharedWorkerGlobalScope::FetchAndRunModuleScript(
 
   // Step 12: "Let destination be "sharedworker" if is shared is true, and
   // "worker" otherwise."
-  auto context_type = mojom::RequestContextType::SHARED_WORKER;
+  auto context_type = mojom::blink::RequestContextType::SHARED_WORKER;
   auto destination = network::mojom::RequestDestination::kSharedWorker;
 
   // Step 13: "... Fetch a module worker script graph given url, outside
@@ -287,8 +287,7 @@ void SharedWorkerGlobalScope::Trace(Visitor* visitor) const {
 }
 
 bool SharedWorkerGlobalScope::CrossOriginIsolatedCapability() const {
-  // TODO(crbug.com/1131403): Return Agent::IsCrossOriginIsolated().
-  return false;
+  return Agent::IsCrossOriginIsolated();
 }
 
 }  // namespace blink

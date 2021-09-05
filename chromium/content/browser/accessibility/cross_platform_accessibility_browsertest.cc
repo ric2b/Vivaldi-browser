@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -28,6 +29,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
@@ -36,6 +38,14 @@
 #include "base/win/atl.h"
 #include "base/win/scoped_com_initializer.h"
 #include "ui/base/win/atl_module.h"
+#endif
+
+#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER) &&              \
+    !defined(LEAK_SANITIZER) && !defined(MEMORY_SANITIZER) &&      \
+    !defined(THREAD_SANITIZER) && !defined(UNDEFINED_SANITIZER) && \
+    !defined(OS_ANDROID)
+#define IS_FAST_BUILD
+constexpr int kDelayForDeferredUpdatesAfterPageLoad = 150;
 #endif
 
 namespace content {
@@ -64,7 +74,7 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
       RecursiveAssertUniqueIds(child, ids);
   }
 
-  // ContentBrowserTest
+  void SetUp() override;
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
 
@@ -77,6 +87,15 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   }
 
  protected:
+  // Choose which feature flags to enable or disable.
+  virtual void ChooseFeatures(std::vector<base::Feature>* enabled_features,
+                              std::vector<base::Feature>* disabled_features);
+
+  void ExecuteScript(const char* script) {
+    shell()->web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::ASCIIToUTF16(script), base::NullCallback());
+  }
+
   void LoadInitialAccessibilityTreeFromUrl(
       const GURL& url,
       ui::AXMode accessibility_mode = ui::kAXModeComplete) {
@@ -111,14 +130,14 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
                                           const std::string& name_or_value) {
     const std::string& name =
         node.GetStringAttribute(ax::mojom::StringAttribute::kName);
-    // Note that in the case of a text field, "BrowserAccessibility::GetValue"
-    // has the added functionality of computing the value of an ARIA text box
-    // from its inner text.
+    // Note that in the case of a text field,
+    // "BrowserAccessibility::GetValueForControl" has the added functionality
+    // of computing the value of an ARIA text box from its inner text.
     //
     // <div contenteditable="true" role="textbox">Hello world.</div>
     // Will expose no HTML value attribute, but some screen readers, such as
     // Jaws, VoiceOver and Talkback, require one to be computed.
-    const std::string& value = base::UTF16ToUTF8(node.GetValue());
+    const std::string& value = base::UTF16ToUTF8(node.GetValueForControl());
     if ((name == name_or_value || value == name_or_value)) {
       return &node;
     }
@@ -139,12 +158,36 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   bool GetBoolAttr(const ui::AXNode* node, const ax::mojom::BoolAttribute attr);
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
 #if defined(OS_WIN)
   std::unique_ptr<base::win::ScopedCOMInitializer> com_initializer_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(CrossPlatformAccessibilityBrowserTest);
 };
+
+void CrossPlatformAccessibilityBrowserTest::SetUp() {
+  std::vector<base::Feature> enabled_features;
+  std::vector<base::Feature> disabled_features;
+  ChooseFeatures(&enabled_features, &disabled_features);
+
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+  // The <input type="color"> popup tested in
+  // AccessibilityInputColorWithPopupOpen requires the ability to read pixels
+  // from a Canvas, so we need to be able to produce pixel output.
+  EnablePixelOutput();
+
+  ContentBrowserTest::SetUp();
+}
+
+void CrossPlatformAccessibilityBrowserTest::ChooseFeatures(
+    std::vector<base::Feature>* enabled_features,
+    std::vector<base::Feature>* disabled_features) {
+  enabled_features->emplace_back(
+      features::kEnableAccessibilityExposeHTMLElement);
+}
 
 void CrossPlatformAccessibilityBrowserTest::SetUpOnMainThread() {
 #if defined(OS_WIN)
@@ -301,8 +344,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
                GetAttr(text, ax::mojom::StringAttribute::kHtmlTag).c_str());
   EXPECT_EQ(0, GetIntAttr(text, ax::mojom::IntAttribute::kTextSelStart));
   EXPECT_EQ(0, GetIntAttr(text, ax::mojom::IntAttribute::kTextSelEnd));
-  EXPECT_STREQ("Hello, world.",
-               GetAttr(text, ax::mojom::StringAttribute::kValue).c_str());
+  EXPECT_STREQ("Hello, world.", text->GetValueForControl().c_str());
 
   // TODO(dmazzoni): as soon as more accessibility code is cross-platform,
   // this code should test that the accessible info is dynamically updated
@@ -332,8 +374,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
                GetAttr(text, ax::mojom::StringAttribute::kHtmlTag).c_str());
   EXPECT_EQ(0, GetIntAttr(text, ax::mojom::IntAttribute::kTextSelStart));
   EXPECT_EQ(13, GetIntAttr(text, ax::mojom::IntAttribute::kTextSelEnd));
-  EXPECT_STREQ("Hello, world.",
-               GetAttr(text, ax::mojom::StringAttribute::kValue).c_str());
+  EXPECT_STREQ("Hello, world.", text->GetValueForControl().c_str());
 }
 
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
@@ -936,14 +977,16 @@ IN_PROC_BROWSER_TEST_F(
   const char url_str[] =
       "data:text/html,"
       "<!doctype html>"
+      "<fieldset>"
       "<input type='text' placeholder='placeholder'>"
-      "<input type='text' placeholder='placeholder' aria-label='label'>";
+      "<input type='text' placeholder='placeholder' aria-label='label'>"
+      "</fieldset>";
   GURL url(url_str);
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
   const ui::AXTree& tree = GetAXTree();
   const ui::AXNode* root = tree.root();
-  const ui::AXNode* group = root->children().front();
+  const ui::AXNode* group = root->GetUnignoredChildAtIndex(0);
   const ui::AXNode* input1 = group->children()[0];
   const ui::AXNode* input2 = group->children()[1];
 
@@ -1387,19 +1430,24 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
 class CrossPlatformAccessibilityBrowserTestWithImplicitRootScrolling
     : public CrossPlatformAccessibilityBrowserTest {
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kImplicitRootScroller);
-    CrossPlatformAccessibilityBrowserTest::SetUp();
+  void ChooseFeatures(std::vector<base::Feature>* enabled_features,
+                      std::vector<base::Feature>* disabled_features) override {
+    enabled_features->emplace_back(blink::features::kImplicitRootScroller);
+    CrossPlatformAccessibilityBrowserTest::ChooseFeatures(enabled_features,
+                                                          disabled_features);
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// TODO(http://crbug.com/1137425): Re-enable the test after it gets fixed on
+// Android O.
+#if defined(OS_ANDROID)
+#define MAYBE_ImplicitRootScroller DISABLED_ImplicitRootScroller
+#else
+#define MAYBE_ImplicitRootScroller ImplicitRootScroller
+#endif
 IN_PROC_BROWSER_TEST_F(
     CrossPlatformAccessibilityBrowserTestWithImplicitRootScrolling,
-    ImplicitRootScroller) {
+    MAYBE_ImplicitRootScroller) {
   LoadInitialAccessibilityTreeFromHtmlFilePath(
       "/accessibility/scrolling/implicit-root-scroller.html");
 
@@ -1425,6 +1473,218 @@ IN_PROC_BROWSER_TEST_F(
   manager->SetUseRootScrollOffsetsWhenComputingBoundsForTesting(false);
   bounds = heading->GetUnclippedRootFrameBoundsRect();
   EXPECT_GT(bounds.y(), 0);
+}
+
+#if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       NonInteractiveChangesAreBatched) {
+  // Ensure that normal DOM changes are batched together, and do not occur
+  // more than once every kDelayForDeferredUpdatesAfterPageLoad.
+  const char url_str[] =
+      R"HTML(data:text/html,
+      <!doctype html>
+      <body><div id=foo></div>
+      <script>
+      const startTime = performance.now();
+      const fooElem = document.getElementById('foo');
+      function addChild() {
+        const newChild = document.createElement('div');
+        newChild.innerHTML = '<button>x</button>';
+        fooElem.appendChild(newChild);
+        if (performance.now() - startTime < 1000)
+          requestAnimationFrame(addChild);
+        else
+          document.close();
+      }
+      addChild();
+      </script>
+      </body></html>)HTML";
+  GURL url(url_str);
+
+  // Load the document and wait for it
+  {
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLoadComplete);
+    EXPECT_TRUE(NavigateToURL(shell(), url));
+    waiter.WaitForNotification();
+  }
+  base::ElapsedTimer timer;
+  int num_batches = 0;
+
+  {
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLayoutComplete);
+    // Run test for 1 second, counting the number of layout completes.
+    while (timer.Elapsed().InMilliseconds() < 1000) {
+      waiter.WaitForNotificationWithTimeout(
+          base::TimeDelta::FromMilliseconds(1000) - timer.Elapsed());
+      ++num_batches;
+    }
+  }
+
+  // In practice, num_batches lines up nicely with the top end expected,
+  // so if kDelayForDeferredUpdatesAfterPageLoad == 150, 6-7 batches are likely.
+  EXPECT_GT(num_batches, 1);
+  EXPECT_LE(num_batches, 1000 / kDelayForDeferredUpdatesAfterPageLoad + 1);
+}
+#endif
+
+#if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       DocumentSelectionChangesAreNotBatched) {
+  // Ensure that document selection changes are not batched, and occur faster
+  // than once per kDelayForDeferredUpdatesAfterPageLoad.
+  const char url_str[] =
+      R"HTML(data:text/html,
+      <!doctype html>
+      <body><div id=foo></div>
+      <script>
+      const startTime = performance.now();
+      const fooElem = document.getElementById('foo');
+      function addChild() {
+        const newChild = document.createElement('div');
+        newChild.innerHTML = '<button>x</button>';
+        fooElem.appendChild(newChild);
+        window.getSelection().selectAllChildren(newChild);
+        if (performance.now() - startTime < 1000)
+          requestAnimationFrame(addChild);
+        else
+          document.close();
+      }
+      addChild();
+      </script>
+      </body></html>)HTML";
+  GURL url(url_str);
+
+  // Load the document and wait for it
+  {
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLoadComplete);
+    EXPECT_TRUE(NavigateToURL(shell(), url));
+    waiter.WaitForNotification();
+  }
+
+  base::ElapsedTimer timer;
+  int num_batches = 0;
+
+  {
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLayoutComplete);
+    // Run test for 1 second, counting the number of layout completes.
+    while (timer.Elapsed().InMilliseconds() < 1000) {
+      waiter.WaitForNotificationWithTimeout(
+          base::TimeDelta::FromMilliseconds(1000) - timer.Elapsed());
+      ++num_batches;
+    }
+  }
+
+  // In practice, num_batches is about 50 on a fast Linux box.
+  EXPECT_GT(num_batches, 1000 / kDelayForDeferredUpdatesAfterPageLoad);
+}
+#endif  // IS_FAST_BUILD
+
+#if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       ActiveDescendantChangesAreNotBatched) {
+  // Ensure that active descendant changes are not batched, and occur faster
+  // than once per kDelayForDeferredUpdatesAfterPageLoad.
+  const char url_str[] =
+      R"HTML(data:text/html,
+      <!doctype html>
+      <body><div id=foo tabindex=0 autofocus></div>
+      <script>
+      const startTime = performance.now();
+      const fooElem = document.getElementById('foo');
+      let count = 0;
+      function addChild() {
+        const newChild = document.createElement('div');
+        ++count;
+        newChild.innerHTML = '<button id=' + count + '>x</button>';
+        fooElem.appendChild(newChild);
+        fooElem.setAttribute('aria-activedescendant', count);
+        if (performance.now() - startTime < 1000)
+          requestAnimationFrame(addChild);
+        else
+          document.close();
+      }
+      addChild();
+      </script>
+      </body></html>)HTML";
+  GURL url(url_str);
+
+  // Load the document and wait for it
+  {
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLoadComplete);
+    EXPECT_TRUE(NavigateToURL(shell(), url));
+    waiter.WaitForNotification();
+  }
+
+  base::ElapsedTimer timer;
+  int num_batches = 0;
+
+  {
+    AccessibilityNotificationWaiter waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED);
+    // Run test for 1 second, counting the number of active descendant changes.
+    while (timer.Elapsed().InMilliseconds() < 1000) {
+      waiter.WaitForNotificationWithTimeout(
+          base::TimeDelta::FromMilliseconds(1000) - timer.Elapsed());
+      ++num_batches;
+    }
+  }
+
+  // In practice, num_batches is about 50 on a fast Linux box.
+  EXPECT_GT(num_batches, 1000 / kDelayForDeferredUpdatesAfterPageLoad);
+}
+#endif  // IS_FAST_BUILD
+
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       AccessibilityAddClickListener) {
+  // This is a regression test for a bug where a node is ignored in the
+  // accessibility tree (in this case the BODY), and then by adding a click
+  // listener to it we can make it no longer ignored without correctly firing
+  // the right notifications - with the end result being that the whole
+  // accessibility tree is broken.
+  LoadInitialAccessibilityTreeFromUrl(GURL(R"HTML(data:text/html,
+      <!DOCTYPE html>
+      <body>
+        <div>
+          <button>This should be accessible</button>
+        </div>
+      </body></html>)HTML"));
+
+  BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
+  BrowserAccessibility* root_browser_accessibility =
+      browser_accessibility_manager->GetRoot();
+  ASSERT_NE(root_browser_accessibility, nullptr);
+
+  const ui::AXNode* root_node = root_browser_accessibility->node();
+  ASSERT_NE(root_node, nullptr);
+  const ui::AXNode* html_node = root_node->children()[0];
+  ASSERT_NE(html_node, nullptr);
+  const ui::AXNode* body_node = html_node->children()[0];
+  ASSERT_NE(body_node, nullptr);
+
+  // Make sure this is actually the body element.
+  ASSERT_EQ(body_node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag),
+            "body");
+  ASSERT_TRUE(body_node->IsIgnored());
+
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::IGNORED_CHANGED);
+  ExecuteScript("document.body.addEventListener('mousedown', function() {});");
+  waiter.WaitForNotification();
+
+  // The body should no longer be ignored after adding a mouse button listener.
+  ASSERT_FALSE(body_node->IsIgnored());
 }
 
 }  // namespace content

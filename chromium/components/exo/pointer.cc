@@ -30,8 +30,9 @@
 #include "ui/base/cursor/cursor_size.h"
 #include "ui/base/cursor/cursor_util.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/layout.h"
+#include "ui/base/resource/scale_factor.h"
 #include "ui/display/manager/display_manager.h"
-#include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -113,7 +114,6 @@ Pointer::Pointer(PointerDelegate* delegate, Seat* seat)
       seat_(seat),
       cursor_(ui::mojom::CursorType::kNull),
       capture_scale_(GetCaptureDisplayInfo().device_scale_factor()),
-      capture_ratio_(GetCaptureDisplayInfo().GetDensityRatio()),
       cursor_capture_source_id_(base::UnguessableToken::Create()) {
   WMHelper* helper = WMHelper::GetInstance();
   helper->AddPreTargetHandler(this);
@@ -597,7 +597,6 @@ void Pointer::OnCursorDisplayChanged(const display::Display& display) {
   UpdatePointerSurface(root_surface());
   auto info = GetCaptureDisplayInfo();
   capture_scale_ = info.device_scale_factor();
-  capture_ratio_ = info.GetDensityRatio();
 
   auto* cursor_client = WMHelper::GetInstance()->GetCursorClient();
   // TODO(crbug.com/631103): CursorClient does not exist in mash yet.
@@ -746,14 +745,16 @@ void Pointer::UpdateCursor() {
   if (cursor_ == ui::mojom::CursorType::kCustom) {
     SkBitmap bitmap = cursor_bitmap_;
     gfx::Point hotspot =
-        gfx::ScaleToFlooredPoint(cursor_hotspot_, capture_ratio_);
+        gfx::ScaleToFlooredPoint(cursor_hotspot_, capture_scale_);
 
     // TODO(oshima|weidongg): Add cutsom cursor API to handle size/display
     // change without explicit management like this. https://crbug.com/721601.
-    const display::Display& display = cursor_client->GetDisplay();
-    float scale =
-        helper->GetDisplayInfo(display.id()).GetDensityRatio() / capture_ratio_;
 
+    // Scaling bitmap to match the corresponding supported scale factor of ash.
+    const display::Display& display = cursor_client->GetDisplay();
+    float scale = ui::GetScaleForScaleFactor(ui::GetSupportedScaleFactor(
+                      display.device_scale_factor())) /
+                  capture_scale_;
     if (cursor_client->GetCursorSize() == ui::CursorSize::kLarge)
       scale *= kLargeCursorScale;
 
@@ -766,8 +767,8 @@ void Pointer::UpdateCursor() {
     // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
     // and use that here instead of the current bitmap API.
     // https://crbug.com/686600
-    platform_cursor =
-        ui::CursorFactory::GetInstance()->CreateImageCursor(bitmap, hotspot);
+    platform_cursor = ui::CursorFactory::GetInstance()->CreateImageCursor(
+        cursor_.type(), bitmap, hotspot);
     cursor_.SetPlatformCursor(platform_cursor);
     cursor_.set_custom_bitmap(bitmap);
     cursor_.set_custom_hotspot(hotspot);

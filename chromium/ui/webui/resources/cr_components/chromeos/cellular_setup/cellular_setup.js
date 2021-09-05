@@ -15,11 +15,16 @@ Polymer({
     /** @type {!cellular_setup.CellularSetupDelegate} */
     delegate: Object,
 
+    flowTitle: {
+      type: String,
+      notify: true,
+    },
+
     /**
      * Name of the currently displayed sub-page.
      * @private {!cellularSetup.CellularSetupPageName|null}
      */
-    currentPageName_: {
+    currentPageName: {
       type: String,
       value: cellularSetup.CellularSetupPageName.SETUP_FLOW_SELECTION,
     },
@@ -65,6 +70,7 @@ Polymer({
   /** @private */
   onPageChange_() {
     if (this.currentPage_) {
+      this.flowTitle = '';
       this.currentPage_.initSubflow();
     }
   },

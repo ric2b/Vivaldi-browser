@@ -146,6 +146,7 @@ constexpr char kFakeBatteryStatus[] = "fake_battery_status";
 const char kFakeFirstPowerDate[] = "2020-40";
 const char kFakeManufactureDate[] = "2019-01-01";
 const char kFakeSkuNumber[] = "ABCD&^A";
+const char kFakeSerialNumber[] = "8607G03EDF";
 constexpr char kFakeMarketingName[] = "Latitude 1234 Chromebook Enterprise";
 constexpr char kFakeBiosVersion[] = "Google_BoardName.12200.68.0";
 constexpr char kFakeBoardName[] = "BoardName";
@@ -159,6 +160,8 @@ constexpr char kFakeVersionReleaseChannel[] = "stable-channel";
 // CPU test values:
 constexpr uint32_t kFakeNumTotalThreads = 8;
 constexpr char kFakeModelName[] = "fake_cpu_model_name";
+constexpr int32_t kFakeCpuTemperature = -189;
+constexpr char kFakeCpuTemperatureLabel[] = "Fake CPU temperature";
 constexpr cros_healthd::CpuArchitectureEnum kFakeMojoArchitecture =
     cros_healthd::CpuArchitectureEnum::kX86_64;
 constexpr em::CpuInfo::Architecture kFakeProtoArchitecture =
@@ -169,6 +172,8 @@ constexpr uint32_t kFakeScalingCurFrequency = 2400000;
 // Since this number is divided by the result of the sysconf(_SC_CLK_TCK)
 // syscall, we need it to be 0 to avoid flaky tests,
 constexpr uint32_t kFakeIdleTime = 0;
+constexpr uint64_t kFakeUserTime = 789;
+constexpr uint64_t kFakeSystemTime = 4680;
 constexpr char kFakeCStateName[] = "fake_c_state_name";
 constexpr uint64_t kFakeTimeInStateSinceLastBoot = 87;
 // CPU Temperature test values:
@@ -494,7 +499,7 @@ cros_healthd::BatteryResultPtr CreateBatteryResult() {
           kFakeBatteryModel, kFakeBatteryChargeNow, kFakeBatteryCurrentNow,
           kFakeBatteryTechnology, kFakeBatteryStatus,
           kFakeSmartBatteryManufactureDate,
-          cros_healthd::UInt64Value::New(kFakeSmartBatteryTemperature)));
+          cros_healthd::NullableUint64::New(kFakeSmartBatteryTemperature)));
 }
 
 cros_healthd::NonRemovableBlockDeviceResultPtr CreateBlockDeviceResult() {
@@ -503,7 +508,7 @@ cros_healthd::NonRemovableBlockDeviceResultPtr CreateBlockDeviceResult() {
       kFakeStorageBytesRead, kFakeStorageBytesWritten,
       kFakeStorageReadTimeSeconds, kFakeStorageWriteTimeSeconds,
       kFakeStorageIoTimeSeconds,
-      cros_healthd::UInt64Value::New(kFakeStorageDiscardTimeSeconds),
+      cros_healthd::NullableUint64::New(kFakeStorageDiscardTimeSeconds),
       cros_healthd::BlockDeviceVendor::NewEmmcOemid(kFakeOemid),
       cros_healthd::BlockDeviceProduct::NewEmmcPnm(kFakePnm),
       cros_healthd::BlockDeviceRevision::NewEmmcPrv(kFakePrv), kFakeStorageName,
@@ -519,9 +524,9 @@ cros_healthd::SystemResultPtr CreateSystemResult() {
   return cros_healthd::SystemResult::NewSystemInfo(
       cros_healthd::SystemInfo::New(
           kFakeFirstPowerDate, kFakeManufactureDate, kFakeSkuNumber,
-          kFakeMarketingName, kFakeBiosVersion, kFakeBoardName,
-          kFakeBoardVersion, cros_healthd::UInt64Value::New(kFakeChassisType),
-          kFakeProductName,
+          kFakeSerialNumber, kFakeMarketingName, kFakeBiosVersion,
+          kFakeBoardName, kFakeBoardVersion,
+          cros_healthd::NullableUint64::New(kFakeChassisType), kFakeProductName,
           cros_healthd::OsVersion::New(
               kFakeVersionMilestone, kFakeVersionBuildNumber,
               kFakeVersionPatchNumber, kFakeVersionReleaseChannel)));
@@ -538,7 +543,7 @@ std::vector<cros_healthd::LogicalCpuInfoPtr> CreateLogicalCpu() {
   std::vector<cros_healthd::LogicalCpuInfoPtr> logical_cpus;
   logical_cpus.push_back(cros_healthd::LogicalCpuInfo::New(
       kFakeMaxClockSpeed, kFakeScalingMaxFrequency, kFakeScalingCurFrequency,
-      kFakeIdleTime, CreateCStateInfo()));
+      kFakeUserTime, kFakeSystemTime, kFakeIdleTime, CreateCStateInfo()));
   return logical_cpus;
 }
 
@@ -549,9 +554,17 @@ std::vector<cros_healthd::PhysicalCpuInfoPtr> CreatePhysicalCpu() {
   return physical_cpus;
 }
 
+std::vector<cros_healthd::CpuTemperatureChannelPtr> CreateTemperatureChannel() {
+  std::vector<cros_healthd::CpuTemperatureChannelPtr> cpu_temps;
+  cpu_temps.push_back(cros_healthd::CpuTemperatureChannel::New(
+      kFakeCpuTemperatureLabel, kFakeCpuTemperature));
+  return cpu_temps;
+}
+
 cros_healthd::CpuResultPtr CreateCpuResult() {
   return cros_healthd::CpuResult::NewCpuInfo(cros_healthd::CpuInfo::New(
-      kFakeNumTotalThreads, kFakeMojoArchitecture, CreatePhysicalCpu()));
+      kFakeNumTotalThreads, kFakeMojoArchitecture, CreatePhysicalCpu(),
+      CreateTemperatureChannel()));
 }
 
 cros_healthd::TimezoneResultPtr CreateTimezoneResult() {
@@ -3167,6 +3180,8 @@ TEST_F(DeviceStatusCollectorTest, TestCrosHealthdInfo) {
   EXPECT_EQ(device_status_.system_status().manufacture_date(),
             kFakeManufactureDate);
   EXPECT_EQ(device_status_.system_status().vpd_sku_number(), kFakeSkuNumber);
+  EXPECT_EQ(device_status_.system_status().vpd_serial_number(),
+            kFakeSerialNumber);
   EXPECT_EQ(device_status_.system_status().marketing_name(),
             kFakeMarketingName);
   EXPECT_EQ(device_status_.system_status().bios_version(), kFakeBiosVersion);
@@ -3322,6 +3337,8 @@ TEST_F(DeviceStatusCollectorTest, TestCrosHealthdVpdAndSystemInfo) {
   EXPECT_EQ(device_status_.system_status().manufacture_date(),
             kFakeManufactureDate);
   EXPECT_EQ(device_status_.system_status().vpd_sku_number(), kFakeSkuNumber);
+  EXPECT_EQ(device_status_.system_status().vpd_serial_number(),
+            kFakeSerialNumber);
   ASSERT_FALSE(device_status_.system_status().has_marketing_name());
   ASSERT_FALSE(device_status_.system_status().has_bios_version());
   ASSERT_FALSE(device_status_.system_status().has_board_name());

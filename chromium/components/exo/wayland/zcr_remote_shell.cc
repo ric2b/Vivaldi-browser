@@ -10,7 +10,6 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -24,6 +23,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ui/base/window_pin_type.h"
 #include "components/exo/client_controlled_shell_surface.h"
 #include "components/exo/display.h"
 #include "components/exo/input_method_surface.h"
@@ -55,6 +55,8 @@ namespace switches {
 constexpr char kForceRemoteShellScale[] = "force-remote-shell-scale";
 
 }  // namespace switches
+
+using chromeos::WindowStateType;
 
 // We don't send configure immediately after tablet mode switch
 // because layout can change due to orientation lock state or accelerometer.
@@ -136,6 +138,20 @@ ash::ShelfLayoutManager* GetShelfLayoutManagerForDisplay(
     const display::Display& display) {
   auto* root = ash::Shell::GetRootWindowForDisplayId(display.id());
   return ash::Shelf::ForWindow(root)->shelf_layout_manager();
+}
+
+int SystemUiVisibility(const display::Display& display) {
+  auto* shelf_layout_manager = GetShelfLayoutManagerForDisplay(display);
+  switch (shelf_layout_manager->visibility_state()) {
+    case ash::SHELF_VISIBLE:
+      return ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_VISIBLE;
+    case ash::SHELF_AUTO_HIDE:
+    case ash::SHELF_HIDDEN:
+      return ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_AUTOHIDE_NON_STICKY;
+  }
+  NOTREACHED() << "Got unexpected shelf visibility state "
+               << shelf_layout_manager->visibility_state();
+  return 0;
 }
 
 int Component(uint32_t direction) {
@@ -316,13 +332,13 @@ void remote_surface_pin(wl_client* client,
                         wl_resource* resource,
                         int32_t trusted) {
   GetUserDataAs<ClientControlledShellSurface>(resource)->SetPinned(
-      trusted ? ash::WindowPinType::kTrustedPinned
-              : ash::WindowPinType::kPinned);
+      trusted ? chromeos::WindowPinType::kTrustedPinned
+              : chromeos::WindowPinType::kPinned);
 }
 
 void remote_surface_unpin(wl_client* client, wl_resource* resource) {
   GetUserDataAs<ClientControlledShellSurface>(resource)->SetPinned(
-      ash::WindowPinType::kNone);
+      chromeos::WindowPinType::kNone);
 }
 
 void remote_surface_set_system_modal(wl_client* client, wl_resource* resource) {
@@ -803,11 +819,7 @@ class WaylandRemoteOutput : public WaylandDisplayObserver {
         resource_, stable_insets_in_pixel.left(), stable_insets_in_pixel.top(),
         stable_insets_in_pixel.right(), stable_insets_in_pixel.bottom());
 
-    auto* shelf_layout_manager = GetShelfLayoutManagerForDisplay(display);
-    int systemui_visibility =
-        shelf_layout_manager->visibility_state() == ash::SHELF_AUTO_HIDE
-            ? ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_AUTOHIDE_NON_STICKY
-            : ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_VISIBLE;
+    int systemui_visibility = SystemUiVisibility(display);
     zcr_remote_output_v1_send_systemui_visibility(resource_,
                                                   systemui_visibility);
 
@@ -837,6 +849,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
     helper->AddTabletModeObserver(this);
     helper->AddActivationObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
+    helper->AddFrameThrottlingObserver();
 
     layout_mode_ = helper->InTabletMode()
                        ? ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
@@ -862,6 +875,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
     helper->RemoveTabletModeObserver(this);
     helper->RemoveActivationObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
+    helper->RemoveFrameThrottlingObserver();
   }
 
   std::unique_ptr<ClientControlledShellSurface> CreateShellSurface(
@@ -1028,8 +1042,6 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
       }
 
       if (wl_resource_get_version(remote_shell_resource_) >= 20) {
-        auto* shelf_layout_manager = GetShelfLayoutManagerForDisplay(display);
-
         // Apply the scale factor used on the remote shell client (ARC).
         const gfx::Rect& bounds = display.bounds();
 
@@ -1055,10 +1067,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
         MaybeApplyCTSHack(layout_mode_, size_in_pixel, &insets_in_client_pixel,
                           &stable_insets_in_client_pixel);
 
-        int systemui_visibility =
-            shelf_layout_manager->visibility_state() == ash::SHELF_AUTO_HIDE
-                ? ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_AUTOHIDE_NON_STICKY
-                : ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_VISIBLE;
+        int systemui_visibility = SystemUiVisibility(display);
 
         zcr_remote_shell_v1_send_workspace_info(
             remote_shell_resource_, display_id_hi, display_id_lo, x_px, y_px,
@@ -1131,19 +1140,18 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
 
   void HandleRemoteSurfaceBoundsChangedCallback(
       wl_resource* resource,
-      ash::WindowStateType current_state,
-      ash::WindowStateType requested_state,
+      WindowStateType current_state,
+      WindowStateType requested_state,
       int64_t display_id,
       const gfx::Rect& bounds_in_display,
       bool resize,
       int bounds_change) {
     zcr_remote_surface_v1_bounds_change_reason reason =
         ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_RESIZE;
-    if (!resize) {
-      reason = current_state == ash::WindowStateType::kPip
-                   ? ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_MOVE_PIP
-                   : ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_MOVE;
-    }
+    if (!resize)
+      reason = ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_MOVE;
+    if (current_state == WindowStateType::kPip)
+      reason = ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_PIP;
     if (bounds_change & ash::WindowResizer::kBoundsChange_Resizes) {
       reason = ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_DRAG_RESIZE;
     } else if (bounds_change & ash::WindowResizer::kBoundsChange_Repositions) {
@@ -1152,9 +1160,9 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
     // Override the reason only if the window enters snapped mode. If the window
     // resizes by dragging in snapped mode, we need to keep the original reason.
     if (requested_state != current_state) {
-      if (requested_state == ash::WindowStateType::kLeftSnapped) {
+      if (requested_state == WindowStateType::kLeftSnapped) {
         reason = ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_SNAP_TO_LEFT;
-      } else if (requested_state == ash::WindowStateType::kRightSnapped) {
+      } else if (requested_state == WindowStateType::kRightSnapped) {
         reason = ZCR_REMOTE_SURFACE_V1_BOUNDS_CHANGE_REASON_SNAP_TO_RIGHT;
       }
     }
@@ -1199,10 +1207,9 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
         bounds_in_display.height(), reason);
   }
 
-  void HandleRemoteSurfaceStateChangedCallback(
-      wl_resource* resource,
-      ash::WindowStateType old_state_type,
-      ash::WindowStateType new_state_type) {
+  void HandleRemoteSurfaceStateChangedCallback(wl_resource* resource,
+                                               WindowStateType old_state_type,
+                                               WindowStateType new_state_type) {
     DCHECK_NE(old_state_type, new_state_type);
     LOG_IF(ERROR, pending_bounds_changes_.count(resource) > 0)
         << "Sending window state while there is a pending bounds change. This "
@@ -1210,28 +1217,28 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
 
     uint32_t state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_NORMAL;
     switch (new_state_type) {
-      case ash::WindowStateType::kMinimized:
+      case WindowStateType::kMinimized:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED;
         break;
-      case ash::WindowStateType::kMaximized:
+      case WindowStateType::kMaximized:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED;
         break;
-      case ash::WindowStateType::kFullscreen:
+      case WindowStateType::kFullscreen:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN;
         break;
-      case ash::WindowStateType::kPinned:
+      case WindowStateType::kPinned:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_PINNED;
         break;
-      case ash::WindowStateType::kTrustedPinned:
+      case WindowStateType::kTrustedPinned:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_TRUSTED_PINNED;
         break;
-      case ash::WindowStateType::kLeftSnapped:
+      case WindowStateType::kLeftSnapped:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_LEFT_SNAPPED;
         break;
-      case ash::WindowStateType::kRightSnapped:
+      case WindowStateType::kRightSnapped:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_RIGHT_SNAPPED;
         break;
-      case ash::WindowStateType::kPip:
+      case WindowStateType::kPip:
         state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_PIP;
         break;
       default:

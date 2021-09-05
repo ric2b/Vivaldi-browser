@@ -11,17 +11,18 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/invalidation/impl/invalidation_logger.h"
@@ -30,17 +31,14 @@
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/invalidator_state.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/driver/active_devices_provider.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/engine/cycle/commit_counters.h"
-#include "components/sync/engine/cycle/status_counters.h"
-#include "components/sync/engine/cycle/update_counters.h"
 #include "components/sync/engine/fake_sync_manager.h"
-#include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/net/http_bridge.h"
-#include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/engine/sync_engine_host_stub.h"
 #include "components/sync/engine/sync_manager_factory.h"
 #include "components/sync/invalidations/mock_sync_invalidations_service.h"
@@ -48,8 +46,6 @@
 #include "components/sync/invalidations/sync_invalidations_service.h"
 #include "components/sync/protocol/sync_invalidations_payload.pb.h"
 #include "components/sync/test/callback_counter.h"
-#include "components/sync_preferences/pref_service_syncable.h"
-#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -66,15 +62,6 @@ namespace {
 
 static const base::FilePath::CharType kTestSyncDir[] =
     FILE_PATH_LITERAL("sync-test");
-
-scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(ModelSafeGroup group) {
-  switch (group) {
-    case GROUP_PASSIVE:
-      return new PassiveModelWorker();
-    default:
-      return nullptr;
-  }
-}
 
 class TestSyncEngineHost : public SyncEngineHostStub {
  public:
@@ -156,21 +143,45 @@ class MockInvalidationService : public invalidation::InvalidationService {
  public:
   MockInvalidationService() = default;
   ~MockInvalidationService() override = default;
+  MOCK_METHOD(void,
+              RegisterInvalidationHandler,
+              (syncer::InvalidationHandler * handler),
+              (override));
+  MOCK_METHOD(bool,
+              UpdateInterestedTopics,
+              (syncer::InvalidationHandler * handler,
+               const syncer::TopicSet& topics),
+              (override));
+  MOCK_METHOD(void,
+              UnregisterInvalidationHandler,
+              (syncer::InvalidationHandler * handler),
+              (override));
+  MOCK_METHOD(syncer::InvalidatorState,
+              GetInvalidatorState,
+              (),
+              (const override));
+  MOCK_METHOD(std::string, GetInvalidatorClientId, (), (const override));
+  MOCK_METHOD(invalidation::InvalidationLogger*,
+              GetInvalidationLogger,
+              (),
+              (override));
+  MOCK_METHOD(
+      void,
+      RequestDetailedStatus,
+      (base::RepeatingCallback<void(const base::DictionaryValue&)> post_caller),
+      (const override));
+};
 
-  MOCK_METHOD1(RegisterInvalidationHandler,
-               void(syncer::InvalidationHandler* handler));
-  MOCK_METHOD2(UpdateInterestedTopics,
-               bool(syncer::InvalidationHandler* handler,
-                    const syncer::TopicSet& topics));
-  MOCK_METHOD1(UnregisterInvalidationHandler,
-               void(syncer::InvalidationHandler* handler));
-  MOCK_METHOD0(GetInvalidatorStat, syncer::InvalidatorState());
-  MOCK_CONST_METHOD0(GetInvalidatorState, syncer::InvalidatorState());
-  MOCK_CONST_METHOD0(GetInvalidatorClientId, std::string());
-  MOCK_METHOD0(GetInvalidationLogger, invalidation::InvalidationLogger*());
-  MOCK_CONST_METHOD1(RequestDetailedStatus,
-                     void(base::RepeatingCallback<
-                          void(const base::DictionaryValue&)> post_caller));
+class MockActiveDevicesProvider : public ActiveDevicesProvider {
+ public:
+  MockActiveDevicesProvider() = default;
+  ~MockActiveDevicesProvider() override = default;
+
+  MOCK_METHOD(size_t, CountActiveDevicesIfAvailable, (), (override));
+  MOCK_METHOD(void,
+              SetActiveDevicesChangedCallback,
+              (ActiveDevicesProvider::ActiveDevicesChangedCallback),
+              (override));
 };
 
 std::unique_ptr<HttpPostProviderFactory> CreateHttpBridgeFactory() {
@@ -183,8 +194,7 @@ std::unique_ptr<HttpPostProviderFactory> CreateHttpBridgeFactory() {
 class SyncEngineImplTest : public testing::Test {
  protected:
   SyncEngineImplTest()
-      : sync_thread_("SyncThreadForTest"),
-        host_(base::BindOnce(&SyncEngineImplTest::SetEngineTypes,
+      : host_(base::BindOnce(&SyncEngineImplTest::SetEngineTypes,
                              base::Unretained(this))),
         fake_manager_(nullptr) {}
 
@@ -196,9 +206,17 @@ class SyncEngineImplTest : public testing::Test {
     SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
 
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
-    sync_thread_.StartAndWaitForTesting();
     ON_CALL(invalidator_, UpdateInterestedTopics(_, _))
         .WillByDefault(testing::Return(true));
+    auto sync_task_runner = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+    backend_ = std::make_unique<SyncEngineImpl>(
+        "dummyDebugName", &invalidator_, GetSyncInvalidationsService(),
+        std::make_unique<NiceMock<MockActiveDevicesProvider>>(),
+        sync_prefs_->AsWeakPtr(),
+        temp_dir_.GetPath().Append(base::FilePath(kTestSyncDir)),
+        sync_task_runner);
 
     fake_manager_factory_ = std::make_unique<FakeSyncManagerFactory>(
         &fake_manager_, network::TestNetworkConnectionTracker::GetInstance());
@@ -226,26 +244,12 @@ class SyncEngineImplTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void CreateBackend() {
-    backend_ = std::make_unique<SyncEngineImpl>(
-        "dummyDebugName", &invalidator_, GetSyncInvalidationsService(),
-        sync_prefs_->AsWeakPtr(),
-        temp_dir_.GetPath().Append(base::FilePath(kTestSyncDir)));
-  }
-
   // Synchronously initializes the backend.
   void InitializeBackend(bool expect_success) {
-    if (!backend_) {
-      CreateBackend();
-    }
-
     host_.SetExpectSuccess(expect_success);
 
     SyncEngine::InitParams params;
-    params.sync_task_runner = sync_thread_.task_runner();
     params.host = &host_;
-    params.registrar = std::make_unique<SyncBackendRegistrar>(
-        std::string(), base::BindRepeating(&CreateModelWorkerForGroup));
     params.http_factory_getter = base::BindOnce(&CreateHttpBridgeFactory);
     params.authenticated_account_id = CoreAccountId("account_id");
     params.sync_manager_factory = std::move(fake_manager_factory_);
@@ -272,7 +276,6 @@ class SyncEngineImplTest : public testing::Test {
     ModelTypeConfigurer::ConfigureParams params;
     params.reason = CONFIGURE_REASON_RECONFIGURATION;
     params.enabled_types = Difference(enabled_types_, unready_types);
-    params.disabled_types = Union(disabled_types, unready_types);
     params.to_download = Difference(params.enabled_types, engine_types_);
     if (!params.to_download.Empty()) {
       params.to_download.Put(NIGORI);
@@ -317,8 +320,7 @@ class SyncEngineImplTest : public testing::Test {
 
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
-  sync_preferences::TestingPrefServiceSyncable pref_service_;
-  base::Thread sync_thread_;
+  TestingPrefServiceSimple pref_service_;
   TestSyncEngineHost host_;
   std::unique_ptr<SyncPrefs> sync_prefs_;
   std::unique_ptr<SyncEngineImpl> backend_;
@@ -588,8 +590,8 @@ TEST_F(SyncEngineImplTest, DisableThenPurgeType) {
 TEST_F(SyncEngineImplTest, ModelTypeConnectorValidDuringShutdown) {
   InitializeBackend(true);
   backend_->StopSyncingForShutdown();
-  // Verify that call to DeactivateNonBlockingDataType doesn't assert.
-  backend_->DeactivateNonBlockingDataType(AUTOFILL);
+  // Verify that call to DeactivateDataType doesn't assert.
+  backend_->DeactivateDataType(AUTOFILL);
   backend_->Shutdown(STOP_SYNC);
   backend_.reset();
 }
@@ -683,7 +685,6 @@ TEST_F(SyncEngineImplTest, ShouldDestroyAfterInitFailure) {
 
 TEST_F(SyncEngineImplWithSyncInvalidationsTest,
        ShouldInvalidateDataTypesOnIncomingInvalidation) {
-  CreateBackend();
   EXPECT_CALL(mock_instance_id_driver_, AddListener(backend_.get()));
   InitializeBackend(/*expect_success=*/true);
 
@@ -724,12 +725,11 @@ TEST_F(SyncEngineImplWithSyncInvalidationsForWalletAndOfferTest,
 
   // Since the old invalidations system is not being used anymore (based on the
   // enabled feature flags), SyncEngine should call the (old) invalidator with
-  // an empty TopicSet upon construction.
+  // an empty TopicSet upon initialization.
   EXPECT_CALL(invalidator_, UpdateInterestedTopics(_, TopicSet()));
-  CreateBackend();
+  InitializeBackend(/*expect_success=*/true);
 
   EXPECT_CALL(invalidator_, UpdateInterestedTopics(_, _)).Times(0);
-  InitializeBackend(/*expect_success=*/true);
   ConfigureDataTypes();
 }
 

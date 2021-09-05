@@ -42,6 +42,11 @@ const char kANGLEImplementationMetalNULLName[] = "metal-null";
 const char kCmdDecoderValidatingName[] = "validating";
 const char kCmdDecoderPassthroughName[] = "passthrough";
 
+// Swap chain formats for direct composition SDR video overlays.
+const char kSwapChainFormatNV12[] = "nv12";
+const char kSwapChainFormatYUY2[] = "yuy2";
+const char kSwapChainFormatBGRA[] = "bgra";
+
 }  // namespace gl
 
 namespace switches {
@@ -152,6 +157,11 @@ const char kUseAdapterLuid[] = "use-adapter-luid";
 const char kDirectCompositionForceFullDamageForTesting[] =
     "direct-composition-force-full-damage-for-testing";
 
+// Used for overriding the swap chain format for direct composition SDR video
+// overlays.
+const char kDirectCompositionVideoSwapChainFormat[] =
+    "direct-composition-video-swap-chain-format";
+
 // This is the list of switches passed from this file that are passed from the
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
 // to read it in the GPU process, else don't add it.
@@ -173,6 +183,7 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
     kEnableDirectCompositionVideoOverlays,
     kDisableDirectCompositionVideoOverlays,
     kDirectCompositionForceFullDamageForTesting,
+    kDirectCompositionVideoSwapChainFormat,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     base::size(kGLSwitchesCopiedFromGpuProcessHost);
@@ -180,6 +191,14 @@ const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
 }  // namespace switches
 
 namespace features {
+
+// Use BufferCount of 3 for the direct composition root swap chain.
+const base::Feature kDCompTripleBufferRootSwapChain{
+    "DCompTripleBufferRootSwapChain", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use BufferCount of 3 for direct composition video swap chains.
+const base::Feature kDCompTripleBufferVideoSwapChain{
+    "DCompTripleBufferVideoSwapChain", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Forces Chrome's main backbuffer to full damage if the actual damage
 // is large enough and allows DWM to consider the main backbuffer as an
@@ -192,25 +211,10 @@ const base::Feature kDirectCompositionLowLatencyPresentation{
     "DirectCompositionLowLatencyPresentation",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Overrides preferred overlay format to NV12 instead of YUY2.
-const base::Feature kDirectCompositionPreferNV12Overlays{
-    "DirectCompositionPreferNV12Overlays", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Allow overlay swapchain to present on all GPUs even if they only support
 // software overlays.
 const base::Feature kDirectCompositionSoftwareOverlays{
     "DirectCompositionSoftwareOverlays", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Allow putting a video swapchain underneath the main swapchain, so overlays
-// can be used even if there are controls on top of the video. It can be
-// enabled only when overlay is supported.
-const base::Feature kDirectCompositionUnderlays{
-    "DirectCompositionUnderlays", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Use decode swap chain created from compatible video decoder buffers.
-const base::Feature kDirectCompositionUseNV12DecodeSwapChain{
-    "DirectCompositionUseNV12DecodeSwapChain",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Default to using ANGLE's OpenGL backend
 const base::Feature kDefaultANGLEOpenGL{"DefaultANGLEOpenGL",

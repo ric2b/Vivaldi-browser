@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
@@ -21,6 +22,8 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
@@ -39,6 +42,8 @@ blink::ServiceWorkerStatusCode DatabaseStatusToStatusCode(
     case storage::mojom::ServiceWorkerDatabaseStatus::kErrorDisabled:
       return blink::ServiceWorkerStatusCode::kErrorAbort;
       NOTREACHED();
+    case storage::mojom::ServiceWorkerDatabaseStatus::kErrorStorageDisconnected:
+      return blink::ServiceWorkerStatusCode::kErrorStorageDisconnected;
     default:
       return blink::ServiceWorkerStatusCode::kErrorFailed;
   }
@@ -79,6 +84,11 @@ void CompleteFindSoon(
     ServiceWorkerRegistry::FindRegistrationCallback callback) {
   RunSoon(from_here, base::BindOnce(&CompleteFindNow, std::move(registration),
                                     status, std::move(callback)));
+}
+
+void RecordRetryCount(size_t retries) {
+  base::UmaHistogramCounts100("ServiceWorker.Storage.RetryCountForRecovery",
+                              retries);
 }
 
 }  // namespace
@@ -125,8 +135,11 @@ ServiceWorkerRegistry::ServiceWorkerRegistry(
     : context_(context),
       storage_control_(std::make_unique<ServiceWorkerStorageControlImpl>(
           ServiceWorkerStorage::Create(user_data_directory,
-                                       std::move(database_task_runner),
+                                       database_task_runner,
                                        quota_manager_proxy))),
+      user_data_directory_(user_data_directory),
+      database_task_runner_(database_task_runner),
+      quota_manager_proxy_(quota_manager_proxy),
       special_storage_policy_(special_storage_policy) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(context_);
@@ -138,7 +151,10 @@ ServiceWorkerRegistry::ServiceWorkerRegistry(
     ServiceWorkerRegistry* old_registry)
     : context_(context),
       storage_control_(std::make_unique<ServiceWorkerStorageControlImpl>(
-          ServiceWorkerStorage::Create(old_registry->storage()))),
+          ServiceWorkerStorage::Create(
+              old_registry->user_data_directory_,
+              old_registry->database_task_runner_,
+              old_registry->quota_manager_proxy_.get()))),
       special_storage_policy_(old_registry->special_storage_policy_) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(context_);
@@ -146,10 +162,6 @@ ServiceWorkerRegistry::ServiceWorkerRegistry(
 }
 
 ServiceWorkerRegistry::~ServiceWorkerRegistry() = default;
-
-ServiceWorkerStorage* ServiceWorkerRegistry::storage() const {
-  return storage_control_->storage();
-}
 
 void ServiceWorkerRegistry::CreateNewRegistration(
     blink::mojom::ServiceWorkerRegistrationOptions options,
@@ -291,17 +303,17 @@ void ServiceWorkerRegistry::GetStorageUsageForOrigin(
     const url::Origin& origin,
     GetStorageUsageForOriginCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  // TODO(crbug.com/1133143): Consider handling disconnection error without
+  // using WrapCallbackWithDefaultInvokeIfNotRun() as it can easily lead to
+  // surprising behavior in the destructor.
   GetRemoteStorageControl()->GetUsageForOrigin(
       origin,
-      base::BindOnce(
-          [](GetStorageUsageForOriginCallback callback,
-             storage::mojom::ServiceWorkerDatabaseStatus database_status,
-             int64_t usage) {
-            blink::ServiceWorkerStatusCode status =
-                DatabaseStatusToStatusCode(database_status);
-            std::move(callback).Run(status, usage);
-          },
-          std::move(callback)));
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&ServiceWorkerRegistry::DidGetStorageUsageForOrigin,
+                         weak_factory_.GetWeakPtr(), std::move(callback)),
+          storage::mojom::ServiceWorkerDatabaseStatus::
+              kErrorStorageDisconnected,
+          /*usage=*/0));
 }
 
 void ServiceWorkerRegistry::GetAllRegistrationsInfos(
@@ -532,22 +544,6 @@ void ServiceWorkerRegistry::GetUserData(int64_t registration_id,
                                         const std::vector<std::string>& keys,
                                         GetUserDataCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId ||
-      keys.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback), std::vector<std::string>(),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-  for (const std::string& key : keys) {
-    if (key.empty()) {
-      RunSoon(FROM_HERE,
-              base::BindOnce(std::move(callback), std::vector<std::string>(),
-                             blink::ServiceWorkerStatusCode::kErrorFailed));
-      return;
-    }
-  }
-
   GetRemoteStorageControl()->GetUserData(
       registration_id, keys,
       base::BindOnce(&ServiceWorkerRegistry::DidGetUserData,
@@ -559,14 +555,6 @@ void ServiceWorkerRegistry::GetUserDataByKeyPrefix(
     const std::string& key_prefix,
     GetUserDataCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId ||
-      key_prefix.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback), std::vector<std::string>(),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-
   GetRemoteStorageControl()->GetUserDataByKeyPrefix(
       registration_id, key_prefix,
       base::BindOnce(&ServiceWorkerRegistry::DidGetUserData,
@@ -578,15 +566,6 @@ void ServiceWorkerRegistry::GetUserKeysAndDataByKeyPrefix(
     const std::string& key_prefix,
     GetUserKeysAndDataCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId ||
-      key_prefix.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           blink::ServiceWorkerStatusCode::kErrorFailed,
-                           base::flat_map<std::string, std::string>()));
-    return;
-  }
-
   GetRemoteStorageControl()->GetUserKeysAndDataByKeyPrefix(
       registration_id, key_prefix,
       base::BindOnce(&ServiceWorkerRegistry::DidGetUserKeysAndData,
@@ -611,12 +590,6 @@ void ServiceWorkerRegistry::StoreUserData(
   // storage::mojom::ServiceWorkerUserDataPtr instead of converting
   //|key_value_pairs|.
   for (const auto& kv : key_value_pairs) {
-    if (kv.first.empty()) {
-      RunSoon(FROM_HERE,
-              base::BindOnce(std::move(callback),
-                             blink::ServiceWorkerStatusCode::kErrorFailed));
-      return;
-    }
     user_data.push_back(storage::mojom::ServiceWorkerUserData::New(
         registration_id, kv.first, kv.second));
   }
@@ -631,22 +604,6 @@ void ServiceWorkerRegistry::ClearUserData(int64_t registration_id,
                                           const std::vector<std::string>& keys,
                                           StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId ||
-      keys.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-  for (const std::string& key : keys) {
-    if (key.empty()) {
-      RunSoon(FROM_HERE,
-              base::BindOnce(std::move(callback),
-                             blink::ServiceWorkerStatusCode::kErrorFailed));
-      return;
-    }
-  }
-
   GetRemoteStorageControl()->ClearUserData(
       registration_id, keys,
       base::BindOnce(&ServiceWorkerRegistry::DidClearUserData,
@@ -658,22 +615,6 @@ void ServiceWorkerRegistry::ClearUserDataByKeyPrefixes(
     const std::vector<std::string>& key_prefixes,
     StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId ||
-      key_prefixes.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-  for (const std::string& key_prefix : key_prefixes) {
-    if (key_prefix.empty()) {
-      RunSoon(FROM_HERE,
-              base::BindOnce(std::move(callback),
-                             blink::ServiceWorkerStatusCode::kErrorFailed));
-      return;
-    }
-  }
-
   GetRemoteStorageControl()->ClearUserDataByKeyPrefixes(
       registration_id, key_prefixes,
       base::BindOnce(&ServiceWorkerRegistry::DidClearUserData,
@@ -684,13 +625,6 @@ void ServiceWorkerRegistry::ClearUserDataForAllRegistrationsByKeyPrefix(
     const std::string& key_prefix,
     StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (key_prefix.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-
   GetRemoteStorageControl()->ClearUserDataForAllRegistrationsByKeyPrefix(
       key_prefix,
       base::BindOnce(&ServiceWorkerRegistry::DidClearUserData,
@@ -701,14 +635,6 @@ void ServiceWorkerRegistry::GetUserDataForAllRegistrations(
     const std::string& key,
     GetUserDataForAllRegistrationsCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (key.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           std::vector<std::pair<int64_t, std::string>>(),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-
   GetRemoteStorageControl()->GetUserDataForAllRegistrations(
       key,
       base::BindOnce(&ServiceWorkerRegistry::DidGetUserDataForAllRegistrations,
@@ -719,18 +645,21 @@ void ServiceWorkerRegistry::GetUserDataForAllRegistrationsByKeyPrefix(
     const std::string& key_prefix,
     GetUserDataForAllRegistrationsCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  if (key_prefix.empty()) {
-    RunSoon(FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           std::vector<std::pair<int64_t, std::string>>(),
-                           blink::ServiceWorkerStatusCode::kErrorFailed));
-    return;
-  }
-
   GetRemoteStorageControl()->GetUserDataForAllRegistrationsByKeyPrefix(
       key_prefix,
       base::BindOnce(&ServiceWorkerRegistry::DidGetUserDataForAllRegistrations,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ServiceWorkerRegistry::GetRegisteredOrigins(
+    GetRegisteredOriginsCallback callback) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  GetRemoteStorageControl()->GetRegisteredOrigins(std::move(callback));
+}
+
+void ServiceWorkerRegistry::PerformStorageCleanup(base::OnceClosure callback) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  GetRemoteStorageControl()->PerformStorageCleanup(std::move(callback));
 }
 
 void ServiceWorkerRegistry::PrepareForDeleteAndStarOver() {
@@ -744,10 +673,10 @@ void ServiceWorkerRegistry::DeleteAndStartOver(StatusCallback callback) {
       CreateDatabaseStatusCallback(std::move(callback)));
 }
 
-void ServiceWorkerRegistry::DisableDeleteAndStartOverForTesting() {
-  DCHECK(should_schedule_delete_and_start_over_);
-  should_schedule_delete_and_start_over_ = false;
-  is_storage_disabled_ = true;
+void ServiceWorkerRegistry::SimulateStorageRestartForTesting() {
+  storage_control_ = std::make_unique<ServiceWorkerStorageControlImpl>(
+      ServiceWorkerStorage::Create(user_data_directory_, database_task_runner_,
+                                   quota_manager_proxy_.get()));
 }
 
 void ServiceWorkerRegistry::Start() {
@@ -1035,7 +964,6 @@ void ServiceWorkerRegistry::DidGetRegistrationsForOrigin(
     DCHECK(entry->registration);
     DCHECK(entry->version_reference);
     registration_ids.insert(entry->registration->registration_id);
-    // TODO(crbug.com/1055677): Pass ServiceWorkerLiveVersionRef.
     registrations.push_back(
         GetOrCreateRegistration(*entry->registration, entry->resources,
                                 std::move(entry->version_reference)));
@@ -1145,6 +1073,15 @@ void ServiceWorkerRegistry::DidGetAllRegistrations(
   }
 
   std::move(callback).Run(blink::ServiceWorkerStatusCode::kOk, infos);
+}
+
+void ServiceWorkerRegistry::DidGetStorageUsageForOrigin(
+    GetStorageUsageForOriginCallback callback,
+    storage::mojom::ServiceWorkerDatabaseStatus database_status,
+    int64_t usage) {
+  blink::ServiceWorkerStatusCode status =
+      DatabaseStatusToStatusCode(database_status);
+  std::move(callback).Run(status, usage);
 }
 
 void ServiceWorkerRegistry::DidStoreRegistration(
@@ -1401,9 +1338,56 @@ ServiceWorkerRegistry::GetRemoteStorageControl() {
   if (!remote_storage_control_.is_bound()) {
     storage_control_->Bind(
         remote_storage_control_.BindNewPipeAndPassReceiver());
+    remote_storage_control_.set_disconnect_handler(
+        base::BindOnce(&ServiceWorkerRegistry::OnRemoteStorageDisconnected,
+                       weak_factory_.GetWeakPtr()));
   }
 
   return remote_storage_control_;
+}
+
+void ServiceWorkerRegistry::OnRemoteStorageDisconnected() {
+  const size_t kMaxRetryCounts = 100;
+
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+  remote_storage_control_.reset();
+
+  if (!context_)
+    return;
+
+  if (connection_state_ == ConnectionState::kRecovering) {
+    ++recovery_retry_counts_;
+    if (recovery_retry_counts_ > kMaxRetryCounts) {
+      RecordRetryCount(kMaxRetryCounts);
+      CHECK(false) << "The Storage Service consistently crashes.";
+      return;
+    }
+  }
+  connection_state_ = ConnectionState::kRecovering;
+
+  // Collect live version information to recover resource purging state in the
+  // Storage Service.
+  std::vector<storage::mojom::ServiceWorkerLiveVersionInfoPtr> versions;
+  for (auto& it : context_->GetLiveVersions()) {
+    if (!it.second->is_redundant())
+      versions.push_back(it.second->RebindStorageReference());
+  }
+
+  GetRemoteStorageControl()->Recover(
+      std::move(versions), base::BindOnce(&ServiceWorkerRegistry::DidRecover,
+                                          weak_factory_.GetWeakPtr()));
+}
+
+void ServiceWorkerRegistry::DidRecover() {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+  RecordRetryCount(recovery_retry_counts_);
+
+  recovery_retry_counts_ = 0;
+  connection_state_ = ConnectionState::kNormal;
+  // TODO(crbug.com/1133143): Retry mojo method calls which are invoked during
+  // recovery steps.
 }
 
 }  // namespace content

@@ -15,9 +15,8 @@
 #include "extraparts/media_renderer_host_message_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
-VivaldiContentBrowserClient::VivaldiContentBrowserClient(
-    StartupData* startup_data)
-    : ChromeContentBrowserClient(startup_data) {}
+VivaldiContentBrowserClient::VivaldiContentBrowserClient()
+    : ChromeContentBrowserClient() {}
 
 VivaldiContentBrowserClient::~VivaldiContentBrowserClient() {}
 

@@ -19,6 +19,7 @@
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/driver/active_devices_provider.h"
 #include "components/sync/driver/glue/sync_engine_backend.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/engine/data_type_activation_response.h"
@@ -26,9 +27,7 @@
 #include "components/sync/engine/engine_components_factory_impl.h"
 #include "components/sync/engine/events/protocol_event.h"
 #include "components/sync/engine/net/http_bridge.h"
-#include "components/sync/engine/sync_backend_registrar.h"
 #include "components/sync/engine/sync_engine_host.h"
-#include "components/sync/engine/sync_manager_factory.h"
 #include "components/sync/engine/sync_string_conversions.h"
 #include "components/sync/invalidations/fcm_handler.h"
 #include "components/sync/invalidations/switches.h"
@@ -40,19 +39,37 @@ SyncEngineImpl::SyncEngineImpl(
     const std::string& name,
     invalidation::InvalidationService* invalidator,
     SyncInvalidationsService* sync_invalidations_service,
+    std::unique_ptr<ActiveDevicesProvider> active_devices_provider,
     const base::WeakPtr<SyncPrefs>& sync_prefs,
-    const base::FilePath& sync_data_folder)
-    : name_(name),
+    const base::FilePath& sync_data_folder,
+    scoped_refptr<base::SequencedTaskRunner> sync_task_runner)
+    : sync_task_runner_(std::move(sync_task_runner)),
+      name_(name),
       sync_prefs_(sync_prefs),
       invalidator_(invalidator),
       sync_invalidations_service_(sync_invalidations_service),
 #if defined(OS_ANDROID)
-      sessions_invalidation_enabled_(false) {
+      sessions_invalidation_enabled_(false),
 #else
-      sessions_invalidation_enabled_(true) {
+      sessions_invalidation_enabled_(true),
 #endif
+      active_devices_provider_(std::move(active_devices_provider)) {
   backend_ = base::MakeRefCounted<SyncEngineBackend>(
       name_, sync_data_folder, weak_ptr_factory_.GetWeakPtr());
+}
+
+SyncEngineImpl::~SyncEngineImpl() {
+  DCHECK(!backend_ && !host_) << "Must call Shutdown before destructor.";
+}
+
+void SyncEngineImpl::Initialize(InitParams params) {
+  DCHECK(params.host);
+
+  host_ = params.host;
+
+  sync_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&SyncEngineBackend::DoInitialize, backend_,
+                                std::move(params)));
 
   // If the new invalidations system (SyncInvalidationsService) is fully
   // enabled, then the SyncService doesn't need to communicate with the old
@@ -62,31 +79,13 @@ SyncEngineImpl::SyncEngineImpl(
       base::FeatureList::IsEnabled(switches::kUseSyncInvalidations) &&
       base::FeatureList::IsEnabled(
           switches::kUseSyncInvalidationsForWalletAndOffer)) {
+    DCHECK(!invalidation_handler_registered_);
     invalidator_->RegisterInvalidationHandler(this);
     bool success = invalidator_->UpdateInterestedTopics(this, /*topics=*/{});
     DCHECK(success);
     invalidator_->UnregisterInvalidationHandler(this);
     invalidator_ = nullptr;
   }
-}
-
-SyncEngineImpl::~SyncEngineImpl() {
-  DCHECK(!backend_ && !host_) << "Must call Shutdown before destructor.";
-  DCHECK(!registrar_);
-}
-
-void SyncEngineImpl::Initialize(InitParams params) {
-  DCHECK(params.sync_task_runner);
-  DCHECK(params.host);
-  DCHECK(params.registrar);
-
-  sync_task_runner_ = params.sync_task_runner;
-  host_ = params.host;
-  registrar_ = params.registrar.get();
-
-  sync_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&SyncEngineBackend::DoInitialize, backend_,
-                                std::move(params)));
 }
 
 bool SyncEngineImpl::IsInitialized() const {
@@ -165,8 +164,6 @@ void SyncEngineImpl::StopSyncingForShutdown() {
   // Immediately stop sending messages to the host.
   host_ = nullptr;
 
-  registrar_->RequestWorkerStopOnUIThread();
-
   backend_->ShutdownOnUIThread();
 }
 
@@ -192,11 +189,12 @@ void SyncEngineImpl::Shutdown(ShutdownReason reason) {
   last_enabled_types_.Clear();
   invalidation_handler_registered_ = false;
 
+  active_devices_provider_->SetActiveDevicesChangedCallback(
+      base::RepeatingClosure());
+
   model_type_connector_.reset();
 
-  // Shut down and destroy SyncManager. SyncManager holds a pointer to
-  // |registrar_| so its destruction must be sequenced before the destruction of
-  // |registrar_|.
+  // Shut down and destroy SyncManager.
   sync_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&SyncEngineBackend::DoShutdown, backend_, reason));
@@ -204,8 +202,6 @@ void SyncEngineImpl::Shutdown(ShutdownReason reason) {
   // Ensure that |backend_| destroyed inside Sync sequence, not inside current
   // one.
   sync_task_runner_->ReleaseSoon(FROM_HERE, std::move(backend_));
-  DCHECK(!backend_);
-  registrar_ = nullptr;
 }
 
 void SyncEngineImpl::ConfigureDataTypes(ConfigureParams params) {
@@ -217,24 +213,14 @@ void SyncEngineImpl::ConfigureDataTypes(ConfigureParams params) {
                                 std::move(params)));
 }
 
-void SyncEngineImpl::EnableEncryptEverything() {
-  sync_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SyncEngineBackend::DoEnableEncryptEverything, backend_));
-}
-
-void SyncEngineImpl::ActivateNonBlockingDataType(
+void SyncEngineImpl::ActivateDataType(
     ModelType type,
     std::unique_ptr<DataTypeActivationResponse> activation_response) {
-  registrar_->RegisterNonBlockingType(type);
-  if (activation_response->model_type_state.initial_sync_done())
-    registrar_->AddRestoredNonBlockingType(type);
-  model_type_connector_->ConnectNonBlockingType(type,
-                                                std::move(activation_response));
+  model_type_connector_->ConnectDataType(type, std::move(activation_response));
 }
 
-void SyncEngineImpl::DeactivateNonBlockingDataType(ModelType type) {
-  model_type_connector_->DisconnectNonBlockingType(type);
+void SyncEngineImpl::DeactivateDataType(ModelType type) {
+  model_type_connector_->DisconnectDataType(type);
 }
 
 void SyncEngineImpl::ActivateProxyDataType(ModelType type) {
@@ -260,14 +246,6 @@ void SyncEngineImpl::HasUnsyncedItemsForTest(
       std::move(cb));
 }
 
-void SyncEngineImpl::GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const {
-  if (IsInitialized()) {
-    registrar_->GetModelSafeRoutingInfo(out);
-  } else {
-    NOTREACHED();
-  }
-}
-
 void SyncEngineImpl::RequestBufferedProtocolEventsAndEnableForwarding() {
   sync_task_runner_->PostTask(
       FROM_HERE,
@@ -281,23 +259,6 @@ void SyncEngineImpl::DisableProtocolEventForwarding() {
       FROM_HERE,
       base::BindOnce(&SyncEngineBackend::DisableProtocolEventForwarding,
                      backend_));
-}
-
-void SyncEngineImpl::EnableDirectoryTypeDebugInfoForwarding() {
-  DCHECK(IsInitialized());
-  sync_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SyncEngineBackend::EnableDirectoryTypeDebugInfoForwarding,
-                     backend_));
-}
-
-void SyncEngineImpl::DisableDirectoryTypeDebugInfoForwarding() {
-  DCHECK(IsInitialized());
-  sync_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &SyncEngineBackend::DisableDirectoryTypeDebugInfoForwarding,
-          backend_));
 }
 
 void SyncEngineImpl::FinishConfigureDataTypesOnFrontendLoop(
@@ -340,6 +301,12 @@ void SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop(
   if (sync_invalidations_service_) {
     sync_invalidations_service_->AddListener(this);
   }
+
+  active_devices_provider_->SetActiveDevicesChangedCallback(base::BindRepeating(
+      &SyncEngineImpl::OnActiveDevicesChanged, weak_ptr_factory_.GetWeakPtr()));
+
+  // Initialize active devices count.
+  OnActiveDevicesChanged();
 
   host_->OnEngineInitialized(initial_types, js_backend, debug_info_listener,
                              birthday, bag_of_chips, /*success=*/true);
@@ -404,27 +371,6 @@ void SyncEngineImpl::HandleProtocolEventOnFrontendLoop(
     std::unique_ptr<ProtocolEvent> event) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_->OnProtocolEvent(*event);
-}
-
-void SyncEngineImpl::HandleDirectoryCommitCountersUpdatedOnFrontendLoop(
-    ModelType type,
-    const CommitCounters& counters) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  host_->OnDirectoryTypeCommitCounterUpdated(type, counters);
-}
-
-void SyncEngineImpl::HandleDirectoryUpdateCountersUpdatedOnFrontendLoop(
-    ModelType type,
-    const UpdateCounters& counters) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  host_->OnDirectoryTypeUpdateCounterUpdated(type, counters);
-}
-
-void SyncEngineImpl::HandleDirectoryStatusCountersUpdatedOnFrontendLoop(
-    ModelType type,
-    const StatusCounters& counters) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  host_->OnDatatypeStatusCounterUpdated(type, counters);
 }
 
 void SyncEngineImpl::UpdateInvalidationVersions(
@@ -509,6 +455,15 @@ void SyncEngineImpl::SendInterestedTopicsToInvalidator() {
   bool success = invalidator_->UpdateInterestedTopics(
       this, ModelTypeSetToTopicSet(invalidation_enabled_types));
   DCHECK(success);
+}
+
+void SyncEngineImpl::OnActiveDevicesChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  sync_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &SyncEngineBackend::DoOnActiveDevicesChanged, backend_,
+          active_devices_provider_->CountActiveDevicesIfAvailable()));
 }
 
 }  // namespace syncer

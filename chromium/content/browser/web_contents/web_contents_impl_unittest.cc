@@ -8,12 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_url_parameters.h"
@@ -31,8 +32,6 @@
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
-#include "content/common/page_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/context_menu_params.h"
@@ -66,13 +65,16 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "skia/ext/skia_utils_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/skia_util.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -277,6 +279,43 @@ TEST_F(WebContentsImplTest, UpdateTitle) {
   EXPECT_TRUE(fake_delegate.loading_state_changed_was_called());
 
   contents()->SetDelegate(nullptr);
+}
+
+TEST_F(WebContentsImplTest, DownloadInvalidImage) {
+  TestWebContents* test_contents = contents();
+
+  GURL url("about:blank");
+
+  SkBitmap result_bitmap;
+  WebContents::ImageDownloadCallback cb = base::BindLambdaForTesting(
+      [&](int id, int http_status_code, const GURL& image_url,
+          const std::vector<SkBitmap>& bitmaps,
+          const std::vector<gfx::Size>& sizes) {
+        ASSERT_EQ(bitmaps.size(), 1u);
+        result_bitmap = bitmaps[0];
+      });
+
+  // In production this would go to the renderer, but TestWebContents just
+  // waits for us to give a reply.
+  test_contents->DownloadImage(url,
+                               /*is_favicon=*/false,
+                               /*preferred_size=*/false,
+                               /*max_bitmap_size=*/0,
+                               /*bypass_cache=*/false, std::move(cb));
+
+  SkBitmap badbitmap;
+  badbitmap.allocPixels(
+      SkImageInfo::Make(1, 1, kARGB_4444_SkColorType, kPremul_SkAlphaType));
+  badbitmap.eraseColor(SK_ColorGREEN);
+
+  SkBitmap n32bitmap;
+  EXPECT_TRUE(skia::SkBitmapToN32OpaqueOrPremul(badbitmap, &n32bitmap));
+
+  // The result from the renderer is not an N32 32bpp bitmap, so it should
+  // be converted before being given to the rest of the browser process.
+  test_contents->TestDidDownloadImage(url, 400, {badbitmap},
+                                      {gfx::Size(1000, 2000)});
+  EXPECT_TRUE(gfx::BitmapsAreEqual(result_bitmap, n32bitmap));
 }
 
 TEST_F(WebContentsImplTest, UpdateTitleBeforeFirstNavigation) {
@@ -2509,10 +2548,22 @@ namespace {
 
 class MockWebContentsDelegate : public WebContentsDelegate {
  public:
+  explicit MockWebContentsDelegate(
+      blink::ProtocolHandlerSecurityLevel security_level =
+          blink::ProtocolHandlerSecurityLevel::kStrict)
+      : security_level_(security_level) {}
   MOCK_METHOD2(HandleContextMenu,
                bool(RenderFrameHost*, const ContextMenuParams&));
   MOCK_METHOD4(RegisterProtocolHandler,
                void(RenderFrameHost*, const std::string&, const GURL&, bool));
+
+  blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel(
+      RenderFrameHost*) override {
+    return security_level_;
+  }
+
+ private:
+  blink::ProtocolHandlerSecurityLevel security_level_;
 };
 
 }  // namespace
@@ -2552,13 +2603,34 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerDifferentOrigin) {
 
   {
     contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url1,
-                                        base::string16(),
                                         /*user_gesture=*/true);
   }
 
   {
     contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url2,
-                                        base::string16(),
+                                        /*user_gesture=*/true);
+  }
+
+  // Check behavior for RegisterProtocolHandler::kUntrustedOrigins.
+  MockWebContentsDelegate unrestrictive_delegate(
+      blink::ProtocolHandlerSecurityLevel::kUntrustedOrigins);
+  contents()->SetDelegate(&unrestrictive_delegate);
+  EXPECT_CALL(
+      unrestrictive_delegate,
+      RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url1, true))
+      .Times(1);
+  EXPECT_CALL(
+      unrestrictive_delegate,
+      RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url2, true))
+      .Times(1);
+
+  {
+    contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url1,
+                                        /*user_gesture=*/true);
+  }
+
+  {
+    contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url2,
                                         /*user_gesture=*/true);
   }
 
@@ -2581,7 +2653,6 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerDataURL) {
 
   {
     contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", data_handler,
-                                        base::string16(),
                                         /*user_gesture=*/true);
   }
 

@@ -125,17 +125,23 @@ class Storage::QueueUploaderInterface : public StorageQueue::UploaderInterface {
                                                     std::move(uploader));
   }
 
-  void ProcessRecord(StatusOr<EncryptedRecord> encrypted_record,
+  void ProcessRecord(EncryptedRecord encrypted_record,
                      base::OnceCallback<void(bool)> processed_cb) override {
-    if (encrypted_record.ok()) {
-      // Update sequencing information: add Priority and Generation ID.
-      SequencingInformation* const sequencing_info =
-          encrypted_record.ValueOrDie().mutable_sequencing_information();
-      sequencing_info->set_priority(priority_);
-      // sequencing_info->set_generation_id(...);  Not supported yet.
-    }
+    // Update sequencing information: add Priority.
+    SequencingInformation* const sequencing_info =
+        encrypted_record.mutable_sequencing_information();
+    sequencing_info->set_priority(priority_);
     storage_interface_->ProcessRecord(std::move(encrypted_record),
                                       std::move(processed_cb));
+  }
+
+  void ProcessGap(SequencingInformation start,
+                  uint64_t count,
+                  base::OnceCallback<void(bool)> processed_cb) override {
+    // Update sequencing information: add Priority.
+    start.set_priority(priority_);
+    storage_interface_->ProcessGap(std::move(start), count,
+                                   std::move(processed_cb));
   }
 
   void Completed(Status final_status) override {

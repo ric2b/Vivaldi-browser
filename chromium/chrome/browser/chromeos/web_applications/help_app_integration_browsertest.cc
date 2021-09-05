@@ -7,6 +7,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -46,7 +47,7 @@ class HelpAppIntegrationTest : public SystemWebAppIntegrationTest {
  public:
   HelpAppIntegrationTest() {
     scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kHelpAppReleaseNotes,
+        {chromeos::features::kHelpAppSearchServiceIntegration,
          chromeos::features::kReleaseNotesNotificationAllChannels},
         {});
   }
@@ -232,7 +233,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
       std::make_unique<chromeos::ReleaseNotesStorage>(profile());
 
   // Force the release notes notification to show up.
-  profile()->GetPrefs()->SetInteger(prefs::kReleaseNotesLastShownMilestone, -1);
+  profile()->GetPrefs()->SetInteger(prefs::kReleaseNotesLastShownMilestone, 20);
   release_notes_notification->MaybeShowReleaseNotes();
   // Assert that the notification really is there.
   auto notifications = display_service->GetDisplayedNotificationsForType(
@@ -292,7 +293,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2DirectNavigation) {
   auto params = LaunchParamsForApp(web_app::SystemAppType::HELP);
   params.override_url = GURL("chrome://help-app/help/");
 
-  content::WebContents* web_contents = LaunchApp(params);
+  content::WebContents* web_contents = LaunchApp(std::move(params));
 
   // The inner frame should have the same pathname as the launch URL.
   EXPECT_EQ("chrome-untrusted://help-app/help/",
@@ -352,6 +353,45 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2ShowParentalControls) {
   // Settings should be active in a new window.
   EXPECT_EQ(3u, chrome::GetTotalBrowserCount());
   EXPECT_EQ(expected_url, GetActiveWebContents()->GetVisibleURL());
+}
+
+// Test that the Help App delegate uses the local search service methods.
+IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
+                       HelpAppV2UsesLocalSearchServiceMethods) {
+  WaitForTestSystemAppInstall();
+  content::WebContents* web_contents = LaunchApp(web_app::SystemAppType::HELP);
+
+  // Script that adds a data item to the search index, then tries to find that
+  // data item.
+  constexpr char kScript[] = R"(
+    (async () => {
+      const delegate = document.querySelector('showoff-app').getDelegate();
+
+      await delegate.addOrUpdateSearchIndex([{
+        id: 'test-id',
+        title: 'foobar',
+        body: 'foo bar baz',
+        mainCategoryName: 'Help',
+        locale: 'en-US',
+      }]);
+
+      // Polling is required as addOrUpdateSearchIndex resolves before the
+      // search index is actually updated.
+      setInterval(async () => {
+        // Note that the LSS will fuzzy match into foobar.
+        const {results} = await delegate.findInSearchIndex('foober');
+        if (results && results.length === 1) {
+          window.domAutomationController.send(results[0].id);
+        }
+      }, 10);
+    })();
+  )";
+  std::string result;
+  // Use ExecuteScript instead of EvalJsInAppFrame because the script needs to
+  // run in the same world as the page's code.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript, &result));
+  EXPECT_EQ(result, "test-id");
 }
 
 // Test that the Help App opens when Gesture help requested.

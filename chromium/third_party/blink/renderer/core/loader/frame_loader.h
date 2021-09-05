@@ -35,13 +35,14 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
+#include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -132,7 +133,7 @@ class CORE_EXPORT FrameLoader final {
 
   DocumentLoader* GetDocumentLoader() const { return document_loader_.Get(); }
 
-  void SetDefersLoading(bool);
+  void SetDefersLoading(WebURLLoader::DeferType defer);
 
   void DidExplicitOpen();
 

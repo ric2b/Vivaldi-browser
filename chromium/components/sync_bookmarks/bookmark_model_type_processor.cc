@@ -22,9 +22,9 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
-#include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
 #include "components/sync/model/data_type_activation_request.h"
+#include "components/sync/model/type_entities_count.h"
 #include "components/sync/protocol/bookmark_model_metadata.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync_bookmarks/bookmark_local_changes_builder.h"
@@ -40,47 +40,6 @@
 namespace sync_bookmarks {
 
 namespace {
-
-// Metrics: "Sync.MissingBookmarkPermanentNodes"
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class MissingPermanentNodes {
-  kBookmarkBar = 0,
-  kOtherBookmarks = 1,
-  kMobileBookmarks = 2,
-  kBookmarkBarAndOtherBookmarks = 3,
-  kBookmarkBarAndMobileBookmarks = 4,
-  kOtherBookmarksAndMobileBookmarks = 5,
-  kBookmarkBarAndOtherBookmarksAndMobileBookmarks = 6,
-
-  kMaxValue = kBookmarkBarAndOtherBookmarksAndMobileBookmarks,
-};
-
-void LogMissingPermanentNodes(
-    const SyncedBookmarkTracker::Entity* bookmark_bar,
-    const SyncedBookmarkTracker::Entity* other_bookmarks,
-    const SyncedBookmarkTracker::Entity* mobile_bookmarks) {
-  MissingPermanentNodes missing_nodes;
-  if (!bookmark_bar && other_bookmarks && mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kBookmarkBar;
-  } else if (bookmark_bar && !other_bookmarks && mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kOtherBookmarks;
-  } else if (bookmark_bar && other_bookmarks && !mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kMobileBookmarks;
-  } else if (!bookmark_bar && !other_bookmarks && mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kBookmarkBarAndOtherBookmarks;
-  } else if (!bookmark_bar && other_bookmarks && !mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kBookmarkBarAndMobileBookmarks;
-  } else if (bookmark_bar && !other_bookmarks && !mobile_bookmarks) {
-    missing_nodes = MissingPermanentNodes::kOtherBookmarksAndMobileBookmarks;
-  } else {
-    // All must be missing.
-    missing_nodes =
-        MissingPermanentNodes::kBookmarkBarAndOtherBookmarksAndMobileBookmarks;
-  }
-  UMA_HISTOGRAM_ENUMERATION("Sync.MissingBookmarkPermanentNodes",
-                            missing_nodes);
-}
 
 class ScopedRemoteUpdateBookmarks {
  public:
@@ -484,12 +443,6 @@ void BookmarkModelTypeProcessor::OnInitialUpdateReceived(
                 bookmark_model_->trash_node())) ||
       !bookmark_tracker_->GetEntityForBookmarkNode(
           bookmark_model_->mobile_node())) {
-    LogMissingPermanentNodes(bookmark_tracker_->GetEntityForBookmarkNode(
-                                 bookmark_model_->bookmark_bar_node()),
-                             bookmark_tracker_->GetEntityForBookmarkNode(
-                                 bookmark_model_->other_node()),
-                             bookmark_tracker_->GetEntityForBookmarkNode(
-                                 bookmark_model_->mobile_node()));
     StopTrackingMetadata();
     bookmark_tracker_.reset();
     error_handler_.Run(
@@ -621,18 +574,16 @@ void BookmarkModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     AppendNodeAndChildrenForDebugging(child.get(), i++, all_nodes);
 }
 
-void BookmarkModelTypeProcessor::GetStatusCountersForDebugging(
-    StatusCountersCallback callback) {
+void BookmarkModelTypeProcessor::GetTypeEntitiesCountForDebugging(
+    base::OnceCallback<void(const syncer::TypeEntitiesCount&)> callback) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  syncer::StatusCounters counters;
+  syncer::TypeEntitiesCount count(syncer::BOOKMARKS);
   if (bookmark_tracker_) {
-    counters.num_entries =
-        bookmark_tracker_->TrackedBookmarksCountForDebugging();
-    counters.num_entries_and_tombstones =
-        counters.num_entries +
-        bookmark_tracker_->TrackedUncommittedTombstonesCountForDebugging();
+    count.non_tombstone_entities = bookmark_tracker_->TrackedBookmarksCount();
+    count.entities = count.non_tombstone_entities +
+                     bookmark_tracker_->TrackedUncommittedTombstonesCount();
   }
-  std::move(callback).Run(syncer::BOOKMARKS, counters);
+  std::move(callback).Run(count);
 }
 
 void BookmarkModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {
@@ -640,8 +591,7 @@ void BookmarkModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {
   SyncRecordModelTypeMemoryHistogram(syncer::BOOKMARKS, EstimateMemoryUsage());
   if (bookmark_tracker_) {
     SyncRecordModelTypeCountHistogram(
-        syncer::BOOKMARKS,
-        bookmark_tracker_->TrackedBookmarksCountForDebugging());
+        syncer::BOOKMARKS, bookmark_tracker_->TrackedBookmarksCount());
   } else {
     SyncRecordModelTypeCountHistogram(syncer::BOOKMARKS, 0);
   }

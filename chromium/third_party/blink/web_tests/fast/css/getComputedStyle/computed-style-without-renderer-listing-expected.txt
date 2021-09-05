@@ -61,6 +61,7 @@ animation-fill-mode: none
 animation-iteration-count: 1
 animation-name: none
 animation-play-state: running
+animation-timeline: auto
 animation-timing-function: ease
 appearance: none
 backdrop-filter: none
@@ -243,6 +244,7 @@ outline-width: 0px
 overflow: visible
 overflow-anchor: auto
 overflow-block: visible
+overflow-clip-margin: 0px
 overflow-inline: visible
 overflow-wrap: normal
 overflow-x: visible
@@ -281,6 +283,7 @@ scroll-padding-block-start: auto
 scroll-padding-inline-end: auto
 scroll-padding-inline-start: auto
 scrollbar-gutter: auto
+scrollbar-width: auto
 shape-image-threshold: 0
 shape-margin: 0px
 shape-outside: none

@@ -13,7 +13,7 @@
 #include "gn/test_with_scope.h"
 #include "util/test/test.h"
 
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_HAIKU)
+#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_HAIKU) || defined(OS_MSYS)
 #include <sys/time.h>
 #endif
 
@@ -89,7 +89,7 @@ TEST_F(WriteFileTest, WithData) {
   FILETIME last_modified_filetime = {};
   ASSERT_TRUE(::SetFileTime(foo_file.GetPlatformFile(), nullptr,
                             &last_access_filetime, &last_modified_filetime));
-#elif defined(OS_AIX) || defined(OS_HAIKU)
+#elif defined(OS_AIX) || defined(OS_HAIKU) || defined(OS_SOLARIS)
   struct timeval times[2] = {};
   ASSERT_EQ(utimes(foo_name.value().c_str(), times), 0);
 #else

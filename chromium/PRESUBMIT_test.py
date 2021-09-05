@@ -41,168 +41,6 @@ class VersionControlConflictsTest(unittest.TestCase):
     self.assertEqual(0, len(errors))
 
 
-class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
-  def testTypicalCorrectlyMatchedChange(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
-    diff_xml = ['<histogram name="Bla.Foo.Dummy"> </histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testTypicalNotMatchedChange(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(1, len(warnings))
-    self.assertEqual('warning', warnings[0].type)
-    self.assertTrue('foo.cc' in warnings[0].items[0])
-    self.assertTrue('foo.java' in warnings[0].items[1])
-
-  def testTypicalNotMatchedChangeViaSuffixes(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
-    diff_xml = ['<histogram_suffixes name="SuperHistogram">',
-                '  <suffix name="Dummy"/>',
-                '  <affected-histogram name="Snafu.Dummy"/>',
-                '</histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(1, len(warnings))
-    self.assertEqual('warning', warnings[0].type)
-    self.assertTrue('foo.cc' in warnings[0].items[0])
-    self.assertTrue('foo.java' in warnings[0].items[1])
-
-  def testTypicalCorrectlyMatchedChangeViaSuffixes(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
-    diff_xml = ['<histogram_suffixes name="SuperHistogram">',
-                '  <suffix name="Dummy"/>',
-                '  <affected-histogram name="Bla.Foo"/>',
-                '</histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testTypicalCorrectlyMatchedChangeViaSuffixesWithSeparator(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Snafu_Dummy", true)']
-    diff_java = ['RecordHistogram.recordBooleanHistogram("Snafu_Dummy", true)']
-    diff_xml = ['<histogram_suffixes name="SuperHistogram" separator="_">',
-                '  <suffix name="Dummy"/>',
-                '  <affected-histogram name="Snafu"/>',
-                '</histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testCorrectlyMatchedChangeViaSuffixesWithLineWrapping(self):
-    diff_cc = [
-        'UMA_HISTOGRAM_BOOL("LongHistogramNameNeedsLineWrapping.Dummy", true)']
-    diff_java = ['RecordHistogram.recordBooleanHistogram(' +
-                 '"LongHistogramNameNeedsLineWrapping.Dummy", true)']
-    diff_xml = ['<histogram_suffixes',
-                '    name="LongHistogramNameNeedsLineWrapping"',
-                '    separator=".">',
-                '  <suffix name="Dummy"/>',
-                '  <affected-histogram',
-                '      name="LongHistogramNameNeedsLineWrapping"/>',
-                '</histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testNameMatch(self):
-    # Check that the detected histogram name is "Dummy" and not, e.g.,
-    # "Dummy\", true);  // The \"correct"
-    diff_cc = ['UMA_HISTOGRAM_BOOL("Dummy", true);  // The "correct" histogram']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram("Dummy", true);' +
-      '  // The "correct" histogram']
-    diff_xml = ['<histogram name="Dummy"> </histogram>']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testSimilarMacroNames(self):
-    diff_cc = ['PUMA_HISTOGRAM_COOL("Mountain Lion", 42)']
-    diff_java = [
-      'FakeRecordHistogram.recordFakeHistogram("Mountain Lion", 42)']
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo.java', diff_java),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testMultiLine(self):
-    diff_cc = ['UMA_HISTOGRAM_BOOLEAN(', '    "Multi.Line", true)']
-    diff_cc2 = ['UMA_HISTOGRAM_BOOLEAN(', '    "Multi.Line"', '    , true)']
-    diff_java = [
-      'RecordHistogram.recordBooleanHistogram(',
-      '    "Multi.Line", true);',
-    ]
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockFile('some/path/foo.cc', diff_cc),
-      MockFile('some/path/foo2.cc', diff_cc2),
-      MockFile('some/path/foo.java', diff_java),
-    ]
-    warnings = PRESUBMIT.CheckUmaHistogramChangesOnUpload(mock_input_api,
-                                                   MockOutputApi())
-    self.assertEqual(1, len(warnings))
-    self.assertEqual('warning', warnings[0].type)
-    self.assertTrue('foo.cc' in warnings[0].items[0])
-    self.assertTrue('foo2.cc' in warnings[0].items[1])
-
-
 class BadExtensionsTest(unittest.TestCase):
   def testBadRejFile(self):
     mock_input_api = MockInputApi()
@@ -732,9 +570,9 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.mock_input_api.subprocess = PydepsNeedsUpdatingTest.MockSubprocess()
     self.checker = PRESUBMIT.PydepsChecker(self.mock_input_api, mock_all_pydeps)
     self.checker._file_cache = {
-        'A.pydeps': '# Generated by:\n# CMD A\nA.py\nC.py\n',
-        'B.pydeps': '# Generated by:\n# CMD B\nB.py\nC.py\n',
-        'D.pydeps': '# Generated by:\n# CMD D\nD.py\n',
+        'A.pydeps': '# Generated by:\n# CMD --output A.pydeps A\nA.py\nC.py\n',
+        'B.pydeps': '# Generated by:\n# CMD --output B.pydeps B\nB.py\nC.py\n',
+        'D.pydeps': '# Generated by:\n# CMD --output D.pydeps D\nD.py\n',
     }
 
   def tearDown(self):
@@ -762,7 +600,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
             include_deletes=True)])
     results = self._RunCheck()
     self.assertEqual(1, len(results))
-    self.assertTrue('PYDEPS_FILES' in str(results[0]))
+    self.assertIn('PYDEPS_FILES', str(results[0]))
 
   def testPydepNotInSrc(self):
     self.mock_input_api.files = [
@@ -785,7 +623,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
             include_deletes=True)])
     results = self._RunCheck()
     self.assertEqual(1, len(results))
-    self.assertTrue('PYDEPS_FILES' in str(results[0]))
+    self.assertIn('PYDEPS_FILES', str(results[0]))
 
   def testRandomPyIgnored(self):
     # PRESUBMIT.CheckPydepsNeedsUpdating is only implemented for Linux.
@@ -809,7 +647,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     ]
 
     def mock_check_output(cmd, shell=False, env=None):
-      self.assertEqual('CMD A --output ""', cmd)
+      self.assertEqual('CMD --output A.pydeps A --output ""', cmd)
       return self.checker._file_cache['A.pydeps']
 
     self.mock_input_api.subprocess.check_output = mock_check_output
@@ -827,14 +665,14 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     ]
 
     def mock_check_output(cmd, shell=False, env=None):
-      self.assertEqual('CMD A --output ""', cmd)
+      self.assertEqual('CMD --output A.pydeps A --output ""', cmd)
       return 'changed data'
 
     self.mock_input_api.subprocess.check_output = mock_check_output
 
     results = self._RunCheck()
     self.assertEqual(1, len(results))
-    self.assertTrue('File is stale' in str(results[0]))
+    self.assertIn('File is stale', str(results[0]))
 
   def testRelevantPyTwoChanges(self):
     # PRESUBMIT.CheckPydepsNeedsUpdating is only implemented for Linux.
@@ -852,8 +690,8 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
 
     results = self._RunCheck()
     self.assertEqual(2, len(results))
-    self.assertTrue('File is stale' in str(results[0]))
-    self.assertTrue('File is stale' in str(results[1]))
+    self.assertIn('File is stale', str(results[0]))
+    self.assertIn('File is stale', str(results[1]))
 
   def testRelevantAndroidPyInNonAndroidCheckout(self):
     # PRESUBMIT.CheckPydepsNeedsUpdating is only implemented for Linux.
@@ -865,7 +703,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     ]
 
     def mock_check_output(cmd, shell=False, env=None):
-      self.assertEqual('CMD D --output ""', cmd)
+      self.assertEqual('CMD --output D.pydeps D --output ""', cmd)
       return 'changed data'
 
     self.mock_input_api.subprocess.check_output = mock_check_output
@@ -873,8 +711,33 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
 
     results = self._RunCheck()
     self.assertEqual(1, len(results))
-    self.assertTrue('Android' in str(results[0]))
-    self.assertTrue('D.pydeps' in str(results[0]))
+    self.assertIn('Android', str(results[0]))
+    self.assertIn('D.pydeps', str(results[0]))
+
+  def testGnPathsAndMissingOutputFlag(self):
+    # PRESUBMIT.CheckPydepsNeedsUpdating is only implemented for Linux.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
+    self.checker._file_cache = {
+        'A.pydeps': '# Generated by:\n# CMD --gn-paths A\n//A.py\n//C.py\n',
+        'B.pydeps': '# Generated by:\n# CMD --gn-paths B\n//B.py\n//C.py\n',
+        'D.pydeps': '# Generated by:\n# CMD --gn-paths D\n//D.py\n',
+    }
+
+    self.mock_input_api.files = [
+      MockAffectedFile('A.py', []),
+    ]
+
+    def mock_check_output(cmd, shell=False, env=None):
+      self.assertEqual('CMD --gn-paths A --output A.pydeps --output ""', cmd)
+      return 'changed data'
+
+    self.mock_input_api.subprocess.check_output = mock_check_output
+
+    results = self._RunCheck()
+    self.assertEqual(1, len(results))
+    self.assertIn('File is stale', str(results[0]))
 
 
 class IncludeGuardTest(unittest.TestCase):
@@ -1243,6 +1106,100 @@ class AndroidDeprecatedTestAnnotationTest(unittest.TestCase):
     self.assertTrue('UsedDeprecatedSmokeAnnotation.java:1' in msgs[0].items,
                     'UsedDeprecatedSmokeAnnotation not found in errors')
 
+
+class CheckNoDownstreamDepsTest(unittest.TestCase):
+  def testInvalidDepFromUpstream(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('BUILD.gn', [
+          'deps = [',
+          '   "//clank/target:test",',
+          ']'
+        ]),
+        MockAffectedFile('chrome/android/BUILD.gn', [
+          'deps = [ "//clank/target:test" ]'
+        ]),
+        MockAffectedFile('chrome/chrome_java_deps.gni', [
+          'java_deps = [',
+          '   "//clank/target:test",',
+          ']'
+        ]),
+    ]
+    mock_input_api.change.RepositoryRoot = lambda: 'chromium/src'
+    msgs = PRESUBMIT.CheckNoUpstreamDepsOnClank(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (1, len(msgs), msgs))
+    self.assertEqual(3, len(msgs[0].items),
+                     'Expected %d items, found %d: %s'
+                     % (3, len(msgs[0].items), msgs[0].items))
+    self.assertTrue(any('BUILD.gn:2' in item for item in msgs[0].items),
+                    'BUILD.gn not found in errors')
+    self.assertTrue(
+        any('chrome/android/BUILD.gn:1' in item for item in msgs[0].items),
+        'chrome/android/BUILD.gn:1 not found in errors')
+    self.assertTrue(
+        any('chrome/chrome_java_deps.gni:2' in item for item in msgs[0].items),
+        'chrome/chrome_java_deps.gni:2 not found in errors')
+
+  def testAllowsComments(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('BUILD.gn', [
+          '# real implementation in //clank/target:test',
+        ]),
+    ]
+    mock_input_api.change.RepositoryRoot = lambda: 'chromium/src'
+    msgs = PRESUBMIT.CheckNoUpstreamDepsOnClank(
+        mock_input_api, mock_output_api)
+    self.assertEqual(0, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (0, len(msgs), msgs))
+
+  def testOnlyChecksBuildFiles(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('README.md', [
+          'DEPS = [ "//clank/target:test" ]'
+        ]),
+        MockAffectedFile('chrome/android/java/file.java', [
+          '//clank/ only function'
+        ]),
+    ]
+    mock_input_api.change.RepositoryRoot = lambda: 'chromium/src'
+    msgs = PRESUBMIT.CheckNoUpstreamDepsOnClank(
+        mock_input_api, mock_output_api)
+    self.assertEqual(0, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (0, len(msgs), msgs))
+
+  def testValidDepFromDownstream(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('BUILD.gn', [
+          'DEPS = [',
+          '   "//clank/target:test",',
+          ']'
+        ]),
+        MockAffectedFile('java/BUILD.gn', [
+          'DEPS = [ "//clank/target:test" ]'
+        ]),
+    ]
+    mock_input_api.change.RepositoryRoot = lambda: 'chromium/src/clank'
+    msgs = PRESUBMIT.CheckNoUpstreamDepsOnClank(
+        mock_input_api, mock_output_api)
+    self.assertEqual(0, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (0, len(msgs), msgs))
 
 class AndroidDeprecatedJUnitFrameworkTest(unittest.TestCase):
   def testCheckAndroidTestJUnitFramework(self):
@@ -2595,6 +2552,11 @@ class NoProductionJavaCodeUsingTestOnlyFunctionsTest(unittest.TestCase):
       MockFile('dir/java/src/foo.java', ['FooForTests() {']),
       MockFile('dir/java/src/bar.java', ['// FooForTest();']),
       MockFile('dir/java/src/bar2.java', ['x = 1; // FooForTest();']),
+      MockFile('dir/java/src/bar3.java', ['@VisibleForTesting']),
+      MockFile('dir/java/src/bar4.java', ['@VisibleForTesting()']),
+      MockFile('dir/java/src/bar5.java', [
+        '@VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)'
+      ]),
       MockFile('dir/javatests/src/baz.java', ['FooForTest(', 'y', ');']),
       MockFile('dir/junit/src/baz.java', ['FooForTest(', 'y', ');']),
       MockFile('dir/junit/src/javadoc.java', [

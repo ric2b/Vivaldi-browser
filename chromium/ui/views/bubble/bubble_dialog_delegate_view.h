@@ -15,6 +15,9 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/class_property.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -235,6 +238,21 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   virtual void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                         Widget* widget) const {}
 
+  // Get the maximum available screen space to place a bubble anchored to
+  // |anchor_view| at |arrow|. If offscreen adjustment is on, this would return
+  // the max space corresponding to the possible arrow positions of the bubble.
+  static gfx::Size GetMaxAvailableScreenSpaceToPlaceBubble(
+      View* anchor_view,
+      BubbleBorder::Arrow arrow,
+      bool adjust_if_offscreen,
+      BubbleFrameView::PreferredArrowAdjustment arrow_adjustment);
+
+  // Get the available space to place a bubble anchored to |anchor_rect| at
+  // |arrow| inside |screen_rect|.
+  static gfx::Size GetAvailableSpaceToPlaceBubble(BubbleBorder::Arrow arrow,
+                                                  gfx::Rect anchor_rect,
+                                                  gfx::Rect screen_rect);
+
  protected:
   // Create and initialize the bubble Widget with proper bounds.
   static Widget* CreateBubble(BubbleDialogDelegate* bubble_delegate);
@@ -382,7 +400,8 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
       View* anchor_view,
       BubbleBorder::Arrow arrow,
       BubbleBorder::Shadow shadow = BubbleBorder::DIALOG_SHADOW);
-
+  BubbleDialogDelegateView(const BubbleDialogDelegateView&) = delete;
+  BubbleDialogDelegateView& operator=(const BubbleDialogDelegateView&) = delete;
   ~BubbleDialogDelegateView() override;
 
   // BubbleDialogDelegate:
@@ -408,19 +427,19 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
   // Perform view initialization on the contents for bubble sizing.
   void Init() override;
 
-  // Allows the up and down arrow keys to tab between items.
-  void EnableUpDownKeyboardAccelerators();
-
  private:
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, CreateDelegate);
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, NonClientHitTest);
 
   // Update the bubble color from the NativeTheme unless it was explicitly set.
   void UpdateColorsFromTheme();
-
-  DISALLOW_COPY_AND_ASSIGN(BubbleDialogDelegateView);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, BubbleDialogDelegateView, View)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, BubbleDialogDelegateView)
 
 #endif  // UI_VIEWS_BUBBLE_BUBBLE_DIALOG_DELEGATE_VIEW_H_

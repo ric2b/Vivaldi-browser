@@ -5,14 +5,14 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -20,6 +20,7 @@
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
+#include "chrome/browser/extensions/error_console/error_console.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/web_navigation.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/gcm_driver/fake_gcm_profile_service.h"
@@ -116,6 +118,39 @@ class WebContentsLoadStopObserver : content::WebContentsObserver {
 constexpr char kTestExtensionId[] = "ogdbpbegnmindpdjfafpmpicikegejdj";
 
 }  // namespace
+
+class ErrorObserver : public ErrorConsole::Observer {
+ public:
+  ErrorObserver(size_t errors_expected, ErrorConsole* error_console)
+      : errors_expected_(errors_expected),
+        error_console_(error_console),
+        errors_observed_(0),
+        observer_(this) {
+    observer_.Add(error_console_);
+  }
+
+  // ErrorConsole::Observer implementation.
+  void OnErrorAdded(const ExtensionError* error) override {
+    ++errors_observed_;
+    if (errors_observed_ >= errors_expected_) {
+      run_loop_.Quit();
+    }
+  }
+
+  // Spin until the appropriate number of errors have been observed.
+  void WaitForErrors() {
+    if (errors_observed_ < errors_expected_) {
+      run_loop_.Run();
+    }
+  }
+
+ private:
+  size_t errors_expected_;
+  ErrorConsole* error_console_;
+  size_t errors_observed_;
+  ScopedObserver<ErrorConsole, ErrorConsole::Observer> observer_;
+  base::RunLoop run_loop_;
+};
 
 class ServiceWorkerTest : public ExtensionApiTest {
  public:
@@ -348,6 +383,26 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, Basic) {
   EXPECT_TRUE(newtab_listener.WaitUntilSatisfied());
 }
 
+// Tests that an error is generated if the service worker script is
+// saved in non-root directory.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, NonRootDirectory) {
+  ErrorConsole* error_console = ErrorConsole::Get(profile());
+  profile()->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
+  constexpr size_t kErrorsExpected = 1u;
+  ErrorObserver observer(kErrorsExpected, error_console);
+
+  const Extension* extension = LoadExtension(test_data_dir_.AppendASCII(
+      "service_worker/worker_based_background/non_root_directory"));
+
+  observer.WaitForErrors();
+  const ErrorList& error_list =
+      error_console->GetErrorsForExtension(extension->id());
+  ASSERT_EQ(kErrorsExpected, error_list.size());
+  ASSERT_EQ(
+      error_list[0]->message(),
+      base::string16(base::ASCIIToUTF16("Service worker registration failed")));
+}
+
 // Tests chrome.runtime.onInstalled fires for extension service workers.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, OnInstalledEvent) {
   ASSERT_TRUE(RunExtensionTest(
@@ -417,6 +472,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, WindowsBasic) {
   EXPECT_EQ(2, histogram_tester.GetBucketCount(
                    "Extensions.Functions.ExtensionServiceWorkerCalls",
                    functions::HistogramValue::WINDOWS_GETALL));
+  EXPECT_EQ(1, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionServiceWorkerCalls",
+                   functions::HistogramValue::WINDOWS_GET));
 }
 
 // Tests chrome.webRequest APIs.
@@ -2490,24 +2548,12 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerCheckBindingsTest, BindingsAvailability) {
   ExtensionTestMessageListener result_listener("SUCCESS", false);
   result_listener.set_failure_message("FAILURE");
 
-  // The extension will only load properly if Service Worker-based extensions
-  // are supported in the channel being tested.
-  bool expect_failure =
-      GetParam() > extension_misc::kMinChannelForServiceWorkerBasedExtension;
-  int flags = kFlagEnableFileAccess;
-  if (expect_failure)
-    flags |= kFlagIgnoreManifestWarnings;
-
   scoped_refptr<const Extension> extension =
-      LoadExtensionWithFlags(test_dir.UnpackedPath(), flags);
+      LoadExtension(test_dir.UnpackedPath());
   ASSERT_TRUE(extension.get());
 
-  if (expect_failure) {
-    EXPECT_FALSE(BackgroundInfo::IsServiceWorkerBased(extension.get()));
-  } else {
-    EXPECT_TRUE(BackgroundInfo::IsServiceWorkerBased(extension.get()));
-    EXPECT_TRUE(result_listener.WaitUntilSatisfied());
-  }
+  EXPECT_TRUE(BackgroundInfo::IsServiceWorkerBased(extension.get()));
+  EXPECT_TRUE(result_listener.WaitUntilSatisfied());
 }
 
 INSTANTIATE_TEST_SUITE_P(Unknown,

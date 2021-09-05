@@ -104,10 +104,14 @@ class CppTypeGenerator(object):
     elif type_.property_type == PropertyType.ANY:
       cpp_type = 'base::Value'
     elif type_.property_type == PropertyType.FUNCTION:
-      # Functions come into the json schema compiler as empty objects. We can
-      # record these as empty DictionaryValues so that we know if the function
-      # was passed in or not.
-      cpp_type = 'base::DictionaryValue'
+      if type_.is_serializable_function:
+        # Serializable functions get transformed into strings.
+        cpp_type = 'std::string'
+      else:
+        # Non-serializable functions come into the json schema compiler as
+        # empty objects. We can record these as empty DictionaryValues so that
+        # we know if the function was passed in or not.
+        cpp_type = 'base::DictionaryValue'
     elif type_.property_type == PropertyType.ARRAY:
       item_cpp_type = self.GetCppType(type_.item_type, is_in_container=True)
       cpp_type = 'std::vector<%s>' % item_cpp_type
@@ -208,8 +212,8 @@ class CppTypeGenerator(object):
       for param in function.params:
         dependencies |= self._TypeDependencies(param.type_,
                                                hard=not param.optional)
-      if function.callback:
-        for param in function.callback.params:
+      if function.returns_async:
+        for param in function.returns_async.params:
           dependencies |= self._TypeDependencies(param.type_,
                                                  hard=not param.optional)
     for type_ in self._default_namespace.types.values():

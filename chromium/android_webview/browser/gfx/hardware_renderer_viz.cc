@@ -110,20 +110,27 @@ HardwareRendererViz::OnViz::OnViz(
       viz_frame_submission_(features::IsUsingVizFrameSubmissionForWebView()) {
   DCHECK_CALLED_ON_VALID_THREAD(viz_thread_checker_);
 
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+      display_controller = output_surface_provider->CreateDisplayController();
   std::unique_ptr<viz::OutputSurface> output_surface =
-      output_surface_provider->CreateOutputSurface();
+      output_surface_provider->CreateOutputSurface(display_controller.get());
 
   stub_begin_frame_source_ = std::make_unique<viz::StubBeginFrameSource>();
   auto scheduler =
       std::make_unique<DisplaySchedulerWebView>(without_gpu_.get());
   auto overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
 
+  // Android WebView has no overlay processor, and does not need to share
+  // gpu_task_scheduler, so it is passed in as nullptr.
+  // TODO(weiliangc): Android WebView should support overlays. Change initialize
+  // order to make this happen.
   display_ = std::make_unique<viz::Display>(
       nullptr /* shared_bitmap_manager */,
       output_surface_provider->renderer_settings(),
       output_surface_provider->debug_settings(), frame_sink_id_,
-      std::move(output_surface), std::move(overlay_processor),
-      std::move(scheduler), nullptr /* current_task_runner */);
+      std::move(display_controller), std::move(output_surface),
+      std::move(overlay_processor), std::move(scheduler),
+      nullptr /* current_task_runner */);
   display_->Initialize(this, GetFrameSinkManager()->surface_manager(),
                        output_surface_provider->enable_shared_image());
 
@@ -152,7 +159,8 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
 
   if (child_frame->frame) {
     DCHECK(!viz_frame_submission_);
-    without_gpu_->SubmitChildCompositorFrame(child_frame);
+    without_gpu_->SubmitChildCompositorFrame(child_id.local_surface_id(),
+                                             child_frame);
   }
 
   gfx::Size frame_size = without_gpu_->GetChildFrameSize();
@@ -266,8 +274,11 @@ HardwareRendererViz::OnViz::GetPreferredFrameIntervalForFrameSinkId(
 
 HardwareRendererViz::HardwareRendererViz(
     RenderThreadManager* state,
-    RootFrameSinkGetter root_frame_sink_getter)
-    : HardwareRenderer(state) {
+    RootFrameSinkGetter root_frame_sink_getter,
+    AwVulkanContextProvider* context_provider)
+    : HardwareRenderer(state),
+      viz_frame_submission_(features::IsUsingVizFrameSubmissionForWebView()),
+      output_surface_provider_(context_provider) {
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
   DCHECK(output_surface_provider_.renderer_settings().use_skia_renderer);
 
@@ -328,10 +339,43 @@ void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
   if (!child_frame_)
     return;
 
-  viz::SurfaceId child_surface_id = child_frame_->GetSurfaceId();
+  // Two problems currently can cause the content-generated LocalSurfaceId
+  // to remain the same even if a frame of a new size is submitted:
+  // * The content LocalSurfaceId is currently copied from browser, not
+  //   the renderer when the renderer submits a frame
+  // * Synchronous compositor can resize the viewport in LTHI::OnDraw before
+  //   a new LocalSurfaceId is committed.
+  // Therefore we do not use the LocalSurfaceId allocated by content, and
+  // instead generate our own LocalSurfaceId here for the root renderer frame.
+  if (!renderer_root_local_surface_id_allocator_ ||
+      child_frame_->frame_sink_id != surface_id_.frame_sink_id() ||
+      layer_tree_frame_sink_id_ != child_frame_->layer_tree_frame_sink_id) {
+    renderer_root_local_surface_id_allocator_ =
+        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
+    layer_tree_frame_sink_id_ = child_frame_->layer_tree_frame_sink_id;
+    renderer_root_local_surface_id_ = viz::LocalSurfaceId();
+  }
+
+  if (!viz_frame_submission_ && child_frame_->frame) {
+    if (!renderer_root_local_surface_id_.is_valid() ||
+        child_frame_->frame->size_in_pixels() != frame_size_ ||
+        child_frame_->frame->device_scale_factor() != device_scale_factor_) {
+      renderer_root_local_surface_id_allocator_->GenerateId();
+      renderer_root_local_surface_id_ =
+          renderer_root_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
+      frame_size_ = child_frame_->frame->size_in_pixels();
+      device_scale_factor_ = child_frame_->frame->device_scale_factor();
+    }
+  }
+
+  viz::SurfaceId child_surface_id =
+      viz_frame_submission_ ? child_frame_->GetSurfaceId()
+                            : viz::SurfaceId(child_frame_->frame_sink_id,
+                                             renderer_root_local_surface_id_);
   if (child_surface_id.is_valid() && child_surface_id != surface_id_) {
     surface_id_ = child_surface_id;
-    device_scale_factor_ = child_frame_->device_scale_factor;
+    if (viz_frame_submission_)
+      device_scale_factor_ = child_frame_->device_scale_factor;
   }
 
   if (!surface_id_.is_valid())

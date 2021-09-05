@@ -24,7 +24,9 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
@@ -32,7 +34,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.components.bookmarks.BookmarkId;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.concurrent.ExecutionException;
@@ -42,6 +43,7 @@ import java.util.concurrent.TimeoutException;
  * Tests functionality in BookmarkEditActivity.
  */
 @RunWith(BaseJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 public class BookmarkEditTest {
     private static final String TITLE_A = "a";
     private static final String TITLE_B = "b";
@@ -98,6 +100,8 @@ public class BookmarkEditTest {
 
     @After
     public void tearDown() {
+        mBookmarkModel.removeObserver(mModelObserver);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mBookmarkModel.removeAllUserBookmarks());
         ApplicationStatus.unregisterActivityStateListener(mActivityStateListener);
     }
 

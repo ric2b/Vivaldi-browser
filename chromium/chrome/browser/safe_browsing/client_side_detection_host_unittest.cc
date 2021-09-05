@@ -9,17 +9,16 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/gmock_move_support.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "chrome/browser/safe_browsing/browser_feature_extractor.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/client_side_model_loader.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -108,7 +107,7 @@ MATCHER(CallbackIsNull, "") {
 
 class MockModelLoader : public ModelLoader {
  public:
-  MockModelLoader() : ModelLoader(base::Closure(), nullptr, false) {}
+  MockModelLoader() : ModelLoader(base::RepeatingClosure(), nullptr, false) {}
   ~MockModelLoader() override = default;
 
   MOCK_METHOD1(ScheduleFetch, void(int64_t));
@@ -127,7 +126,7 @@ class MockClientSideDetectionService : public ClientSideDetectionService {
                void(std::unique_ptr<ClientPhishingRequest>,
                     bool,
                     bool,
-                    const ClientReportPhishingRequestCallback&));
+                    ClientReportPhishingRequestCallback));
   MOCK_CONST_METHOD1(IsPrivateIPAddress, bool(const std::string&));
   MOCK_METHOD2(GetValidCachedResult, bool(const GURL&, bool*));
   MOCK_METHOD1(IsInCache, bool(const GURL&));
@@ -175,18 +174,6 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingDatabaseManager);
-};
-
-class MockBrowserFeatureExtractor : public BrowserFeatureExtractor {
- public:
-  explicit MockBrowserFeatureExtractor(WebContents* tab)
-      : BrowserFeatureExtractor(tab) {}
-  ~MockBrowserFeatureExtractor() override {}
-
-  MOCK_METHOD3(ExtractFeatures,
-               void(const BrowseInfo*,
-                    std::unique_ptr<ClientPhishingRequest>,
-                    BrowserFeatureExtractor::DoneCallback));
 };
 
 }  // namespace
@@ -293,10 +280,6 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
     csd_host_->set_ui_manager(ui_manager_.get());
     csd_host_->set_database_manager(database_manager_.get());
     csd_host_->set_tick_clock_for_testing(&clock_);
-
-    // We need to create this here since we don't call DidStopLanding in
-    // this test.
-    csd_host_->browse_info_.reset(new BrowseInfo);
   }
 
   void TearDown() override {
@@ -357,84 +340,12 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
     EXPECT_TRUE(Mock::VerifyAndClear(database_manager_.get()));
   }
 
-  void SetFeatureExtractor(BrowserFeatureExtractor* extractor) {
-    csd_host_->feature_extractor_.reset(extractor);
-  }
-
-  void SetRedirectChain(const std::vector<GURL>& redirect_chain) {
-    csd_host_->browse_info_->url_redirects = redirect_chain;
-  }
-
-  void TestUnsafeResourceCopied(const UnsafeResource& resource) {
-    ASSERT_TRUE(csd_host_->unsafe_resource_.get());
-    // Test that the resource from OnSafeBrowsingHit notification was copied
-    // into the CSDH.
-    EXPECT_EQ(resource.url, csd_host_->unsafe_resource_->url);
-    EXPECT_EQ(resource.original_url, csd_host_->unsafe_resource_->original_url);
-    EXPECT_EQ(resource.is_subresource,
-              csd_host_->unsafe_resource_->is_subresource);
-    EXPECT_EQ(resource.threat_type, csd_host_->unsafe_resource_->threat_type);
-    EXPECT_TRUE(csd_host_->unsafe_resource_->callback.is_null());
-    EXPECT_EQ(resource.web_contents_getter.Run(),
-              csd_host_->unsafe_resource_->web_contents_getter.Run());
-  }
-
-  void SetUnsafeSubResourceForCurrent(bool expect_unsafe_resource) {
-    UnsafeResource resource;
-    resource.url = GURL("http://www.malware.com/");
-    resource.original_url = web_contents()->GetURL();
-    resource.is_subresource = true;
-    resource.threat_type = SB_THREAT_TYPE_URL_MALWARE;
-    resource.callback = base::DoNothing();
-    resource.callback_thread = content::GetIOThreadTaskRunner({});
-    resource.web_contents_getter = security_interstitials::GetWebContentsGetter(
-        web_contents()->GetMainFrame()->GetProcess()->GetID(),
-        web_contents()->GetMainFrame()->GetRoutingID());
-    csd_host_->OnSafeBrowsingHit(resource);
-    resource.callback.Reset();
-    ASSERT_EQ(expect_unsafe_resource, csd_host_->DidShowSBInterstitial());
-    if (expect_unsafe_resource)
-      TestUnsafeResourceCopied(resource);
-  }
-
-  void NavigateWithSBHitAndCommit(const GURL& url) {
-    // Create a pending navigation.
-    controller().LoadURL(
-        url, content::Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
-
-    ASSERT_TRUE(pending_main_rfh());
-
-    // Simulate a safebrowsing hit before navigation completes.
-    UnsafeResource resource;
-    resource.url = url;
-    resource.original_url = url;
-    resource.is_subresource = false;
-    resource.threat_type = SB_THREAT_TYPE_URL_MALWARE;
-    resource.callback = base::DoNothing();
-    resource.callback_thread = content::GetIOThreadTaskRunner({});
-    resource.web_contents_getter = security_interstitials::GetWebContentsGetter(
-        pending_rvh()->GetProcess()->GetID(),
-        pending_main_rfh()->GetRoutingID());
-    csd_host_->OnSafeBrowsingHit(resource);
-    resource.callback.Reset();
-
-    // LoadURL created a navigation entry, now simulate the RenderView sending
-    // a notification that it actually navigated.
-    content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
-
-    ASSERT_TRUE(csd_host_->DidShowSBInterstitial());
-    TestUnsafeResourceCopied(resource);
-  }
-
-  void NavigateWithoutSBHitAndCommit(const GURL& safe_url) {
+  void NavigateAndCommit(const GURL& safe_url) {
     controller().LoadURL(
         safe_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
         std::string());
 
-    ASSERT_TRUE(pending_main_rfh());
-
     content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
-    ASSERT_FALSE(csd_host_->DidShowSBInterstitial());
   }
 
   void AdvanceTimeTickClock(base::TimeDelta delta) { clock_.Advance(delta); }
@@ -465,45 +376,31 @@ class ClientSideDetectionHostIncognitoTest
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneInvalidVerdict) {
   // Case 0: renderer sends an invalid verdict string that we're unable to
   // parse.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _)).Times(0);
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
+      .Times(0);
   PhishingDetectionDone("Invalid Protocol Buffer");
-  EXPECT_TRUE(Mock::VerifyAndClear(mock_extractor));
+  EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
 }
 
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneNotPhishing) {
   // Case 1: client thinks the page is phishing.  The server does not agree.
   // No interstitial is shown.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
   ClientPhishingRequest verdict;
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* into,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        request->CopyFrom(verdict);
-        std::move(callback).Run(true, std::move(request));
-      }));
-
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
                                  PartiallyEqualVerdict(verdict), _, _, _))
-      .WillOnce(SaveArg<3>(&cb));
+      .WillOnce(MoveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   ASSERT_FALSE(cb.is_null());
 
   // Make sure DisplayBlockingPage is not going to be called.
   EXPECT_CALL(*ui_manager_.get(), DisplayBlockingPage(_)).Times(0);
-  cb.Run(GURL(verdict.url()), false);
+  std::move(cb).Run(GURL(verdict.url()), false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
 }
@@ -511,33 +408,22 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneNotPhishing) {
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneDisabled) {
   // Case 2: client thinks the page is phishing and so does the server but
   // showing the interstitial is disabled => no interstitial is shown.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
   ClientPhishingRequest verdict;
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* info,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        request->CopyFrom(verdict);
-        std::move(callback).Run(true, std::move(request));
-      }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
                                  PartiallyEqualVerdict(verdict), _, _, _))
-      .WillOnce(SaveArg<3>(&cb));
+      .WillOnce(MoveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   ASSERT_FALSE(cb.is_null());
 
   // Make sure DisplayBlockingPage is not going to be called.
   EXPECT_CALL(*ui_manager_.get(), DisplayBlockingPage(_)).Times(0);
-  cb.Run(GURL(verdict.url()), false);
+  std::move(cb).Run(GURL(verdict.url()), false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
 }
@@ -545,10 +431,6 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneDisabled) {
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   // Case 3: client thinks the page is phishing and so does the server.
   // We show an interstitial.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
   GURL phishing_url("http://phishingurl.com/");
   ClientPhishingRequest verdict;
@@ -556,16 +438,9 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* info,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        request->CopyFrom(verdict);
-        std::move(callback).Run(true, std::move(request));
-      }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
                                  PartiallyEqualVerdict(verdict), _, _, _))
-      .WillOnce(SaveArg<3>(&cb));
+      .WillOnce(MoveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
@@ -574,7 +449,7 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   UnsafeResource resource;
   EXPECT_CALL(*ui_manager_.get(), DisplayBlockingPage(_))
       .WillOnce(SaveArg<0>(&resource));
-  cb.Run(phishing_url, true);
+  std::move(cb).Run(phishing_url, true);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
@@ -598,10 +473,6 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   // before the server responds with a verdict.  After a while the
   // server responds for both requests with a phishing verdict.  Only
   // a single interstitial is shown for the second URL.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
   GURL phishing_url("http://phishingurl.com/");
   ClientPhishingRequest verdict;
@@ -609,25 +480,14 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* info,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        request->CopyFrom(verdict);
-        std::move(callback).Run(true, std::move(request));
-      }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
                                  PartiallyEqualVerdict(verdict), _, _, _))
-      .WillOnce(SaveArg<3>(&cb));
+      .WillOnce(MoveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
   ASSERT_FALSE(cb.is_null());
 
-  // Set this back to a normal browser feature extractor since we're using
-  // NavigateAndCommit() and it's easier to use the real thing than setting up
-  // mock expectations.
-  SetFeatureExtractor(new BrowserFeatureExtractor(web_contents()));
   GURL other_phishing_url("http://other_phishing_url.com/bla");
   ExpectPreClassificationChecks(other_phishing_url, &kFalse, &kFalse, &kFalse,
                                 &kFalse, &kFalse);
@@ -642,10 +502,7 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   verdict.set_client_score(0.8f);
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
                                  PartiallyEqualVerdict(verdict), _, _, _))
-      .WillOnce(SaveArg<3>(&cb_other));
-  std::vector<GURL> redirect_chain;
-  redirect_chain.push_back(other_phishing_url);
-  SetRedirectChain(redirect_chain);
+      .WillOnce(MoveArg<3>(&cb_other));
   PhishingDetectionDone(verdict.SerializeAsString());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
@@ -658,8 +515,9 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   EXPECT_CALL(*ui_manager_.get(), DisplayBlockingPage(_))
       .WillOnce(SaveArg<0>(&resource));
 
-  cb.Run(phishing_url, true);  // Should have no effect.
-  cb_other.Run(other_phishing_url, true);  // Should show interstitial.
+  std::move(cb).Run(phishing_url, true);  // Should have no effect.
+  std::move(cb_other).Run(other_phishing_url,
+                          true);  // Should show interstitial.
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
@@ -679,18 +537,15 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
 
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneVerdictNotPhishing) {
   // Case 6: renderer sends a verdict string that isn't phishing.
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientPhishingRequest verdict;
   verdict.set_url("http://not-phishing.com/");
   verdict.set_client_score(0.1f);
   verdict.set_is_phishing(false);
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _)).Times(0);
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
+      .Times(0);
   PhishingDetectionDone(verdict.SerializeAsString());
-  EXPECT_TRUE(Mock::VerifyAndClear(mock_extractor));
+  EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
 }
 
 TEST_F(ClientSideDetectionHostTest,
@@ -709,11 +564,7 @@ TEST_F(ClientSideDetectionHostTest,
                                 &kFalse);
   NavigateAndCommit(url);
   WaitAndCheckPreClassificationChecks();
-  SetUnsafeSubResourceForCurrent(true /* expect_unsafe_resource */);
 
-  std::vector<GURL> redirect_chain;
-  redirect_chain.push_back(url);
-  SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
 }
 
@@ -742,12 +593,9 @@ TEST_F(ClientSideDetectionHostTest,
   EXPECT_CALL(*csd_service_, GetModelStr()).WillRepeatedly(Return("model_str"));
   ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
                                 &kFalse);
-  NavigateWithSBHitAndCommit(url);
+  NavigateAndCommit(url);
   WaitAndCheckPreClassificationChecks();
 
-  std::vector<GURL> redirect_chain;
-  redirect_chain.push_back(url);
-  SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
 }
 
@@ -775,10 +623,7 @@ TEST_F(
   EXPECT_CALL(*csd_service_, GetModelStr()).WillRepeatedly(Return("model_str"));
   ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
                                 &kFalse);
-  NavigateWithoutSBHitAndCommit(url);
-
-  // Simulate a subresource malware hit on committed page.
-  SetUnsafeSubResourceForCurrent(true /* expect_unsafe_resource */);
+  NavigateAndCommit(url);
 
   // Create a pending navigation, but don't commit it.
   GURL pending_url("http://slow.example.com/");
@@ -789,24 +634,7 @@ TEST_F(
 
   WaitAndCheckPreClassificationChecks();
 
-  std::vector<GURL> redirect_chain;
-  redirect_chain.push_back(url);
-  SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-}
-
-TEST_F(ClientSideDetectionHostTest, SafeBrowsingHitOnFreshTab) {
-  // A fresh WebContents should not have any NavigationEntries yet. (See
-  // https://crbug.com/524208.)
-  EXPECT_EQ(nullptr, controller().GetLastCommittedEntry());
-  EXPECT_EQ(nullptr, controller().GetPendingEntry());
-
-  // Simulate a subresource malware hit (this could happen if the WebContents
-  // was created with window.open, and had content injected into it).
-  SetUnsafeSubResourceForCurrent(false /* expect_unsafe_resource */);
-
-  // If the test didn't crash, we're good. (Nothing else to test, since there
-  // was no DidNavigateMainFrame, CSD won't do anything with this hit.)
 }
 
 // This test doesn't work because it makes assumption about how
@@ -1052,10 +880,6 @@ TEST_F(ClientSideDetectionHostTest, TestPreClassificationWhitelistedByPolicy) {
 }
 
 TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectorResults) {
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   {
     ClientPhishingRequest verdict;
     verdict.set_url("http://not-phishing.com/");
@@ -1064,9 +888,10 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectorResults) {
 
     base::HistogramTester histogram_tester;
 
-    EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _)).Times(0);
+    EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
+        .Times(0);
     PhishingDetectionDone(verdict.SerializeAsString());
-    EXPECT_TRUE(Mock::VerifyAndClear(mock_extractor));
+    EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
 
     histogram_tester.ExpectUniqueSample(
         "SBClientPhishing.PhishingDetectorResult",
@@ -1076,9 +901,10 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectorResults) {
   {
     base::HistogramTester histogram_tester;
 
-    EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _)).Times(0);
+    EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
+        .Times(0);
     PhishingDetectionError(mojom::PhishingDetectorResult::CLASSIFIER_NOT_READY);
-    EXPECT_TRUE(Mock::VerifyAndClear(mock_extractor));
+    EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
 
     histogram_tester.ExpectUniqueSample(
         "SBClientPhishing.PhishingDetectorResult",
@@ -1088,10 +914,11 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectorResults) {
   {
     base::HistogramTester histogram_tester;
 
-    EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _)).Times(0);
+    EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
+        .Times(0);
     PhishingDetectionError(
         mojom::PhishingDetectorResult::FORWARD_BACK_TRANSITION);
-    EXPECT_TRUE(Mock::VerifyAndClear(mock_extractor));
+    EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
 
     histogram_tester.ExpectUniqueSample(
         "SBClientPhishing.PhishingDetectorResult",
@@ -1127,9 +954,6 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectionDuration) {
   const base::TimeDelta duration = base::TimeDelta::FromMilliseconds(10);
   AdvanceTimeTickClock(duration);
 
-  std::vector<GURL> redirect_chain;
-  redirect_chain.push_back(url);
-  SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
 
   histogram_tester.ExpectTotalCount(
@@ -1155,10 +979,6 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
   profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled,
                                     false);
 
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientPhishingRequest verdict;
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
@@ -1169,12 +989,6 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
 
   ClientPhishingRequest request;
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* into,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        std::move(callback).Run(true, std::move(request));
-      }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
       .WillOnce(testing::SaveArgPointee<0>(&request));
   PhishingDetectionDone(verdict.SerializeAsString());
@@ -1188,10 +1002,6 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
   profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled,
                                     true);
 
-  MockBrowserFeatureExtractor* mock_extractor =
-      new StrictMock<MockBrowserFeatureExtractor>(web_contents());
-  SetFeatureExtractor(mock_extractor);  // The host class takes ownership.
-
   ClientPhishingRequest verdict;
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
@@ -1202,12 +1012,6 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
 
   ClientPhishingRequest request;
 
-  EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
-      .WillOnce(Invoke([&](const BrowseInfo* into,
-                           std::unique_ptr<ClientPhishingRequest> request,
-                           BrowserFeatureExtractor::DoneCallback callback) {
-        std::move(callback).Run(true, std::move(request));
-      }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
       .WillOnce(testing::SaveArgPointee<0>(&request));
   PhishingDetectionDone(verdict.SerializeAsString());

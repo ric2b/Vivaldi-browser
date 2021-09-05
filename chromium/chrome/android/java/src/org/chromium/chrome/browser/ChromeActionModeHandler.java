@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.share.ShareDelegateImpl.ShareOrigin;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsObserver;
@@ -174,6 +175,7 @@ public class ChromeActionModeHandler {
                 mHelper.finishActionMode();
             } else if (mShareDelegateSupplier.get().isSharingHubV15Enabled()
                     && item.getItemId() == R.id.select_action_menu_share) {
+                RecordUserAction.record(SelectionPopupController.UMA_MOBILE_ACTION_MODE_SHARE);
                 mShareDelegateSupplier.get().share(
                         new ShareParams.Builder(mTab.getWindowAndroid(), /*url=*/"", /*title=*/"")
                                 .setText(sanitizeTextForShare(mHelper.getSelectedText()))
@@ -181,7 +183,8 @@ public class ChromeActionModeHandler {
                         new ChromeShareExtras.Builder()
                                 .setSaveLastUsed(true)
                                 .setIsUserHighlightedText(true)
-                                .build());
+                                .build(),
+                        ShareOrigin.MOBILE_ACTION_MODE);
             } else if (item.getItemId()
                     == org.chromium.chrome.R.id.select_action_menu_copy_to_note) { // Vivaldi
                 new NoteSelectionPopupController().addNoteFromSelection(

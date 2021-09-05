@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ur">
-<translation id="1060499346270045814">{NUM_HOURS,plural, =1{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: 1 گھنٹہ پہلے۔}other{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: {NUM_HOURS} گھنٹے پہلے۔}}</translation>
 <translation id="1065672644894730302">آپ کی ترجیحات کو نہیں پڑھا جا سکتا ہے۔
 
 کچھ خصوصیات غیر دستیاب ہو سکتی ہیں اور ترجیحات میں تبدیلیاں محفوظ نہیں ہونگی۔</translation>
@@ -12,6 +11,7 @@
 <translation id="1131805035311359397">‏یہ دیکھنے کے لئے کہ آیا آپ کے پاس ورڈز ڈیٹا کی خلاف ورزیوں اور دیگر سیکیورٹی مسائل سے محفوظ ہیں، <ph name="BEGIN_LINK" />Chromium میں سائن ان کریں<ph name="END_LINK" />۔</translation>
 <translation id="1185134272377778587">‏Chromium کے بارے میں</translation>
 <translation id="1315551408014407711">‏اپنی نئی Chromium پروفائل سیٹ اپ کریں</translation>
+<translation id="1357932062193643861">‏جب Chromium کھولتا ہے تب پوچھیں</translation>
 <translation id="1396446129537741364">‏Chromium پاس ورڈز دکھانے کی کوشش کر رہا ہے۔</translation>
 <translation id="1414495520565016063">‏آپ Chromium میں سائن ان ہیں!</translation>
 <translation id="1414973082589232775">‏تحفظ یافتہ میڈیا چلانے کی خاطر Rosetta استعمال کرنے کیلئے آپ کو Chromium ری سٹارٹ کرنا ضروری ہے۔</translation>
@@ -48,10 +48,8 @@
 <translation id="2711502716910134313">‏Chromium ٹیب</translation>
 <translation id="2718390899429598676">‏اضافی سیکیورٹی کیلئے، Chromium آپ کا ڈیٹا مرموز کر دے گا۔</translation>
 <translation id="2770231113462710648">ڈیفالٹ براؤزر کو اس میں تبدیل کریں:</translation>
-<translation id="2797461000988640326">{NUM_MINS,plural, =1{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: 1 منٹ پہلے۔}other{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: {NUM_MINS} منٹ پہلے۔}}</translation>
 <translation id="2799223571221894425">دوبارہ شروع کریں</translation>
 <translation id="2847479871509788944">‏Chromium سے ہٹائیں…</translation>
-<translation id="2853765747879685679">‏جب میں Chromium کھولتا ہوں تو پوچھیں</translation>
 <translation id="2885378588091291677">ٹاسک مینیجر</translation>
 <translation id="2910007522516064972">‏Chromium&amp; کے بارے میں</translation>
 <translation id="2977470724722393594">‏Chromium اپ ٹو ڈیٹ ہے</translation>
@@ -59,7 +57,6 @@
 <translation id="3032706164202344641">‏Chromium آپ کے پاس ورڈز چیک نہیں کر سکتا ہے۔ بعد میں دوبارہ کوشش کریں۔</translation>
 <translation id="3032787606318309379">‏Chromium میں شامل کیا جا رہا ہے…</translation>
 <translation id="3068515742935458733">‏Google کو کریش کی رپورٹیں اور <ph name="UMA_LINK" /> بھیج کر Chromium کو بہتر بنانے میں مدد کریں</translation>
-<translation id="3086207596048762442">‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے</translation>
 <translation id="3103660991484857065">‏انسٹالر آرکائیو کا کمپریشن ختم کرنے میں ناکام ہوگیا۔ براہ کرم Chromium کو دوبارہ ڈاؤن لوڈ کریں۔</translation>
 <translation id="3130323860337406239">‏Chromium آپ کا مائیکروفون استعمال کر رہا ہے۔</translation>
 <translation id="3155163173539279776">‏Chromium کو دوبارہ شروع کریں</translation>
@@ -181,7 +178,6 @@
 <translation id="6847869444787758381">‏Chromium آپ کو بتاتا ہے کہ آیا آپ کے پاس ورڈز کے ساتھ کبھی چھیڑ چھاڑ کی گئی ہے</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" />‎</translation>
 <translation id="6863361426438995919">‏Google Pay ‏(Chromium میں کاپی کر دیا گیا)</translation>
-<translation id="6863846675160669383">{NUM_DAYS,plural, =1{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: 1 دن پہلے۔}other{‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: {NUM_DAYS} دن پہلے۔}}</translation>
 <translation id="6893813176749746474">‏Chromium کو اپ ڈیٹ کر دیا گیا ہے لیکن آپ نے کم از کم 30 دن سے اسے استعمال نہیں کیا ہے۔</translation>
 <translation id="6897548120660295439">‏اس صفحے پر تحفظ یافتہ میڈیا چلانے کیلئے Rosetta‏ Chromium کو فعال کرتا ہے۔</translation>
 <translation id="6964305034639999644">‏لنک کو Chromium &amp;پوشیدگی ونڈو میں کھولیں</translation>
@@ -215,7 +211,6 @@ Chromium آپ کی ترتیبات کو بازیافت کرنے سے قاصر ہ�
       Chromium OS کی ترتیبات<ph name="LINK_END" /> میں دیکھیں</translation>
 <translation id="761356813943268536">‏Chromium آپ کا کیمرا اور مائیکروفون استعمال کر رہا ہے۔</translation>
 <translation id="7617377681829253106">‏Chromium اور بھی بہتر ہوگیا ہے</translation>
-<translation id="7628001322379820951">‏Chromium کو آپ کے کمپیوٹر پر نقصان دہ سافٹ ویئر ملا</translation>
 <translation id="7686590090926151193">‏Chromium آپ کا ڈیفالٹ براؤزر نہیں ہے</translation>
 <translation id="7689606757190482937">‏اپنے آلات پر Chromium کو مطابقت پذیر اور ذاتی نوعیت کا بنائیں</translation>
 <translation id="7729447699958282447">‏Chromium آپ کا ڈیٹا مطابقت پذیر نہیں کر سکا کیونکہ مطابقت پذیری آپ کے ڈومین کیلئے دستیاب نہیں ہے۔</translation>
@@ -248,7 +243,6 @@ Chromium آپ کی ترتیبات کو بازیافت کرنے سے قاصر ہ�
 <translation id="8621669128220841554">‏غیر متعین خرابی کی وجہ سے انسٹالیشن ناکام ہوگیا۔ براہ کرم Chromium دوبارہ ڈاؤن لوڈ کریں۔</translation>
 <translation id="8697124171261953979">‏یہ آپ کی جانب سے Chromium شروع کیے جانے یا اومنی باکس سے تلاش کیے جانے پر دکھائی دینے والے صفحہ کو کنٹرول بھی کرتا ہے۔</translation>
 <translation id="8704119203788522458">‏یہ آپ کا Chromium ہے</translation>
-<translation id="8705191560707593947">‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: گزشتہ کل۔</translation>
 <translation id="8796602469536043152">‏Chromium کو اس سائٹ کیلئے آپ کے کیمرے اور مائیکروفون تک رسائی کی اجازت درکار ہے</translation>
 <translation id="8803635938069941624">‏Chromium OS کی شرائط</translation>
 <translation id="8821041990367117597">‏Chromium آپ کے اکاؤنٹ کی سائن ان تفصیلات پرانی ہونے کی وجہ سے آپ کے ڈیٹا کی مطابقت پذیری نہیں کر سکا۔</translation>
@@ -264,7 +258,6 @@ Chromium آپ کی ترتیبات کو بازیافت کرنے سے قاصر ہ�
 <translation id="91086099826398415">‏لنک کو نئے Chromium &amp;ٹیب میں کھولیں</translation>
 <translation id="911206726377975832">نیز آپ کا براؤزنگ ڈیٹا حذف کریں؟</translation>
 <translation id="9158494823179993217">‏آپ کے سسٹم کے منتظم نے <ph name="TARGET_URL_HOSTNAME" /> تک رسائی حاصل کرنے کے لیے Chromium کو ایک متبادل براؤزر کھولنے کے لیے کنفیگر کیا ہے۔</translation>
-<translation id="9164845895615421500">‏Chromium ہفتے میں ایک بار غیر مطلوبہ سافٹ ویئر کو چیک کرتا ہے۔ آخری بار چیک کیا گیا: ایک لمحہ پہلے۔</translation>
 <translation id="9190841055450128916">‎Chromium (mDNS-In)‎</translation>
 <translation id="93478295209880648">‏ممکن ہے کہ Chromium ٹھیک طریقے سے کام نہ کرے کیونکہ یہ اب Windows XP یا Windows Vista پر تعاون یافتہ نہیں ہے</translation>
 <translation id="95514773681268843">‏<ph name="DOMAIN" /> تقاضہ کرتا ہے کہ آپ یہ آلہ استعمال کرنے سے پہلے مندرجہ ذیل سروس کی شرائط کو پڑھیں اور قبول کریں۔ یہ شرائط Chromium OS شرائط کی ایکسٹینشن، ان میں ترمیم یا انہیں محدود نہیں کرتی ہیں۔</translation>

@@ -299,7 +299,7 @@ void MetricsService::DisableReporting() {
   reporting_service_.DisableReporting();
 }
 
-std::string MetricsService::GetClientId() {
+std::string MetricsService::GetClientId() const {
   return state_manager_->client_id();
 }
 
@@ -396,6 +396,7 @@ void MetricsService::RecordCompletedSessionEnd() {
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 void MetricsService::OnAppEnterBackground(bool keep_recording_in_background) {
+  is_in_foreground_ = false;
   if (!keep_recording_in_background) {
     rotation_scheduler_->Stop();
     reporting_service_.Stop();
@@ -422,6 +423,7 @@ void MetricsService::OnAppEnterBackground(bool keep_recording_in_background) {
 }
 
 void MetricsService::OnAppEnterForeground(bool force_open_new_log) {
+  is_in_foreground_ = true;
   state_manager_->clean_exit_beacon()->WriteBeaconValue(false);
   StartSchedulerIfNecessary();
 
@@ -509,8 +511,6 @@ void MetricsService::InitializeMetricsState() {
     // provided UMA is enabled.
     if (state_manager_->IsMetricsReportingEnabled()) {
       has_initial_stability_log = PrepareInitialStabilityLog(previous_version);
-      if (!has_initial_stability_log)
-        provider.LogStabilityLogDeferred();
     }
   }
 
@@ -520,10 +520,8 @@ void MetricsService::InitializeMetricsState() {
   // number of different edge cases, such as if the last version crashed before
   // it could save off a system profile or if UMA reporting is disabled (which
   // normally results in stats being accumulated).
-  if (version_changed && !has_initial_stability_log) {
+  if (version_changed && !has_initial_stability_log)
     ClearSavedStabilityMetrics();
-    provider.LogStabilityDataDiscarded();
-  }
 
   // If the version changed, the system profile is obsolete and needs to be
   // cleared. This is to avoid the stability data misattribution that could
@@ -754,8 +752,6 @@ bool MetricsService::PrepareInitialStabilityLog(
           local_state_, &system_profile_app_version)) {
     return false;
   }
-  if (system_profile_app_version != prefs_previous_version)
-    StabilityMetricsProvider(local_state_).LogStabilityVersionMismatch();
 
   log_manager_.PauseCurrentLog();
   log_manager_.BeginLoggingWithLog(std::move(initial_stability_log));

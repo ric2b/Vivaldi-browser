@@ -11,6 +11,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
@@ -159,7 +160,7 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       use_custom_device_scale_factor_for_testing_(false),
       tree_(std::make_unique<ui::AXSerializableTree>()),
       event_generator_(ax_tree()) {
-  tree_observer_.Add(ax_tree());
+  tree_observation_.Observe(ax_tree());
 }
 
 BrowserAccessibilityManager::BrowserAccessibilityManager(
@@ -174,7 +175,7 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       use_custom_device_scale_factor_for_testing_(false),
       tree_(std::make_unique<ui::AXSerializableTree>()),
       event_generator_(ax_tree()) {
-  tree_observer_.Add(ax_tree());
+  tree_observation_.Observe(ax_tree());
   Initialize(initial_tree);
 }
 
@@ -407,6 +408,10 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
   TRACE_EVENT0("accessibility",
                "BrowserAccessibilityManager::OnAccessibilityEvents");
 
+#if DCHECK_IS_ON()
+  base::AutoReset<bool> auto_reset(&in_on_accessibility_events_, true);
+#endif  // DCHECK_IS_ON()
+
   // Update the cached device scale factor.
   if (delegate_ && !use_custom_device_scale_factor_for_testing_)
     device_scale_factor_ = delegate_->AccessibilityGetDeviceScaleFactor();
@@ -462,22 +467,14 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
     connected_to_parent_tree_node_ = false;
   }
 
-  // Based on the changes to the tree, fire focus events if needed.
-  // Screen readers might not do the right thing if they're not aware of what
-  // has focus, so always try that first. Nothing will be fired if the window
-  // itself isn't focused or if focus hasn't changed.
-  //
-  // We need to fire focus events specifically from the root manager, since we
-  // need the top document's delegate to check if its view has focus.
-  //
-  // If this manager is disconnected from the top document, then root_manager
-  // will be a null pointer and FireFocusEventsIfNeeded won't be able to
-  // retrieve the global focus (not firing an event anyway).
-  if (root_manager)
-    root_manager->FireFocusEventsIfNeeded();
-
+  // Fire any events related to changes to the tree that come from ancestors of
+  // the currently-focused node. We do this so that screen readers are made
+  // aware of changes in the tree which might be relevant to subsequent events
+  // on the focused node, such as the focused node being a descendant of a
+  // reparented node or a newly-shown dialog box.
+  BrowserAccessibility* focus = GetFocus();
+  std::vector<ui::AXEventGenerator::TargetedEvent> deferred_events;
   bool received_load_complete_event = false;
-  // Fire any events related to changes to the tree.
   for (const auto& targeted_event : event_generator()) {
     BrowserAccessibility* event_target = GetFromAXNode(targeted_event.node);
     if (!event_target)
@@ -492,6 +489,38 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
         ui::AXEventGenerator::Event::LOAD_COMPLETE) {
       received_load_complete_event = true;
     }
+
+    // IsDescendantOf() also returns true in the case of equality.
+    if (focus && focus != event_target && focus->IsDescendantOf(event_target))
+      FireGeneratedEvent(targeted_event.event_params.event, event_target);
+    else
+      deferred_events.push_back(targeted_event);
+  }
+
+  // Screen readers might not process events related to the currently-focused
+  // node if they are not aware that node is now focused, so fire a focus event
+  // before firing any other events on that node. No focus event will be fired
+  // if the window itself isn't focused or if focus hasn't changed.
+  //
+  // We need to fire focus events specifically from the root manager, since we
+  // need the top document's delegate to check if its view has focus.
+  //
+  // If this manager is disconnected from the top document, then root_manager
+  // will be a null pointer and FireFocusEventsIfNeeded won't be able to
+  // retrieve the global focus (not firing an event anyway).
+  if (root_manager)
+    root_manager->FireFocusEventsIfNeeded();
+
+  // Now fire all of the rest of the generated events we previously deferred.
+  for (const auto& targeted_event : deferred_events) {
+    BrowserAccessibility* event_target = GetFromAXNode(targeted_event.node);
+    if (!event_target)
+      continue;
+
+    event_target = RetargetForEvents(
+        event_target, RetargetEventType::RetargetEventTypeGenerated);
+    if (!event_target || !event_target->CanFireEvents())
+      continue;
 
     FireGeneratedEvent(targeted_event.event_params.event, event_target);
   }
@@ -1396,6 +1425,14 @@ ui::AXNode* BrowserAccessibilityManager::GetNodeFromTree(
     const ui::AXNode::AXID node_id) const {
   BrowserAccessibility* wrapper = GetFromID(node_id);
   return wrapper ? wrapper->node() : nullptr;
+}
+
+void BrowserAccessibilityManager::AddObserver(ui::AXTreeObserver* observer) {
+  ax_tree()->AddObserver(observer);
+}
+
+void BrowserAccessibilityManager::RemoveObserver(ui::AXTreeObserver* observer) {
+  ax_tree()->RemoveObserver(observer);
 }
 
 AXTreeID BrowserAccessibilityManager::GetTreeID() const {

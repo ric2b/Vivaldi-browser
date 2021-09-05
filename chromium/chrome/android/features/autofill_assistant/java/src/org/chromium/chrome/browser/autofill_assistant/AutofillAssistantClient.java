@@ -17,6 +17,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.autofill_assistant.trigger_scripts.AssistantTriggerScriptBridge;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.signin.AccessTokenData;
@@ -35,7 +36,7 @@ import java.util.Map;
  * This mainly a bridge to autofill_assistant::ClientAndroid.
  */
 @JNINamespace("autofill_assistant")
-class AutofillAssistantClient {
+public class AutofillAssistantClient {
     /** OAuth2 scope that RPCs require. */
     private static final String AUTH_TOKEN_TYPE =
             "oauth2:https://www.googleapis.com/auth/userinfo.profile";
@@ -113,8 +114,8 @@ class AutofillAssistantClient {
 
         checkNativeClientIsAliveOrThrow();
         chooseAccountAsyncIfNecessary(userName);
-        return AutofillAssistantClientJni.get().start(mNativeClientAndroid,
-                AutofillAssistantClient.this, initialUrl, experimentIds, callerAccount,
+        return AutofillAssistantClientJni.get().start(mNativeClientAndroid, this, initialUrl,
+                experimentIds, callerAccount,
                 parameters.keySet().toArray(new String[parameters.size()]),
                 parameters.values().toArray(new String[parameters.size()]), isChromeCustomTab,
                 onboardingCoordinator,
@@ -123,13 +124,26 @@ class AutofillAssistantClient {
                 AutofillAssistantServiceInjector.getServiceToInject());
     }
 
+    public void startTriggerScript(AssistantTriggerScriptBridge delegate, String initialUrl,
+            Map<String, String> parameters, String experimentIds) {
+        if (mNativeClientAndroid == 0) {
+            return;
+        }
+        checkNativeClientIsAliveOrThrow();
+        AutofillAssistantClientJni.get().startTriggerScript(mNativeClientAndroid, this, delegate,
+                initialUrl, experimentIds,
+                parameters.keySet().toArray(new String[parameters.size()]),
+                parameters.values().toArray(new String[parameters.size()]),
+                AutofillAssistantServiceInjector.getServiceRequestSenderToInject());
+    }
+
     /**
      * Gets rid of the UI, if there is one. Leaves Autofill Assistant running.
      */
     public void destroyUi() {
         if (mNativeClientAndroid == 0) return;
 
-        AutofillAssistantClientJni.get().destroyUI(
+        AutofillAssistantClientJni.get().onJavaDestroyUI(
                 mNativeClientAndroid, AutofillAssistantClient.this);
     }
 
@@ -368,6 +382,12 @@ class AutofillAssistantClient {
         return ChromeAccessibilityUtil.get().isAccessibilityEnabled();
     }
 
+    /** Returns whether the user has seen a trigger script before or not. */
+    @CalledByNative
+    private static boolean isFirstTimeTriggerScriptUser() {
+        return AutofillAssistantPreferencesUtil.isAutofillAssistantFirstTimeLiteScriptUser();
+    }
+
     /** Adds a dynamic action to the given reporter. */
     @CalledByNative
     private void onFetchWebsiteActions(Callback<Boolean> callback, boolean success) {
@@ -387,10 +407,13 @@ class AutofillAssistantClient {
                 String[] parameterValues, boolean isChromeCustomTab,
                 @Nullable AssistantOnboardingCoordinator onboardingCoordinator,
                 boolean onboardingShown, long nativeService);
+        void startTriggerScript(long nativeClientAndroid, AutofillAssistantClient caller,
+                AssistantTriggerScriptBridge delegate, String initialUrl, String experimentIds,
+                String[] parameterNames, String[] parameterValues, long nativeServiceRequestSender);
         void onAccessToken(long nativeClientAndroid, AutofillAssistantClient caller,
                 boolean success, String accessToken);
         String getPrimaryAccountName(long nativeClientAndroid, AutofillAssistantClient caller);
-        void destroyUI(long nativeClientAndroid, AutofillAssistantClient caller);
+        void onJavaDestroyUI(long nativeClientAndroid, AutofillAssistantClient caller);
         void transferUITo(
                 long nativeClientAndroid, AutofillAssistantClient caller, Object otherWebContents);
         void fetchWebsiteActions(long nativeClientAndroid, AutofillAssistantClient caller,

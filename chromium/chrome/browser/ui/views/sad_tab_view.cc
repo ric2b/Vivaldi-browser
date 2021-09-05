@@ -31,6 +31,7 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 #include "app/vivaldi_apptools.h"
@@ -558,7 +559,7 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
 
   auto help_link = std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(GetHelpLinkTitle()));
-  help_link->set_callback(base::BindRepeating(
+  help_link->SetCallback(base::BindRepeating(
       &SadTab::PerformAction, base::Unretained(this), Action::HELP_LINK));
   layout->StartRowWithPadding(views::GridLayout::kFixedSize, column_set_id,
                               views::GridLayout::kFixedSize,
@@ -566,7 +567,9 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
   layout->AddView(std::move(help_link), 1.0, 1.0, views::GridLayout::LEADING,
                   views::GridLayout::CENTER);
   auto action_button = std::make_unique<views::MdTextButton>(
-      this, l10n_util::GetStringUTF16(GetButtonTitle()));
+      base::BindRepeating(&SadTabView::PerformAction, base::Unretained(this),
+                          Action::BUTTON),
+      l10n_util::GetStringUTF16(GetButtonTitle()));
   action_button->SetProminent(true);
   action_button_ =
       layout->AddView(std::move(action_button), 1.0, 1.0,
@@ -600,11 +603,6 @@ void SadTabView::ReinstallInWebView() {
     owner_ = nullptr;
   }
   AttachToWebView();
-}
-
-void SadTabView::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  DCHECK_EQ(action_button_, sender);
-  PerformAction(Action::BUTTON);
 }
 
 void SadTabView::OnPaint(gfx::Canvas* canvas) {

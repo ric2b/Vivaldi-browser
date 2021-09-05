@@ -370,6 +370,29 @@ def _ExtractOwners(node):
   return owners, has_owner
 
 
+def _ExtractComponents(histogram):
+  """Extracts component information from the given histogram element.
+
+  Components are present when a histogram has a component tag, e.g.
+  <component>UI&gt;Browser</component>. Components may also be present when an
+  OWNERS file is given as a histogram owner, e.g. <owner>src/dir/OWNERS</owner>.
+  See _ExtractComponentFromOWNERS() in the following file for details:
+  chromium/src/tools/metrics/histograms/expand_owners.py.
+
+  Args:
+    histogram: A DOM Element corresponding to a histogram.
+
+  Returns:
+    A list of the components associated with the histogram, e.g.
+    ['UI>Browser>Spellcheck'].
+  """
+  component_nodes = histogram.getElementsByTagName('component')
+  return [
+      _GetTextFromChildNodes(component_node)
+      for component_node in component_nodes
+  ]
+
+
 def _ValidateDateString(date_str):
   """Checks if |date_str| matches 'YYYY-MM-DD'.
 
@@ -453,6 +476,7 @@ def _ExtractTokens(histogram, variants_dict):
       continue
 
     token = dict(key=token_key)
+    token['variants'] = []
 
     # If 'variants' attribute is set for the <token>, get the list of Variant
     # objects from from the |variants_dict|. Else, extract the <variant>
@@ -461,7 +485,7 @@ def _ExtractTokens(histogram, variants_dict):
       variants_name = token_node.getAttribute('variants')
       variant_list = variants_dict.get(variants_name)
       if variant_list:
-        token['variants'] = variant_list
+        token['variants'] = variant_list[:]
       else:
         logging.error(
             "The variants attribute %s of token key %s of histogram %s does "
@@ -469,8 +493,8 @@ def _ExtractTokens(histogram, variants_dict):
             (variants_name, token_key, histogram_name))
         token['variants'] = []
         have_error = True
-    else:
-      token['variants'] = _ExtractVariantNodes(token_node)
+    # Inline and out-of-line variants can be combined.
+    token['variants'].extend(_ExtractVariantNodes(token_node))
 
     tokens.append(token)
 
@@ -552,6 +576,11 @@ def _ExtractHistogramsFromXmlTree(tree, enums):
     owners, has_owner = _ExtractOwners(histogram)
     if owners:
       histogram_entry['owners'] = owners
+
+    # Find <component> tag.
+    components = _ExtractComponents(histogram)
+    if components:
+      histogram_entry['components'] = components
 
     # Find <summary> tag.
     summary_nodes = list(IterElementsWithTag(histogram, 'summary'))
@@ -791,6 +820,8 @@ def _UpdateHistogramsWithSuffixes(tree, histograms):
           # group itself was obsolete as well.
           obsolete_reason = _GetObsoleteReason(suffix)
           if not obsolete_reason:
+            obsolete_reason = _GetObsoleteReason(affected_histogram)
+          if not obsolete_reason:
             obsolete_reason = group_obsolete_reason
 
           # If the suffix has an obsolete tag, all histograms it generates
@@ -976,9 +1007,9 @@ def ExtractHistogramsFromDom(tree):
   enums, enum_errors = ExtractEnumsFromXmlTree(enums_tree)
   histograms, histogram_errors = _ExtractHistogramsFromXmlTree(
       histograms_tree, enums)
+  histograms, update_token_errors = _UpdateHistogramsWithTokens(histograms)
   update_suffix_errors = _UpdateHistogramsWithSuffixes(histogram_suffixes_tree,
                                                        histograms)
-  histograms, update_token_errors = _UpdateHistogramsWithTokens(histograms)
 
   return histograms, (enum_errors or histogram_errors or update_suffix_errors
                       or update_token_errors)
@@ -1007,3 +1038,8 @@ def ExtractHistograms(filename):
 
 def ExtractNames(histograms):
   return sorted(histograms.keys())
+
+
+def ExtractObsoleteNames(histograms):
+  return sorted(
+      filter(lambda name: histograms[name].get("obsolete"), histograms.keys()))

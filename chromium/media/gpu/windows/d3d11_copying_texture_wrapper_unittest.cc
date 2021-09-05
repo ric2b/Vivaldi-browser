@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/task_environment.h"
 #include "media/gpu/windows/d3d11_copying_texture_wrapper.h"
 #include "media/gpu/windows/d3d11_texture_wrapper.h"
@@ -80,6 +80,9 @@ class MockVideoProcessorProxy : public VideoProcessorProxy {
   base::Optional<gfx::ColorSpace> last_output_color_space_;
   base::Optional<DXGI_HDR_METADATA_HDR10> last_stream_metadata_;
   base::Optional<DXGI_HDR_METADATA_HDR10> last_display_metadata_;
+
+ private:
+  ~MockVideoProcessorProxy() override = default;
 };
 
 class MockTexture2DWrapper : public Texture2DWrapper {
@@ -106,7 +109,7 @@ class MockTexture2DWrapper : public Texture2DWrapper {
   MOCK_METHOD0(MockInit, Status());
   MOCK_METHOD0(MockProcessTexture, Status());
   MOCK_METHOD1(SetStreamHDRMetadata,
-               void(const gl::HDRMetadata& stream_metadata));
+               void(const gfx::HDRMetadata& stream_metadata));
   MOCK_METHOD1(SetDisplayHDRMetadata,
                void(const DXGI_HDR_METADATA_HDR10& dxgi_display_metadata));
 
@@ -136,8 +139,8 @@ class D3D11CopyingTexture2DWrapperTest
     gpu_task_runner_ = task_environment_.GetMainThreadTaskRunner();
   }
 
-  std::unique_ptr<MockVideoProcessorProxy> ExpectProcessorProxy() {
-    auto result = std::make_unique<MockVideoProcessorProxy>();
+  scoped_refptr<MockVideoProcessorProxy> ExpectProcessorProxy() {
+    auto result = base::MakeRefCounted<MockVideoProcessorProxy>();
     ON_CALL(*result.get(), MockInit(_, _))
         .WillByDefault(Return(GetProcessorProxyInit()
                                   ? StatusCode::kOk
@@ -215,8 +218,7 @@ TEST_P(D3D11CopyingTexture2DWrapperTest,
   auto texture_wrapper = ExpectTextureWrapper();
   MockTexture2DWrapper* texture_wrapper_raw = texture_wrapper.get();
   auto wrapper = std::make_unique<CopyingTexture2DWrapper>(
-      size, std::move(texture_wrapper), std::move(processor), nullptr,
-      copy_color_space);
+      size, std::move(texture_wrapper), processor, nullptr, copy_color_space);
 
   // TODO: check |gpu_task_runner_|.
 
@@ -256,15 +258,15 @@ TEST_P(D3D11CopyingTexture2DWrapperTest,
 }
 
 TEST_P(D3D11CopyingTexture2DWrapperTest, HDRMetadataIsSentToVideoProcessor) {
-  gl::HDRMetadata metadata;
+  gfx::HDRMetadata metadata;
   metadata.mastering_metadata.primary_r =
-      gl::MasteringMetadata::Chromaticity(0.1, 0.2);
+      gfx::MasteringMetadata::Chromaticity(0.1, 0.2);
   metadata.mastering_metadata.primary_g =
-      gl::MasteringMetadata::Chromaticity(0.3, 0.4);
+      gfx::MasteringMetadata::Chromaticity(0.3, 0.4);
   metadata.mastering_metadata.primary_b =
-      gl::MasteringMetadata::Chromaticity(0.5, 0.6);
+      gfx::MasteringMetadata::Chromaticity(0.5, 0.6);
   metadata.mastering_metadata.white_point =
-      gl::MasteringMetadata::Chromaticity(0.7, 0.8);
+      gfx::MasteringMetadata::Chromaticity(0.7, 0.8);
   metadata.mastering_metadata.luminance_max = 0.9;
   metadata.mastering_metadata.luminance_min = 0.05;
   metadata.max_content_light_level = 1000;

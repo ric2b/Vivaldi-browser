@@ -31,6 +31,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
@@ -50,6 +51,7 @@
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
@@ -105,7 +107,7 @@ void WorkerClassicScriptLoader::LoadSynchronously(
     ExecutionContext& execution_context,
     ResourceFetcher* fetch_client_settings_object_fetcher,
     const KURL& url,
-    mojom::RequestContextType request_context,
+    mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination destination) {
   DCHECK(fetch_client_settings_object_fetcher);
   url_ = url;
@@ -140,9 +142,7 @@ void WorkerClassicScriptLoader::LoadTopLevelScriptAsynchronously(
     const KURL& url,
     std::unique_ptr<WorkerMainScriptLoadParameters>
         worker_main_script_load_params,
-    CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
-        resource_load_info_notifier,
-    mojom::RequestContextType request_context,
+    mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination destination,
     network::mojom::RequestMode request_mode,
     network::mojom::CredentialsMode credentials_mode,
@@ -182,8 +182,7 @@ void WorkerClassicScriptLoader::LoadTopLevelScriptAsynchronously(
     worker_main_script_loader_->Start(
         fetch_params, std::move(worker_main_script_load_params),
         &fetch_client_settings_object_fetcher_->Context(),
-        fetch_client_settings_object_fetcher->GetResourceLoadObserver(),
-        std::move(resource_load_info_notifier), this);
+        fetch_client_settings_object_fetcher->GetResourceLoadObserver(), this);
     return;
   }
 

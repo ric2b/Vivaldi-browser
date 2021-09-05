@@ -14,6 +14,7 @@
 #include "ash/system/holding_space/holding_space_item_view_delegate.h"
 #include "base/bind.h"
 #include "ui/base/class_property.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -25,6 +26,7 @@
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/vector_icons.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -197,6 +199,27 @@ void HoldingSpaceItemView::OnMouseReleased(const ui::MouseEvent& event) {
   delegate_->OnHoldingSpaceItemViewMouseReleased(this, event);
 }
 
+void HoldingSpaceItemView::StartDrag(const ui::LocatedEvent& event,
+                                     ui::mojom::DragEventSource source) {
+  int drag_operations = GetDragOperations(event.location());
+  if (drag_operations == ui::DragDropTypes::DRAG_NONE)
+    return;
+
+  views::Widget* widget = GetWidget();
+  DCHECK(widget);
+
+  if (widget->dragged_view())
+    return;
+
+  auto data = std::make_unique<ui::OSExchangeData>();
+  WriteDragData(event.location(), data.get());
+
+  gfx::Point widget_location(event.location());
+  views::View::ConvertPointToWidget(this, &widget_location);
+  widget->RunShellDrag(this, std::move(data), widget_location, drag_operations,
+                       source);
+}
+
 void HoldingSpaceItemView::SetSelected(bool selected) {
   if (selected_ == selected)
     return;
@@ -207,10 +230,11 @@ void HoldingSpaceItemView::SetSelected(bool selected) {
       selected_layer_owner_->layer()->bounds());
 }
 
-void HoldingSpaceItemView::AddPin(views::View* parent) {
+views::ToggleImageButton* HoldingSpaceItemView::AddPin(views::View* parent) {
   DCHECK(!pin_);
 
   pin_ = parent->AddChildView(std::make_unique<views::ToggleImageButton>());
+  pin_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   pin_->SetVisible(false);
 
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
@@ -223,8 +247,16 @@ void HoldingSpaceItemView::AddPin(views::View* parent) {
 
   pin_->SetImage(views::Button::STATE_NORMAL, unpinned_icon);
   pin_->SetToggledImage(views::Button::STATE_NORMAL, &pinned_icon);
-  pin_->set_callback(base::BindRepeating(&HoldingSpaceItemView::OnPinPressed,
-                                         base::Unretained(this)));
+
+  pin_->SetImageHorizontalAlignment(
+      views::ToggleImageButton::HorizontalAlignment::ALIGN_CENTER);
+  pin_->SetImageVerticalAlignment(
+      views::ToggleImageButton::VerticalAlignment::ALIGN_MIDDLE);
+
+  pin_->SetCallback(base::BindRepeating(&HoldingSpaceItemView::OnPinPressed,
+                                        base::Unretained(this)));
+
+  return pin_;
 }
 
 void HoldingSpaceItemView::OnPaintFocus(gfx::Canvas* canvas, gfx::Size size) {

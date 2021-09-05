@@ -12,7 +12,9 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
+#include "cc/metrics/dropped_frame_counter.h"
 #include "cc/metrics/event_metrics.h"
+#include "cc/metrics/total_frame_counter.h"
 #include "components/viz/common/frame_timing_details.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,9 +36,11 @@ class CompositorFrameReporterTest : public testing::Test {
             nullptr,
             /*should_report_metrics=*/true,
             CompositorFrameReporter::SmoothThread::kSmoothBoth,
-            /*layer_tree_host_id=*/1)) {
+            /*layer_tree_host_id=*/1,
+            &dropped_frame_counter_)) {
     pipeline_reporter_->set_tick_clock(&test_tick_clock_);
     AdvanceNowByMs(1);
+    dropped_frame_counter_.set_total_counter(&total_frame_counter_);
   }
 
  protected:
@@ -49,20 +53,19 @@ class CompositorFrameReporterTest : public testing::Test {
 
   std::unique_ptr<BeginMainFrameMetrics> BuildBlinkBreakdown() {
     auto breakdown = std::make_unique<BeginMainFrameMetrics>();
-    breakdown->handle_input_events = base::TimeDelta::FromMicroseconds(11);
-    breakdown->animate = base::TimeDelta::FromMicroseconds(10);
-    breakdown->style_update = base::TimeDelta::FromMicroseconds(9);
-    breakdown->layout_update = base::TimeDelta::FromMicroseconds(8);
-    breakdown->compositing_inputs = base::TimeDelta::FromMicroseconds(7);
-    breakdown->prepaint = base::TimeDelta::FromMicroseconds(6);
-    breakdown->compositing_assignments = base::TimeDelta::FromMicroseconds(5);
-    breakdown->paint = base::TimeDelta::FromMicroseconds(4);
-    breakdown->scrolling_coordinator = base::TimeDelta::FromMicroseconds(3);
+    breakdown->handle_input_events = base::TimeDelta::FromMicroseconds(10);
+    breakdown->animate = base::TimeDelta::FromMicroseconds(9);
+    breakdown->style_update = base::TimeDelta::FromMicroseconds(8);
+    breakdown->layout_update = base::TimeDelta::FromMicroseconds(7);
+    breakdown->compositing_inputs = base::TimeDelta::FromMicroseconds(6);
+    breakdown->prepaint = base::TimeDelta::FromMicroseconds(5);
+    breakdown->compositing_assignments = base::TimeDelta::FromMicroseconds(4);
+    breakdown->paint = base::TimeDelta::FromMicroseconds(3);
     breakdown->composite_commit = base::TimeDelta::FromMicroseconds(2);
     breakdown->update_layers = base::TimeDelta::FromMicroseconds(1);
 
     // Advance now by the sum of the breakdowns.
-    AdvanceNowByMs(11 + 10 + 9 + 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1);
+    AdvanceNowByMs(10 + 9 + 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1);
 
     return breakdown;
   }
@@ -81,6 +84,8 @@ class CompositorFrameReporterTest : public testing::Test {
   // and destroyed after that.
   base::SimpleTestTickClock test_tick_clock_;
 
+  DroppedFrameCounter dropped_frame_counter_;
+  TotalFrameCounter total_frame_counter_;
   std::unique_ptr<CompositorFrameReporter> pipeline_reporter_;
 };
 
@@ -243,8 +248,9 @@ TEST_F(CompositorFrameReporterTest,
                            base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
-  std::vector<EventMetrics> events_metrics = {
-      *event_metrics_ptrs[0], *event_metrics_ptrs[1], *event_metrics_ptrs[2]};
+  EventMetrics::List events_metrics(
+      std::make_move_iterator(std::begin(event_metrics_ptrs)),
+      std::make_move_iterator(std::end(event_metrics_ptrs)));
 
   AdvanceNowByMs(3);
   pipeline_reporter_->StartStage(
@@ -296,7 +302,9 @@ TEST_F(CompositorFrameReporterTest,
                            base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
-  std::vector<EventMetrics> events_metrics = {*event_metrics_ptrs[0]};
+  EventMetrics::List events_metrics(
+      std::make_move_iterator(std::begin(event_metrics_ptrs)),
+      std::make_move_iterator(std::end(event_metrics_ptrs)));
 
   auto begin_impl_time = AdvanceNowByMs(2);
   pipeline_reporter_->StartStage(
@@ -376,9 +384,6 @@ TEST_F(CompositorFrameReporterTest,
        blink_breakdown_copy.compositing_assignments},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Paint",
        blink_breakdown_copy.paint},
-      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit."
-       "ScrollingCoordinator",
-       blink_breakdown_copy.scrolling_coordinator},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.CompositeCommit",
        blink_breakdown_copy.composite_commit},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.UpdateLayers",
@@ -450,8 +455,9 @@ TEST_F(CompositorFrameReporterTest,
                            event_time, ui::ScrollInputType::kWheel),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
-  std::vector<EventMetrics> events_metrics = {
-      *event_metrics_ptrs[0], *event_metrics_ptrs[1], *event_metrics_ptrs[2]};
+  EventMetrics::List events_metrics(
+      std::make_move_iterator(std::begin(event_metrics_ptrs)),
+      std::make_move_iterator(std::end(event_metrics_ptrs)));
 
   AdvanceNowByMs(3);
   pipeline_reporter_->StartStage(
@@ -523,8 +529,9 @@ TEST_F(CompositorFrameReporterTest,
                            base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
-  std::vector<EventMetrics> events_metrics = {
-      *event_metrics_ptrs[0], *event_metrics_ptrs[1], *event_metrics_ptrs[2]};
+  EventMetrics::List events_metrics(
+      std::make_move_iterator(std::begin(event_metrics_ptrs)),
+      std::make_move_iterator(std::end(event_metrics_ptrs)));
 
   AdvanceNowByMs(3);
   pipeline_reporter_->StartStage(

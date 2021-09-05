@@ -14,6 +14,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/unguessable_token.h"
+#include "base/util/memory_pressure/fake_memory_pressure_monitor.h"
 #include "components/paint_preview/browser/directory_key.h"
 #include "components/paint_preview/browser/file_manager.h"
 #include "components/paint_preview/browser/paint_preview_base_service.h"
@@ -26,6 +27,8 @@
 namespace paint_preview {
 
 namespace {
+
+constexpr size_t kMaxParallelRequests = 1;
 
 class FakePaintPreviewCompositorClient : public PaintPreviewCompositorClient {
  public:
@@ -181,6 +184,10 @@ class PlayerCompositorDelegateImpl : public PlayerCompositorDelegate {
     status_checked_ = false;
   }
 
+  void SetFakeMemoryPressureMonitor(base::MemoryPressureMonitor* monitor) {
+    memory_pressure_monitor_ = monitor;
+  }
+
   bool WasStatusChecked() const { return status_checked_; }
 
   void OnCompositorReady(CompositorStatus compositor_status,
@@ -192,7 +199,16 @@ class PlayerCompositorDelegateImpl : public PlayerCompositorDelegate {
     status_checked_ = true;
   }
 
+ protected:
+  base::MemoryPressureMonitor* memory_pressure_monitor() override {
+    if (memory_pressure_monitor_)
+      return memory_pressure_monitor_;
+
+    return PlayerCompositorDelegate::memory_pressure_monitor();
+  }
+
  private:
+  base::MemoryPressureMonitor* memory_pressure_monitor_{nullptr};
   CompositorStatus expected_status_{CompositorStatus::OK};
   bool status_checked_{false};
 };
@@ -332,7 +348,7 @@ TEST_F(PlayerCompositorDelegateTest, OnClick) {
     player_compositor_delegate.SetExpectedStatus(CompositorStatus::OK);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, url, key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
 
@@ -376,7 +392,7 @@ TEST_F(PlayerCompositorDelegateTest, BadProto) {
         CompositorStatus::PROTOBUF_DESERIALIZATION_ERROR);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
   }
@@ -396,7 +412,7 @@ TEST_F(PlayerCompositorDelegateTest, OldVersion) {
     player_compositor_delegate.SetExpectedStatus(CompositorStatus::OLD_VERSION);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, url, key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     player_compositor_delegate.SetCompressOnClose(false);
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
@@ -417,7 +433,7 @@ TEST_F(PlayerCompositorDelegateTest, URLMismatch) {
         CompositorStatus::URL_MISMATCH);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
   }
@@ -445,7 +461,8 @@ TEST_F(PlayerCompositorDelegateTest, ServiceDisconnect) {
               *called = true;
             },
             &called),
-        base::TimeDelta::Max(), CreateCompositorService());
+        base::TimeDelta::Max(), kMaxParallelRequests,
+        CreateCompositorService());
     env.RunUntilIdle();
     AsFakeService(player_compositor_delegate.GetCompositorServiceForTest())
         ->Disconnect();
@@ -476,7 +493,8 @@ TEST_F(PlayerCompositorDelegateTest, ClientDisconnect) {
               *called = true;
             },
             &called),
-        base::TimeDelta::Max(), CreateCompositorService());
+        base::TimeDelta::Max(), kMaxParallelRequests,
+        CreateCompositorService());
     env.RunUntilIdle();
     AsFakeClient(player_compositor_delegate.GetClientForTest())->Disconnect();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
@@ -509,7 +527,7 @@ TEST_F(PlayerCompositorDelegateTest, InvalidCompositeRequest) {
         CompositorStatus::INVALID_REQUEST);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, url, key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
   }
@@ -529,7 +547,7 @@ TEST_F(PlayerCompositorDelegateTest, CompositorDeserializationError) {
         CompositorStatus::COMPOSITOR_DESERIALIZATION_ERROR);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, url, key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     AsFakeClient(player_compositor_delegate.GetClientForTest())
         ->SetBeginSeparatedFrameResponseStatus(
             mojom::PaintPreviewCompositor::BeginCompositeStatus::
@@ -553,7 +571,7 @@ TEST_F(PlayerCompositorDelegateTest, InvalidRootSkp) {
         CompositorStatus::INVALID_ROOT_FRAME_SKP);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, url, key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     AsFakeClient(player_compositor_delegate.GetClientForTest())
         ->SetBeginSeparatedFrameResponseStatus(
             mojom::PaintPreviewCompositor::BeginCompositeStatus::
@@ -588,7 +606,7 @@ TEST_F(PlayerCompositorDelegateTest, CompressOnClose) {
     player_compositor_delegate.SetExpectedStatus(CompositorStatus::NO_CAPTURE);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
   }
@@ -596,7 +614,7 @@ TEST_F(PlayerCompositorDelegateTest, CompressOnClose) {
   EXPECT_TRUE(base::PathExists(dir.AddExtensionASCII(".zip")));
 }
 
-TEST_F(PlayerCompositorDelegateTest, RequestBitmapSuccess) {
+TEST_F(PlayerCompositorDelegateTest, RequestBitmapWithCancel) {
   auto* service = GetBaseService();
   auto file_manager = service->GetFileManager();
   auto key = file_manager->CreateKey(1U);
@@ -608,7 +626,130 @@ TEST_F(PlayerCompositorDelegateTest, RequestBitmapSuccess) {
     player_compositor_delegate.SetExpectedStatus(CompositorStatus::NO_CAPTURE);
     player_compositor_delegate.InitializeWithFakeServiceForTest(
         service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
-        CreateCompositorService());
+        kMaxParallelRequests, CreateCompositorService());
+    env.RunUntilIdle();
+    EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
+
+    base::RunLoop loop0;
+    int request_0 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](base::OnceClosure quit,
+               mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) {
+              EXPECT_EQ(mojom::PaintPreviewCompositor::BitmapStatus::kSuccess,
+                        status);
+              std::move(quit).Run();
+            },
+            loop0.QuitClosure()));
+    bool request_1_called = false;
+    int request_1 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](bool* called, mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) { *called = true; },
+            &request_1_called));
+    base::RunLoop loop2;
+    int request_2 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](base::OnceClosure quit,
+               mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) {
+              EXPECT_EQ(mojom::PaintPreviewCompositor::BitmapStatus::kSuccess,
+                        status);
+              std::move(quit).Run();
+            },
+            loop2.QuitClosure()));
+    bool request_3_called = false;
+    int request_3 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](bool* called, mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) { *called = true; },
+            &request_3_called));
+    EXPECT_EQ(
+        std::set<int>({request_0, request_1, request_2, request_3}).size(), 4U);
+
+    EXPECT_FALSE(player_compositor_delegate.CancelBitmapRequest(request_0));
+    EXPECT_TRUE(player_compositor_delegate.CancelBitmapRequest(request_1));
+    EXPECT_FALSE(player_compositor_delegate.CancelBitmapRequest(request_1));
+    EXPECT_TRUE(player_compositor_delegate.CancelBitmapRequest(request_3));
+
+    loop0.Run();
+    loop2.Run();
+    env.RunUntilIdle();
+    EXPECT_FALSE(request_1_called);
+    EXPECT_FALSE(request_3_called);
+  }
+  env.RunUntilIdle();
+}
+
+TEST_F(PlayerCompositorDelegateTest, RequestBitmapWithCancelAll) {
+  auto* service = GetBaseService();
+  auto file_manager = service->GetFileManager();
+  auto key = file_manager->CreateKey(1U);
+  {
+    // This test skips setting up files as the fakes don't use them. In normal
+    // execution the files are required by the service or no bitmap will be
+    // created.
+    PlayerCompositorDelegateImpl player_compositor_delegate;
+    player_compositor_delegate.SetExpectedStatus(CompositorStatus::NO_CAPTURE);
+    player_compositor_delegate.InitializeWithFakeServiceForTest(
+        service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
+        kMaxParallelRequests, CreateCompositorService());
+    env.RunUntilIdle();
+    EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
+
+    base::RunLoop loop0;
+    int request_0 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](base::OnceClosure quit,
+               mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) {
+              EXPECT_EQ(mojom::PaintPreviewCompositor::BitmapStatus::kSuccess,
+                        status);
+              std::move(quit).Run();
+            },
+            loop0.QuitClosure()));
+    bool request_1_called = false;
+    int request_1 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](bool* called, mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) { *called = true; },
+            &request_1_called));
+    bool request_2_called = false;
+    int request_2 = player_compositor_delegate.RequestBitmap(
+        base::UnguessableToken::Create(), gfx::Rect(10, 20, 30, 40), 1.0,
+        base::BindOnce(
+            [](bool* called, mojom::PaintPreviewCompositor::BitmapStatus status,
+               const SkBitmap& bitmap) { *called = true; },
+            &request_2_called));
+    EXPECT_EQ(std::set<int>({request_0, request_1, request_2}).size(), 3U);
+    player_compositor_delegate.CancelAllBitmapRequests();
+    loop0.Run();
+    env.RunUntilIdle();
+    EXPECT_FALSE(request_1_called);
+    EXPECT_FALSE(request_2_called);
+  }
+  env.RunUntilIdle();
+}
+
+TEST_F(PlayerCompositorDelegateTest, RequestBitmapSuccessQueued) {
+  auto* service = GetBaseService();
+  auto file_manager = service->GetFileManager();
+  auto key = file_manager->CreateKey(1U);
+  {
+    // This test skips setting up files as the fakes don't use them. In normal
+    // execution the files are required by the service or no bitmap will be
+    // created.
+    PlayerCompositorDelegateImpl player_compositor_delegate;
+    player_compositor_delegate.SetExpectedStatus(CompositorStatus::NO_CAPTURE);
+    player_compositor_delegate.InitializeWithFakeServiceForTest(
+        service, GURL(), key, base::DoNothing(), base::TimeDelta::Max(),
+        kMaxParallelRequests, CreateCompositorService());
     env.RunUntilIdle();
     EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
 
@@ -647,8 +788,77 @@ TEST_F(PlayerCompositorDelegateTest, Timeout) {
               std::move(quit).Run();
             },
             loop.QuitClosure()),
-        base::TimeDelta::FromSeconds(1), std::move(compositor_service));
+        base::TimeDelta::FromSeconds(1), kMaxParallelRequests,
+        std::move(compositor_service));
     env.FastForwardBy(base::TimeDelta::FromSeconds(5));
+    loop.Run();
+  }
+  env.RunUntilIdle();
+}
+
+TEST_F(PlayerCompositorDelegateTest, CriticalMemoryPressure) {
+  auto* service = GetBaseService();
+  auto file_manager = service->GetFileManager();
+  auto key = file_manager->CreateKey(1U);
+  {
+    // This test skips setting up files as the fakes don't use them. In normal
+    // execution the files are required by the service or no bitmap will be
+    // created.
+    base::RunLoop loop;
+    PlayerCompositorDelegateImpl player_compositor_delegate;
+    player_compositor_delegate.SetExpectedStatus(CompositorStatus::NO_CAPTURE);
+    player_compositor_delegate.InitializeWithFakeServiceForTest(
+        service, GURL(), key,
+        base::BindOnce(
+            [](base::OnceClosure quit, int compositor_status) {
+              EXPECT_EQ(compositor_status,
+                        static_cast<int>(
+                            CompositorStatus::STOPPED_DUE_TO_MEMORY_PRESSURE));
+              std::move(quit).Run();
+            },
+            loop.QuitClosure()),
+        base::TimeDelta::Max(), kMaxParallelRequests,
+        CreateCompositorService());
+    env.RunUntilIdle();
+    EXPECT_TRUE(player_compositor_delegate.WasStatusChecked());
+
+    player_compositor_delegate.OnMemoryPressure(
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+    loop.Run();
+  }
+  env.RunUntilIdle();
+}
+
+TEST_F(PlayerCompositorDelegateTest, CriticalMemoryPressureBeforeStart) {
+  auto* service = GetBaseService();
+  auto file_manager = service->GetFileManager();
+  auto key = file_manager->CreateKey(1U);
+  {
+    // This test skips setting up files as the fakes don't use them. In normal
+    // execution the files are required by the service or no bitmap will be
+    // created.
+    base::RunLoop loop;
+    PlayerCompositorDelegateImpl player_compositor_delegate;
+    util::test::FakeMemoryPressureMonitor memory_pressure_monitor;
+    memory_pressure_monitor.SetAndNotifyMemoryPressure(
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+    player_compositor_delegate.SetFakeMemoryPressureMonitor(
+        &memory_pressure_monitor);
+    player_compositor_delegate.Initialize(
+        service, GURL(), key,
+        base::BindOnce(
+            [](base::OnceClosure quit, int compositor_status) {
+              EXPECT_EQ(compositor_status,
+                        static_cast<int>(
+                            CompositorStatus::SKIPPED_DUE_TO_MEMORY_PRESSURE));
+              std::move(quit).Run();
+            },
+            loop.QuitClosure()),
+        base::TimeDelta::Max(), kMaxParallelRequests);
+    env.RunUntilIdle();
+
+    player_compositor_delegate.OnMemoryPressure(
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
     loop.Run();
   }
   env.RunUntilIdle();

@@ -28,6 +28,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/night_light/time_of_day.h"
@@ -89,14 +90,7 @@ const int kDistanceFromPinKeyboardToBigUserViewBottomDp = 50;
 // Distance from the top of the user view to the user icon.
 constexpr int kDistanceFromTopOfBigUserViewToUserIconDp = 24;
 
-constexpr SkColor kChallengeResponseSmartCardIconColor = gfx::kGoogleGrey200;
-constexpr SkColor kChallengeResponseArrowBackgroundColor =
-    SkColorSetARGB(0x2B, 0xFF, 0xFF, 0xFF);
 constexpr SkColor kChallengeResponseErrorColor = gfx::kGoogleRed300;
-
-// 38% opacity.
-constexpr SkColor kDisabledFingerprintIconColor =
-    SkColorSetA(SK_ColorWHITE, 97);
 
 // Date time format containing only the day of the week, for example: "Tuesday".
 constexpr char kDayOfWeekOnlyTimeFormat[] = "EEEE";
@@ -224,7 +218,8 @@ class FingerprintLabel : public views::Label {
   FingerprintLabel() {
     SetSubpixelRenderingEnabled(false);
     SetAutoColorReadabilityEnabled(false);
-    SetEnabledColor(login_constants::kAuthMethodsTextColor);
+    SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorSecondary));
     SetMultiLine(true);
 
     SetTextBasedOnState(FingerprintState::AVAILABLE_DEFAULT,
@@ -410,7 +405,9 @@ class LoginAuthUserView::FingerprintView : public views::View {
         gfx::Size(kFingerprintIconSizeDp, kFingerprintIconSizeDp),
         0 /*corner_radius*/);
     icon_->SetImage(gfx::CreateVectorIcon(
-        kLockScreenFingerprintIcon, kFingerprintIconSizeDp, SK_ColorWHITE));
+        kLockScreenFingerprintIcon, kFingerprintIconSizeDp,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary)));
     AddChildView(icon_);
 
     label_ = new FingerprintLabel();
@@ -497,11 +494,13 @@ class LoginAuthUserView::FingerprintView : public views::View {
   }
 
   void SetIcon(FingerprintState state) {
+    const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kIconColorPrimary);
     const SkColor color =
-        (state == FingerprintState::AVAILABLE_DEFAULT ||
-                 state == FingerprintState::AVAILABLE_WITH_TOUCH_SENSOR_WARNING
-             ? SK_ColorWHITE
-             : kDisabledFingerprintIconColor);
+        state == FingerprintState::AVAILABLE_DEFAULT ||
+                state == FingerprintState::AVAILABLE_WITH_TOUCH_SENSOR_WARNING
+            ? icon_color
+            : AshColorProvider::Get()->GetDisabledColor(icon_color);
     switch (state) {
       case FingerprintState::UNAVAILABLE:
       case FingerprintState::AVAILABLE_DEFAULT:
@@ -540,8 +539,7 @@ class LoginAuthUserView::FingerprintView : public views::View {
 };
 
 // Consists of challenge-response icon view and a label.
-class LoginAuthUserView::ChallengeResponseView : public views::View,
-                                                 public views::ButtonListener {
+class LoginAuthUserView::ChallengeResponseView : public views::View {
  public:
   enum class State { kInitial, kAuthenticating, kFailure };
 
@@ -555,11 +553,12 @@ class LoginAuthUserView::ChallengeResponseView : public views::View,
     layout->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kCenter);
     auto arrow_button_view = std::make_unique<ArrowButtonView>(
-        /*listener=*/this, kChallengeResponseArrowSizeDp);
+        base::BindRepeating(&ChallengeResponseView::ArrowButtonPressed,
+                            base::Unretained(this)),
+        kChallengeResponseArrowSizeDp);
     arrow_button_view->SetInstallFocusRingOnFocus(true);
     views::InstallCircleHighlightPathGenerator(arrow_button_view.get());
     arrow_button_ = AddChildView(std::move(arrow_button_view));
-    arrow_button_->SetBackgroundColor(kChallengeResponseArrowBackgroundColor);
     arrow_button_->SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_ASH_LOGIN_START_SMART_CARD_AUTH_BUTTON_ACCESSIBLE_NAME));
 
@@ -579,7 +578,8 @@ class LoginAuthUserView::ChallengeResponseView : public views::View,
         GetTextForLabel(), views::style::CONTEXT_LABEL,
         views::style::STYLE_PRIMARY));
     label_->SetAutoColorReadabilityEnabled(false);
-    label_->SetEnabledColor(login_constants::kAuthMethodsTextColor);
+    label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorSecondary));
     label_->SetSubpixelRenderingEnabled(false);
     label_->SetFontList(views::Label::GetDefaultFontList().Derive(
         /*size_delta=*/1, gfx::Font::FontStyle::ITALIC,
@@ -587,17 +587,6 @@ class LoginAuthUserView::ChallengeResponseView : public views::View,
   }
 
   ~ChallengeResponseView() override = default;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    if (sender == arrow_button_) {
-      // Ignore further clicks while handling the previous one.
-      if (state_ != State::kAuthenticating)
-        on_start_tap_.Run();
-    } else {
-      NOTREACHED();
-    }
-  }
 
   void SetState(State state) {
     if (state_ == state)
@@ -634,9 +623,10 @@ class LoginAuthUserView::ChallengeResponseView : public views::View,
     switch (state_) {
       case State::kInitial:
       case State::kAuthenticating:
-        return gfx::CreateVectorIcon(kLockScreenSmartCardIcon,
-                                     kChallengeResponseIconSizeDp,
-                                     kChallengeResponseSmartCardIconColor);
+        return gfx::CreateVectorIcon(
+            kLockScreenSmartCardIcon, kChallengeResponseIconSizeDp,
+            AshColorProvider::Get()->GetContentLayerColor(
+                AshColorProvider::ContentLayerType::kIconColorPrimary));
       case State::kFailure:
         return gfx::CreateVectorIcon(kLockScreenSmartCardFailureIcon,
                                      kChallengeResponseIconSizeDp,
@@ -654,6 +644,12 @@ class LoginAuthUserView::ChallengeResponseView : public views::View,
         return l10n_util::GetStringUTF16(
             IDS_ASH_LOGIN_SMART_CARD_SIGN_IN_FAILURE_MESSAGE);
     }
+  }
+
+  void ArrowButtonPressed() {
+    // Ignore further clicks while handling the previous one.
+    if (state_ != State::kAuthenticating)
+      on_start_tap_.Run();
   }
 
   base::RepeatingClosure on_start_tap_;
@@ -707,16 +703,18 @@ class LoginAuthUserView::DisabledAuthMessageView : public views::View {
       message_icon_ = new views::ImageView();
       message_icon_->SetPreferredSize(gfx::Size(
           kDisabledAuthMessageIconSizeDp, kDisabledAuthMessageIconSizeDp));
-      message_icon_->SetImage(
-          gfx::CreateVectorIcon(kLockScreenTimeLimitMoonIcon,
-                                kDisabledAuthMessageIconSizeDp, SK_ColorWHITE));
+      message_icon_->SetImage(gfx::CreateVectorIcon(
+          kLockScreenTimeLimitMoonIcon, kDisabledAuthMessageIconSizeDp,
+          AshColorProvider::Get()->GetContentLayerColor(
+              AshColorProvider::ContentLayerType::kIconColorPrimary)));
       AddChildView(message_icon_);
     }
 
     auto decorate_label = [](views::Label* label) {
       label->SetSubpixelRenderingEnabled(false);
       label->SetAutoColorReadabilityEnabled(false);
-      label->SetEnabledColor(SK_ColorWHITE);
+      label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kTextColorPrimary));
       label->SetFocusBehavior(FocusBehavior::ALWAYS);
     };
     message_title_ =
@@ -772,7 +770,9 @@ class LoginAuthUserView::DisabledAuthMessageView : public views::View {
         auth_disabled_data.reason, auth_disabled_data.auth_reenabled_time,
         auth_disabled_data.device_used_time, use_24hour_clock);
     message_icon_->SetImage(gfx::CreateVectorIcon(
-        *message.icon, kDisabledAuthMessageIconSizeDp, SK_ColorWHITE));
+        *message.icon, kDisabledAuthMessageIconSizeDp,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary)));
     message_title_->SetText(message.title);
     message_contents_->SetText(message.content);
     Layout();
@@ -821,8 +821,10 @@ class LoginAuthUserView::LockedTpmMessageView : public views::View {
     auto message_icon = std::make_unique<views::ImageView>();
     message_icon->SetPreferredSize(
         gfx::Size(kLockedTpmMessageIconSizeDp, kLockedTpmMessageIconSizeDp));
-    message_icon->SetImage(
-        gfx::CreateVectorIcon(kLockScreenAlertIcon, SK_ColorWHITE));
+    message_icon->SetImage(gfx::CreateVectorIcon(
+        kLockScreenAlertIcon,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary)));
     message_icon_ = AddChildView(std::move(message_icon));
 
     message_warning_ = CreateLabel();
@@ -879,7 +881,8 @@ class LoginAuthUserView::LockedTpmMessageView : public views::View {
                                               gfx::Font::Weight::NORMAL));
     label->SetSubpixelRenderingEnabled(false);
     label->SetAutoColorReadabilityEnabled(false);
-    label->SetEnabledColor(SK_ColorWHITE);
+    label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary));
     label->SetFocusBehavior(FocusBehavior::ALWAYS);
     label->SetMultiLine(true);
     return AddChildView(std::move(label));
@@ -996,7 +999,6 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
   DCHECK(callbacks.on_remove_warning_shown);
   DCHECK(callbacks.on_remove);
   DCHECK(callbacks.on_easy_unlock_icon_hovered);
-  DCHECK(callbacks.on_easy_unlock_icon_tapped);
   DCHECK_NE(user.basic_user_info.type, user_manager::USER_TYPE_PUBLIC_ACCOUNT);
 
   // Build child views.
@@ -1023,7 +1025,7 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
       callbacks.on_easy_unlock_icon_hovered,
       callbacks.on_easy_unlock_icon_tapped);
 
-  auto pin_input_view = std::make_unique<LoginPinInputView>();
+  auto pin_input_view = std::make_unique<LoginPinInputView>(palette);
   pin_input_view_ = pin_input_view.get();
   pin_input_view->Init(base::BindRepeating(&LoginAuthUserView::OnAuthSubmit,
                                            base::Unretained(this)),
@@ -1036,8 +1038,9 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
       gfx::Insets(kPinPasswordToggleButtonPaddingTop, 0, 0, 0)));
   pin_password_toggle_ =
       toggle_container->AddChildView(std::make_unique<SystemLabelButton>(
-          this, GetPinPasswordToggleText(),
-          SystemLabelButton::DisplayType::DEFAULT,
+          base::BindRepeating(&LoginAuthUserView::OnSwitchButtonClicked,
+                              base::Unretained(this)),
+          GetPinPasswordToggleText(), SystemLabelButton::DisplayType::DEFAULT,
           /*multiline*/ false));
   pin_password_toggle_->SetMaxSize(
       gfx::Size(/*ignored*/ 0, kPinPasswordToggleButtonHeight));
@@ -1067,15 +1070,20 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
     button_message =
         l10n_util::GetStringUTF16(IDS_ASH_LOCK_SCREEN_VERIFY_ACCOUNT_MESSAGE);
   }
-  auto online_sign_in_message = std::make_unique<SystemLabelButton>(
-      this, button_message, SystemLabelButton::DisplayType::ALERT_WITH_ICON,
+  bool is_login_secondary =
+      Shell::Get()->session_controller()->GetSessionState() ==
+      session_manager::SessionState::LOGIN_SECONDARY;
+  auto online_sign_in_button = std::make_unique<SystemLabelButton>(
+      base::BindRepeating(&LoginAuthUserView::OnOnlineSignInMessageTap,
+                          base::Unretained(this)),
+      button_message, SystemLabelButton::DisplayType::ALERT_WITH_ICON,
       /*multiline*/ false);
-  online_sign_in_message_ = online_sign_in_message.get();
+  // Disable online sign-in on secondary login screen as there is no OOBE there.
+  online_sign_in_button->SetEnabled(!is_login_secondary);
+  online_sign_in_message_ = online_sign_in_button.get();
 
   bool shown_because_of_multiprofile_policy =
-      !user.is_multiprofile_allowed &&
-      Shell::Get()->session_controller()->GetSessionState() ==
-          session_manager::SessionState::LOGIN_SECONDARY;
+      !user.is_multiprofile_allowed && is_login_secondary;
   auto disabled_auth_message = std::make_unique<DisabledAuthMessageView>(
       shown_because_of_multiprofile_policy, user.multiprofile_policy);
   disabled_auth_message_ = disabled_auth_message.get();
@@ -1099,7 +1107,7 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
       login_views_utils::WrapViewForPreferredSize(std::move(password_view));
   auto wrapped_online_sign_in_message_view =
       login_views_utils::WrapViewForPreferredSize(
-          std::move(online_sign_in_message));
+          std::move(online_sign_in_button));
   auto wrapped_disabled_auth_message_view =
       login_views_utils::WrapViewForPreferredSize(
           std::move(disabled_auth_message));
@@ -1225,6 +1233,8 @@ void LoginAuthUserView::SetAuthMethods(
   password_view_->layer()->SetOpacity(current_state.has_password ? 1 : 0);
 
   pin_input_view_->UpdateLength(auth_metadata_.autosubmit_pin_length);
+  pin_input_view_->SetAuthenticateWithEmptyPinOnReturnKey(
+      HasAuthMethod(AUTH_TAP));
   pin_input_view_->SetVisible(current_state.has_pin_input);
 
   pin_password_toggle_->SetVisible(current_state.has_toggle);
@@ -1504,16 +1514,6 @@ void LoginAuthUserView::RequestFocus() {
     pin_input_view_->RequestFocus();
   else
     password_view_->RequestFocus();
-}
-
-void LoginAuthUserView::ButtonPressed(views::Button* sender,
-                                      const ui::Event& event) {
-  DCHECK(sender == online_sign_in_message_ || sender == pin_password_toggle_);
-  if (sender == online_sign_in_message_) {
-    OnOnlineSignInMessageTap();
-  } else if (sender == pin_password_toggle_) {
-    OnSwitchButtonClicked();
-  }
 }
 
 void LoginAuthUserView::OnAuthSubmit(const base::string16& password) {

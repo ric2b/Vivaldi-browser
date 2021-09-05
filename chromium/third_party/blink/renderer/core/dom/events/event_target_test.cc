@@ -21,7 +21,7 @@ TEST_F(EventTargetTest, UseCountPassiveTouchEventListener) {
   ClassicScript::CreateUnspecifiedScript(
       ScriptSourceCode("window.addEventListener('touchstart', function() {}, "
                        "{passive: true});"))
-      ->RunScript(GetDocument().GetFrame());
+      ->RunScript(GetDocument().domWindow());
   EXPECT_TRUE(
       GetDocument().IsUseCounted(WebFeature::kPassiveTouchEventListener));
   EXPECT_FALSE(
@@ -35,7 +35,7 @@ TEST_F(EventTargetTest, UseCountNonPassiveTouchEventListener) {
   ClassicScript::CreateUnspecifiedScript(
       ScriptSourceCode("window.addEventListener('touchstart', function() {}, "
                        "{passive: false});"))
-      ->RunScript(GetDocument().GetFrame());
+      ->RunScript(GetDocument().domWindow());
   EXPECT_TRUE(
       GetDocument().IsUseCounted(WebFeature::kNonPassiveTouchEventListener));
   EXPECT_FALSE(
@@ -48,7 +48,7 @@ TEST_F(EventTargetTest, UseCountPassiveTouchEventListenerPassiveNotSpecified) {
   GetDocument().GetSettings()->SetScriptEnabled(true);
   ClassicScript::CreateUnspecifiedScript(
       ScriptSourceCode("window.addEventListener('touchstart', function() {});"))
-      ->RunScript(GetDocument().GetFrame());
+      ->RunScript(GetDocument().domWindow());
   EXPECT_TRUE(
       GetDocument().IsUseCounted(WebFeature::kPassiveTouchEventListener));
   EXPECT_FALSE(
@@ -64,9 +64,24 @@ TEST_F(EventTargetTest, UseCountBeforematch) {
                        document.body.appendChild(element);
                        element.addEventListener('beforematch', () => {});
                       )HTML"))
-      ->RunScript(GetDocument().GetFrame());
+      ->RunScript(GetDocument().domWindow());
   EXPECT_TRUE(
       GetDocument().IsUseCounted(WebFeature::kBeforematchHandlerRegistered));
+}
+
+TEST_F(EventTargetTest, UseCountAbortSignal) {
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kAddEventListenerWithAbortSignal));
+  GetDocument().GetSettings()->SetScriptEnabled(true);
+  ClassicScript::CreateUnspecifiedScript(ScriptSourceCode(R"HTML(
+                       const element = document.createElement('div');
+                       const ac = new AbortController();
+                       element.addEventListener(
+                         'test', () => {}, {signal: ac.signal});
+                      )HTML"))
+      ->RunScript(GetDocument().domWindow());
+  EXPECT_TRUE(
+      GetDocument().IsUseCounted(WebFeature::kAddEventListenerWithAbortSignal));
 }
 
 }  // namespace blink

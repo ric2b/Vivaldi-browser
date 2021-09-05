@@ -28,12 +28,12 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "chrome/common/extensions/manifest_handlers/linked_app_icons.h"
-#include "chrome/common/web_application_info.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
 #include "extensions/common/constants.h"
@@ -288,7 +288,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   for (const WebApplicationIconInfo& icon_info : web_app.icon_infos) {
     DCHECK(icon_info.url.is_valid());
     // Web apps in Extensions system supports Purpose::ANY icons only.
-    if (icon_info.purpose != blink::Manifest::ImageResource::Purpose::ANY)
+    if (icon_info.purpose != blink::mojom::ManifestImageResource_Purpose::ANY)
       continue;
     std::unique_ptr<base::DictionaryValue> linked_icon(
         new base::DictionaryValue());

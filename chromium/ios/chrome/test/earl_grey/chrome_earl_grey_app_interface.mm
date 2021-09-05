@@ -13,7 +13,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/metrics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
 #include "components/prefs/pref_service.h"
 #import "components/ukm/ios/features.h"
 #include "components/unified_consent/unified_consent_service.h"
@@ -27,6 +27,7 @@
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/settings/autofill/features.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/menu_util.h"
@@ -99,15 +100,18 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
       @"Clearing browser history timed out");
 }
 
-+ (NSInteger)getBrowsingHistoryEntryCount {
-  NSError* error = nil;
-  NSInteger count = chrome_test_util::GetBrowsingHistoryEntryCount(&error);
++ (NSInteger)browsingHistoryEntryCountWithError:
+    (NSError* __autoreleasing*)error {
+  return chrome_test_util::GetBrowsingHistoryEntryCount(error);
+}
 
-  if (error != nil) {
++ (NSInteger)navigationBackListItemsCount {
+  web::WebState* webState = chrome_test_util::GetCurrentWebState();
+
+  if (!webState)
     return -1;
-  }
 
-  return count;
+  return webState->GetNavigationManager()->GetBackwardItems().size();
 }
 
 + (NSError*)removeBrowsingCache {
@@ -834,6 +838,10 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 
 + (BOOL)areMultipleWindowsSupported {
   return IsMultipleScenesSupported();
+}
+
++ (BOOL)isCloseAllTabsConfirmationEnabled {
+  return IsCloseAllTabsConfirmationEnabled();
 }
 
 #pragma mark - ScopedBlockPopupsPref

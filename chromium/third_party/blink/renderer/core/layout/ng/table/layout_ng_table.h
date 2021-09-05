@@ -9,10 +9,27 @@
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_mixin.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_interface.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_layout_algorithm_types.h"
 
 namespace blink {
 
 class NGTableBorders;
+
+// Invalidation: LayoutNGTable differences from block invalidation:
+//
+// Cached collapsed borders:
+// Table caches collapsed borders as NGTableBorders.
+// NGTableBorders are stored on Table fragment for painting.
+// If NGTableBorders change, table fragment must be regenerated.
+// Any table part that contributes to collapsed borders must invalidate
+// cached borders on border change by calling GridBordersChanged.
+//
+// Cached column constraints:
+// Column constraints are used in layout. They must be regenerated
+// whenever table geometry changes.
+// The validation state is a IsTableColumnsConstraintsDirty flag
+// on LayoutObject. They are invalidated inside
+// LayoutObject::SetNeeds*Layout.
 
 class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
                                   public LayoutNGTableInterface {
@@ -21,6 +38,7 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
   // TODO(atotic) Replace all H/VBorderSpacing with BorderSpacing?
   LogicalSize BorderSpacing() const {
+    NOT_DESTROYED();
     if (ShouldCollapseBorders())
       return LogicalSize();
     return LogicalSize(LayoutUnit(HBorderSpacing()),
@@ -30,10 +48,16 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
   wtf_size_t ColumnCount() const;
 
   const NGTableBorders* GetCachedTableBorders() const {
+    NOT_DESTROYED();
     return cached_table_borders_.get();
   }
 
-  void SetCachedTableBorders(const NGTableBorders* table_borders);
+  void SetCachedTableBorders(scoped_refptr<const NGTableBorders>);
+
+  const NGTableTypes::Columns* GetCachedTableColumnConstraints();
+
+  void SetCachedTableColumnConstraints(
+      scoped_refptr<const NGTableTypes::Columns>);
 
   // Any borders in table grid have changed.
   void GridBordersChanged();
@@ -44,7 +68,10 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
   // LayoutBlock methods start.
 
-  const char* GetName() const override { return "LayoutNGTable"; }
+  const char* GetName() const override {
+    NOT_DESTROYED();
+    return "LayoutNGTable";
+  }
 
   void UpdateBlockLayout(bool relayout_children) override;
 
@@ -56,20 +83,53 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
   void StyleDidChange(StyleDifference diff,
                       const ComputedStyle* old_style) override;
 
+  LayoutBox* CreateAnonymousBoxWithSameTypeAs(
+      const LayoutObject* parent) const override;
+
+  void Paint(const PaintInfo&) const final;
+
+  LayoutUnit BorderTop() const override;
+
+  LayoutUnit BorderBottom() const override;
+
+  LayoutUnit BorderLeft() const override;
+
+  LayoutUnit BorderRight() const override;
+
+  LayoutRectOutsets BorderBoxOutsets() const override;
+
+  PhysicalRect OverflowClipRect(const PhysicalOffset&,
+                                OverlayScrollbarClipBehavior) const override;
+
+  void AddVisualEffectOverflow() final;
+
+  bool VisualRectRespectsVisibility() const override {
+    NOT_DESTROYED();
+    return false;
+  }
+
   // LayoutBlock methods end.
 
   // LayoutNGTableInterface methods start.
 
   const LayoutNGTableInterface* ToLayoutNGTableInterface() const final {
+    NOT_DESTROYED();
     return this;
   }
 
-  const LayoutObject* ToLayoutObject() const final { return this; }
+  const LayoutObject* ToLayoutObject() const final {
+    NOT_DESTROYED();
+    return this;
+  }
 
   // Non-const version required by TextAutosizer, AXLayoutObject.
-  LayoutObject* ToMutableLayoutObject() final { return this; }
+  LayoutObject* ToMutableLayoutObject() final {
+    NOT_DESTROYED();
+    return this;
+  }
 
   bool ShouldCollapseBorders() const final {
+    NOT_DESTROYED();
     return StyleRef().BorderCollapse() == EBorderCollapse::kCollapse;
   }
 
@@ -85,13 +145,16 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
   }
 
   bool IsFixedTableLayout() const final {
+    NOT_DESTROYED();
     return StyleRef().TableLayout() == ETableLayout::kFixed &&
            !StyleRef().LogicalWidth().IsAuto();
   }
   int16_t HBorderSpacing() const final {
+    NOT_DESTROYED();
     return ShouldCollapseBorders() ? 0 : StyleRef().HorizontalBorderSpacing();
   }
   int16_t VBorderSpacing() const final {
+    NOT_DESTROYED();
     return ShouldCollapseBorders() ? 0 : StyleRef().VerticalBorderSpacing();
   }
 
@@ -100,14 +163,15 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
   // Because NG does not compress columns, absolute and effective are the same.
   unsigned AbsoluteColumnToEffectiveColumn(
       unsigned absolute_column_index) const final {
+    NOT_DESTROYED();
     return absolute_column_index;
   }
 
   // Legacy caches sections. Might not be needed by NG.
-  void RecalcSectionsIfNeeded() const final {}
+  void RecalcSectionsIfNeeded() const final { NOTIMPLEMENTED(); }
 
   // Legacy caches sections. Might not be needed by NG.
-  void ForceSectionsRecalc() final {}
+  void ForceSectionsRecalc() final { NOTIMPLEMENTED(); }
 
   // Used in paint for printing. Should not be needed by NG.
   LayoutUnit RowOffsetFromRepeatingFooter() const final {
@@ -150,6 +214,7 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
  protected:
   bool IsOfType(LayoutObjectType type) const override {
+    NOT_DESTROYED();
     return type == kLayoutObjectTable ||
            LayoutNGMixin<LayoutBlock>::IsOfType(type);
   }
@@ -159,6 +224,10 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
   // Table borders are cached because computing collapsed borders is expensive.
   scoped_refptr<const NGTableBorders> cached_table_borders_;
+
+  // Table columns do not depend on any outside data (e.g. NGConstraintSpace).
+  // They are cached because computing them is expensive.
+  scoped_refptr<const NGTableTypes::Columns> cached_table_columns_;
 };
 
 // wtf/casting.h helper.

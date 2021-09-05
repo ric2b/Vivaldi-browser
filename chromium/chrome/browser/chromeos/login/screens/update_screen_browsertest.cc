@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -136,8 +136,8 @@ class UpdateScreenTest : public OobeBaseTest {
     tick_clock_.Advance(kTimeAdvanceSeconds60);
 
     error_screen_ = GetOobeUI()->GetErrorScreen();
-    update_screen_ = UpdateScreen::Get(
-        WizardController::default_controller()->screen_manager());
+    update_screen_ =
+        WizardController::default_controller()->GetScreen<UpdateScreen>();
     update_screen_->set_exit_callback_for_testing(base::BindRepeating(
         &UpdateScreenTest::HandleScreenExit, base::Unretained(this)));
     version_updater_ = update_screen_->GetVersionUpdaterForTesting();
@@ -163,7 +163,7 @@ class UpdateScreenTest : public OobeBaseTest {
   NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};
 
   UpdateScreen* update_screen_ = nullptr;
-  // Version updater - owned by |update_screen_|.
+  // Version updater - owned by `update_screen_`.
   VersionUpdater* version_updater_ = nullptr;
   // Error screen - owned by OobeUI.
   ErrorScreen* error_screen_ = nullptr;

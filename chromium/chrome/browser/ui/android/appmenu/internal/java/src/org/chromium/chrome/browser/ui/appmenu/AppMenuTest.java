@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.ui.appmenu;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+
 import android.graphics.Rect;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -27,6 +29,7 @@ import org.mockito.Mockito;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -34,7 +37,6 @@ import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.ui.appmenu.test.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DummyUiActivity;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
@@ -292,7 +294,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertFalse(mMenuObserver.menuHighlighting);
 
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> mAppMenuHandler.setMenuHighlight(R.id.menu_item_one, false));
+                () -> mAppMenuHandler.setMenuHighlight(R.id.menu_item_one));
         mMenuObserver.menuHighlightChangedCallback.waitForCallback(0);
         Assert.assertTrue(mMenuObserver.menuHighlighting);
 
@@ -315,7 +317,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertFalse(mMenuObserver.menuHighlighting);
 
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> mAppMenuHandler.setMenuHighlight(R.id.icon_one, false));
+                () -> mAppMenuHandler.setMenuHighlight(R.id.icon_one));
         mMenuObserver.menuHighlightChangedCallback.waitForCallback(0);
         Assert.assertTrue(mMenuObserver.menuHighlighting);
 
@@ -758,6 +760,30 @@ public class AppMenuTest extends DummyUiActivityTestCase {
                 1 /* groupDividerResourceId */, 6 /* availableScreenSpace */);
         // The space is not enough for any item, but we still show 1 and half items at least.
         Assert.assertEquals(15, height);
+    }
+
+    @Test
+    @SmallTest
+    public void testRecordSelectedMenuItem() throws TimeoutException {
+        showMenuAndAssert();
+        AppMenu appMenu = mAppMenuHandler.getAppMenu();
+        AppMenuHandlerImpl spiedHandler = Mockito.spy(mAppMenuHandler);
+        appMenu.mHandler = spiedHandler;
+
+        appMenu.recordSelectedMenuItem(R.id.menu_item_one, 1);
+        Mockito.verify(spiedHandler, Mockito.times(0))
+                .recordAppMenuSimilarSelectionIfNeeded(anyInt(), anyInt());
+
+        appMenu.recordSelectedMenuItem(R.id.menu_item_two, 2);
+        Mockito.verify(spiedHandler, Mockito.times(1))
+                .recordAppMenuSimilarSelectionIfNeeded(R.id.menu_item_one, R.id.menu_item_two);
+
+        appMenu.recordSelectedMenuItem(
+                R.id.menu_item_three, AppMenu.RECENT_SELECTED_MENUITEM_EXPIRATION_MS + 3);
+        Mockito.verify(spiedHandler, Mockito.times(0))
+                .recordAppMenuSimilarSelectionIfNeeded(R.id.menu_item_one, R.id.menu_item_three);
+        Mockito.verify(spiedHandler, Mockito.times(0))
+                .recordAppMenuSimilarSelectionIfNeeded(R.id.menu_item_two, R.id.menu_item_three);
     }
 
     private void createMenuItem(

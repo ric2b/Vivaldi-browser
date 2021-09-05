@@ -10,14 +10,12 @@
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -371,26 +369,11 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
 }
 
 // Browser Test for AppListClient that observes search result changes.
-class AppListClientSearchResultsBrowserTest
-    : public extensions::ExtensionBrowserTest {
- public:
-  AppListClientSearchResultsBrowserTest() {
-    // Zero state changes UI behavior. This test case tests the expected UI
-    // behavior with zero state being disabled.
-    // TODO(jennyz): write new test case for zero state, crbug.com/925195.
-    feature_list_.InitAndDisableFeature(
-        app_list_features::kEnableZeroStateSuggestions);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
+using AppListClientSearchResultsBrowserTest = extensions::ExtensionBrowserTest;
 
 // Test showing search results, and uninstalling one of them while displayed.
 IN_PROC_BROWSER_TEST_F(AppListClientSearchResultsBrowserTest,
                        UninstallSearchResult) {
-  ASSERT_FALSE(app_list_features::IsZeroStateSuggestionsEnabled());
-
   base::FilePath test_extension_path;
   ASSERT_TRUE(
       base::PathService::Get(chrome::DIR_TEST_DATA, &test_extension_path));
@@ -441,13 +424,14 @@ IN_PROC_BROWSER_TEST_F(AppListClientSearchResultsBrowserTest,
 
 class AppListClientGuestModeBrowserTest : public InProcessBrowserTest {
  public:
-  AppListClientGuestModeBrowserTest() {}
+  AppListClientGuestModeBrowserTest() = default;
+  AppListClientGuestModeBrowserTest(const AppListClientGuestModeBrowserTest&) =
+      delete;
+  AppListClientGuestModeBrowserTest& operator=(
+      const AppListClientGuestModeBrowserTest&) = delete;
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AppListClientGuestModeBrowserTest);
 };
 
 void AppListClientGuestModeBrowserTest::SetUpCommandLine(
@@ -474,6 +458,8 @@ class AppListAppLaunchTest : public extensions::ExtensionBrowserTest {
   AppListAppLaunchTest() : extensions::ExtensionBrowserTest() {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
   }
+  AppListAppLaunchTest(const AppListAppLaunchTest&) = delete;
+  AppListAppLaunchTest& operator=(const AppListAppLaunchTest&) = delete;
   ~AppListAppLaunchTest() override = default;
 
   // InProcessBrowserTest:
@@ -498,8 +484,6 @@ class AppListAppLaunchTest : public extensions::ExtensionBrowserTest {
 
  private:
   AppListModelUpdater* model_updater_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppListAppLaunchTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AppListAppLaunchTest,

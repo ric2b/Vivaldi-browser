@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Памылка друкавання.</translation>
 <translation id="1125564390852150847">Стварыць новую ўкладку.</translation>
 <translation id="1145536944570833626">Выдаліць існуючыя даныя.</translation>
+<translation id="1147031633655575115">Вы ўвайшлі як <ph name="USER" /></translation>
 <translation id="1154690515305205900">Не ўдалося стварыць спасылку на вылучаны тэкст.</translation>
+<translation id="1157749421655780457">Дазволіць выкарыстанне месцазнаходжання...</translation>
 <translation id="1165039591588034296">Памылка</translation>
 <translation id="1172898394251786223">Наступнае поле</translation>
 <translation id="1176932207622159128">Не ўдалося захаваць відарыс</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Схаваць пароль</translation>
 <translation id="145015347812617860">Элементаў: <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Каб уключыць або выключыць наладу, двойчы дакраніцеся</translation>
+<translation id="1492417797159476138">Вы ўжо захавалі гэта імя карыстальніка для гэтага сайта</translation>
 <translation id="1509486075633541495">Уваход на вэб-сайт</translation>
 <translation id="1509960214886564027">Функцыі на многіх сайтах могуць перастаць працаваць</translation>
 <translation id="152234381334907219">Ніколі не захоўваліся</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">Назад</translation>
 <translation id="3892144330757387737">Ваша гісторыя знаходзіцца тут</translation>
 <translation id="3897092660631435901">Меню</translation>
+<translation id="3913386780052199712">Уваход у Chrome выкананы</translation>
 <translation id="3915450441834151894">Звесткі пра сайт</translation>
 <translation id="3922310737605261887">Шукаць скапіраваны тэкст</translation>
 <translation id="3928666092801078803">Аб'яднаць мае даныя</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">Новая ўкладка інкогніта</translation>
 <translation id="4758977202923349869">Змясціце крэдытную картку ў гэтай рамцы</translation>
 <translation id="4775879719735953715">Стандартны браўзер</translation>
+<translation id="4778644898150334464">Выкарыстаць іншы пароль</translation>
 <translation id="4802417911091824046">Шыфраванне фразы-пароля не распаўсюджваецца на спосабы аплаты і адрасы з Google Pay.
 
 Каб змяніць гэту наладу, <ph name="BEGIN_LINK" />скіньце налады сінхранізацыі<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Усталяваць Google Дыск</translation>
 <translation id="5083464117946352670">Не ўдалося вызначыць памер файла.</translation>
+<translation id="5090832849094901128">Пры выдаленні гэтага пароля ўліковы запіс на сайце <ph name="WEBSITE" /> не выдаліцца.</translation>
 <translation id="5094827893301452931">Твіт апублікаваны.</translation>
 <translation id="5118764316110575523">Выключана</translation>
 <translation id="5127805178023152808">Сінхранізацыя выключана</translation>
@@ -511,6 +517,9 @@
 <translation id="6476800141292307438">Старонка перакладаецца на мову "<ph name="LANGUAGE" />". Параметры знаходзяцца ў ніжняй частцы экрана.</translation>
 <translation id="648164694371393720">Памылка аўтэнтыфікацыі</translation>
 <translation id="6482629121755362506">Выдалена элементаў: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
+<translation id="6497772452874122664">Калі вы давяраеце сайту <ph name="TIME" />, можаце выкарыстаць захаваны пароль з іншага сайта.
+
+Паспрабуйце выкарыстоўваць унікальны пароль для кожнага сайта.</translation>
 <translation id="651505212789431520">Скасаваць сінхранізацыю? Сінхранізацыю можна ўключыць у любы момант у Наладах.</translation>
 <translation id="6561262006871132942">Павялічыць</translation>
 <translation id="6585618849026997638">Каб мець магчымасць вярнуцца да важнай для вас старонкі пазней, можна дадаць закладку</translation>
@@ -590,6 +599,7 @@
 <translation id="739941347996872055">Папярэдняя ўкладка</translation>
 <translation id="7400418766976504921">URL-адрас</translation>
 <translation id="7409985198648820906">Непрачытаных артыкулаў: <ph name="UNREAD_COUNT" />.</translation>
+<translation id="7412027924265291969">Працягнуць</translation>
 <translation id="7425346204213733349">Змены ў закладках, гісторыі, паролях і іншых наладах больш не будуць сінхранізавацца з Уліковым запісам Google. Але існуючыя даныя застануцца ва Уліковым запісе Google.</translation>
 <translation id="7435356471928173109">Выключаны адміністратарам</translation>
 <translation id="7454057999980797137">Штат/акруга</translation>
@@ -600,6 +610,7 @@
 <translation id="7472734401283673885">Назва кампаніі</translation>
 <translation id="7473891865547856676">Не, дзякуй</translation>
 <translation id="7481312909269577407">Далей</translation>
+<translation id="7483467499335917849">Выкарыстанне вашага бягучага месцазнаходжання</translation>
 <translation id="750493650310597496">Выбрана: 0</translation>
 <translation id="7514365320538308">Спампаваць</translation>
 <translation id="7537586195939242955">Зараз усталяваць пароль у Passbook не ўдалося.</translation>
@@ -733,6 +744,7 @@
 <translation id="9094033019050270033">Абнавіць пароль</translation>
 <translation id="9100610230175265781">Патрабуецца фраза-пароль</translation>
 <translation id="9107664647686727385">Праверка наяўнасці раскрытых пароляў</translation>
+<translation id="9137526406337347448">Сэрвісы Google</translation>
 <translation id="9148126808321036104">Увайсці зноў</translation>
 <translation id="9152539721251340337">Стварыць QR-код</translation>
 <translation id="9157836665414082580">Не паказваць дыялогі</translation>

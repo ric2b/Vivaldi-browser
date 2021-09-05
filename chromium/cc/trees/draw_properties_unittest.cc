@@ -12,7 +12,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
@@ -8123,12 +8122,12 @@ TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
   UpdateMainDrawProperties();
   CommitAndActivate();
 
-  EXPECT_FALSE(
-      GetRenderSurfaceImpl(child_1)->rounded_corner_bounds().IsEmpty());
-  EXPECT_FALSE(
-      GetRenderSurfaceImpl(child_2)->rounded_corner_bounds().IsEmpty());
-  EXPECT_FALSE(
-      GetRenderSurfaceImpl(child_3)->rounded_corner_bounds().IsEmpty());
+  EXPECT_TRUE(
+      GetRenderSurfaceImpl(child_1)->mask_filter_info().HasRoundedCorners());
+  EXPECT_TRUE(
+      GetRenderSurfaceImpl(child_2)->mask_filter_info().HasRoundedCorners());
+  EXPECT_TRUE(
+      GetRenderSurfaceImpl(child_3)->mask_filter_info().HasRoundedCorners());
 }
 
 }  // namespace

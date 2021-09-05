@@ -131,13 +131,6 @@ const PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"translationServiceEnabled", prefs::kOfferTranslateEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
-    // webRTCMultipleRoutesEnabled and webRTCNonProxiedUdpEnabled have been
-    // replaced by webRTCIPHandlingPolicy. Leaving it for backward
-    // compatibility. TODO(guoweis): Remove this in M50.
-    {"webRTCMultipleRoutesEnabled", prefs::kWebRTCMultipleRoutesEnabled,
-     APIPermission::kPrivacy, APIPermission::kPrivacy},
-    {"webRTCNonProxiedUdpEnabled", prefs::kWebRTCNonProxiedUdpEnabled,
-     APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"webRTCIPHandlingPolicy", prefs::kWebRTCIPHandlingPolicy,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"webRTCUDPPortRange", prefs::kWebRTCUDPPortRange, APIPermission::kPrivacy,
@@ -718,7 +711,8 @@ ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
                        ep->HasIncognitoPrefValue(browser_pref));
   }
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 SetPreferenceFunction::~SetPreferenceFunction() = default;

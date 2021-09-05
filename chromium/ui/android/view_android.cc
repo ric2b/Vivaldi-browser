@@ -114,6 +114,32 @@ float ViewAndroid::GetDipScale() {
   return ui::GetScaleFactorForNativeView(this);
 }
 
+base::Optional<gfx::Rect> ViewAndroid::GetDisplayFeature() {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return base::nullopt;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jintArray> jni_display_feature =
+      Java_ViewAndroidDelegate_getDisplayFeature(env, delegate);
+  std::vector<int> display_feature_values;
+  if (jni_display_feature.obj()) {
+    // In order to reduce jni overhead, the DisplayFeature is returned in
+    // an integer array. This array must have 4 items in it (or the return
+    // value should be null).
+    base::android::JavaIntArrayToIntVector(env, jni_display_feature,
+                                           &display_feature_values);
+    CHECK(display_feature_values.size() == 4);
+    gfx::Rect display_feature;
+    display_feature.SetByBounds(
+        display_feature_values[0], display_feature_values[1],
+        display_feature_values[2], display_feature_values[3]);
+    return display_feature;
+  }
+
+  return base::nullopt;
+}
+
 ScopedJavaLocalRef<jobject> ViewAndroid::GetEventForwarder() {
   if (!event_forwarder_) {
     DCHECK(!RootPathHasEventForwarder(parent_))
@@ -407,7 +433,7 @@ void ViewAndroid::OnCursorChanged(const Cursor& cursor) {
           env, delegate, static_cast<int>(mojom::CursorType::kPointer));
       return;
     }
-    ScopedJavaLocalRef<jobject> java_bitmap = gfx::ConvertToJavaBitmap(&bitmap);
+    ScopedJavaLocalRef<jobject> java_bitmap = gfx::ConvertToJavaBitmap(bitmap);
     Java_ViewAndroidDelegate_onCursorChangedToCustom(env, delegate, java_bitmap,
                                                      hotspot.x(), hotspot.y());
   } else {
@@ -657,6 +683,16 @@ bool ViewAndroid::ScrollTo(float x, float y) {
       return true;
   }
   return false;
+}
+
+void ViewAndroid::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  if (event_handler_)
+    event_handler_->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
+
+  for (auto* child : children_) {
+    child->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
+  }
 }
 
 template <typename E>

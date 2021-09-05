@@ -13,7 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
@@ -25,7 +25,6 @@
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/browser/web_applications/test/test_file_handler_manager.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
-#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
 #include "chrome/browser/web_applications/test/test_pending_app_manager_impl.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
@@ -37,6 +36,7 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
+#include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/test/test_utils.h"
@@ -46,7 +46,7 @@ namespace web_app {
 
 namespace {
 const char kSettingsAppInternalName[] = "OSSettings";
-const char kDiscoverAppInternalName[] = "Discover";
+const char kCameraAppInternalName[] = "Camera";
 
 GURL AppUrl1() {
   return GURL(content::GetWebUIURL("system-app1"));
@@ -115,7 +115,7 @@ class TestDataRetrieverFactory {
 
     blink::Manifest::ImageResource icon;
     icon.src = GetSystemAppDataForTask(task_index).icon_url;
-    icon.purpose.push_back(blink::Manifest::ImageResource::Purpose::ANY);
+    icon.purpose.push_back(blink::mojom::ManifestImageResource_Purpose::ANY);
     icon.sizes.emplace_back(gfx::Size(icon_size::k256, icon_size::k256));
     manifest->icons.push_back(std::move(icon));
     data_retriever->SetManifest(std::move(manifest),
@@ -168,10 +168,9 @@ class SystemWebAppWaiter {
 
 class SystemWebAppManagerTest : public WebAppTest {
  public:
-  SystemWebAppManagerTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsWithoutExtensions}, {});
-  }
+  SystemWebAppManagerTest() = default;
+  SystemWebAppManagerTest(const SystemWebAppManagerTest&) = delete;
+  SystemWebAppManagerTest& operator=(const SystemWebAppManagerTest&) = delete;
 
   ~SystemWebAppManagerTest() override = default;
 
@@ -194,41 +193,35 @@ class SystemWebAppManagerTest : public WebAppTest {
     install_manager_ = std::make_unique<WebAppInstallManager>(profile());
     test_pending_app_manager_impl_ =
         std::make_unique<TestPendingAppManagerImpl>(profile());
-    test_os_integration_manager_ = std::make_unique<TestOsIntegrationManager>(
-        profile(), /*app_shortcut_manager=*/nullptr,
-        /*file_handler_manager=*/nullptr);
     test_system_web_app_manager_ =
         std::make_unique<TestSystemWebAppManager>(profile());
     test_ui_manager_ = std::make_unique<TestWebAppUiManager>();
 
     install_finalizer().SetSubsystems(&controller().registrar(), &ui_manager(),
-                                      &controller().sync_bridge());
+                                      &controller().sync_bridge(),
+                                      &controller().os_integration_manager());
 
     install_manager().SetUrlLoaderForTesting(
         std::make_unique<TestWebAppUrlLoader>());
     install_manager().SetSubsystems(&controller().registrar(),
-                                    &os_integration_manager(),
+                                    &controller().os_integration_manager(),
                                     &install_finalizer());
 
     auto url_loader = std::make_unique<TestWebAppUrlLoader>();
     url_loader_ = url_loader.get();
     pending_app_manager().SetUrlLoaderForTesting(std::move(url_loader));
     pending_app_manager().SetSubsystems(
-        &controller().registrar(), &os_integration_manager(), &ui_manager(),
-        &install_finalizer(), &install_manager());
+        &controller().registrar(), &controller().os_integration_manager(),
+        &ui_manager(), &install_finalizer(), &install_manager());
 
     system_web_app_manager().SetSubsystems(
         &pending_app_manager(), &controller().registrar(),
-        &controller().sync_bridge(), &ui_manager(), &os_integration_manager());
+        &controller().sync_bridge(), &ui_manager(),
+        &controller().os_integration_manager());
 
     install_manager().Start();
     install_finalizer().Start();
 
-    // TODO(https://crbug.com/1108611) we should use a single
-    // TestOsIntegrationManager
-    WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .SuppressOsHooksForTesting();
   }
 
   void TearDown() override {
@@ -240,7 +233,6 @@ class SystemWebAppManagerTest : public WebAppTest {
     // The reverse order of creation:
     test_ui_manager_.reset();
     test_system_web_app_manager_.reset();
-    test_os_integration_manager_.reset();
     test_pending_app_manager_impl_.reset();
     install_manager_.reset();
     install_finalizer_.reset();
@@ -278,10 +270,6 @@ class SystemWebAppManagerTest : public WebAppTest {
   }
 
   TestWebAppUiManager& ui_manager() { return *test_ui_manager_; }
-
-  TestOsIntegrationManager& os_integration_manager() {
-    return *test_os_integration_manager_;
-  }
 
   TestWebAppUrlLoader& url_loader() { return *url_loader_; }
 
@@ -363,7 +351,6 @@ class SystemWebAppManagerTest : public WebAppTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<TestWebAppRegistryController> test_registry_controller_;
   std::unique_ptr<ExternallyInstalledWebAppPrefs>
       externally_installed_app_prefs_;
@@ -374,11 +361,9 @@ class SystemWebAppManagerTest : public WebAppTest {
   std::unique_ptr<TestPendingAppManagerImpl> test_pending_app_manager_impl_;
   std::unique_ptr<TestSystemWebAppManager> test_system_web_app_manager_;
   std::unique_ptr<TestWebAppUiManager> test_ui_manager_;
-  std::unique_ptr<TestOsIntegrationManager> test_os_integration_manager_;
   TestWebAppUrlLoader* url_loader_ = nullptr;
   std::unique_ptr<TestDataRetrieverFactory> test_data_retriever_factory_;
 
-  DISALLOW_COPY_AND_ASSIGN(SystemWebAppManagerTest);
 };
 
 // Test that System Apps do install with the feature enabled.
@@ -392,8 +377,8 @@ TEST_F(SystemWebAppManagerTest, Enabled) {
   base::flat_map<SystemAppType, SystemAppInfo> system_apps;
   system_apps.emplace(SystemAppType::SETTINGS,
                       SystemAppInfo(kSettingsAppInternalName, AppUrl1()));
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
 
   system_web_app_manager().SetSystemAppsForTesting(std::move(system_apps));
   StartAndWaitForAppsToSynchronize();
@@ -414,8 +399,8 @@ TEST_F(SystemWebAppManagerTest, InstallFromWebAppInfo) {
       SystemAppType::SETTINGS,
       SystemAppInfo(kSettingsAppInternalName, AppUrl1(),
                     base::BindRepeating(&GetApp1WebApplicationInfo)));
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
 
   system_web_app_manager().SetSystemAppsForTesting(std::move(system_apps));
   StartAndWaitForAppsToSynchronize();
@@ -479,8 +464,8 @@ TEST_F(SystemWebAppManagerTest, AlwaysUpdate) {
   PrepareSystemAppDataToRetrieve(
       {{AppUrl1(), AppIconUrl1()}, {AppUrl2(), AppIconUrl2()}});
   PrepareLoadUrlResults({AppUrl1(), AppUrl2()});
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
   system_web_app_manager().SetSystemAppsForTesting(system_apps);
 
   // This one returns because on_apps_synchronized runs immediately.
@@ -517,8 +502,8 @@ TEST_F(SystemWebAppManagerTest, UpdateOnVersionChange) {
   // force reinstall.
   PrepareSystemAppDataToRetrieve({{AppUrl2(), AppIconUrl2()}});
   PrepareLoadUrlResults({AppUrl2()});
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
   system_web_app_manager().SetSystemAppsForTesting(system_apps);
   StartAndWaitForAppsToSynchronize();
 
@@ -603,9 +588,9 @@ TEST_F(SystemWebAppManagerTest, InstallResultHistogram) {
   const std::string settings_app_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) + ".Apps." +
       kSettingsAppInternalName;
-  const std::string discover_app_install_result_histogram =
+  const std::string camera_app_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) + ".Apps." +
-      kDiscoverAppInternalName;
+      kCameraAppInternalName;
   // Profile category for Chrome OS testing environment is "Other".
   const std::string profile_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) +
@@ -657,8 +642,8 @@ TEST_F(SystemWebAppManagerTest, InstallResultHistogram) {
     base::flat_map<SystemAppType, SystemAppInfo> system_apps;
     system_apps.emplace(SystemAppType::SETTINGS,
                         SystemAppInfo(kSettingsAppInternalName, AppUrl1()));
-    system_apps.emplace(SystemAppType::DISCOVER,
-                        SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+    system_apps.emplace(SystemAppType::CAMERA,
+                        SystemAppInfo(kCameraAppInternalName, AppUrl2()));
     system_web_app_manager().SetSystemAppsForTesting(system_apps);
 
     StartAndWaitForAppsToSynchronize();
@@ -671,7 +656,7 @@ TEST_F(SystemWebAppManagerTest, InstallResultHistogram) {
     histograms.ExpectTotalCount(settings_app_install_result_histogram, 2);
     histograms.ExpectBucketCount(settings_app_install_result_histogram,
                                  InstallResultCode::kWebAppDisabled, 1);
-    histograms.ExpectBucketCount(discover_app_install_result_histogram,
+    histograms.ExpectBucketCount(camera_app_install_result_histogram,
                                  InstallResultCode::kWebAppDisabled, 1);
   }
 
@@ -722,9 +707,9 @@ TEST_F(SystemWebAppManagerTest,
   const std::string settings_app_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) + ".Apps." +
       kSettingsAppInternalName;
-  const std::string discover_app_install_result_histogram =
+  const std::string camera_app_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) + ".Apps." +
-      kDiscoverAppInternalName;
+      kCameraAppInternalName;
   // Profile category for Chrome OS testing environment is "Other".
   const std::string profile_install_result_histogram =
       std::string(SystemWebAppManager::kInstallResultHistogramName) +
@@ -734,8 +719,8 @@ TEST_F(SystemWebAppManagerTest,
   base::flat_map<SystemAppType, SystemAppInfo> system_apps;
   system_apps.emplace(SystemAppType::SETTINGS,
                       SystemAppInfo(kSettingsAppInternalName, AppUrl1()));
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
   system_web_app_manager().SetSystemAppsForTesting(system_apps);
 
   pending_app_manager().SetHandleInstallRequestCallback(
@@ -751,7 +736,7 @@ TEST_F(SystemWebAppManagerTest,
   histograms.ExpectTotalCount(SystemWebAppManager::kInstallResultHistogramName,
                               1);
   histograms.ExpectTotalCount(settings_app_install_result_histogram, 0);
-  histograms.ExpectTotalCount(discover_app_install_result_histogram, 1);
+  histograms.ExpectTotalCount(camera_app_install_result_histogram, 1);
   histograms.ExpectTotalCount(profile_install_result_histogram, 1);
 }
 
@@ -763,8 +748,8 @@ TEST_F(SystemWebAppManagerTest,
   base::flat_map<SystemAppType, SystemAppInfo> system_apps;
   system_apps.emplace(SystemAppType::SETTINGS,
                       SystemAppInfo(kSettingsAppInternalName, AppUrl1()));
-  system_apps.emplace(SystemAppType::DISCOVER,
-                      SystemAppInfo(kDiscoverAppInternalName, AppUrl2()));
+  system_apps.emplace(SystemAppType::CAMERA,
+                      SystemAppInfo(kCameraAppInternalName, AppUrl2()));
   system_web_app_manager().SetSystemAppsForTesting(system_apps);
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);

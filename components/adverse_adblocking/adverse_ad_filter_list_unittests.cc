@@ -21,7 +21,8 @@ class VivaldiSubresourceFilterTest : public SubresourceFilterTestHarness {
   void SetUp() override {
     vivaldi::ForceVivaldiRunning(true);
     SubresourceFilterTestHarness::SetUp();
-    VivaldiSubresourceFilterClient::CreateForWebContents(web_contents());
+    VivaldiSubresourceFilterClient::
+        CreateThrottleManagerWithClientForWebContents(web_contents());
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
   }

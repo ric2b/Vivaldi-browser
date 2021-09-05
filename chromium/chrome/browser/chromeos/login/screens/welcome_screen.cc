@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
@@ -21,10 +21,12 @@
 #include "chrome/browser/chromeos/login/configuration_keys.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
@@ -146,12 +148,6 @@ std::string WelcomeScreen::GetResultString(Result result) {
   }
 }
 
-// static
-WelcomeScreen* WelcomeScreen::Get(ScreenManager* manager) {
-  return static_cast<WelcomeScreen*>(
-      manager->GetScreen(WelcomeView::kScreenId));
-}
-
 WelcomeScreen::WelcomeScreen(WelcomeView* view,
                              const ScreenExitCallback& exit_callback)
     : BaseScreen(WelcomeView::kScreenId, OobeScreenPriority::DEFAULT),
@@ -267,6 +263,26 @@ void WelcomeScreen::SetTimezone(const std::string& timezone_id) {
 
 std::string WelcomeScreen::GetTimezone() const {
   return timezone_;
+}
+
+void WelcomeScreen::SetDeviceRequisition(const std::string& requisition) {
+  std::string initial_requisition =
+      policy::EnrollmentRequisitionManager::GetDeviceRequisition();
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(requisition);
+
+  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
+    // CfM devices default to static timezone.
+    g_browser_process->local_state()->SetInteger(
+        prefs::kResolveDeviceTimezoneByGeolocationMethod,
+        static_cast<int>(chromeos::system::TimeZoneResolverManager::
+                             TimeZoneResolveMethod::DISABLED));
+  }
+
+  // Exit Chrome to force the restart as soon as a new requisition is set.
+  if (initial_requisition !=
+      policy::EnrollmentRequisitionManager::GetDeviceRequisition()) {
+    chrome::AttemptRestart();
+  }
 }
 
 void WelcomeScreen::AddObserver(Observer* observer) {
@@ -397,7 +413,17 @@ bool WelcomeScreen::HandleAccelerator(ash::LoginAcceleratorAction action) {
   } else if (action == ash::LoginAcceleratorAction::kEnableDebugging) {
     OnEnableDebugging();
     return true;
+  } else if (action == ash::LoginAcceleratorAction::kEditDeviceRequisition) {
+    if (view_)
+      view_->ShowEditRequisitionDialog(
+          policy::EnrollmentRequisitionManager::GetDeviceRequisition());
+    return true;
+  } else if (action == ash::LoginAcceleratorAction::kDeviceRequisitionRemora) {
+    if (view_)
+      view_->ShowRemoraRequisitionDialog();
+    return true;
   }
+
   return false;
 }
 

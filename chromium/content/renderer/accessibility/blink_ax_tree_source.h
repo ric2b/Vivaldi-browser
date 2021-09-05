@@ -142,8 +142,6 @@ class CONTENT_EXPORT BlinkAXTreeSource
                                  ui::AXNodeData* dst) const;
   void SerializeNameAndDescriptionAttributes(blink::WebAXObject src,
                                              ui::AXNodeData* dst) const;
-  void SerializeStyleAttributes(blink::WebAXObject src,
-                                ui::AXNodeData* dst) const;
   void SerializeInlineTextBoxAttributes(blink::WebAXObject src,
                                         ui::AXNodeData* dst) const;
   void SerializeMarkerAttributes(blink::WebAXObject src,
@@ -158,8 +156,6 @@ class CONTENT_EXPORT BlinkAXTreeSource
                                        ui::AXNodeData* dst) const;
   void SerializeOtherScreenReaderAttributes(blink::WebAXObject src,
                                             ui::AXNodeData* dst) const;
-  void SerializeEditableTextAttributes(blink::WebAXObject src,
-                                       ui::AXNodeData* dst) const;
   void SerializeElementAttributes(blink::WebAXObject src,
                                   blink::WebElement element,
                                   ui::AXNodeData* dst) const;

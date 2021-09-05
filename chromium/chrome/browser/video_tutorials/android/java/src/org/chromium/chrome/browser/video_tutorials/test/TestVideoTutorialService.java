@@ -11,16 +11,17 @@ import org.chromium.chrome.browser.video_tutorials.Tutorial;
 import org.chromium.chrome.browser.video_tutorials.VideoTutorialService;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /** A video tutorial service implementation for tests. */
 public class TestVideoTutorialService implements VideoTutorialService {
-    public static final Language HINDI = new Language("hi", "Hindi", "Hindi Native");
-    public static final Language TAMIL = new Language("ta", "Tamil", "Tamil Native");
-    public static final Language ENGLISH = new Language("en", "English", "English Native");
+    public static final Language HINDI = new Language("hi", "hindi", "हिंदी");
+    public static final Language TAMIL = new Language("ta", "Tamil", "தமிழ்");
+    public static final Language ENGLISH = new Language("en", "English", "English");
 
     private final List<Tutorial> mTutorials = new ArrayList<>();
-    private final List<Language> mLanguages = new ArrayList<>();
+    private final List<String> mLanguages = new ArrayList<>();
     private String mPreferredLocale;
 
     public TestVideoTutorialService() {
@@ -36,13 +37,24 @@ public class TestVideoTutorialService implements VideoTutorialService {
 
     @Override
     public void getTutorial(int featureType, Callback<Tutorial> callback) {
+        if (featureType == FeatureType.SUMMARY) {
+            Tutorial summary = new Tutorial(FeatureType.SUMMARY, "Videos on how to use chrome",
+                    "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.mp4",
+                    "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                    "https://www.gstatic.com/chrome/video-tutorials/gif/sample_anim.gif",
+                    "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                    "caption url", "share url", 25);
+            callback.onResult(summary);
+            return;
+        }
+
         for (Tutorial tutorial : mTutorials) {
             if (tutorial.featureType == featureType) callback.onResult(tutorial);
         }
     }
 
     @Override
-    public List<Language> getSupportedLanguages() {
+    public List<String> getSupportedLanguages() {
         return mLanguages;
     }
 
@@ -56,7 +68,7 @@ public class TestVideoTutorialService implements VideoTutorialService {
         mPreferredLocale = locale;
     }
 
-    public List<Language> getTestLanguages() {
+    public List<String> getTestLanguages() {
         return mLanguages;
     }
 
@@ -65,22 +77,39 @@ public class TestVideoTutorialService implements VideoTutorialService {
     }
 
     private void initializeTutorialList() {
+        mTutorials.add(new Tutorial(FeatureType.CHROME_INTRO, "Introduction to chrome",
+                "https://www.gstatic.com/chrome/video-tutorials/webm/1_Search_english.mp4",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                "https://www.gstatic.com/chrome/video-tutorials/gif/sample_anim.gif",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                "caption url", "share url", 25));
+
         mTutorials.add(new Tutorial(FeatureType.DOWNLOAD,
                 "How to use Google Chrome's download functionality",
-                "https://storage.googleapis.com/stock-wizard.appspot.com/portrait.jpg",
-                "https://storage.googleapis.com/stock-wizard.appspot.com/portrait.jpg",
+                "https://www.gstatic.com/chrome/video-tutorials/webm/1_Search_english.mp4",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                "https://www.gstatic.com/chrome/video-tutorials/gif/sample_anim.gif",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
                 "caption url", "share url", 35));
 
-        mTutorials.add(
-                new Tutorial(FeatureType.SEARCH, "How to efficiently search with Google Chrome",
-                        "https://storage.googleapis.com/stock-wizard.appspot.com/elephant.jpg ",
-                        "https://storage.googleapis.com/stock-wizard.appspot.com/elephant.jpg",
-                        "caption url", "share url", 35));
+        mTutorials.add(new Tutorial(FeatureType.SEARCH,
+                "How to efficiently search with Google Chrome",
+                "https://www.gstatic.com/chrome/video-tutorials/webm/1_Search_english.mp4",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                "https://www.gstatic.com/chrome/video-tutorials/gif/sample_anim.gif",
+                "https://www.gstatic.com/chrome/video-tutorials/images/1_Search_english.png",
+                "caption url", "share url", 335));
     }
 
     private void initializeLanguages() {
-        mLanguages.add(HINDI);
-        mLanguages.add(TAMIL);
-        mLanguages.add(ENGLISH);
+        mLanguages.add("hi");
+        mLanguages.add("ta");
+        mLanguages.add("en");
+    }
+
+    /** Initialized to a set of test languages. */
+    public void initializeTestLanguages(String[] languages) {
+        mLanguages.clear();
+        mLanguages.addAll(Arrays.asList(languages));
     }
 }

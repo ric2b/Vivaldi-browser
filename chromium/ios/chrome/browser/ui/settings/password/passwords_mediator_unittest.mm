@@ -38,7 +38,7 @@
 
 namespace {
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 using password_manager::CompromisedCredentials;
 using password_manager::CompromiseType;
 using password_manager::TestPasswordStore;
@@ -77,7 +77,7 @@ std::unique_ptr<KeyedService> BuildMockSyncSetupService(
 }
 
 - (void)setPasswordsForms:
-    (std::vector<std::unique_ptr<autofill::PasswordForm>>)form {
+    (std::vector<std::unique_ptr<password_manager::PasswordForm>>)form {
 }
 
 @end
@@ -87,8 +87,6 @@ class PasswordsMediatorTest : public BlockCleanupTest {
  protected:
   void SetUp() override {
     BlockCleanupTest::SetUp();
-    scoped_feature_list_.InitAndEnableFeature(
-        password_manager::features::kPasswordCheck);
 
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(
@@ -134,7 +132,6 @@ class PasswordsMediatorTest : public BlockCleanupTest {
   scoped_refptr<IOSChromePasswordCheckManager> password_check_;
   FakePasswordsConsumer* consumer_;
   PasswordsMediator* mediator_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(PasswordsMediatorTest, ElapsedTimeSinceLastCheck) {

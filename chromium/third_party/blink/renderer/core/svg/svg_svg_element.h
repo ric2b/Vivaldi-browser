@@ -48,10 +48,11 @@ class SVGSVGElement final : public SVGGraphicsElement,
  public:
   explicit SVGSVGElement(Document&);
 
-  float IntrinsicWidth() const;
-  float IntrinsicHeight() const;
+  base::Optional<float> IntrinsicWidth() const;
+  base::Optional<float> IntrinsicHeight() const;
   FloatSize CurrentViewportSize() const;
   FloatRect CurrentViewBoxRect() const;
+  bool HasEmptyViewBox() const;
   const SVGPreserveAspectRatio* CurrentPreserveAspectRatio() const;
 
   float currentScale() const;
@@ -93,15 +94,11 @@ class SVGSVGElement final : public SVGGraphicsElement,
   static SVGTransformTearOff* createSVGTransform();
   static SVGTransformTearOff* createSVGTransformFromMatrix(SVGMatrixTearOff*);
 
-  AffineTransform ViewBoxToViewTransform(float view_width,
-                                         float view_height) const;
+  AffineTransform ViewBoxToViewTransform(const FloatSize& viewport_size) const;
 
   void SetupInitialView(const String& fragment_identifier,
                         Element* anchor_node);
   bool ZoomAndPanEnabled() const;
-
-  bool HasIntrinsicWidth() const;
-  bool HasIntrinsicHeight() const;
 
   SVGAnimatedLength* x() const { return x_.Get(); }
   SVGAnimatedLength* y() const { return y_.Get(); }
@@ -135,6 +132,7 @@ class SVGSVGElement final : public SVGGraphicsElement,
 
   bool SelfHasRelativeLengths() const override;
 
+  bool HasValidViewBox() const;
   bool ShouldSynthesizeViewBox() const;
   void UpdateUserTransform();
 

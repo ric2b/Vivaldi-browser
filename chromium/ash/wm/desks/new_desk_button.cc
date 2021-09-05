@@ -26,7 +26,6 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/highlight_path_generator.h"
-#include "ui/views/style/platform_style.h"
 
 namespace ash {
 
@@ -36,20 +35,18 @@ constexpr int kCornerRadius = 16;
 
 }  // namespace
 
-NewDeskButton::NewDeskButton(views::ButtonListener* listener)
-    : LabelButton(listener,
+NewDeskButton::NewDeskButton()
+    : LabelButton(base::BindRepeating(&NewDeskButton::OnButtonPressed,
+                                      base::Unretained(this)),
                   l10n_util::GetStringUTF16(IDS_ASH_DESKS_NEW_DESK_BUTTON)) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
 
-  AshColorProvider::Get()->DecoratePillButton(
-      this, AshColorProvider::ButtonType::kPillButtonWithIcon,
-      kDesksNewDeskButtonIcon);
-
   SetInkDropMode(InkDropMode::ON);
   SetHasInkDropActionOnClick(true);
   SetFocusPainter(nullptr);
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 
   auto border = std::make_unique<WmHighlightItemBorder>(kCornerRadius);
   border_ptr_ = border.get();
@@ -57,7 +54,6 @@ NewDeskButton::NewDeskButton(views::ButtonListener* listener)
   views::InstallRoundRectHighlightPathGenerator(this, GetInsets(),
                                                 kCornerRadius);
 
-  UpdateButtonState();
   UpdateBorderState();
 }
 
@@ -143,7 +139,7 @@ void NewDeskButton::OnPaintBackground(gfx::Canvas* canvas) {
 std::unique_ptr<views::InkDrop> NewDeskButton::CreateInkDrop() {
   auto ink_drop = CreateDefaultFloodFillInkDropImpl();
   ink_drop->SetShowHighlightOnHover(false);
-  ink_drop->SetShowHighlightOnFocus(!views::PlatformStyle::kPreferFocusRings);
+  ink_drop->SetShowHighlightOnFocus(false);
   return std::move(ink_drop);
 }
 
@@ -168,6 +164,12 @@ std::unique_ptr<views::LabelButtonBorder> NewDeskButton::CreateDefaultBorder()
   std::unique_ptr<views::LabelButtonBorder> border =
       std::make_unique<views::LabelButtonBorder>();
   return border;
+}
+
+void NewDeskButton::OnThemeChanged() {
+  LabelButton::OnThemeChanged();
+  AshColorProvider::Get()->DecoratePillButton(this, &kDesksNewDeskButtonIcon);
+  UpdateButtonState();
 }
 
 views::View* NewDeskButton::GetView() {

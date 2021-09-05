@@ -181,6 +181,17 @@ void NGContainerFragmentBuilder::AddChildInternal(
     return;
   }
 
+  if (child->IsTextControlPlaceholder()) {
+    // ::placeholder should be followed by another block in order to paint
+    // ::placeholder earlier.
+    const wtf_size_t size = children_.size();
+    if (size > 0) {
+      children_.insert(size - 1,
+                       ChildWithOffset(child_offset, std::move(child)));
+      return;
+    }
+  }
+
   children_.emplace_back(child_offset, std::move(child));
 }
 
@@ -282,12 +293,12 @@ void NGContainerFragmentBuilder::
     // the given descendant.
     if (!candidate.inline_container &&
         IsInlineContainerForNode(candidate.node, layout_object_))
-      candidate.inline_container = ToLayoutInline(layout_object_);
+      candidate.inline_container = To<LayoutInline>(layout_object_);
 
     // Ensure that the inline_container is a continuation root.
     if (candidate.inline_container) {
       candidate.inline_container =
-          ToLayoutInline(candidate.inline_container->ContinuationRoot());
+          To<LayoutInline>(candidate.inline_container->ContinuationRoot());
     }
   }
 }

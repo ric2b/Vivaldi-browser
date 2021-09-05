@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Hindi maibahagi ang <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540">Ipinagpalit ang <ph name="FIRST_ITEM_TITLE" /> sa <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Hinanap mo ito dati. Kapag na-delete ang "<ph name="QUERY" />" sa iyong history, permanente itong aalisin sa account mo sa lahat ng iyong device.</translation>
+<translation id="1510238584712386396">Launcher</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuto at }one{# minuto at }other{# na minuto at }}</translation>
 <translation id="1643823602425662293">Notification</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> File</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Hanapin ang “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">History ng clipboard</translation>
 <translation id="364720409959344976">Pumili ng Folder na I-a-upload</translation>
 <translation id="3660179305079774227">Up Arrow</translation>
 <translation id="3670030362669914947">Numero</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktibo ngayong araw}=1{Aktibo 1 araw ang nakalipas}one{Aktibo # araw ang nakalipas}other{Aktibo # na araw ang nakalipas}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 araw at }one{# araw at }other{# na araw at }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Larawan.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{sa loob ng 1 taon}one{sa loob ng # taon}other{sa loob ng # na taon}}</translation>
 <translation id="588258955323874662">Fullscreen</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 segundo na lang ang natitira}one{# segundo na lang ang natitira}other{# na segundo na lang ang natitira}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">pindutin</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 oras na lang ang natitira}one{# oras na lang ang natitira}other{# na oras na lang ang natitira}}</translation>
 <translation id="688711909580084195">Walang Pamagat na Webpage</translation>
+<translation id="6902419395050653510">Content ng HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> (na) PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 taon ang natitira}one{# taon ang natitira}other{# na taon ang natitira}}</translation>
 <translation id="6945221475159498467">Pumili</translation>

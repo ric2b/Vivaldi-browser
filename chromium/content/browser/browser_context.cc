@@ -36,7 +36,6 @@
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browsing_data/browsing_data_remover_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/content_service_delegate_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/media/browser_feature_provider.h"
 #include "content/browser/permissions/permission_controller_impl.h"
@@ -60,7 +59,6 @@
 #include "media/learning/common/media_learning_tasks.h"
 #include "media/learning/impl/learning_session_impl.h"
 #include "media/mojo/services/video_decode_perf_history.h"
-#include "services/content/service.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/database/database_tracker.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -73,19 +71,11 @@ namespace {
 
 class ContentServiceHolder : public base::SupportsUserData::Data {
  public:
-  explicit ContentServiceHolder(BrowserContext* browser_context)
-      : delegate_(browser_context) {
-    delegate_.AddService(&service_);
-  }
+  explicit ContentServiceHolder(BrowserContext* browser_context) {}
 
   ~ContentServiceHolder() override = default;
 
-  content::Service& service() { return service_; }
-
  private:
-  ContentServiceDelegateImpl delegate_;
-  content::Service service_{&delegate_};
-
   DISALLOW_COPY_AND_ASSIGN(ContentServiceHolder);
 };
 
@@ -126,6 +116,10 @@ void ShutdownServiceWorkerContext(StoragePartition* partition) {
       static_cast<ServiceWorkerContextWrapper*>(
           partition->GetServiceWorkerContext());
   wrapper->process_manager()->Shutdown();
+}
+
+void ShutdownSharedWorkerContext(StoragePartition* partition) {
+  partition->GetSharedWorkerService()->Shutdown();
 }
 
 void SetDownloadManager(
@@ -378,15 +372,16 @@ void BrowserContext::NotifyWillBeDestroyed(BrowserContext* browser_context) {
   // ensure that all their WebContents (and therefore RPHs) are torn down too.
   browser_context->RemoveUserData(kContentServiceKey);
 
-  // Service Workers must shutdown before the browser context is destroyed,
-  // since they keep render process hosts alive and the codebase assumes that
-  // render process hosts die before their profile (browser context) dies.
+  // Shut down service worker and shared worker machinery because these can keep
+  // RenderProcessHosts and SiteInstances alive, and the codebase assumes these
+  // are destroyed before the BrowserContext is destroyed.
   ForEachStoragePartition(browser_context,
                           base::BindRepeating(ShutdownServiceWorkerContext));
+  ForEachStoragePartition(browser_context,
+                          base::BindRepeating(ShutdownSharedWorkerContext));
 
-  // Shared workers also keep render process hosts alive, and are expected to
-  // return ref counts to 0 after documents close. However, to ensure that
-  // hosts are destructed now, forcibly release their ref counts here.
+  // Also forcibly release keep alive refcounts on RenderProcessHosts, to ensure
+  // they destruct before the BrowserContext does.
   for (RenderProcessHost::iterator host_iterator =
            RenderProcessHost::AllHostsIterator();
        !host_iterator.IsAtEnd(); host_iterator.Advance()) {
@@ -542,19 +537,6 @@ std::string BrowserContext::CreateRandomMediaDeviceIDSalt() {
 
 const std::string& BrowserContext::UniqueId() {
   return unique_id_;
-}
-
-void BrowserContext::BindNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  auto* service_holder =
-      static_cast<ContentServiceHolder*>(GetUserData(kContentServiceKey));
-  if (!service_holder) {
-    auto new_holder = std::make_unique<ContentServiceHolder>(this);
-    service_holder = new_holder.get();
-    SetUserData(kContentServiceKey, std::move(new_holder));
-  }
-
-  service_holder->service().BindNavigableContentsFactory(std::move(receiver));
 }
 
 media::VideoDecodePerfHistory* BrowserContext::GetVideoDecodePerfHistory() {

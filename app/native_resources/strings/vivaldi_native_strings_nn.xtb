@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Send lenkja som e-post</translation>
 <translation id="1454726940098520109">Syn ikkje stadfestinga igjen</translation>
 <translation id="1462666970065907900">Vil du verkeleg lukka dette vindauget?</translation>
+<translation id="1526344461589023948">Klarte ikkje å lagra den nedlasta oppdateringa. Sjå til at maskina har nok lagringsplass og prøv igjen.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privatvindauge</translation>
+<translation id="1702758681952953055">Om feilen ikkje forsvinn, gjer vel og meld frå og ta med desse detaljane:</translation>
 <translation id="1728549374069268714">Lim inn og hald fram</translation>
 <translation id="1756026472674246267">Opna lenkja i ei ny fane</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Allmenn</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatera Vivaldi til utgåve <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Klarte ikkje å lasta ned oppdateringsfilene. Sjå over internettsambandet ditt og prøv igjen.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Sett inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Opna lenkja i eit nytt vindauge</translation>
 <translation id="3588820906588687999">Opna bildet i ei ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3708982624815781692">Nedlastinga vart avbroten.</translation>
 <translation id="3732157130969736834">Lag bokmerke av lenkja</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera utgåve 15+ (beta)</translation>
 <translation id="5648110075441906505">Opna bildet i nytt vindauge</translation>
+<translation id="5656371807944747581">Oppdateringsfeil.</translation>
 <translation id="5716238312826274098">Slår av varsel</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
 <translation id="588258955323874662">Fullskjermsvising</translation>
 <translation id="5916080360077521750">Diverre er ikkje Chrome-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Chrome-vindauga. Vel Hald fram.</translation>
+<translation id="6040143037577758943">Lukk</translation>
 <translation id="6229528619562190452">Klikk her for å oppdatera Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
 <translation id="630690498669249215">Opera bokmerke-fil</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi er gjort mogleg gjennom openkjeldeprosjektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> og andre <ph name="BEGIN_LINK_OSS" />openkjeldeprogram<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Klarte ikkje å starta oppdateringsprogrammet. Sjå til at datamaskina har nok minne eller lagringsplass og prøv igjen.</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdateringa</translation>
 <translation id="7724603315864178912">Klipp</translation>
 <translation id="7793738202466490491">Legg til som kalenderhending</translation>
+<translation id="7848222781052558334">Klarte ikkje å stadfesta den digitale signaturen til dei nedlasta filene.</translation>
 <translation id="7865983598101744945">Stadfest lukking</translation>
 <translation id="7957213167373139414">Kalenderen min</translation>
 <translation id="8027581147000338959">Opna i eit nytt vindauge</translation>

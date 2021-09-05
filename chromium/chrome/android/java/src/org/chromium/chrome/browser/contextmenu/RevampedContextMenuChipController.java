@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -27,12 +28,13 @@ import java.lang.annotation.RetentionPolicy;
  * A controller to handle chip construction and cross-app communication.
  */
 class RevampedContextMenuChipController implements View.OnClickListener {
+    private boolean mFakeLensQueryResultForTesting;
     private View mAnchorView;
-    private LensAsyncManager mLensAsyncManager;
-    private Runnable mChipClickedCallback;
     private ChipView mChipView;
     private AnchoredPopupWindow mPopupWindow;
     private Context mContext;
+    private ChipRenderParams mChipRenderParams;
+
     @VisibleForTesting
     @IntDef({ChipEvent.SHOWN, ChipEvent.CLICKED, ChipEvent.DISMISSED})
     @Retention(RetentionPolicy.SOURCE)
@@ -48,21 +50,9 @@ class RevampedContextMenuChipController implements View.OnClickListener {
                 "ContextMenu.LensChip.Event", chipEvent, ChipEvent.NUM_ENTRIES);
     }
 
-    /**
-     * Construct the chip controller.
-     * @param context The current activity context
-     * @param anchorView The view to use as a placement anchor for the chip popup window.
-     * @param lensAsyncManager The object responsible for making Lens requests.
-     * @param chipClickedCallback The callback to fire after a user clicks a lens chip.
-     */
-    RevampedContextMenuChipController(Context context, View anchorView,
-            LensAsyncManager lensAsyncManager, Runnable chipClickedCallback) {
+    RevampedContextMenuChipController(Context context, View anchorView) {
         mContext = context;
-        mLensAsyncManager = lensAsyncManager;
-        mChipClickedCallback = chipClickedCallback;
         mAnchorView = anchorView;
-        mLensAsyncManager.classifyImageAsync(
-                (isShoppingIntent) -> { handleImageClassification(isShoppingIntent); });
     }
 
     /**
@@ -83,32 +73,36 @@ class RevampedContextMenuChipController implements View.OnClickListener {
     @VisibleForTesting
     int getChipTextMaxWidthPx() {
         return mContext.getResources().getDimensionPixelSize(R.dimen.context_menu_chip_max_width)
-                // Leading and trailing padding (start and end of chip and
-                // start / end of text).
-                - (3
-                        * mContext.getResources().getDimensionPixelSize(
-                                R.dimen.context_menu_chip_lateral_padding))
-                - (1
-                        * mContext.getResources().getDimensionPixelSize(
-                                R.dimen.chip_element_leading_padding))
+                // Padding before primary icon
+                - mContext.getResources().getDimensionPixelSize(
+                        R.dimen.chip_element_extended_leading_padding)
+                // Padding after primary icon
+                - mContext.getResources().getDimensionPixelSize(
+                        R.dimen.chip_element_leading_padding)
+                // Padding before close icon.
+                - mContext.getResources().getDimensionPixelSize(
+                        R.dimen.chip_end_icon_extended_margin_start)
+                // Padding after close icon.
+                - mContext.getResources().getDimensionPixelSize(
+                        R.dimen.chip_extended_end_padding_with_end_icon)
                 // Primary and close icon width.
                 - (2
                         * mContext.getResources().getDimensionPixelSize(
                                 R.dimen.context_menu_chip_icon_size));
     }
 
-    @VisibleForTesting
-    void handleImageClassification(boolean isShoppingIntent) {
-        if (isShoppingIntent) {
-            showChip(mAnchorView);
-        };
+    // This method should only be used in test files.  It is not marked
+    // @VisibleForTesting to allow the Coordinator to reference it in its
+    // own testing methods.
+    void setFakeLensQueryResultForTesting() {
+        mFakeLensQueryResultForTesting = true;
     }
 
     @Override
     public void onClick(View v) {
         if (v == mChipView) {
             recordChipEvent(ChipEvent.CLICKED);
-            mChipClickedCallback.run();
+            mChipRenderParams.onClickCallback.run();
             dismissLensChipIfShowing();
         }
     }
@@ -125,20 +119,22 @@ class RevampedContextMenuChipController implements View.OnClickListener {
 
     /**
      * Inflate an anchored chip view, set it up, and show it to the user.
-     * @param isEnabled Whether is will be enabled.
+     * @param chipRenderParams The data to construct the chip.
      */
-    private void showChip(View anchorView) {
+    protected void showChip(@NonNull ChipRenderParams chipRenderParams) {
         if (mPopupWindow != null) {
             // Chip has already been shown for this context menu.
             return;
         }
 
+        mChipRenderParams = chipRenderParams;
+
         mChipView = (ChipView) LayoutInflater.from(mContext).inflate(
                 R.layout.revamped_context_menu_chip, null);
 
-        ViewRectProvider rectProvider = new ViewRectProvider(anchorView);
+        ViewRectProvider rectProvider = new ViewRectProvider(mAnchorView);
         // Draw a clear background to avoid blocking context menu items.
-        mPopupWindow = new AnchoredPopupWindow(mContext, anchorView,
+        mPopupWindow = new AnchoredPopupWindow(mContext, mAnchorView,
                 new ColorDrawable(Color.TRANSPARENT), mChipView, rectProvider);
         mPopupWindow.setAnimationStyle(R.style.ChipAnimation);
         mPopupWindow.setPreferredHorizontalOrientation(
@@ -152,14 +148,17 @@ class RevampedContextMenuChipController implements View.OnClickListener {
         mPopupWindow.setMaxWidth(
                 mContext.getResources().getDimensionPixelSize(R.dimen.context_menu_chip_max_width));
 
-        mChipView.getPrimaryTextView().setText(SpanApplier.removeSpanText(
-                mContext.getString(R.string.contextmenu_shop_image_with_google_lens),
-                new SpanInfo("<new>", "</new>")));
+        mChipView.getPrimaryTextView().setText(
+                SpanApplier.removeSpanText(mContext.getString(chipRenderParams.titleResourceId),
+                        new SpanInfo("<new>", "</new>")));
         // TODO(benwgold): Consult with Chrome UX owners to see if Chip UI hierarchy should be
         // refactored.
         mChipView.getPrimaryTextView().setMaxWidth(getChipTextMaxWidthPx());
 
-        mChipView.setIcon(R.drawable.lens_icon, false);
+        if (chipRenderParams.iconResourceId != 0) {
+            mChipView.setIcon(chipRenderParams.iconResourceId, false);
+        }
+
         mChipView.addRemoveIcon();
 
         mChipView.setOnClickListener(this);
@@ -170,6 +169,9 @@ class RevampedContextMenuChipController implements View.OnClickListener {
 
         mPopupWindow.show();
         recordChipEvent(ChipEvent.SHOWN);
+        if (mChipRenderParams.onShowCallback != null) {
+            mChipRenderParams.onShowCallback.run();
+        }
     }
 
     // This method should only be used in test files.  It is not marked

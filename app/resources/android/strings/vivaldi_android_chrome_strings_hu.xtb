@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="hu">
+<translation id="1397811292916898096">Keresés a(z) <ph name="PRODUCT_NAME" /> keresőmotorral</translation>
+<translation id="1598449788754183301">Normál/privát lap váltása</translation>
+<translation id="1644574205037202324">Előzmények</translation>
+<translation id="17513872634828108">Megnyitott lapok</translation>
+<translation id="1829244130665387512">Keresés az oldalon</translation>
+<translation id="2038563949887743358">Bekapcsolja az Asztali webhely kérése funkciót</translation>
+<translation id="2433507940547922241">Megjelenés</translation>
+<translation id="2501278716633472235">Visszalépés</translation>
+<translation id="2633278372998075009">Privát lapok</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Minden jog fenntartva.</translation>
+<translation id="3234355010754616171">Új privát lap</translation>
+<translation id="3518985090088779359">Elfogadás és tovább</translation>
+<translation id="3700829948786686853">Üdvözöl a Vivaldi</translation>
+<translation id="3719826155360621982">Kezdőlap</translation>
+<translation id="385051799172605136">Vissza</translation>
+<translation id="4121750346708795461">Az alkalmazás használatával elfogadod a Vivaldi <ph name="BEGIN_LINK1" />Általános Szerződési Feltételeit<ph name="END_LINK1" /> és <ph name="BEGIN_LINK2" />Adatvédelmi szabályzatát<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Megnyitás privát lapon</translation>
+<translation id="4526803704855831732">Privát lapok</translation>
+<translation id="4759238208242260848">Letöltések</translation>
+<translation id="4883379392681899581">Privát mód elhagyása</translation>
+<translation id="4943872375798546930">Nincs találat</translation>
+<translation id="49576331685473090">Tartalom blokkolása</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> tárhely</translation>
+<translation id="5186185447130319458">Privát</translation>
+<translation id="5233638681132016545">Új lap</translation>
+<translation id="572328651809341494">Nemrég megnyitott lapok</translation>
+<translation id="5840488417521835756">Megtudhatod a webhelyek témaköreit anélkül, hogy elhagynád az oldalt. A Keresés koppintással funkció csak akkor érhető el, ha a Google a Vivaldi alapértelmezett keresője. Elküld egy szót és annak kontextusát a Google Kereső számára, majd meghatározásokat, képeket, keresési eredményeket és egyéb részleteket ad vissza.
+
+A keresési kifejezést hosszú nyomva tartással módosíthatod. A keresés finomításához csúsztasd a panelt teljesen fel, majd érintsd meg a keresőmezőt.</translation>
+<translation id="6336451774241870485">Új privát lap</translation>
+<translation id="6593061639179217415">Asztali webhely</translation>
+<translation id="6610147964972079463">Privát lapok bezárása</translation>
+<translation id="706339621163631076">Vivaldi - Adatvédelmi szabályzat</translation>
+<translation id="7427132068601343474">A Vivaldi névjegye</translation>
+<translation id="7465104139234185284">Minden privát lap bezárása</translation>
+<translation id="7519434535192513364">A Keresés koppintással funkció csak akkor érhető el, ha a Google a Vivaldi alapértelmezett keresője. Elküld egy szót és annak kontextusát a Google Kereső számára. A funkciót a <ph name="BEGIN_LINK" />Beállításokban<ph name="END_LINK" /> lehet kikapcsolni.</translation>
+<translation id="804786196054284061">Általános Szerződési Feltételek</translation>
+<translation id="85991616550051997">Kezdőlapra ugrás</translation>
+<translation id="8820817407110198400">Könyvjelzők</translation>
+<translation id="9063523880881406963">Kikapcsolja az Asztali webhely kérése funkciót</translation>
+<translation id="9080642952018487277">Privát módba váltás</translation>
+</translationbundle>

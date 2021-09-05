@@ -5,19 +5,13 @@
 #include <string>
 
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/public/cpp/default_frame_header.h"
-#include "ash/public/cpp/frame_header.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/public/cpp/shelf_test_api.h"
 #include "ash/public/cpp/split_view_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
-#include "ash/public/cpp/window_pin_type.h"
-#include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -52,7 +46,7 @@
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
-#include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller_chromeos.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/fullscreen_control/fullscreen_control_host.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
@@ -68,16 +62,22 @@
 #include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_menu_button.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/ui/chromeos_ui_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "chromeos/ui/base/window_pin_type.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "chromeos/ui/frame/default_frame_header.h"
+#include "chromeos/ui/frame/frame_header.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller_test_api.h"
 #include "components/account_id/account_id.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/service_names.mojom.h"
@@ -379,7 +379,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
                        IncognitoMarkedAsAssistantBlocked) {
   Browser* incognito_browser = CreateIncognitoBrowser();
   EXPECT_TRUE(incognito_browser->window()->GetNativeWindow()->GetProperty(
-      ash::kBlockedForAssistantSnapshotKey));
+      chromeos::kBlockedForAssistantSnapshotKey));
 }
 
 // Tests that browser frame minimum size constraint is updated in response to
@@ -462,7 +462,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
       static_cast<BrowserNonClientFrameViewAsh*>(
           widget->non_client_view()->frame_view());
 
-  ash::FrameCaptionButtonContainerView::TestApi test(
+  chromeos::FrameCaptionButtonContainerView::TestApi test(
       frame_view->caption_button_container_);
   EXPECT_TRUE(test.size_button()->icon_definition_for_test());
 }
@@ -481,8 +481,8 @@ class ImmersiveModeBrowserViewTest
 
     BrowserView::SetDisableRevealerDelayForTesting(true);
 
-    ash::ImmersiveFullscreenControllerTestApi(
-        static_cast<ImmersiveModeControllerAsh*>(
+    chromeos::ImmersiveFullscreenControllerTestApi(
+        static_cast<ImmersiveModeControllerChromeos*>(
             BrowserView::GetBrowserViewForBrowser(browser())
                 ->immersive_mode_controller())
             ->controller())
@@ -676,12 +676,12 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
       "test_browser_app", true /* trusted_source */, gfx::Rect(0, 0, 300, 300),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   ASSERT_TRUE(browser->is_type_app());
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
 
-  ash::ImmersiveFullscreenControllerTestApi(
-      static_cast<ImmersiveModeControllerAsh*>(
+  chromeos::ImmersiveFullscreenControllerTestApi(
+      static_cast<ImmersiveModeControllerChromeos*>(
           browser_view->immersive_mode_controller())
           ->controller())
       .SetupForTest();
@@ -736,7 +736,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
 
   // Set locked fullscreen state.
   browser()->window()->GetNativeWindow()->SetProperty(
-      ash::kWindowPinTypeKey, ash::WindowPinType::kTrustedPinned);
+      chromeos::kWindowPinTypeKey, chromeos::WindowPinType::kTrustedPinned);
 
   // We're fullscreen, immersive is disabled in locked fullscreen, and while
   // we're at it, also make sure that the shelf is hidden.
@@ -762,7 +762,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
 
   // Set locked fullscreen state.
   browser()->window()->GetNativeWindow()->SetProperty(
-      ash::kWindowPinTypeKey, ash::WindowPinType::kTrustedPinned);
+      chromeos::kWindowPinTypeKey, chromeos::WindowPinType::kTrustedPinned);
 
   // We're fullscreen, immersive is disabled in locked fullscreen, and while
   // we're at it, also make sure that the shelf is hidden.
@@ -830,7 +830,7 @@ class WebAppNonClientFrameViewAshTest
 
   Browser* app_browser_ = nullptr;
   BrowserView* browser_view_ = nullptr;
-  ash::DefaultFrameHeader* frame_header_ = nullptr;
+  chromeos::DefaultFrameHeader* frame_header_ = nullptr;
   WebAppFrameToolbarView* web_app_frame_toolbar_ = nullptr;
   const std::vector<ContentSettingImageView*>* content_setting_views_ = nullptr;
   BrowserActionsContainer* browser_actions_container_ = nullptr;
@@ -885,8 +885,8 @@ class WebAppNonClientFrameViewAshTest
 
     browser_view_ = BrowserView::GetBrowserViewForBrowser(app_browser_);
     BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view_);
-    frame_header_ =
-        static_cast<ash::DefaultFrameHeader*>(frame_view->frame_header_.get());
+    frame_header_ = static_cast<chromeos::DefaultFrameHeader*>(
+        frame_view->frame_header_.get());
 
     web_app_frame_toolbar_ = frame_view->web_app_frame_toolbar_for_testing();
     DCHECK(web_app_frame_toolbar_);
@@ -1003,8 +1003,10 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest,
 IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, FrameThemeColorIsSet) {
   SetUpWebApp();
   aura::Window* window = browser_view_->GetWidget()->GetNativeWindow();
-  EXPECT_EQ(GetThemeColor(), window->GetProperty(ash::kFrameActiveColorKey));
-  EXPECT_EQ(GetThemeColor(), window->GetProperty(ash::kFrameInactiveColorKey));
+  EXPECT_EQ(GetThemeColor(),
+            window->GetProperty(chromeos::kFrameActiveColorKey));
+  EXPECT_EQ(GetThemeColor(),
+            window->GetProperty(chromeos::kFrameInactiveColorKey));
   EXPECT_EQ(gfx::kGoogleGrey200, GetActiveColor());
 }
 
@@ -1037,7 +1039,7 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest,
   EXPECT_TRUE(manage_passwords_icon);
   EXPECT_FALSE(manage_passwords_icon->GetVisible());
 
-  autofill::PasswordForm password_form;
+  password_manager::PasswordForm password_form;
   password_form.username_value = base::ASCIIToUTF16("test");
   password_form.url = GetAppURL().GetOrigin();
   PasswordsClientUIDelegateFromWebContents(web_contents)
@@ -1242,7 +1244,7 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, BrowserActions) {
 IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest,
                        ActiveStateOfButtonMatchesWidget) {
   SetUpWebApp();
-  ash::FrameCaptionButtonContainerView::TestApi test(
+  chromeos::FrameCaptionButtonContainerView::TestApi test(
       GetFrameViewAsh(browser_view_)->caption_button_container_);
   EXPECT_TRUE(test.size_button()->paint_as_active());
   EXPECT_TRUE(GetPaintingAsActive());
@@ -1341,7 +1343,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser2 = new Browser(params);
+  Browser* browser2 = Browser::Create(params);
   AddBlankTabAndShow(browser2);
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
   Widget* widget2 = browser_view2->GetWidget();
@@ -1375,13 +1377,14 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest, AppFrameColor) {
   browser()->window()->Close();
 
   // Open a new app window.
-  Browser* app_browser = new Browser(Browser::CreateParams::CreateForApp(
+  Browser* app_browser = Browser::Create(Browser::CreateParams::CreateForApp(
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true /* user_gesture */));
   aura::Window* window = app_browser->window()->GetNativeWindow();
   window->Show();
 
-  SkColor active_frame_color = window->GetProperty(ash::kFrameActiveColorKey);
+  SkColor active_frame_color =
+      window->GetProperty(chromeos::kFrameActiveColorKey);
   EXPECT_EQ(active_frame_color, SkColorSetRGB(253, 254, 255))
       << "RGB: " << SkColorGetR(active_frame_color) << ", "
       << SkColorGetG(active_frame_color) << ", "
@@ -1397,7 +1400,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   ImmersiveModeController* immersive_mode_controller =
       browser_view->immersive_mode_controller();
@@ -1498,7 +1501,7 @@ IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewAshTest,
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   ASSERT_TRUE(browser->is_type_app());
   browser->window()->Show();
 

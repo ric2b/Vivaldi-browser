@@ -48,12 +48,8 @@ declare_args() {
   # file name) is saved.
   enable_location_source = true
 
-  # Whether or not the FROM_HERE macro uses base::Location::Current(). This
-  # allows the implementation to be reverted if needed while validating its
-  # replacement base::Location::Current(). On by default in non-official builds
-  # for testing purposes.
-  # TODO(https://crbug.com/974061): remove this eventually.
-  from_here_uses_location_builtins = !is_official_build
+  # Whether or not the FROM_HERE macro uses base::Location::Current().
+  from_here_uses_location_builtins = true
 
   # Unsafe developer build. Has developer-friendly features that may weaken or
   # disable security measures like sandboxing or ASLR.
@@ -90,18 +86,6 @@ if (is_android) {
 
 if (is_fuchsia) {
   import("//third_party/fuchsia-sdk/sdk/build/fidl_library.gni")
-}
-
-config("base_flags") {
-  if (is_clang) {
-    cflags = [
-      # Ideally all product code (but no test code) in chrome would have these
-      # flags. But this isn't trivial so start with //base as a minimum
-      # requirement.
-      # https://groups.google.com/a/chromium.org/d/topic/chromium-dev/B9Q5KTD7iCo/discussion
-      "-Wglobal-constructors",
-    ]
-  }
 }
 
 config("base_implementation") {
@@ -168,8 +152,9 @@ component("base") {
     "big_endian.cc",
     "big_endian.h",
     "bind.h",
-    "bind_helpers.h",
     "bind_internal.h",
+    "bind_post_task.h",
+    "bind_post_task_internal.h",
     "bit_cast.h",
     "bits.h",
     "build_time.cc",
@@ -195,8 +180,12 @@ component("base") {
     "containers/checked_iterators.h",
     "containers/checked_range.h",
     "containers/circular_deque.h",
+    "containers/contiguous_iterator.h",
+    "containers/fixed_flat_map.h",
+    "containers/fixed_flat_set.h",
     "containers/flat_map.h",
     "containers/flat_set.h",
+    "containers/flat_tree.cc",
     "containers/flat_tree.h",
     "containers/id_map.h",
     "containers/intrusive_heap.cc",
@@ -230,7 +219,6 @@ component("base") {
     "debug/dump_without_crashing.cc",
     "debug/dump_without_crashing.h",
     "debug/leak_annotations.h",
-    "debug/leak_tracker.h",
     "debug/profiler.cc",
     "debug/profiler.h",
     "debug/stack_trace.cc",
@@ -266,6 +254,8 @@ component("base") {
     "files/file_util.h",
     "files/important_file_writer.cc",
     "files/important_file_writer.h",
+    "files/important_file_writer_cleaner.cc",
+    "files/important_file_writer_cleaner.h",
     "files/memory_mapped_file.cc",
     "files/memory_mapped_file.h",
     "files/platform_file.h",
@@ -274,6 +264,9 @@ component("base") {
     "files/scoped_temp_dir.cc",
     "files/scoped_temp_dir.h",
     "format_macros.h",
+    "functional/identity.h",
+    "functional/invoke.h",
+    "functional/not_fn.h",
     "gtest_prod_util.h",
     "guid.cc",
     "guid.h",
@@ -408,8 +401,6 @@ component("base") {
     "metrics/sparse_histogram.h",
     "metrics/statistics_recorder.cc",
     "metrics/statistics_recorder.h",
-    "metrics/ukm_source_id.cc",
-    "metrics/ukm_source_id.h",
     "metrics/user_metrics.cc",
     "metrics/user_metrics.h",
     "metrics/user_metrics_action.h",
@@ -507,8 +498,10 @@ component("base") {
     "sampling_heap_profiler/sampling_heap_profiler.h",
     "scoped_clear_last_error.h",
     "scoped_generic.h",
+    "scoped_multi_source_observation.h",
     "scoped_native_library.cc",
     "scoped_native_library.h",
+    "scoped_observation.h",
     "scoped_observer.h",
     "sequence_checker.h",
     "sequence_checker_impl.cc",
@@ -631,6 +624,7 @@ component("base") {
     "task/sequence_manager/task_time_observer.h",
     "task/sequence_manager/tasks.cc",
     "task/sequence_manager/tasks.h",
+    "task/sequence_manager/thread_controller.cc",
     "task/sequence_manager/thread_controller.h",
     "task/sequence_manager/thread_controller_impl.cc",
     "task/sequence_manager/thread_controller_impl.h",
@@ -718,7 +712,6 @@ component("base") {
     "third_party/cityhash/city.h",
     "third_party/cityhash_v103/src/city_v103.cc",
     "third_party/cityhash_v103/src/city_v103.h",
-    "third_party/icu/icu_utf.cc",
     "third_party/icu/icu_utf.h",
     "third_party/nspr/prtime.cc",
     "third_party/nspr/prtime.h",
@@ -797,6 +790,8 @@ component("base") {
     "trace_event/heap_profiler_allocation_context_tracker.h",
     "trace_event/memory_allocator_dump_guid.cc",
     "trace_event/memory_allocator_dump_guid.h",
+    "trace_event/trace_id_helper.cc",
+    "trace_event/trace_id_helper.h",
     "traits_bag.h",
     "tuple.h",
     "unguessable_token.cc",
@@ -907,8 +902,6 @@ component("base") {
       "files/file_path_watcher_win.cc",
       "files/file_util_win.cc",
       "files/file_win.cc",
-      "files/important_file_writer_cleaner.cc",
-      "files/important_file_writer_cleaner.h",
       "files/memory_mapped_file_win.cc",
       "logging_win.cc",
       "logging_win.h",
@@ -1253,10 +1246,10 @@ component("base") {
   frameworks = []
 
   configs += [
-    ":base_flags",
     ":base_implementation",
     "//build/config:precompiled_headers",
     "//build/config/compiler:noshadowing",
+    "//build/config/compiler:wglobal_constructors",
   ]
 
   deps = [
@@ -1265,9 +1258,14 @@ component("base") {
     "//base/third_party/double_conversion",
     "//base/third_party/dynamic_annotations",
     "//build:branding_buildflags",
+    "//build:chromecast_buildflags",
     "//build:chromeos_buildflags",
     "//third_party/modp_b64",
   ]
+
+  if (is_ios) {
+    deps += [ "//base/ios:ios_multi_window_buildflags" ]
+  }
 
   # native_unwinder_android is intended for use solely via a dynamic feature
   # module, to avoid increasing Chrome's executable size.
@@ -1304,20 +1302,26 @@ component("base") {
     sources += [
       "allocator/allocator_shim.cc",
       "allocator/allocator_shim.h",
+      "allocator/allocator_shim_default_dispatch_to_partition_alloc.cc",
+      "allocator/allocator_shim_default_dispatch_to_partition_alloc.h",
       "allocator/allocator_shim_internals.h",
-      "allocator/allocator_shim_override_cpp_symbols.h",
-      "allocator/allocator_shim_override_libc_symbols.h",
     ]
     if (is_android) {
-      sources +=
-          [ "allocator/allocator_shim_override_linker_wrapped_symbols.h" ]
+      sources += [
+        "allocator/allocator_shim_override_cpp_symbols.h",
+        "allocator/allocator_shim_override_linker_wrapped_symbols.h",
+      ]
       all_dependent_configs += [ "//base/allocator:wrap_malloc_symbols" ]
     }
     if (is_apple) {
       sources += [ "allocator/allocator_shim_override_mac_symbols.h" ]
     }
     if (is_chromeos || is_linux) {
-      sources += [ "allocator/allocator_shim_override_glibc_weak_symbols.h" ]
+      sources += [
+        "allocator/allocator_shim_override_cpp_symbols.h",
+        "allocator/allocator_shim_override_glibc_weak_symbols.h",
+        "allocator/allocator_shim_override_libc_symbols.h",
+      ]
     }
     if (is_win) {
       sources += [
@@ -1327,10 +1331,7 @@ component("base") {
       ]
     }
 
-    if (use_allocator == "partition") {
-      sources +=
-          [ "allocator/allocator_shim_default_dispatch_to_partition_alloc.cc" ]
-    } else if (use_allocator == "tcmalloc") {
+    if (use_allocator == "tcmalloc") {
       sources += [ "allocator/allocator_shim_default_dispatch_to_tcmalloc.cc" ]
       deps += [ "//base/allocator:tcmalloc" ]
     } else if (use_allocator == "none") {
@@ -1566,6 +1567,8 @@ component("base") {
       "fuchsia/intl_profile_watcher.h",
       "fuchsia/process_context.cc",
       "fuchsia/process_context.h",
+      "fuchsia/scoped_fx_logger.cc",
+      "fuchsia/scoped_fx_logger.h",
       "fuchsia/scoped_service_binding.h",
       "fuchsia/scoped_service_publisher.h",
       "fuchsia/service_provider_impl.cc",
@@ -1621,10 +1624,12 @@ component("base") {
     public_deps += [
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.intl",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger",
       "//third_party/fuchsia-sdk/sdk/pkg/async",
       "//third_party/fuchsia-sdk/sdk/pkg/fdio",
       "//third_party/fuchsia-sdk/sdk/pkg/fidl_cpp",
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+      "//third_party/fuchsia-sdk/sdk/pkg/syslog",
       "//third_party/fuchsia-sdk/sdk/pkg/vfs_cpp",
       "//third_party/fuchsia-sdk/sdk/pkg/zx",
     ]
@@ -1688,6 +1693,8 @@ component("base") {
       "files/file_proxy.cc",
       "files/important_file_writer.cc",
       "files/important_file_writer.h",
+      "files/important_file_writer_cleaner.cc",
+      "files/important_file_writer_cleaner.h",
       "files/scoped_temp_dir.cc",
       "memory/discardable_memory.cc",
       "memory/discardable_memory.h",
@@ -1770,6 +1777,7 @@ component("base") {
         "allocator/partition_allocator/page_allocator_internal.h",
         "allocator/partition_allocator/partition_address_space.cc",
         "allocator/partition_allocator/partition_address_space.h",
+        "allocator/partition_allocator/partition_alloc-inl.h",
         "allocator/partition_allocator/partition_alloc.cc",
         "allocator/partition_allocator/partition_alloc.h",
         "allocator/partition_allocator/partition_alloc_check.h",
@@ -1777,6 +1785,8 @@ component("base") {
         "allocator/partition_allocator/partition_alloc_features.cc",
         "allocator/partition_allocator/partition_alloc_features.h",
         "allocator/partition_allocator/partition_alloc_forward.h",
+        "allocator/partition_allocator/partition_alloc_hooks.cc",
+        "allocator/partition_allocator/partition_alloc_hooks.h",
         "allocator/partition_allocator/partition_bucket.cc",
         "allocator/partition_allocator/partition_bucket.h",
         "allocator/partition_allocator/partition_cookie.h",
@@ -1790,31 +1800,34 @@ component("base") {
         "allocator/partition_allocator/partition_page.h",
         "allocator/partition_allocator/partition_ref_count.cc",
         "allocator/partition_allocator/partition_ref_count.h",
+        "allocator/partition_allocator/partition_root.cc",
+        "allocator/partition_allocator/partition_root.h",
+        "allocator/partition_allocator/partition_stats.cc",
+        "allocator/partition_allocator/partition_stats.h",
         "allocator/partition_allocator/partition_tag.h",
         "allocator/partition_allocator/partition_tag_bitmap.h",
         "allocator/partition_allocator/partition_tls.h",
+        "allocator/partition_allocator/pcscan.cc",
+        "allocator/partition_allocator/pcscan.h",
         "allocator/partition_allocator/random.cc",
         "allocator/partition_allocator/random.h",
+        "allocator/partition_allocator/spinning_mutex.cc",
+        "allocator/partition_allocator/spinning_mutex.h",
         "allocator/partition_allocator/thread_cache.cc",
         "allocator/partition_allocator/thread_cache.h",
         "allocator/partition_allocator/yield_processor.h",
       ]
       if (is_win) {
-        sources +=
-            [ "allocator/partition_allocator/page_allocator_internals_win.h" ]
+        sources += [
+          "allocator/partition_allocator/page_allocator_internals_win.h",
+          "allocator/partition_allocator/partition_tls_win.cc",
+        ]
       } else if (is_posix) {
         sources +=
             [ "allocator/partition_allocator/page_allocator_internals_posix.h" ]
       } else if (is_fuchsia) {
         sources += [
           "allocator/partition_allocator/page_allocator_internals_fuchsia.h",
-        ]
-      }
-
-      if (is_linux || is_chromeos || is_android) {
-        sources += [
-          "allocator/partition_allocator/spinning_futex_linux.cc",
-          "allocator/partition_allocator/spinning_futex_linux.h",
         ]
       }
     }
@@ -2068,18 +2081,23 @@ component("base") {
   if (is_posix && !is_apple) {
     sources += [
       "time/time_conversion_posix.cc",
-      "time/time_exploded_icu.cc",  # See note below.
       "time/time_exploded_posix.cc",
       "time/time_now_posix.cc",
     ]
 
-    # The ICU dependency is only needed on systems with a 32-bit time_t.
-    # However, that cannot be determined from build variables, like
-    # |current_cpu|, since some 32-bit systems have a 64-bit time_t (and vice
-    # versa). Thus, the dependency is taken here for all POSIX platforms and the
-    # compiler+linker should be able to easily detect when the ICU routines will
-    # not be called and delete them in the final linking.
-    deps += [ "//third_party/icu:icui18n" ]
+    # TODO(b/167763382) Find an alternate solution for Chromecast devices, since
+    # adding the icui18n dep significantly increases the binary size.
+    if (!is_chromecast) {
+      sources += [ "time/time_exploded_icu.cc" ]
+
+      # The ICU dependency is only needed on systems with a 32-bit time_t.
+      # However, that cannot be determined from build variables, like
+      # |current_cpu|, since some 32-bit systems have a 64-bit time_t (and vice
+      # versa). Thus, the dependency is taken here for all POSIX platforms and
+      # the compiler+linker should be able to easily detect when the ICU
+      # routines will not be called and delete them in the final linking.
+      deps += [ "//third_party/icu:icui18n" ]
+    }
   }
 
   if (is_posix && !is_apple && !is_nacl) {
@@ -2120,6 +2138,8 @@ component("base") {
       "trace_event/heap_profiler.h",
       "trace_event/heap_profiler_event_filter.cc",
       "trace_event/heap_profiler_event_filter.h",
+      "trace_event/interned_args_helper.cc",
+      "trace_event/interned_args_helper.h",
       "trace_event/log_message.cc",
       "trace_event/log_message.h",
       "trace_event/malloc_dump_provider.cc",
@@ -2143,6 +2163,7 @@ component("base") {
       "trace_event/optional_trace_event.h",
       "trace_event/process_memory_dump.cc",
       "trace_event/process_memory_dump.h",
+      "trace_event/task_execution_macros.h",
       "trace_event/thread_instruction_count.cc",
       "trace_event/thread_instruction_count.h",
       "trace_event/trace_arguments.cc",
@@ -2660,6 +2681,19 @@ if (is_fuchsia) {
       ":testfidl",
     ]
   }
+
+  source_set("test_log_listener_safe") {
+    testonly = true
+    sources = [
+      "fuchsia/test_log_listener_safe.cc",
+      "fuchsia/test_log_listener_safe.h",
+    ]
+    deps = [
+      ":base",
+      "//testing/gtest",
+    ]
+    public_deps = [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger" ]
+  }
 }
 
 source_set("base_unittests_tasktraits") {
@@ -2681,6 +2715,7 @@ test("base_unittests") {
     "base64_unittest.cc",
     "base64url_unittest.cc",
     "big_endian_unittest.cc",
+    "bind_post_task_unittest.cc",
     "bind_unittest.cc",
     "bit_cast_unittest.cc",
     "bits_unittest.cc",
@@ -2697,6 +2732,9 @@ test("base_unittests") {
     "containers/checked_iterators_unittest.cc",
     "containers/checked_range_unittest.cc",
     "containers/circular_deque_unittest.cc",
+    "containers/contiguous_iterator_unittest.cc",
+    "containers/fixed_flat_map_unittest.cc",
+    "containers/fixed_flat_set_unittest.cc",
     "containers/flat_map_unittest.cc",
     "containers/flat_set_unittest.cc",
     "containers/flat_tree_unittest.cc",
@@ -2715,7 +2753,6 @@ test("base_unittests") {
     "debug/alias_unittest.cc",
     "debug/crash_logging_unittest.cc",
     "debug/debugger_unittest.cc",
-    "debug/leak_tracker_unittest.cc",
     "debug/stack_trace_unittest.cc",
     "debug/task_trace_unittest.cc",
     "deferred_sequenced_task_runner_unittest.cc",
@@ -2727,9 +2764,13 @@ test("base_unittests") {
     "files/file_proxy_unittest.cc",
     "files/file_unittest.cc",
     "files/file_util_unittest.cc",
+    "files/important_file_writer_cleaner_unittest.cc",
     "files/important_file_writer_unittest.cc",
     "files/memory_mapped_file_unittest.cc",
     "files/scoped_temp_dir_unittest.cc",
+    "functional/identity_unittest.cc",
+    "functional/invoke_unittest.cc",
+    "functional/not_fn_unittest.cc",
     "gmock_unittest.cc",
     "guid_unittest.cc",
     "hash/hash_unittest.cc",
@@ -2833,7 +2874,9 @@ test("base_unittests") {
     "sampling_heap_profiler/lock_free_address_hash_set_unittest.cc",
     "scoped_clear_last_error_unittest.cc",
     "scoped_generic_unittest.cc",
+    "scoped_multi_source_observation_unittest.cc",
     "scoped_native_library_unittest.cc",
+    "scoped_observation_unittest.cc",
     "security_unittest.cc",
     "sequence_checker_unittest.cc",
     "sequence_token_unittest.cc",
@@ -3009,18 +3052,13 @@ test("base_unittests") {
   ]
 
   if (is_win) {
-    # base_unittests need to test CFG is working, so turn it on for
-    # this test binary.
-    # Overrides the globals set in testing/test.gni to disable CFG.
-    win_test_enable_cfi_linker = true
-
     deps += [ "//base/win:base_win_buildflags" ]
 
     sources += [
       "debug/gdi_debug_util_win_unittest.cc",
       "file_version_info_win_unittest.cc",
-      "files/important_file_writer_cleaner_unittest.cc",
       "process/launch_unittest_win.cc",
+      "test/fake_iasync_operation_win_unittest.cc",
       "test/test_reg_util_win_unittest.cc",
       "threading/platform_thread_win_unittest.cc",
       "time/time_win_unittest.cc",
@@ -3067,6 +3105,10 @@ test("base_unittests") {
       "win/wmi_unittest.cc",
       "win/wrapped_window_proc_unittest.cc",
     ]
+
+    if (enable_cet_shadow_stack) {
+      sources += [ "win/cet_shadow_stack_unittest.cc" ]
+    }
   }
 
   if (is_linux || is_chromeos) {
@@ -3254,6 +3296,7 @@ test("base_unittests") {
       "allocator/partition_allocator/page_allocator_unittest.cc",
       "allocator/partition_allocator/partition_alloc_unittest.cc",
       "allocator/partition_allocator/partition_lock_unittest.cc",
+      "allocator/partition_allocator/pcscan_unittest.cc",
       "allocator/partition_allocator/thread_cache_unittest.cc",
     ]
   }
@@ -3288,7 +3331,7 @@ test("base_unittests") {
     }
   }
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     sources += [
       "linux_util_unittest.cc",
       "nix/xdg_util_unittest.cc",
@@ -3328,6 +3371,7 @@ test("base_unittests") {
 
     deps += [
       ":test_interface_impl",
+      ":test_log_listener_safe",
       ":testfidl",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.intl",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger",
@@ -3338,7 +3382,7 @@ test("base_unittests") {
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     ]
 
-    manifest = "fuchsia/base_unittests.cmx"
+    manifest = "fuchsia/base_unittests.test-cmx"
   }
 
   if (!is_fuchsia && !is_ios) {
@@ -3373,6 +3417,8 @@ test("base_unittests") {
     if (is_win) {
       sources += [ "allocator/winheap_stubs_win_unittest.cc" ]
     }
+
+    sources += [ "allocator/allocator_shim_default_dispatch_to_partition_alloc_unittest.cc" ]
   }
 
   if (enable_base_tracing) {
@@ -3434,6 +3480,7 @@ action("build_date") {
 if (enable_nocompile_tests) {
   nocompile_test("base_nocompile_tests") {
     sources = [
+      "bind_post_task_unittest.nc",
       "bind_unittest.nc",
       "callback_list_unittest.nc",
       "callback_unittest.nc",
@@ -3622,6 +3669,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/annotations/CalledByNativeUnchecked.java",
       "android/java/src/org/chromium/base/annotations/CheckDiscard.java",
       "android/java/src/org/chromium/base/annotations/DoNotInline.java",
+      "android/java/src/org/chromium/base/annotations/IdentifierNameString.java",
       "android/java/src/org/chromium/base/annotations/JNIAdditionalImport.java",
       "android/java/src/org/chromium/base/annotations/JNINamespace.java",
       "android/java/src/org/chromium/base/annotations/JniIgnoreNatives.java",
@@ -3681,6 +3729,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/process_launcher/ChildServiceConnectionFactory.java",
       "android/java/src/org/chromium/base/process_launcher/ChildServiceConnectionImpl.java",
       "android/java/src/org/chromium/base/process_launcher/FileDescriptorInfo.java",
+      "android/java/src/org/chromium/base/supplier/BooleanSupplier.java",
       "android/java/src/org/chromium/base/supplier/DestroyableObservableSupplier.java",
       "android/java/src/org/chromium/base/supplier/ObservableSupplier.java",
       "android/java/src/org/chromium/base/supplier/ObservableSupplierImpl.java",
@@ -3842,10 +3891,14 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/AdvancedMockContext.java",
       "test/android/javatests/src/org/chromium/base/test/util/AnnotationProcessingUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/AnnotationRule.java",
+      "test/android/javatests/src/org/chromium/base/test/util/ApplicationTestUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/Batch.java",
       "test/android/javatests/src/org/chromium/base/test/util/CallbackHelper.java",
       "test/android/javatests/src/org/chromium/base/test/util/CloseableOnMainThread.java",
       "test/android/javatests/src/org/chromium/base/test/util/CommandLineFlags.java",
+      "test/android/javatests/src/org/chromium/base/test/util/Criteria.java",
+      "test/android/javatests/src/org/chromium/base/test/util/CriteriaHelper.java",
+      "test/android/javatests/src/org/chromium/base/test/util/CriteriaNotSatisfiedException.java",
       "test/android/javatests/src/org/chromium/base/test/util/DisableIf.java",
       "test/android/javatests/src/org/chromium/base/test/util/DisableIfSkipCheck.java",
       "test/android/javatests/src/org/chromium/base/test/util/DisabledTest.java",
@@ -3857,6 +3910,7 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/InstrumentationUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/IntegrationTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/JniMocker.java",
+      "test/android/javatests/src/org/chromium/base/test/util/LooperUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/Manual.java",
       "test/android/javatests/src/org/chromium/base/test/util/Matchers.java",
       "test/android/javatests/src/org/chromium/base/test/util/MetricsUtils.java",
@@ -3916,6 +3970,7 @@ if (is_android) {
     sources = [
       "android/junit/src/org/chromium/base/ApplicationStatusTest.java",
       "android/junit/src/org/chromium/base/CallbackControllerTest.java",
+      "android/junit/src/org/chromium/base/CollectionUtilTest.java",
       "android/junit/src/org/chromium/base/DiscardableReferencePoolTest.java",
       "android/junit/src/org/chromium/base/FileUtilsTest.java",
       "android/junit/src/org/chromium/base/LifetimeAssertTest.java",
@@ -3966,6 +4021,7 @@ if (is_android) {
       "android/application_status_listener.h",
       "android/child_process_binding_types.h",
       "android/library_loader/library_loader_hooks.h",
+      "android/linker/modern_linker_jni.h",
       "android/task_scheduler/task_runner_android.h",
       "memory/memory_pressure_listener.h",
       "metrics/histogram_base.h",

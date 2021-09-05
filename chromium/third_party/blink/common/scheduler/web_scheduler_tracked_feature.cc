@@ -67,8 +67,6 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "requested broadcast channel permission";
     case WebSchedulerTrackedFeature::kIndexedDBConnection:
       return "IndexedDB connection present";
-    case WebSchedulerTrackedFeature::kWebGL:
-      return "WebGL";
     case WebSchedulerTrackedFeature::kWebVR:
       return "WebVR";
     case WebSchedulerTrackedFeature::kWebXR:
@@ -107,7 +105,7 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "SpeechSynthesis";
     case WebSchedulerTrackedFeature::kKeyboardLock:
       return "KeyboardLock";
-    case WebSchedulerTrackedFeature::kSmsService:
+    case WebSchedulerTrackedFeature::kWebOTPService:
       return "SMSService";
     case WebSchedulerTrackedFeature::kOutstandingNetworkRequestDirectSocket:
       return "outstanding network request (direct socket)";
@@ -149,7 +147,6 @@ uint64_t StickyFeaturesBitmask() {
          FeatureToBit(
              WebSchedulerTrackedFeature::kRequestedBackgroundWorkPermission) |
          FeatureToBit(WebSchedulerTrackedFeature::kWebLocks) |
-         FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
          FeatureToBit(
              WebSchedulerTrackedFeature::kRequestedStorageAccessGrant) |
          FeatureToBit(WebSchedulerTrackedFeature::kWebNfc) |
@@ -160,7 +157,7 @@ uint64_t StickyFeaturesBitmask() {
          FeatureToBit(WebSchedulerTrackedFeature::kIdleManager) |
          FeatureToBit(WebSchedulerTrackedFeature::kPaymentManager) |
          FeatureToBit(WebSchedulerTrackedFeature::kKeyboardLock) |
-         FeatureToBit(WebSchedulerTrackedFeature::kSmsService);
+         FeatureToBit(WebSchedulerTrackedFeature::kWebOTPService);
 }
 
 }  // namespace scheduler

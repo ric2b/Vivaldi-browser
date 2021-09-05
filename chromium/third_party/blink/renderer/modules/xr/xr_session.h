@@ -10,6 +10,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_xr_light_probe_init.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
@@ -45,10 +46,12 @@ class XRDepthInformation;
 class XRDOMOverlayState;
 class XRHitTestOptionsInit;
 class XRHitTestSource;
+class XRImageTrackingResult;
 class XRLightProbe;
 class XRReferenceSpace;
 class XRRenderState;
 class XRRenderStateInit;
+class XRSessionViewportScaler;
 class XRSpace;
 class XRSystem;
 class XRTransientInputHitTestOptionsInit;
@@ -86,14 +89,6 @@ class XRSession final
   // they are run in the same turn of the render loop.
   using ExecuteVfcCallback = base::OnceCallback<void(double)>;
 
-  enum EnvironmentBlendMode {
-    kBlendModeOpaque = 0,
-    kBlendModeAdditive,
-    kBlendModeAlphaBlend
-  };
-
-  enum InteractionMode { kInteractionModeScreen = 0, kInteractionModeWorld };
-
   struct MetricsReporter {
     explicit MetricsReporter(
         mojo::Remote<device::mojom::blink::XRSessionMetricsRecorder> recorder);
@@ -114,10 +109,9 @@ class XRSession final
             mojo::PendingReceiver<device::mojom::blink::XRSessionClient>
                 client_receiver,
             device::mojom::blink::XRSessionMode mode,
-            EnvironmentBlendMode environment_blend_mode,
-            InteractionMode interaction_mode,
-            bool uses_input_eventing,
-            float default_framebuffer_scale,
+            device::mojom::blink::XREnvironmentBlendMode environment_blend_mode,
+            device::mojom::blink::XRInteractionMode interaction_mode,
+            device::mojom::blink::XRSessionDeviceConfigPtr device_config,
             bool sensorless_session,
             XRSessionFeatureSet enabled_features);
   ~XRSession() override = default;
@@ -129,6 +123,11 @@ class XRSession final
   const String visibilityState() const;
   XRRenderState* renderState() const { return render_state_; }
   XRWorldTrackingState* worldTrackingState() { return world_tracking_state_; }
+
+  // ARCore by default returns textures in RGBA half-float HDR format and no
+  // other runtimes support reflection mapping, so just return this until we
+  // have a need to differentiate based on the underlying runtime.
+  const String preferredReflectionFormat() const { return "rgba16f"; }
 
   XRSpace* viewerSpace() const;
 
@@ -206,7 +205,12 @@ class XRSession final
       XRTransientInputHitTestOptionsInit* options_init,
       ExceptionState& exception_state);
 
-  ScriptPromise requestLightProbe(ScriptState* script_state, ExceptionState&);
+  ScriptPromise requestLightProbe(ScriptState* script_state,
+                                  XRLightProbeInit*,
+                                  ExceptionState&);
+
+  ScriptPromise getTrackedImageScores(ScriptState* script_state,
+                                      ExceptionState&);
 
   // Called by JavaScript to manually end the session.
   ScriptPromise end(ScriptState* script_state, ExceptionState&);
@@ -259,8 +263,8 @@ class XRSession final
 
   void OnMojoSpaceReset();
 
-  const device::mojom::blink::VRDisplayInfoPtr& GetVRDisplayInfo() const {
-    return display_info_;
+  const device::mojom::blink::VRStageParametersPtr& GetStageParameters() const {
+    return stage_parameters_;
   }
 
   mojo::PendingAssociatedRemote<
@@ -270,7 +274,7 @@ class XRSession final
   bool EmulatedPosition() const {
     // If we don't have display info then we should be using the identity
     // reference space, which by definition will be emulating the position.
-    if (!display_info_) {
+    if (!pending_view_parameters_.size()) {
       return true;
     }
 
@@ -278,19 +282,18 @@ class XRSession final
   }
 
   // Immersive sessions currently use two views for VR, and only a single view
-  // for smartphone immersive AR mode. Convention is that we use the left eye
-  // if there's only a single view.
-  bool StereoscopicViews() { return display_info_ && display_info_->right_eye; }
+  // for smartphone immersive AR mode.
+  bool StereoscopicViews() { return pending_view_parameters_.size() >= 2; }
 
   void UpdateEyeParameters(
       const device::mojom::blink::VREyeParametersPtr& left_eye,
       const device::mojom::blink::VREyeParametersPtr& right_eye);
   void UpdateStageParameters(
+      uint32_t stage_parameters_id,
       const device::mojom::blink::VRStageParametersPtr& stage_parameters);
-  // Incremented every time display_info_ is changed, so that other objects that
-  // depend on it can know when they need to update.
-  unsigned int DisplayInfoPtrId() const { return display_info_id_; }
-  unsigned int StageParametersId() const { return stage_parameters_id_; }
+  // Incremented every time stage_parameters_ is changed, so that other objects
+  // that depend on it can know when they need to update.
+  uint32_t StageParametersId() const { return stage_parameters_id_; }
 
   // Returns true if the session recognizes passed in hit_test_source as still
   // existing. Intended to be used by XRFrame to implement
@@ -318,6 +321,10 @@ class XRSession final
   bool HasPendingActivity() const override;
 
   bool CanReportPoses() const;
+
+  // Return whether we should enable anti-aliasing for WebGL layers. Value
+  // comes from the underlying XR runtime.
+  bool CanEnableAntiAliasing() const;
 
   // Returns current transform from mojo space to the space of the passed in
   // type. May return nullopt if poses cannot be reported or if the transform is
@@ -360,6 +367,9 @@ class XRSession final
   // Queues up the execution of video.requestVideoFrameCallback() callbacks for
   // a specific HTMLVideoELement, for the next requestAnimationFrame() call.
   void ScheduleVideoFrameCallbacksExecution(ExecuteVfcCallback);
+
+  HeapVector<Member<XRImageTrackingResult>> ImageTrackingResults(
+      ExceptionState&);
 
  private:
   class XRSessionResizeObserverDelegate;
@@ -427,6 +437,13 @@ class XRSession final
           hit_test_data);
 
   void ProcessDepthData(device::mojom::blink::XRDepthDataPtr depth_data);
+
+  void ProcessTrackedImagesData(
+      const device::mojom::blink::XRTrackedImagesData*);
+  HeapVector<Member<XRImageTrackingResult>> frame_tracked_images_;
+  bool tracked_image_scores_available_ = false;
+  Vector<String> tracked_image_scores_;
+  HeapVector<Member<ScriptPromiseResolver>> image_scores_resolvers_;
 
   void HandleShutdown();
 
@@ -517,7 +534,9 @@ class XRSession final
   HashSet<uint64_t> hit_test_source_ids_;
   HashSet<uint64_t> hit_test_source_for_transient_input_ids_;
 
+  uint32_t view_parameters_id_ = 0;
   HeapVector<Member<XRViewData>> views_;
+  Vector<device::mojom::blink::VREyeParametersPtr> pending_view_parameters_;
 
   Member<XRInputSourceArray> input_sources_;
   Member<XRWebGLLayer> prev_base_layer_;
@@ -531,9 +550,8 @@ class XRSession final
   HeapHashSet<Member<ScriptPromiseResolver>> request_hit_test_source_promises_;
   HeapVector<Member<XRReferenceSpace>> reference_spaces_;
 
-  unsigned int display_info_id_ = 0;
-  unsigned int stage_parameters_id_ = 0;
-  device::mojom::blink::VRDisplayInfoPtr display_info_;
+  uint32_t stage_parameters_id_ = 0;
+  device::mojom::blink::VRStageParametersPtr stage_parameters_;
 
   HeapMojoReceiver<device::mojom::blink::XRSessionClient,
                    XRSession,
@@ -571,6 +589,14 @@ class XRSession final
 
   bool uses_input_eventing_ = false;
   float default_framebuffer_scale_ = 1.0;
+
+  // Corresponds to mojo XRSession.supportsViewportScaling
+  bool supports_viewport_scaling_ = false;
+
+  // Corresponds to mojo XRSessionOptions.enable_anti_aliasing
+  bool enable_anti_aliasing_ = true;
+
+  std::unique_ptr<XRSessionViewportScaler> viewport_scaler_;
 
   // Indicates that this is a sensorless session which should only support the
   // identity reference space.

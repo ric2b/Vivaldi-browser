@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/process/launch.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -554,7 +554,14 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MaximizedApps) {
 #endif  // OS_CHROMEOS
 
 // Creates a tabbed browser and popup and makes sure we restore both.
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, NormalAndPopup) {
+#if defined(OS_MAC)
+// Disabled for mac-arm64 bot stabilization: https://crbug.com/1154345
+// Also disabled for Mac flakiness in general: https://crbug.com/1158715
+#define MAYBE_NormalAndPopup DISABLED_NormalAndPopup
+#else
+#define MAYBE_NormalAndPopup NormalAndPopup
+#endif
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_NormalAndPopup) {
   // Open a popup.
   Browser* popup = CreateBrowserForPopup(browser()->profile());
   ASSERT_EQ(2u, active_browser_list_->size());
@@ -996,9 +1003,7 @@ std::vector<base::Optional<tab_groups::TabGroupId>> GetTabGroups(
 class SessionRestoreTabGroupsTest : public SessionRestoreTest,
                                     public testing::WithParamInterface<bool> {
  public:
-  SessionRestoreTabGroupsTest() {
-    feature_override_.InitAndEnableFeature(features::kTabGroups);
-  }
+  SessionRestoreTabGroupsTest() = default;
 
  protected:
   void SetUpOnMainThread() override {
@@ -1068,7 +1073,7 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, GroupMetadataRestored) {
   const tab_groups::TabGroupVisualData group1_data =
       *tsm->group_model()->GetTabGroup(group1)->visual_data();
   const tab_groups::TabGroupVisualData group2_data(
-      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kBlue);
+      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kBlue, true);
   tsm->group_model()->GetTabGroup(group2)->SetVisualData(group2_data);
 
   Browser* const new_browser = QuitBrowserAndRestore(browser(), 5);
@@ -1080,35 +1085,18 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, GroupMetadataRestored) {
       new_tsm->group_model()->GetTabGroup(group1)->visual_data();
   const tab_groups::TabGroupVisualData* const group2_restored_data =
       new_tsm->group_model()->GetTabGroup(group2)->visual_data();
+
   EXPECT_EQ(group1_data.title(), group1_restored_data->title());
   EXPECT_EQ(group1_data.color(), group1_restored_data->color());
+  EXPECT_EQ(group1_data.is_collapsed(), group1_restored_data->is_collapsed());
   EXPECT_EQ(group2_data.title(), group2_restored_data->title());
   EXPECT_EQ(group2_data.color(), group2_restored_data->color());
+  EXPECT_EQ(group2_data.is_collapsed(), group2_restored_data->is_collapsed());
 }
 
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutReset,
                          SessionRestoreTabGroupsTest,
                          testing::Values(false, true));
-
-// Ensure tab groups aren't restored if |features::kTabGroups| is disabled.
-// Regression test for crbug.com/983962.
-//
-// TODO(https://crbug.com/1012605): Find a way to cover this regression without
-// relying on dynamic FeatureList overrides mid-test.
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
-                       DISABLED_GroupsNotRestoredWhenFeatureDisabled) {
-  auto feature_override = std::make_unique<base::test::ScopedFeatureList>();
-  feature_override->InitAndEnableFeature(features::kTabGroups);
-
-  ASSERT_EQ(1, browser()->tab_strip_model()->count());
-  browser()->tab_strip_model()->AddToNewGroup({0});
-
-  feature_override = std::make_unique<base::test::ScopedFeatureList>();
-  feature_override->InitAndDisableFeature(features::kTabGroups);
-  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
-  ASSERT_EQ(base::nullopt,
-            new_browser->tab_strip_model()->GetTabGroupForTab(0));
-}
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAfterDelete) {
   ui_test_utils::NavigateToURL(browser(), url1_);
@@ -1403,8 +1391,11 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, CloseSingleTabRestoresNothing) {
 // Verifies that launching with no previous session to a url which closes itself
 // results in no session being restored on the next launch.
 // Regression test for http://crbug.com/1052096
+// Flaky:
+//  - Bulk-disabled for arm64 bot stabilization: https://crbug.com/1154345
+//  - Disabled for all platforms: https://crbug.com/1158715
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
-                       AutoClosedSingleTabDoesNotGetRestored) {
+                       DISABLED_AutoClosedSingleTabDoesNotGetRestored) {
   Profile* profile = browser()->profile();
   std::unique_ptr<ScopedKeepAlive> keep_alive(new ScopedKeepAlive(
       KeepAliveOrigin::SESSION_RESTORE, KeepAliveRestartOption::DISABLED));
@@ -1955,7 +1946,10 @@ class MultiBrowserObserver : public BrowserListObserver {
 
 // Test that when closing a profile with multiple browsers, all browsers are
 // restored when the profile is reopened.
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAllBrowsers) {
+// Flaky:
+//  - Bulk-disabled for arm64 bot stabilization: https://crbug.com/1154345
+//  - Disabled for all platforms: https://crbug.com/1158715
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, DISABLED_RestoreAllBrowsers) {
   // Create two profiles with two browsers each.
   Browser* first_profile_browser_one = browser();
   chrome::NewWindow(first_profile_browser_one);
@@ -2258,6 +2252,8 @@ IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest, SecFetchSite) {
 // Test that it is possible to navigate back to a restored about:blank history
 // entry with a non-null initiator origin.  This test cases covers the original
 // repro steps reported in https://crbug.com/1026474.
+//
+// See also TabRestoreTest.BackToAboutBlank
 IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest, BackToAboutBlank1) {
   // Open about:blank in a new tab.
   GURL initial_url = embedded_test_server()->GetURL("foo.com", "/title1.html");

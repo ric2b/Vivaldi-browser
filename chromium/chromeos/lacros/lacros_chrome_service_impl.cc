@@ -11,6 +11,8 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chromeos/lacros/lacros_chrome_service_delegate.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "url/gurl.h"
 
 namespace chromeos {
 namespace {
@@ -72,6 +74,27 @@ class LacrosChromeServiceNeverBlockingState
         base::BindOnce(&LacrosChromeServiceImpl::NewWindowAffineSequence,
                        owner_),
         std::move(callback));
+  }
+
+  void GetFeedbackData(GetFeedbackDataCallback callback) override {
+    owner_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&LacrosChromeServiceImpl::GetFeedbackDataAffineSequence,
+                       owner_, std::move(callback)));
+  }
+
+  void GetHistograms(GetHistogramsCallback callback) override {
+    owner_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&LacrosChromeServiceImpl::GetHistogramsAffineSequence,
+                       owner_, std::move(callback)));
+  }
+
+  void GetActiveTabUrl(GetActiveTabUrlCallback callback) override {
+    owner_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&LacrosChromeServiceImpl::GetActiveTabUrlAffineSequence,
+                       owner_, std::move(callback)));
   }
 
   // Unlike most of other methods of this class, this is called on the
@@ -144,6 +167,19 @@ class LacrosChromeServiceNeverBlockingState
     ash_chrome_service_->OnLacrosStartup(std::move(lacros_info));
   }
 
+  void BindAccountManagerReceiver(
+      mojo::PendingReceiver<crosapi::mojom::AccountManager> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    DVLOG(1) << "Binding AccountManager";
+    ash_chrome_service_->BindAccountManager(std::move(pending_receiver));
+  }
+
+  void BindFileManagerReceiver(
+      mojo::PendingReceiver<crosapi::mojom::FileManager> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindFileManager(std::move(pending_receiver));
+  }
+
   base::WeakPtr<LacrosChromeServiceNeverBlockingState> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -189,6 +225,12 @@ LacrosChromeServiceImpl::LacrosChromeServiceImpl(
     std::unique_ptr<LacrosChromeServiceDelegate> delegate)
     : delegate_(std::move(delegate)),
       sequenced_state_(nullptr, base::OnTaskRunnerDeleter(nullptr)) {
+  if (g_disable_all_crosapi_for_tests) {
+    // Tests don't call LacrosChromeService::Init(), so provide LacrosInitParams
+    // with default values.
+    init_params_ = crosapi::mojom::LacrosInitParams::New();
+  }
+
   // The sequence on which this object was constructed, and thus affine to.
   scoped_refptr<base::SequencedTaskRunner> affine_sequence =
       base::SequencedTaskRunnerHandle::Get();
@@ -292,8 +334,33 @@ void LacrosChromeServiceImpl::BindReceiver(
                        weak_sequenced_state_,
                        ToMojo(delegate_->GetChromeVersion())));
   }
+
+  if (IsAccountManagerAvailable()) {
+    mojo::PendingReceiver<crosapi::mojom::AccountManager>
+        account_manager_receiver =
+            account_manager_remote_.BindNewPipeAndPassReceiver();
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindAccountManagerReceiver,
+            weak_sequenced_state_, std::move(account_manager_receiver)));
+  } else {
+    LOG(WARNING) << "Connected to an older version of ash. Account consistency "
+                    "will not be available";
+  }
+
+  if (IsFileManagerAvailable()) {
+    mojo::PendingReceiver<crosapi::mojom::FileManager> pending_receiver =
+        file_manager_remote_.BindNewPipeAndPassReceiver();
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindFileManagerReceiver,
+            weak_sequenced_state_, std::move(pending_receiver)));
+  }
 }
 
+// static
 void LacrosChromeServiceImpl::DisableCrosapiForTests() {
   g_disable_all_crosapi_for_tests = true;
 }
@@ -314,16 +381,38 @@ bool LacrosChromeServiceImpl::IsHidManagerAvailable() {
   return AshChromeServiceVersion() >= 0;
 }
 
-bool LacrosChromeServiceImpl::IsScreenManagerAvailable() {
-  return AshChromeServiceVersion() >= 0;
-}
-
 bool LacrosChromeServiceImpl::IsFeedbackAvailable() {
   return AshChromeServiceVersion() >= 3;
 }
 
+bool LacrosChromeServiceImpl::IsAccountManagerAvailable() {
+  return AshChromeServiceVersion() >= 4;
+}
+
+bool LacrosChromeServiceImpl::IsFileManagerAvailable() {
+  return AshChromeServiceVersion() >= 5;
+}
+
+bool LacrosChromeServiceImpl::IsScreenManagerAvailable() {
+  return AshChromeServiceVersion() >= 0;
+}
+
 bool LacrosChromeServiceImpl::IsOnLacrosStartupAvailable() {
   return AshChromeServiceVersion() >= 3;
+}
+
+int LacrosChromeServiceImpl::GetInterfaceVersion(
+    base::Token interface_uuid) const {
+  if (g_disable_all_crosapi_for_tests)
+    return -1;
+  if (!init_params_->interface_versions)
+    return -1;
+  const base::flat_map<base::Token, uint32_t>& versions =
+      init_params_->interface_versions.value();
+  auto it = versions.find(interface_uuid);
+  if (it == versions.end())
+    return -1;
+  return it->second;
 }
 
 void LacrosChromeServiceImpl::BindScreenManagerReceiver(
@@ -339,6 +428,24 @@ void LacrosChromeServiceImpl::BindScreenManagerReceiver(
 void LacrosChromeServiceImpl::NewWindowAffineSequence() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
   delegate_->NewWindow();
+}
+
+void LacrosChromeServiceImpl::GetFeedbackDataAffineSequence(
+    GetFeedbackDataCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  delegate_->GetFeedbackData(std::move(callback));
+}
+
+void LacrosChromeServiceImpl::GetHistogramsAffineSequence(
+    GetHistogramsCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  delegate_->GetHistograms(std::move(callback));
+}
+
+void LacrosChromeServiceImpl::GetActiveTabUrlAffineSequence(
+    GetActiveTabUrlCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  delegate_->GetActiveTabUrl(std::move(callback));
 }
 
 int LacrosChromeServiceImpl::AshChromeServiceVersion() {

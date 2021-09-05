@@ -139,7 +139,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTabRestoreTest,
       /* last_active_time=*/base::TimeTicks::Now(),
       /* storage_namespace=*/nullptr,
       /* user_agent_override=*/sessions::SerializedUserAgentOverride(),
-      /* from_session_restore=*/true);
+      /* from_session_restore=*/true,
+      /* page_actions*/ std::map<std::string, bool>());
 
   EXPECT_TRUE(web_contents->GetController().GetPendingEntry());
 }
@@ -161,7 +162,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTabRestoreTest,
       /* last_active_time=*/base::TimeTicks::Now(),
       /* storage_namespace=*/nullptr,
       /* user_agent_override=*/sessions::SerializedUserAgentOverride(),
-      /* from_session_restore=*/true);
+      /* from_session_restore=*/true,
+      /* page_actions*/ std::map<std::string, bool>());
 
   EXPECT_FALSE(web_contents->GetController().GetPendingEntry());
 }

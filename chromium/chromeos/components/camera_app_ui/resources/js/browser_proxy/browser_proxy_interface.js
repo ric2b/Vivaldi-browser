@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// eslint-disable-next-line no-unused-vars
-import {BackgroundOps} from '../background_ops.js';
 import {
   AbstractDirectoryEntry,   // eslint-disable-line no-unused-vars
   AbstractFileEntry,        // eslint-disable-line no-unused-vars
   AbstractFileSystemEntry,  // eslint-disable-line no-unused-vars
 } from '../models/file_system_entry.js';
+// eslint-disable-next-line no-unused-vars
+import {UntrustedOrigin} from '../type.js';
 
 /**
  * The abstract interface for the CCA's interaction with the browser.
@@ -25,7 +25,7 @@ export class BrowserProxy {
    * @return {!Promise<?AbstractDirectoryEntry>}
    * @abstract
    */
-  async getExternalDir() {}
+  async getCameraDirectory() {}
 
   /**
    * @param {(string|!Array<string>|!Object)} keys
@@ -47,6 +47,12 @@ export class BrowserProxy {
    * @abstract
    */
   async localStorageRemove(items) {}
+
+  /**
+   * @return {!Promise}
+   * @abstract
+   */
+  async localStorageClear() {}
 
   /**
    * @return {!Promise<string>}
@@ -94,40 +100,17 @@ export class BrowserProxy {
   getAppVersion() {}
 
   /**
-   * @param {function(*, !MessageSender, function(string)): (boolean|undefined)}
-   *     listener
+   * @return {string} Returns 'ltr'/'rtl' for left-to-right/right-to-left system
+   *     UI language.
    * @abstract
    */
-  addOnMessageExternalListener(listener) {}
-
-  /**
-   * @param {function(!Port)} listener
-   * @abstract
-   */
-  addOnConnectExternalListener(listener) {}
-
-  /**
-   * @abstract
-   */
-  addDummyHistoryIfNotAvailable() {}
+  getTextDirection() {}
 
   /**
    * @return {boolean}
    * @abstract
    */
-  isMp4RecordingEnabled() {}
-
-  /**
-   * @return {!BackgroundOps}
-   * @abstract
-   */
-  getBackgroundOps() {}
-
-  /**
-   * @return {boolean}
-   * @abstract
-   */
-  isFullscreenOrMaximized() {}
+  shouldAddFakeHistory() {}
 
   /**
    * @return {!Promise}
@@ -138,27 +121,37 @@ export class BrowserProxy {
   /**
    * @abstract
    */
-  showWindow() {}
+  openFeedback() {}
 
   /**
+   * @param {function(): !Promise} exploitUsage
+   * @param {function(): !Promise} releaseUsage
    * @abstract
    */
-  hideWindow() {}
-
-  /**
-   * @return {boolean}
-   * @abstract
-   */
-  isMinimized() {}
+  async initCameraUsageMonitor(exploitUsage, releaseUsage) {}
 
   /**
    * @param {function(): void} listener
    * @abstract
    */
-  addOnMinimizedListener(listener) {}
+  setupUnloadListener(listener) {}
 
   /**
+   * @param {function(): !Promise} callback
+   * @return {!Promise}
    * @abstract
    */
-  openFeedback() {}
+  async setLaunchingFromWindowCreationStartTime(callback) {}
+
+  /**
+   * @return {!UntrustedOrigin}
+   * @abstract
+   */
+  getUntrustedOrigin() {}
+
+  /**
+   * @param {boolean} enabled
+   * @abstract
+   */
+  setBeforeUnloadListenerEnabled(enabled) {}
 }

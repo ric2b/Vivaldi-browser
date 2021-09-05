@@ -9,12 +9,15 @@
 #include <google/protobuf/message_lite.h>
 
 #include "base/bind.h"
+#include "base/check_op.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/attestation/fake_attestation_client.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
@@ -23,6 +26,10 @@
 
 namespace chromeos {
 namespace {
+
+// Values for the attestation server switch.
+const char kAttestationServerDefault[] = "default";
+const char kAttestationServerTest[] = "test";
 
 // An arbitrary timeout for getting a certificate.
 constexpr base::TimeDelta kGetCertificateTimeout =
@@ -258,14 +265,14 @@ class AttestationClientImpl : public AttestationClient {
   }
 
   // Parses the response proto message from |response| and calls |callback| with
-  // the decoded message. Calls |callback| with an
-  // |STATUS_UNEXPECTED_DEVICE_ERROR| message on error, including timeout.
+  // the decoded message. Calls |callback| with an |STATUS_DBUS_ERROR| message
+  // on error, including timeout.
   template <typename ReplyType>
   void HandleResponse(base::OnceCallback<void(const ReplyType&)> callback,
                       dbus::Response* response) {
     ReplyType reply_proto;
     if (!ParseProto(response, &reply_proto))
-      reply_proto.set_status(attestation::STATUS_UNEXPECTED_DEVICE_ERROR);
+      reply_proto.set_status(attestation::STATUS_DBUS_ERROR);
     std::move(callback).Run(reply_proto);
   }
 
@@ -309,6 +316,36 @@ void AttestationClient::Shutdown() {
 // static
 AttestationClient* AttestationClient::Get() {
   return g_instance;
+}
+
+// static
+bool AttestationClient::IsAttestationPrepared(
+    const ::attestation::GetEnrollmentPreparationsReply& reply) {
+  if (reply.status() != ::attestation::STATUS_SUCCESS) {
+    return false;
+  }
+  for (const auto& preparation : reply.enrollment_preparations()) {
+    if (preparation.second) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// static
+::attestation::VAType AttestationClient::GetVerifiedAccessServerType() {
+  std::string value =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kAttestationServer);
+  if (value.empty() || value == kAttestationServerDefault) {
+    return ::attestation::DEFAULT_VA;
+  }
+  if (value == kAttestationServerTest) {
+    return ::attestation::TEST_VA;
+  }
+  LOG(WARNING) << "Invalid Verified Access server value: " << value
+               << ". Using default.";
+  return attestation::DEFAULT_VA;
 }
 
 }  // namespace chromeos

@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">No es pot compartir <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> s'ha intercanviat amb <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Ja has fet aquesta cerca anteriorment. En suprimir "<ph name="QUERY" />" de l'historial, també se suprimirà permanentment del teu compte en tots els dispositius.</translation>
+<translation id="1510238584712386396">Menú d'aplicacions</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minut i }other{# minuts i }}</translation>
 <translation id="1643823602425662293">Notificació</translation>
 <translation id="169515659049020177">Maj</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Fitxer <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668">Més de <ph name="MAXIMUM_VALUE" /></translation>
 <translation id="3618849550573277856">Cerca "<ph name="LOOKUP_STRING" />"</translation>
+<translation id="3622035490309591977">Historial del porta-retalls</translation>
 <translation id="364720409959344976">Selecció d'una carpeta per penjar</translation>
 <translation id="3660179305079774227">Fletxa amunt</translation>
 <translation id="3670030362669914947">Número</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Actiu avui}=1{Actiu fa 1 dia}other{Actiu fa # dies}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dia i }other{# dies i }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Imatge.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{d'aquí a 1 a}other{d'aquí a # a}}</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 segon restant}other{# segons restants}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">prem</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 hora restant}other{# hores restants}}</translation>
 <translation id="688711909580084195">Pàgina web sense títol</translation>
+<translation id="6902419395050653510">Contingut HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{D'aquí a 1 any}other{D'aquí a # anys}}</translation>
 <translation id="6945221475159498467">Selecciona</translation>

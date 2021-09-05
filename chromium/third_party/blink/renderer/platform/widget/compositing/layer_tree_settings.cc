@@ -9,6 +9,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/base/features.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/display/de_jelly.h"
@@ -186,7 +187,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
 #if defined(OS_ANDROID)
   // WebView should always raster in the default color space.
   // Synchronous compositing indicates WebView.
-  if (!platform->IsSynchronousCompositingEnabled())
+  if (!platform->IsSynchronousCompositingEnabledForAndroidWebView())
     settings.prefer_raster_in_srgb = ::features::IsDynamicColorGamutEnabled();
 
   // We can use a more aggressive limit on Android since decodes tend to take
@@ -235,7 +236,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
     default_tile_size += 32;
   if (default_tile_size == 384 && std::abs(portrait_width - 1200) < tolerance)
     default_tile_size += 32;
-#elif defined(OS_CHROMEOS) || defined(OS_MAC)
+#elif BUILDFLAG(IS_ASH) || defined(OS_MAC)
   // Use 512 for high DPI (dsf=2.0f) devices.
   if (initial_device_scale_factor >= 2.0f)
     default_tile_size = 512;
@@ -392,7 +393,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
 
 #if defined(OS_ANDROID)
   bool using_synchronous_compositor =
-      platform->IsSynchronousCompositingEnabled();
+      platform->IsSynchronousCompositingEnabledForAndroidWebView();
   bool using_low_memory_policy =
       base::SysInfo::IsLowEndDevice() && !IsSmallScreen(screen_size);
 
@@ -438,8 +439,6 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
         ui::kOverlayScrollbarThinningDuration;
     settings.scrollbar_flash_after_any_scroll_update =
         ui::OverlayScrollbarFlashAfterAnyScrollUpdate();
-    settings.scrollbar_flash_when_mouse_enter =
-        ui::OverlayScrollbarFlashWhenMouseEnter();
   }
 
   // If there's over 4GB of RAM, increase the working set size to 256MB for both
@@ -466,8 +465,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
     // TODO(penghuang): query supported formats from GPU process.
     if (!cmd.HasSwitch(switches::kDisableRGBA4444Textures) &&
         base::SysInfo::AmountOfPhysicalMemoryMB() <= 512 &&
-        !using_synchronous_compositor &&
-        !base::FeatureList::IsEnabled(::features::kVulkan)) {
+        !using_synchronous_compositor && !::features::IsUsingVulkan()) {
       settings.use_rgba_4444 = viz::RGBA_4444;
 
       // If we are going to unpremultiply and dither these tiles, we need to

@@ -53,24 +53,6 @@ const char kAutofillEnableOffersInDownstreamDescription[] =
     "When enabled, offer data will be retrieved during downstream and shown in "
     "the dropdown list.";
 
-const char kAutofillEnforceMinRequiredFieldsForHeuristicsName[] =
-    "Autofill Enforce Min Required Fields For Heuristics";
-const char kAutofillEnforceMinRequiredFieldsForHeuristicsDescription[] =
-    "When enabled, autofill will generally require a form to have at least 3 "
-    "fields before allowing heuristic field-type prediction to occur.";
-
-const char kAutofillEnforceMinRequiredFieldsForQueryName[] =
-    "Autofill Enforce Min Required Fields For Query";
-const char kAutofillEnforceMinRequiredFieldsForQueryDescription[] =
-    "When enabled, autofill will generally require a form to have at least 3 "
-    "fields before querying the autofill server for field-type predictions.";
-
-const char kAutofillEnforceMinRequiredFieldsForUploadName[] =
-    "Autofill Enforce Min Required Fields For Upload";
-const char kAutofillEnforceMinRequiredFieldsForUploadDescription[] =
-    "When enabled, autofill will generally require a form to have at least 3 "
-    "fillable fields before uploading field-type votes for that form.";
-
 const char kAutofillIOSDelayBetweenFieldsName[] = "Autofill delay";
 const char kAutofillIOSDelayBetweenFieldsDescription[] =
     "Delay between the different fields of a form being autofilled. In "
@@ -115,12 +97,6 @@ const char kAutofillUseRendererIDsDescription[] =
     "When enabled, Autofill logic uses unique numeric renderer IDs instead "
     "of string form and field identifiers in form filling logic.";
 
-const char kBlockPopupInfobarMessagesUIName[] =
-    "Block Popup Infobars Messages UI";
-const char kBlockPopupInfobarMessagesUIDescription[] =
-    "When enabled Block Popup Infobars use the new Messages UI. "
-    "IOSInfobarUIReboot needs to be enabled as well for this to work.";
-
 extern const char kLogBreadcrumbsName[] = "Log Breadcrumb Events";
 extern const char kLogBreadcrumbsDescription[] =
     "When enabled, breadcrumb events will be logged.";
@@ -143,15 +119,6 @@ const char kCollectionsCardPresentationStyleName[] =
 const char kCollectionsCardPresentationStyleDescription[] =
     "When enabled collections are presented using the new iOS13 card "
     "style.";
-
-const char kConfirmInfobarMessagesUIName[] = "Confirm Infobars Messages UI";
-const char kConfirmInfobarMessagesUIDescription[] =
-    "When enabled Confirm Infobars use the new Messages UI.";
-
-const char kCrashRestoreInfobarMessagesUIName[] =
-    "Crash Restore Infobars Messages UI";
-const char kCrashRestoreInfobarMessagesUIDescription[] =
-    "When enabled Crash Restore Infobars use the new Messages UI.";
 
 const char kCreditCardScannerName[] = "Enable the 'Use Camera' button";
 const char kCreditCardScannerDescription[] =
@@ -203,16 +170,16 @@ const char kDiscoverFeedInNtpDescription[] =
     "When enabled, replaces articles feed with new content Suggestion Feed in "
     "the NTP.";
 
-const char kDownloadInfobarMessagesUIName[] = "Download Infobars Messages UI";
-const char kDownloadInfobarMessagesUIDescription[] =
-    "When enabled Downloads use the new Messages UI.";
-
 const char kDragAndDropName[] = "Drag and Drop";
 const char kDragAndDropDescription[] = "Enable support for drag and drop.";
 
 const char kEditBookmarksIOSName[] = "Edit Bookmarks IOS";
 const char kEditBookmarksIOSDescription[] =
     "Enables support for the EditBookmarksEnabled enterprise policy on iOS";
+
+const char kEditPasswordsInSettingsName[] = "Edit passwords in settings";
+const char kEditPasswordsInSettingsDescription[] =
+    "Enables password editing in settings.";
 
 const char kEmbedderBlockRestoreUrlName[] =
     "Allow embedders to prevent certain URLs from restoring.";
@@ -224,17 +191,6 @@ const char kEnableAutofillCacheServerCardInfoName[] =
 const char kEnableAutofillCacheServerCardInfoDescription[] =
     "If enabled, when a server card is unmasked, its info will be cached until "
     "page navigation to simplify consecutive fills on the same page.";
-
-const char kEnableAutofillPasswordReauthIOSName[] =
-    "Enable Autofill reauth request for passwords";
-const char kEnableAutofillPasswordReauthIOSDescription[] =
-    "If enabled, when a credential will be filled, the browser will require "
-    "the user to authenticate with the device first.";
-
-const char kEnableClipboardProviderImageSuggestionsName[] =
-    "Enable copied image provider";
-const char kEnableClipboardProviderImageSuggestionsDescription[] =
-    "Enable suggesting a search for the image copied to the clipboard";
 
 const char kEnableCloseAllTabsConfirmationName[] =
     "Enable Close All Tabs confirmation";
@@ -261,10 +217,6 @@ const char kEnableNativeContextMenusName[] =
 const char kEnableNativeContextMenusDescription[] =
     "Enables the new iOS 13 context menus on various pieces of UI in native "
     "Chrome (e.g. History, Bookmarks).";
-
-const char kEnablePersistentDownloadsName[] = "Enable persistent downloads";
-const char kEnablePersistentDownloadsDescription[] =
-    "Enables the new, experimental implementation of persistent downloads";
 
 const char kExpandedTabStripName[] = "Enable expanded tabstrip";
 const char kExpandedTabStripDescription[] =
@@ -296,6 +248,12 @@ const char kFullscreenControllerBrowserScopedDescription[] =
     "When enabled, FullscreenController will be stored and retrieved using the "
     "Browser.";
 
+const char kIncognitoAuthenticationName[] =
+    "Device Authentication for Incognito";
+extern const char kIncognitoAuthenticationDescription[] =
+    "When enabled, a setting appears to enable biometric authentication for "
+    "accessing incognito.";
+
 const char kIllustratedEmptyStatesName[] = "Illustrated empty states";
 const char kIllustratedEmptyStatesDescription[] =
     "Display new illustrations and layout on empty states.";
@@ -312,6 +270,12 @@ const char kInfobarUIRebootDescription[] =
 const char kInfobarUIRebootOnlyiOS13Name[] = "Infobar UI Reboot iOS13";
 const char kInfobarUIRebootOnlyiOS13Description[] =
     "When enabled, Infobar will use the new UI only on iOS13";
+
+const char kSigninNotificationInfobarUsernameInTitleName[] =
+    "Sign-in notification infobar title";
+const char kSigninNotificationInfobarUsernameInTitleDescription[] =
+    "When enabled, uses the authenticated user's full name in the infobar "
+    "title.";
 
 const char kInProductHelpDemoModeName[] = "In-Product Help Demo Mode";
 const char kInProductHelpDemoModeDescription[] =
@@ -331,6 +295,17 @@ const char kIOSLookalikeUrlNavigationSuggestionsUIName[] =
 const char kIOSLookalikeUrlNavigationSuggestionsUIDescription[] =
     "When enabled, an interstitial will be shown on navigations to lookalike "
     "URLs.";
+
+const char kIOSPersistCrashRestoreName[] = "Persist Crash Restore Infobar";
+const char kIOSPersistCrashRestoreDescription[] =
+    "When enabled, the Crash Restore Infobar will persist through navigations "
+    "instead of dismissing.";
+
+const char kLocationPermissionsPromptName[] =
+    "Location Permisssions Prompt Experiment";
+const char kLocationPermissionsPromptDescription[] =
+    "When enabled, a different user experience flow will be shown to ask for "
+    "location permissions.";
 
 const char kLockBottomToolbarName[] = "Lock bottom toolbar";
 const char kLockBottomToolbarDescription[] =
@@ -382,19 +357,15 @@ const char kOmniboxOnFocusSuggestionsDescription[] =
     "before the user has typed any input. This provides overrides for the "
     "default suggestion locations.";
 
-const char kOpenDownloadsInFilesAppName[] = "Open Downloads in Files.app";
-const char kOpenDownloadsInFilesAppDescription[] =
-    "Allows user to open Files.app after pressing the 'Downloads' button from "
-    "the tools menu or after pressing the 'Open in downloads' button invoked "
-    "by pressing 'Open In...' after download completes.";
-
-const char kPasswordCheckName[] = "Bulk Password Check";
-const char kPasswordCheckDescription[] =
-    "Enables the Bulk Password Check feature for signed-in users.";
-
 const char kPageInfoRefactoringName[] = "New design of the page info";
 const char kPageInfoRefactoringDescription[] =
     "Uses the new design for the page security info.";
+
+const char kOmniboxLocalHistoryZeroSuggestName[] =
+    "Omnibox local zero-prefix suggestions";
+const char kOmniboxLocalHistoryZeroSuggestDescription[] =
+    "Configures the omnibox zero-prefix suggestion to use local search "
+    "history.";
 
 #if defined(__IPHONE_13_4)
 const char kPointerSupportName[] = "Enables pointer support on tablets";
@@ -466,12 +437,6 @@ const char kSnapshotDrawViewName[] = "Use DrawViewHierarchy for Snapshots";
 const char kSnapshotDrawViewDescription[] =
     "When enabled, snapshots will be taken using |-drawViewHierarchy:|.";
 
-const char kSSLCommittedInterstitialsName[] =
-    "Enable SSL committed interstitials";
-const char kSSLCommittedInterstitialsDescription[] =
-    "When enabled, SSL interstitial pages will be committed rather than using "
-    "an overlay on the page.";
-
 const char kSyncSandboxName[] = "Use Chrome Sync sandbox";
 const char kSyncSandboxDescription[] =
     "Connects to the testing server for Chrome Sync.";
@@ -515,6 +480,12 @@ const char kWebPageAlternativeTextZoomName[] =
     "Use different method for zooming web pages";
 const char kWebPageAlternativeTextZoomDescription[] =
     "When enabled, switches the method used to zoom web pages.";
+
+const char kWebViewNativeContextMenuName[] =
+    "Use the native Context Menus in the WebView";
+const char kWebViewNativeContextMenuDescription[] =
+    "When enabled, the native context menu are displayed when the user long "
+    "press on a link or an image.";
 
 const char kWellKnownChangePasswordName[] =
     "Support for .well-known/change-password";

@@ -13,7 +13,7 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/sequence_bound.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "content/public/test/browser_task_environment.h"
@@ -29,9 +29,9 @@ TEST(SiteDataCacheFactoryTest, EndToEnd) {
       PerformanceManager::GetTaskRunner());
 
   content::TestBrowserContext browser_context;
-  cache_factory.Post(FROM_HERE, &SiteDataCacheFactory::OnBrowserContextCreated,
-                     browser_context.UniqueId(), browser_context.GetPath(),
-                     base::nullopt);
+  cache_factory.AsyncCall(&SiteDataCacheFactory::OnBrowserContextCreated)
+      .WithArgs(browser_context.UniqueId(), browser_context.GetPath(),
+                base::nullopt);
 
   {
     base::RunLoop run_loop;
@@ -51,9 +51,8 @@ TEST(SiteDataCacheFactoryTest, EndToEnd) {
     run_loop.Run();
   }
 
-  cache_factory.Post(FROM_HERE,
-                     &SiteDataCacheFactory::OnBrowserContextDestroyed,
-                     browser_context.UniqueId());
+  cache_factory.AsyncCall(&SiteDataCacheFactory::OnBrowserContextDestroyed)
+      .WithArgs(browser_context.UniqueId());
   {
     base::RunLoop run_loop;
     cache_factory.PostTaskWithThisObject(

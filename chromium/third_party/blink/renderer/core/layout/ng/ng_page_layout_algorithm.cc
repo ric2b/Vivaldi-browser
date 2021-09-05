@@ -17,17 +17,15 @@ namespace blink {
 
 NGPageLayoutAlgorithm::NGPageLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
-    : NGLayoutAlgorithm(params) {
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-}
+    : NGLayoutAlgorithm(params) {}
 
 scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
   LogicalSize page_size = ChildAvailableSize();
 
   NGConstraintSpace child_space = CreateConstraintSpaceForPages(page_size);
 
-  WritingMode writing_mode = ConstraintSpace().GetWritingMode();
+  WritingDirectionMode writing_direction =
+      ConstraintSpace().GetWritingDirection();
   scoped_refptr<const NGBlockBreakToken> break_token = BreakToken();
   LayoutUnit intrinsic_block_size;
   LogicalOffset page_offset = BorderScrollbarPadding().StartOffset();
@@ -47,7 +45,8 @@ scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
 
     container_builder_.AddChild(page, page_offset);
 
-    LayoutUnit page_block_size = NGFragment(writing_mode, page).BlockSize();
+    LayoutUnit page_block_size =
+        NGFragment(writing_direction, page).BlockSize();
     intrinsic_block_size = std::max(intrinsic_block_size,
                                     page_offset.block_offset + page_block_size);
     page_offset += page_progression;
@@ -81,7 +80,7 @@ MinMaxSizesResult NGPageLayoutAlgorithm::ComputeMinMaxSizes(
 NGConstraintSpace NGPageLayoutAlgorithm::CreateConstraintSpaceForPages(
     const LogicalSize& page_size) const {
   NGConstraintSpaceBuilder space_builder(
-      ConstraintSpace(), Style().GetWritingMode(), /* is_new_fc */ true);
+      ConstraintSpace(), Style().GetWritingDirection(), /* is_new_fc */ true);
   space_builder.SetAvailableSize(page_size);
   space_builder.SetPercentageResolutionSize(page_size);
 

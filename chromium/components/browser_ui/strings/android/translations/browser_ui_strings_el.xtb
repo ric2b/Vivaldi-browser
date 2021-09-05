@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Προστέθηκε ο ιστότοπος <ph name="SITE_NAME" /></translation>
 <translation id="1383876407941801731">Αναζήτηση</translation>
 <translation id="1384959399684842514">Η λήψη διακόπηκε προσωρινά.</translation>
+<translation id="1415402041810619267">Περικομμένο URL</translation>
 <translation id="1431402976894535801">Να μην επιτρέπεται σε ιστοτόπους να γνωρίζουν πότε είστε ενεργοί.</translation>
 <translation id="1446450296470737166">Να επιτρέπεται πλήρης έλεγχος σε MIDI</translation>
 <translation id="1509960214886564027">Μπορεί να παρουσιαστούν προβλήματα στις λειτουργίες πολλών ιστοτόπων.</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
-<translation id="1647391597548383849">Πρόσβαση στην κάμερα</translation>
 <translation id="1660204651932907780">Να επιτρέπεται στους ιστοτόπους να αναπαράγουν ήχο (συνιστάται)</translation>
 <translation id="1677097821151855053">Τα cookie και άλλα δεδομένα ιστοτόπου χρησιμοποιούνται για την απομνημόνευσή σας, όπως, για παράδειγμα, για σας συνδέουν ή να εξατομικεύουν τις διαφημίσεις σας. Για να διαχειριστείτε τα cookie για όλους τους ιστοτόπους, ανατρέξτε στις <ph name="BEGIN_LINK" />Ρυθμίσεις<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Να διαγραφούν τα δεδομένα ιστοτόπου;</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">URL ιστότοπου</translation>
 <translation id="2025115093177348061">Επαυξημένη πραγματικότητα</translation>
 <translation id="2030769033451695672">Πατήστε για επιστροφή σε <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Η παρουσία σας</translation>
 <translation id="2079545284768500474">Αναίρεση</translation>
 <translation id="2091887806945687916">Ήχος</translation>
 <translation id="2107397443965016585">Να γίνεται ερώτηση προτού επιτραπεί στους ιστοτόπους η αναπαραγωγή προστατευόμενου περιεχομένου (συνιστάται)</translation>
 <translation id="2146738493024040262">Άνοιγμα Instant Εφαρμογής</translation>
 <translation id="2148716181193084225">Σήμερα</translation>
 <translation id="2182457891543959921">Να γίνεται ερώτηση προτού επιτραπεί σε ιστοτόπους η δημιουργία τρισδιάστατου χάρτη του περιβάλλοντα χώρου σας και η παρακολούθηση της θέσης της κάμερας (συνιστάται)</translation>
-<translation id="2187243482123994665">Παρουσία χρήστη</translation>
 <translation id="2212565012507486665">Αποδοχή cookie</translation>
 <translation id="2228071138934252756">Για να επιτρέψετε στην εφαρμογή <ph name="APP_NAME" /> να αποκτήσει πρόσβαση στην κάμερά σας, ενεργοποιήστε επίσης την κάμερα στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Μόνο μία φορά</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{Οι άδειες <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> και <ph name="NUM_MORE" /> ακόμη επιτράπηκαν.}other{Οι άδειες <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> και <ph name="NUM_MORE" /> ακόμη επιτράπηκαν.}}</translation>
 <translation id="2434158240863470628">Η λήψη ολοκληρώθηκε <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Πρόσβαση τοποθεσίας</translation>
 <translation id="2482878487686419369">Ειδοποιήσεις</translation>
 <translation id="2490684707762498678">Διαχειριζόμενες από την εφαρμογή <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Βοήθεια και σχόλια</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Μικρόφωνο</translation>
 <translation id="3277252321222022663">Να επιτρέπεται στους ιστοτόπους η πρόσβαση στους αισθητήρες (συνιστάται)</translation>
 <translation id="3295602654194328831">Απόκρυψη πληροφοριών</translation>
+<translation id="3328801116991980348">Πληροφορίες ιστοτόπου</translation>
 <translation id="3333961966071413176">Όλες οι επαφές</translation>
 <translation id="3386292677130313581">Να γίνεται ερώτηση προτού επιτραπεί η κοινοποίηση της τοποθεσίας σας σε ιστότοπους (συνιστάται)</translation>
 <translation id="3538390592868664640">Αποκλείστε ιστοτόπους από τη δημιουργία ενός τρισδιάστατου χάρτη του περιβάλλοντα χώρου σας ή την παρακολούθηση της θέσης της κάμερας.</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Να επιτρέπεται στους ιστοτόπους η αναπαραγωγή προστατευμένου περιεχομένου</translation>
 <translation id="4468959413250150279">Σίγαση ήχου για συγκεκριμένο ιστότοπο.</translation>
 <translation id="4479647676395637221">Να γίνεται ερώτηση προτού επιτραπεί στους ιστότοπους να χρησιμοποιούν την κάμερά σας (συνιστάται)</translation>
+<translation id="4505788138578415521">Το URL επεκτάθηκε</translation>
 <translation id="4534723447064627427">Για να επιτρέψετε στην εφαρμογή <ph name="APP_NAME" /> να αποκτήσει πρόσβαση στο μικρόφωνό σας, ενεργοποιήστε επίσης το μικρόφωνο στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Λεπτομέρειες</translation>
 <translation id="4645575059429386691">Διαχειρίζεται από τους γονείς σου</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> και <ph name="NUM_MORE" /> ακόμη}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> και <ph name="NUM_MORE" /> ακόμη}}</translation>
 <translation id="913657688200966289">Ενεργοποιήστε τις άδειες για την εφαρμογή <ph name="APP_NAME" /> στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Πρόσβαση στο μικρόφωνό σας</translation>
 <translation id="965817943346481315">Αποκλεισμός εάν ο ιστότοπος εμφανίζει παρεμβατικές ή παραπλανητικές διαφημίσεις (συνιστάται)</translation>
 <translation id="967624055006145463">Αποθηκευμένα δεδομένα</translation>
 </translationbundle>

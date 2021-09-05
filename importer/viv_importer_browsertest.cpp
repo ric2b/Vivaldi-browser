@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -19,7 +20,7 @@
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "content/public/test/browser_test.h"
 #include "importer/imported_notes_entry.h"
 
@@ -32,7 +33,7 @@ const size_t kMaxPathLen = 5;
 
 struct OperaPasswordInfo {
   const bool wildcard;
-  const autofill::PasswordForm::Scheme scheme;
+  const password_manager::PasswordForm::Scheme scheme;
   const char* url;
   const char* realm;
   const wchar_t* username_field;
@@ -64,10 +65,12 @@ struct OperaNotesInfo {
 const wchar_t kTestMasterPassword[] = L"0perav1v";
 
 const OperaPasswordInfo OperaPasswords[] = {
-    {false, autofill::PasswordForm::Scheme::kHtml, "http://localhost:8081/login",
+    {false, password_manager::PasswordForm::Scheme::kHtml,
+     "http://localhost:8081/login",
      "http://localhost:8081/", L"username", L"user1", L"password", L"password1",
      false},
-    {false, autofill::PasswordForm::Scheme::kHtml, "http://localhost:8082/login",
+    {false, password_manager::PasswordForm::Scheme::kHtml,
+     "http://localhost:8082/login",
      "http://localhost:8082/", L"username", L"user2", L"password", L"password2",
      false},
 };
@@ -189,7 +192,7 @@ class OperaImportObserver : public ProfileWriter,
 
   bool TemplateURLServiceIsLoaded() const override { return true; }
 
-  void AddPasswordForm(const autofill::PasswordForm& form) override {
+  void AddPasswordForm(const password_manager::PasswordForm& form) override {
     const OperaPasswordInfo& p = OperaPasswords[password_count];
     // EXPECT_EQ(p.wildcard,form.);
     EXPECT_EQ(p.scheme, form.scheme);

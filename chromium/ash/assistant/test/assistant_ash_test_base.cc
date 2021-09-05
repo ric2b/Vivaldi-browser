@@ -18,12 +18,12 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/test/assistant_test_api.h"
-#include "ash/public/cpp/test/test_image_downloader.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_helper.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -66,8 +66,7 @@ void PressHomeButton() {
 // This includes direct and indirect children.
 // For this class to work, _ChildView must:
 //      * Inherit from |views::View|.
-//      * Have a static variable called |kClassName|.
-//      * Return |_ChildView::kClassName| from its GetClassName() method.
+//      * Implement view metadata (see comments on views::View).
 template <class _ChildView>
 class ChildViewCollector {
  public:
@@ -84,7 +83,7 @@ class ChildViewCollector {
 
  private:
   void Get(views::View* view, Views* result) {
-    if (view->GetClassName() == _ChildView::kClassName)
+    if (views::IsViewClass<_ChildView>(view))
       result->push_back(static_cast<_ChildView*>(view));
     for (views::View* child : view->children())
       Get(child, result);
@@ -105,7 +104,6 @@ AssistantAshTestBase::AssistantAshTestBase(
       test_api_(AssistantTestApi::Create()),
       test_setup_(std::make_unique<TestAssistantSetup>()),
       test_web_view_factory_(std::make_unique<TestAssistantWebViewFactory>()),
-      test_image_downloader_(std::make_unique<TestImageDownloader>()),
       assistant_client_(std::make_unique<TestAssistantClient>()) {}
 
 AssistantAshTestBase::~AssistantAshTestBase() = default;
@@ -139,7 +137,7 @@ void AssistantAshTestBase::CreateAndSwitchActiveUser(
 
   session_controller_client->AddUserSession(
       display_email, user_manager::USER_TYPE_REGULAR,
-      /*enable_settings=*/true, /*provide_pref_service=*/true,
+      /*provide_pref_service=*/true,
       /*is_new_profile=*/false, given_name);
 
   session_controller_client->SwitchActiveUser(Shell::Get()

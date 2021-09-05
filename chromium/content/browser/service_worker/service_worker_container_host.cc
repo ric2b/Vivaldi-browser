@@ -7,7 +7,6 @@
 #include <set>
 #include <utility>
 
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -16,7 +15,6 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
-#include "content/browser/web_contents/frame_tree_node_id_registry.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -133,20 +131,11 @@ ServiceWorkerContainerHost::ServiceWorkerContainerHost(
 ServiceWorkerContainerHost::~ServiceWorkerContainerHost() {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
-  if (IsBackForwardCacheEnabled() && IsContainerForClient()) {
-    RunOrPostTaskOnThread(
-        FROM_HERE, BrowserThread::UI,
-        base::BindOnce(
-            [](int process_id, int frame_id, const std::string& uuid) {
-              auto* rfh = RenderFrameHostImpl::FromID(process_id, frame_id);
-              if (rfh)
-                rfh->RemoveServiceWorkerContainerHost(uuid);
-            },
-            process_id(), frame_id(), client_uuid()));
+  if (IsContainerForClient()) {
+    auto* rfh = RenderFrameHostImpl::FromID(process_id(), frame_id());
+    if (rfh)
+      rfh->RemoveServiceWorkerContainerHost(client_uuid());
   }
-
-  if (fetch_request_window_id_)
-    FrameTreeNodeIdRegistry::GetInstance()->Remove(fetch_request_window_id_);
 
   if (IsContainerForClient() && controller_)
     controller_->OnControlleeDestroyed(client_uuid());
@@ -456,8 +445,9 @@ void ServiceWorkerContainerHost::OnSkippedWaiting(
 void ServiceWorkerContainerHost::AddMatchingRegistration(
     ServiceWorkerRegistration* registration) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  DCHECK(blink::ServiceWorkerScopeMatches(registration->scope(), url_));
-  if (!IsContextSecureForServiceWorker())
+  DCHECK(blink::ServiceWorkerScopeMatches(registration->scope(),
+                                          GetUrlForScopeMatch()));
+  if (!IsEligibleForServiceWorkerController())
     return;
   size_t key = registration->scope().spec().size();
   if (base::Contains(matching_registrations_, key))
@@ -529,6 +519,12 @@ void ServiceWorkerContainerHost::CountFeature(
 
   // And only when loading finished so the controller is really settled.
   if (!is_execution_ready())
+    return;
+
+  // `container_` shouldn't be disconnected during the lifetime of `this` but
+  // there seems a situation where `container_` is disconnected.
+  // TODO(crbug.com/1136843): Figure out the cause and remove this check.
+  if (!container_.is_connected())
     return;
 
   container_->CountFeature(feature);
@@ -626,6 +622,30 @@ void ServiceWorkerContainerHost::RemoveServiceWorkerRegistrationObjectHost(
     int64_t registration_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(base::Contains(registration_object_hosts_, registration_id));
+  // This is a workaround for a really unfavorable ownership structure of
+  // service worker content code. This boils down to the following ownership
+  // cycle:
+  // 1. This class owns ServiceWorkerRegistrationObjectHost via std::unique_ptr
+  //    in registration_object_hosts_.
+  // 2. The ServiceWorkerRegistrationObjectHost has a
+  //    scoped_refptr<ServiceWorkerRegistration> registration_ member.
+  // 3. The ServiceWorkerRegistration has multiple
+  //    scoped_refptr<ServiceWorkerVersion> members.
+  // 4. ServiceWorkerVersion has a std::unique_ptr<ServiceWorkerHost>
+  //    worker_host_ member.
+  // 5. ServiceWorkerHost in turn owns an instance of this class via
+  //    its worker_host_ member.
+  // What this all means is that erasing the registration_id here can actually
+  // lead to "this" ending up being destroyed after we exit from the erase
+  // call. This might not seem fatal, but is when using libstdc++. Apparently
+  // the C++ standard does not define when the destructor of the value from the
+  // map gets called. In libcxx its called after the key has been removed from
+  // the map, while in libstdc++ the destructor gets called first and then
+  // the key is removed before the erase call returns. This means that in
+  // case of libstdc++ the value we're removing from the map in the erase call
+  // can be deleted a second time when registration_object_hosts_ destructor
+  // gets called in ~ServiceWorkerContainerHost.
+  auto to_be_deleted = std::move(registration_object_hosts_[registration_id]);
   registration_object_hosts_.erase(registration_id);
 }
 
@@ -726,7 +746,8 @@ void ServiceWorkerContainerHost::OnBeginNavigationCommit(
     int container_frame_id,
     const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-        coep_reporter) {
+        coep_reporter,
+    ukm::SourceId document_ukm_source_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(IsContainerForWindowClient());
 
@@ -757,20 +778,13 @@ void ServiceWorkerContainerHost::OnBeginNavigationCommit(
                                      std::move(coep_reporter_to_be_passed));
   }
 
-  if (IsBackForwardCacheEnabled()) {
-    RunOrPostTaskOnThread(
-        FROM_HERE, BrowserThread::UI,
-        base::BindOnce(
-            [](int process_id, int frame_id, const std::string& uuid,
-               base::WeakPtr<ServiceWorkerContainerHost> self) {
-              auto* rfh = RenderFrameHostImpl::FromID(process_id, frame_id);
-              // |rfh| may be null in tests (but it should not happen in
-              // production).
-              if (rfh)
-                rfh->AddServiceWorkerContainerHost(uuid, self);
-            },
-            container_process_id, frame_id_, client_uuid(), GetWeakPtr()));
-  }
+  auto* rfh = RenderFrameHostImpl::FromID(container_process_id, frame_id());
+  // |rfh| may be null in tests (but it should not happen in production).
+  if (rfh)
+    rfh->AddServiceWorkerContainerHost(client_uuid(), GetWeakPtr());
+
+  DCHECK_EQ(ukm_source_id_, ukm::kInvalidSourceId);
+  ukm_source_id_ = document_ukm_source_id;
 
   TransitionToClientPhase(ClientPhase::kResponseCommitted);
 }
@@ -789,7 +803,8 @@ void ServiceWorkerContainerHost::OnEndNavigationCommit() {
 }
 
 void ServiceWorkerContainerHost::CompleteWebWorkerPreparation(
-    const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy) {
+    const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
+    ukm::SourceId worker_ukm_source_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(IsContainerForWorkerClient());
 
@@ -803,6 +818,9 @@ void ServiceWorkerContainerHost::CompleteWebWorkerPreparation(
                                      cross_origin_embedder_policy_.value(),
                                      mojo::NullRemote());
   }
+
+  DCHECK_EQ(ukm_source_id_, ukm::kInvalidSourceId);
+  ukm_source_id_ = worker_ukm_source_id;
 
   TransitionToClientPhase(ClientPhase::kResponseCommitted);
   SetExecutionReady();
@@ -829,13 +847,8 @@ void ServiceWorkerContainerHost::UpdateUrls(
     // Revoke the token on URL change since any service worker holding the token
     // may no longer be the potential controller of this frame and shouldn't
     // have the power to display SSL dialogs for it.
-    if (IsContainerForWindowClient()) {
-      auto* registry = FrameTreeNodeIdRegistry::GetInstance();
-      registry->Remove(fetch_request_window_id_);
+    if (IsContainerForWindowClient())
       fetch_request_window_id_ = base::UnguessableToken::Create();
-      registry->Add(fetch_request_window_id_,
-                    client_info_->GetFrameTreeNodeId());
-    }
   }
 
   auto previous_origin = url::Origin::Create(previous_url);
@@ -873,7 +886,7 @@ void ServiceWorkerContainerHost::SetControllerRegistration(
   DCHECK(IsContainerForClient());
 
   if (controller_registration) {
-    CHECK(IsContextSecureForServiceWorker());
+    CHECK(IsEligibleForServiceWorkerController());
     DCHECK(controller_registration->active_version());
 #if DCHECK_IS_ON()
     DCHECK(IsMatchingRegistration(controller_registration.get()));
@@ -945,29 +958,27 @@ bool ServiceWorkerContainerHost::AllowServiceWorker(const GURL& scope,
                                                     const GURL& script_url) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(context_);
-  AllowServiceWorkerResult allowed = AllowServiceWorkerResult::No();
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    allowed = GetContentClient()->browser()->AllowServiceWorkerOnUI(
-        scope, site_for_cookies().RepresentativeUrl(), top_frame_origin(),
-        script_url, context_->wrapper()->browser_context());
-  } else {
-    allowed = GetContentClient()->browser()->AllowServiceWorkerOnIO(
-        scope, site_for_cookies().RepresentativeUrl(), top_frame_origin(),
-        script_url, context_->wrapper()->resource_context());
-  }
-  RunOrPostTaskOnThread(FROM_HERE, BrowserThread::UI,
-                        base::BindOnce(&ReportServiceWorkerAccess, process_id_,
-                                       frame_id_, scope, allowed));
+  AllowServiceWorkerResult allowed =
+      GetContentClient()->browser()->AllowServiceWorker(
+          scope, site_for_cookies().RepresentativeUrl(), top_frame_origin(),
+          script_url, context_->wrapper()->browser_context());
+  ReportServiceWorkerAccess(process_id(), frame_id(), scope, allowed);
   return allowed;
 }
 
-bool ServiceWorkerContainerHost::IsContextSecureForServiceWorker() const {
+bool ServiceWorkerContainerHost::IsEligibleForServiceWorkerController() const {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(IsContainerForClient());
 
   if (!url_.is_valid())
     return false;
-  if (!OriginCanAccessServiceWorkers(url_))
+  // Pass GetUrlForScopeMatch() instead of `url_` because we cannot take the
+  // origin of `url_` when it's a blob URL (see https://crbug.com/1144717). It's
+  // guaranteed that the URL returned by GetURLForScopeMatch() has the same
+  // logical origin as `url_`.
+  // TODO(asamidoi): Add url::Origin member for ServiceWorkerContainerHost and
+  // use it as the argument of OriginCanAccessServiceWorkers().
+  if (!OriginCanAccessServiceWorkers(GetUrlForScopeMatch()))
     return false;
 
   if (is_parent_frame_secure_)
@@ -1077,18 +1088,11 @@ void ServiceWorkerContainerHost::EvictFromBackForwardCache(
   DCHECK(IsBackForwardCacheEnabled());
   DCHECK(IsContainerForWindowClient());
   is_in_back_forward_cache_ = false;
-  RunOrPostTaskOnThread(
-      FROM_HERE, BrowserThread::UI,
-      base::BindOnce(
-          [](int process_id, int frame_id,
-             BackForwardCacheMetrics::NotRestoredReason reason) {
-            auto* rfh = RenderFrameHostImpl::FromID(process_id, frame_id);
-            // |rfh| could be evicted before this function is called.
-            if (!rfh || !rfh->IsInBackForwardCache())
-              return;
-            rfh->EvictFromBackForwardCacheWithReason(reason);
-          },
-          process_id_, frame_id_, reason));
+
+  auto* rfh = RenderFrameHostImpl::FromID(process_id(), frame_id());
+  // |rfh| could be evicted before this function is called.
+  if (rfh && rfh->IsInBackForwardCache())
+    rfh->EvictFromBackForwardCacheWithReason(reason);
 }
 
 void ServiceWorkerContainerHost::OnEnterBackForwardCache() {
@@ -1126,7 +1130,8 @@ void ServiceWorkerContainerHost::SyncMatchingRegistrations() {
   for (const auto& key_registration : registrations) {
     ServiceWorkerRegistration* registration = key_registration.second;
     if (!registration->is_uninstalled() &&
-        blink::ServiceWorkerScopeMatches(registration->scope(), url_)) {
+        blink::ServiceWorkerScopeMatches(registration->scope(),
+                                         GetUrlForScopeMatch())) {
       AddMatchingRegistration(registration);
     }
   }
@@ -1184,6 +1189,9 @@ void ServiceWorkerContainerHost::SetExecutionReady() {
   DCHECK(!is_execution_ready());
   TransitionToClientPhase(ClientPhase::kExecutionReady);
   RunExecutionReadyCallbacks();
+
+  if (context_)
+    context_->NotifyClientIsExecutionReady(*this);
 }
 
 void ServiceWorkerContainerHost::RunExecutionReadyCallbacks() {
@@ -1221,7 +1229,7 @@ void ServiceWorkerContainerHost::UpdateController(
   ServiceWorkerVersion* version =
       controller_registration_ ? controller_registration_->active_version()
                                : nullptr;
-  CHECK(!version || IsContextSecureForServiceWorker());
+  CHECK(!version || IsEligibleForServiceWorkerController());
   if (version == controller_.get())
     return;
 
@@ -1575,6 +1583,37 @@ bool ServiceWorkerContainerHost::CanServeContainerHostMethods(
   }
 
   return true;
+}
+
+const GURL& ServiceWorkerContainerHost::GetUrlForScopeMatch() const {
+  DCHECK(IsContainerForClient());
+  if (!scope_match_url_for_blob_client_.is_empty())
+    return scope_match_url_for_blob_client_;
+  return url_;
+}
+
+void ServiceWorkerContainerHost::InheritControllerFrom(
+    ServiceWorkerContainerHost& creator_host,
+    const GURL& blob_url) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsContainerForClient());
+  DCHECK_EQ(blink::mojom::ServiceWorkerClientType::kDedicatedWorker,
+            GetClientType());
+  DCHECK(blob_url.SchemeIsBlob());
+
+  UpdateUrls(blob_url, net::SiteForCookies::FromUrl(blob_url),
+             creator_host.top_frame_origin());
+
+  // Let `scope_match_url_for_blob_client_` be the creator's url for scope match
+  // because a client should be handled by the service worker of its creator.
+  scope_match_url_for_blob_client_ = creator_host.GetUrlForScopeMatch();
+
+  // Inherit the controller of the creator.
+  if (creator_host.controller_registration()) {
+    AddMatchingRegistration(creator_host.controller_registration());
+    SetControllerRegistration(creator_host.controller_registration(),
+                              false /* notify_controllerchange */);
+  }
 }
 
 }  // namespace content

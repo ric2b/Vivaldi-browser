@@ -11,6 +11,7 @@
 
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/stylus_utils.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -115,6 +116,9 @@ const char kPropertySwitchAccessEnabled[] = "a11ySwitchAccessEnabled";
 
 // Key which corresponds to the cursor color A11Y property in JS.
 const char kPropertyCursorColorEnabled[] = "a11yCursorColorEnabled";
+
+// Key which corresponds to the docked magnifier property in JS.
+const char kPropertyDockedMagnifierEnabled[] = "a11yDockedMagnifierEnabled";
 
 // Key which corresponds to the send-function-keys property in JS.
 const char kPropertySendFunctionsKeys[] = "sendFunctionKeys";
@@ -225,6 +229,7 @@ const struct {
     {kPropertySwitchAccessEnabled,
      ash::prefs::kAccessibilitySwitchAccessEnabled},
     {kPropertyCursorColorEnabled, ash::prefs::kAccessibilityCursorColorEnabled},
+    {kPropertyDockedMagnifierEnabled, ash::prefs::kDockedMagnifierEnabled},
     {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
 
 const char* GetBoolPrefNameForApiProperty(const char* api_name) {
@@ -272,7 +277,8 @@ ExtensionFunction::ResponseAction ChromeosInfoPrivateGetFunction::Run() {
     if (value)
       result->Set(property_name, std::move(value));
   }
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
@@ -463,6 +469,18 @@ ExtensionFunction::ResponseAction ChromeosInfoPrivateSetFunction::Run() {
   }
 
   return RespondNow(NoArguments());
+}
+
+ChromeosInfoPrivateIsTabletModeEnabledFunction::
+    ChromeosInfoPrivateIsTabletModeEnabledFunction() {}
+
+ChromeosInfoPrivateIsTabletModeEnabledFunction::
+    ~ChromeosInfoPrivateIsTabletModeEnabledFunction() {}
+
+ExtensionFunction::ResponseAction
+ChromeosInfoPrivateIsTabletModeEnabledFunction::Run() {
+  return RespondNow(
+      OneArgument(base::Value(ash::TabletMode::Get()->InTabletMode())));
 }
 
 }  // namespace extensions

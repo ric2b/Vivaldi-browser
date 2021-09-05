@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/cpu.h"
@@ -74,8 +74,6 @@ ProcessTypeForUma CurrentProcessType() {
     return ProcessTypeForUma::kGpu;
   if (process_type == switches::kPpapiPluginProcess)
     return ProcessTypeForUma::kPpapiPlugin;
-  if (process_type == switches::kPpapiBrokerProcess)
-    return ProcessTypeForUma::kPpapiBroker;
   NOTREACHED() << "Unexpected process type: " << process_type;
   return ProcessTypeForUma::kUnknown;
 }

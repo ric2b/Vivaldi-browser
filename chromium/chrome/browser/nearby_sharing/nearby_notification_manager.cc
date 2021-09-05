@@ -4,6 +4,7 @@
 
 #include "chrome/browser/nearby_sharing/nearby_notification_manager.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -22,6 +23,8 @@
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
@@ -597,6 +600,10 @@ void NearbyNotificationManager::ShowConnectionRequest(
     const TransferMetadata& transfer_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // If there is an existing notification, close it first otherwise we won't
+  // get a heads-up pop-up.
+  CloseTransfer();
+
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);
   notification.set_title(l10n_util::GetStringUTF16(
@@ -605,6 +612,7 @@ void NearbyNotificationManager::ShowConnectionRequest(
       GetConnectionRequestNotificationMessage(share_target, transfer_metadata));
   notification.set_icon(GetImageFromShareTarget(share_target));
   notification.set_never_timeout(true);
+  notification.set_priority(message_center::NotificationPriority::MAX_PRIORITY);
 
   bool show_accept_button =
       transfer_metadata.status() ==
@@ -650,6 +658,10 @@ void NearbyNotificationManager::ShowOnboarding() {
 
 void NearbyNotificationManager::ShowSuccess(const ShareTarget& share_target) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // If there is an existing notification, close it first otherwise we won't
+  // get a heads-up pop-up.
+  CloseTransfer();
 
   if (!share_target.is_incoming) {
     message_center::Notification notification =
@@ -725,10 +737,26 @@ void NearbyNotificationManager::ShowIncomingSuccess(
   notification_display_service_->Display(
       NotificationHandler::Type::NEARBY_SHARE, notification,
       /*metadata=*/nullptr);
+
+  if (ash::features::IsTemporaryHoldingSpaceEnabled()) {
+    ash::HoldingSpaceKeyedService* holding_space_keyed_service =
+        ash::HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(
+            profile_);
+    if (holding_space_keyed_service) {
+      for (const auto& file : share_target.file_attachments) {
+        if (file.file_path().has_value())
+          holding_space_keyed_service->AddNearbyShare(file.file_path().value());
+      }
+    }
+  }
 }
 
 void NearbyNotificationManager::ShowFailure(const ShareTarget& share_target) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // If there is an existing notification, close it first otherwise we won't
+  // get a heads-up pop-up.
+  CloseTransfer();
 
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);

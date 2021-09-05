@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Tidak dapat membagikan <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> ditukar dengan <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Anda menelusuri ini sebelumnya. Menghapus "<ph name="QUERY" />" dari histori akan menghapusnya secara permanen dari akun Anda di semua perangkat.</translation>
+<translation id="1510238584712386396">Peluncur</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 menit dan }other{# menit dan }}</translation>
 <translation id="1643823602425662293">Notifikasi</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">File <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Cari "<ph name="LOOKUP_STRING" />"</translation>
+<translation id="3622035490309591977">Histori papan klip</translation>
 <translation id="364720409959344976">Pilih Folder untuk Diunggah</translation>
 <translation id="3660179305079774227">Panah Atas</translation>
 <translation id="3670030362669914947">Nomor</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktif hari ini}=1{Aktif 1 hari yang lalu}other{Aktif # hari yang lalu}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 hari dan }other{# hari dan }}</translation>
 <translation id="5789643057113097023">:</translation>
+<translation id="5843690142429128814">Gambar.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{dalam 1 t}other{dalam # t}}</translation>
 <translation id="588258955323874662">Layar Penuh</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 detik lagi}other{# detik lagi}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">tekan</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 jam lagi}other{# jam lagi}}</translation>
 <translation id="688711909580084195">Halaman Web Tanpa Judul</translation>
+<translation id="6902419395050653510">Konten HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/dtk</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 tahun lagi}other{# tahun lagi}}</translation>
 <translation id="6945221475159498467">Pilih</translation>

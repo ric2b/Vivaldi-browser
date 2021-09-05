@@ -10,6 +10,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -35,6 +36,7 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/input/input_handler_proxy_client.h"
 #include "third_party/blink/renderer/platform/widget/input/compositor_thread_event_queue.h"
+#include "third_party/blink/renderer/platform/widget/input/cursor_control_handler.h"
 #include "third_party/blink/renderer/platform/widget/input/elastic_overscroll_controller.h"
 #include "third_party/blink/renderer/platform/widget/input/event_with_callback.h"
 #include "third_party/blink/renderer/platform/widget/input/momentum_scroll_jank_tracker.h"
@@ -208,8 +210,7 @@ bool IsGestureScrollOrPinch(WebInputEvent::Type type) {
 }  // namespace
 
 InputHandlerProxy::InputHandlerProxy(cc::InputHandler& input_handler,
-                                     InputHandlerProxyClient* client,
-                                     bool force_input_to_main_thread)
+                                     InputHandlerProxyClient* client)
     : client_(client),
       input_handler_(&input_handler),
       synchronous_input_handler_(nullptr),
@@ -220,7 +221,7 @@ InputHandlerProxy::InputHandlerProxy(cc::InputHandler& input_handler,
       last_injected_gesture_was_begin_(false),
       tick_clock_(base::DefaultTickClock::GetInstance()),
       snap_fling_controller_(std::make_unique<cc::SnapFlingController>(this)),
-      force_input_to_main_thread_(force_input_to_main_thread) {
+      cursor_control_handler_(std::make_unique<CursorControlHandler>()) {
   DCHECK(client);
   input_handler_->BindToClient(this);
   cc::ScrollElasticityHelper* scroll_elasticity_helper =
@@ -264,6 +265,7 @@ void InputHandlerProxy::WillShutdown() {
 
 void InputHandlerProxy::HandleInputEventWithLatencyInfo(
     std::unique_ptr<blink::WebCoalescedInputEvent> event,
+    std::unique_ptr<cc::EventMetrics> metrics,
     EventDispositionCallback callback) {
   DCHECK(input_handler_);
 
@@ -280,9 +282,9 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
                                        trace_id);
               });
 
-  std::unique_ptr<EventWithCallback> event_with_callback =
-      std::make_unique<EventWithCallback>(
-          std::move(event), tick_clock_->NowTicks(), std::move(callback));
+  auto event_with_callback = std::make_unique<EventWithCallback>(
+      std::move(event), tick_clock_->NowTicks(), std::move(callback),
+      std::move(metrics));
 
   enum {
     NO_SCROLL_PINCH = 0,
@@ -325,7 +327,7 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
     // latency to so we flush the queue immediately. This happens only for the
     // first scroll update because once a scroll starts touch events are
     // dispatched non-blocking so scroll updates don't wait for a touch ACK.
-    // The |is_source_touch_event_set_non_blocking| bit is set based on the
+    // The |is_source_touch_event_set_blocking| bit is set based on the
     // renderer's reply that a blocking touch stream should be made
     // non-blocking. Note: unlike wheel events below, the first GSU in a touch
     // may have come from a non-blocking touch sequence, e.g. if the earlier
@@ -333,7 +335,7 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
     // of this, we can't simply look at the first GSU like wheels do.
     bool is_from_blocking_touch =
         gesture_event.SourceDevice() == WebGestureDevice::kTouchscreen &&
-        gesture_event.is_source_touch_event_set_non_blocking;
+        gesture_event.is_source_touch_event_set_blocking;
 
     // TODO(bokan): This was added in https://crrev.com/c/557463 before async
     // wheel events. It's not clear to me why flushing on a scroll end would
@@ -377,6 +379,7 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
 
 void InputHandlerProxy::ContinueScrollBeginAfterMainThreadHitTest(
     std::unique_ptr<blink::WebCoalescedInputEvent> event,
+    std::unique_ptr<cc::EventMetrics> metrics,
     EventDispositionCallback callback,
     cc::ElementIdType hit_test_result) {
   DCHECK(base::FeatureList::IsEnabled(::features::kScrollUnification));
@@ -401,9 +404,9 @@ void InputHandlerProxy::ContinueScrollBeginAfterMainThreadHitTest(
         hit_test_result;
     gesture_event->data.scroll_begin.main_thread_hit_tested = true;
 
-    std::unique_ptr<EventWithCallback> event_with_callback =
-        std::make_unique<EventWithCallback>(
-            std::move(event), tick_clock_->NowTicks(), std::move(callback));
+    auto event_with_callback = std::make_unique<EventWithCallback>(
+        std::move(event), tick_clock_->NowTicks(), std::move(callback),
+        std::move(metrics));
 
     DispatchSingleInputEvent(std::move(event_with_callback),
                              tick_clock_->NowTicks());
@@ -422,7 +425,8 @@ void InputHandlerProxy::ContinueScrollBeginAfterMainThreadHitTest(
     WebInputEventAttribution attribution =
         PerformEventAttribution(event->Event());
     std::move(callback).Run(DROP_EVENT, std::move(event),
-                            /*overscroll_params=*/nullptr, attribution);
+                            /*overscroll_params=*/nullptr, attribution,
+                            std::move(metrics));
   }
 
   // We blocked the compositor gesture event queue while the hit test was
@@ -438,25 +442,6 @@ void InputHandlerProxy::DispatchSingleInputEvent(
   std::unique_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor =
       input_handler_->CreateLatencyInfoSwapPromiseMonitor(
           &monitored_latency_info);
-  base::Optional<cc::EventMetrics::ScrollUpdateType> scroll_update_type;
-  if (event_with_callback->event().GetType() ==
-      WebInputEvent::Type::kGestureScrollUpdate) {
-    // TODO(crbug.com/1079116): For now, we use data from `LatencyInfo` to
-    // determine whether a scroll-update is the first one in a sequence or not.
-    // This should be determined independent of `LatencyInfo`.
-    if (event_with_callback->latency_info().FindLatency(
-            ui::INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT,
-            nullptr)) {
-      scroll_update_type = cc::EventMetrics::ScrollUpdateType::kStarted;
-    } else {
-      scroll_update_type = cc::EventMetrics::ScrollUpdateType::kContinued;
-    }
-  }
-  auto scoped_event_metrics_monitor =
-      input_handler_->GetScopedEventMetricsMonitor(cc::EventMetrics::Create(
-          event_with_callback->event().GetTypeAsUiEventType(),
-          scroll_update_type, event_with_callback->event().TimeStamp(),
-          event_with_callback->event().GetScrollInputType()));
 
   current_overscroll_params_.reset();
 
@@ -538,15 +523,13 @@ void InputHandlerProxy::DispatchQueuedInputEvents() {
     DispatchSingleInputEvent(compositor_event_queue_->Pop(), now);
 }
 
-// This function handles creating synthetic Gesture events. It is currently used
-// for creating Gesture event equivalents for mouse events on a composited
-// scrollbar. (See InputHandlerProxy::HandleInputEvent)
 void InputHandlerProxy::InjectScrollbarGestureScroll(
     const WebInputEvent::Type type,
     const gfx::PointF& position_in_widget,
     const cc::InputHandlerPointerResult& pointer_result,
     const ui::LatencyInfo& latency_info,
-    const base::TimeTicks original_timestamp) {
+    const base::TimeTicks original_timestamp,
+    const cc::EventMetrics* original_metrics) {
   gfx::Vector2dF scroll_delta(pointer_result.scroll_offset.x(),
                               pointer_result.scroll_offset.y());
 
@@ -562,9 +545,6 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
         pointer_result.target_scroller.GetStableId();
   }
 
-  WebScopedInputEvent web_scoped_gesture_event(
-      synthetic_gesture_event.release());
-
   // Send in a LatencyInfo with SCROLLBAR type so that the end to end latency
   // is calculated specifically for scrollbars.
   ui::LatencyInfo scrollbar_latency_info(latency_info);
@@ -578,6 +558,7 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
   DCHECK(!scrollbar_latency_info.FindLatency(
       ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT, nullptr));
 
+  base::Optional<cc::EventMetrics::ScrollUpdateType> scroll_update_type;
   if (type == WebInputEvent::Type::kGestureScrollBegin) {
     last_injected_gesture_was_begin_ = true;
   } else {
@@ -587,21 +568,28 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
       // gesture was a GSB, then this GSU is the first scroll update - mark
       // the LatencyInfo as such.
       scrollbar_latency_info.AddLatencyNumberWithTimestamp(
-          (last_injected_gesture_was_begin_)
+          last_injected_gesture_was_begin_
               ? ui::INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT
               : ui::INPUT_EVENT_LATENCY_SCROLL_UPDATE_ORIGINAL_COMPONENT,
           original_timestamp);
+      scroll_update_type = last_injected_gesture_was_begin_
+                               ? cc::EventMetrics::ScrollUpdateType::kStarted
+                               : cc::EventMetrics::ScrollUpdateType::kContinued;
     }
 
     last_injected_gesture_was_begin_ = false;
   }
 
-  std::unique_ptr<EventWithCallback> gesture_event_with_callback_update =
-      std::make_unique<EventWithCallback>(
-          std::make_unique<WebCoalescedInputEvent>(
-              std::move(web_scoped_gesture_event), scrollbar_latency_info),
-          original_timestamp, original_timestamp,
-          EventWithCallback::OriginalEventList());
+  base::TimeTicks metrics_time_stamp =
+      original_metrics ? original_metrics->time_stamp()
+                       : synthetic_gesture_event->TimeStamp();
+  std::unique_ptr<cc::EventMetrics> metrics = cc::EventMetrics::Create(
+      synthetic_gesture_event->GetTypeAsUiEventType(), scroll_update_type,
+      metrics_time_stamp, synthetic_gesture_event->GetScrollInputType());
+  auto gesture_event_with_callback_update = std::make_unique<EventWithCallback>(
+      std::make_unique<WebCoalescedInputEvent>(
+          std::move(synthetic_gesture_event), scrollbar_latency_info),
+      original_timestamp, base::DoNothing(), std::move(metrics));
 
   bool needs_animate_input = compositor_event_queue_->empty();
   compositor_event_queue_->Queue(std::move(gesture_event_with_callback_update),
@@ -626,8 +614,18 @@ InputHandlerProxy::RouteToTypeSpecificHandler(
     const WebInputEventAttribution& original_attribution) {
   DCHECK(input_handler_);
 
-  if (force_input_to_main_thread_)
-    return DID_NOT_HANDLE;
+  cc::EventsMetricsManager::ScopedMonitor::DoneCallback done_callback;
+  if (event_with_callback->metrics()) {
+    done_callback = base::BindOnce(
+        [](EventWithCallback* event, bool handled) {
+          std::unique_ptr<cc::EventMetrics> result =
+              handled ? event->TakeMetrics() : nullptr;
+          return result;
+        },
+        event_with_callback);
+  }
+  auto scoped_event_monitor =
+      input_handler_->GetScopedEventMetricsMonitor(std::move(done_callback));
 
   const WebInputEvent& event = event_with_callback->event();
   if (event.IsGestureScroll() &&
@@ -635,6 +633,10 @@ InputHandlerProxy::RouteToTypeSpecificHandler(
           GestureScrollEventType(event.GetType())))) {
     return DROP_EVENT;
   }
+
+  if (base::Optional<InputHandlerProxy::EventDisposition> handled =
+          cursor_control_handler_->ObserveInputEvent(event))
+    return *handled;
 
   switch (event.GetType()) {
     case WebInputEvent::Type::kMouseWheel:
@@ -646,7 +648,8 @@ InputHandlerProxy::RouteToTypeSpecificHandler(
 
     case WebInputEvent::Type::kGestureScrollUpdate:
       return HandleGestureScrollUpdate(
-          static_cast<const WebGestureEvent&>(event), original_attribution);
+          static_cast<const WebGestureEvent&>(event), original_attribution,
+          event_with_callback->metrics());
 
     case WebInputEvent::Type::kGestureScrollEnd:
       return HandleGestureScrollEnd(static_cast<const WebGestureEvent&>(event));
@@ -1040,7 +1043,8 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureScrollBegin(
 InputHandlerProxy::EventDisposition
 InputHandlerProxy::HandleGestureScrollUpdate(
     const WebGestureEvent& gesture_event,
-    const WebInputEventAttribution& original_attribution) {
+    const WebInputEventAttribution& original_attribution,
+    const cc::EventMetrics* original_metrics) {
   TRACE_EVENT2("input", "InputHandlerProxy::HandleGestureScrollUpdate", "dx",
                -gesture_event.data.scroll_update.delta_x, "dy",
                -gesture_event.data.scroll_update.delta_y);
@@ -1073,8 +1077,8 @@ InputHandlerProxy::HandleGestureScrollUpdate(
                          TRACE_EVENT_SCOPE_THREAD);
     handling_gesture_on_impl_thread_ = false;
     currently_active_gesture_device_ = base::nullopt;
-    client_->GenerateScrollBeginAndSendToMainThread(gesture_event,
-                                                    original_attribution);
+    client_->GenerateScrollBeginAndSendToMainThread(
+        gesture_event, original_attribution, original_metrics);
 
     // TODO(bokan): |!gesture_pinch_in_progress_| was put here by
     // https://crrev.com/2720903005 but it's not clear to me how this is
@@ -1561,7 +1565,8 @@ const cc::InputHandlerPointerResult InputHandlerProxy::HandlePointerDown(
     InjectScrollbarGestureScroll(WebInputEvent::Type::kGestureScrollBegin,
                                  position, pointer_result,
                                  event_with_callback->latency_info(),
-                                 event_with_callback->event().TimeStamp());
+                                 event_with_callback->event().TimeStamp(),
+                                 event_with_callback->metrics());
 
     // Don't need to inject GSU if the scroll offset is zero (this can
     // be the case where mouse down occurs on the thumb).
@@ -1569,7 +1574,8 @@ const cc::InputHandlerPointerResult InputHandlerProxy::HandlePointerDown(
       InjectScrollbarGestureScroll(WebInputEvent::Type::kGestureScrollUpdate,
                                    position, pointer_result,
                                    event_with_callback->latency_info(),
-                                   event_with_callback->event().TimeStamp());
+                                   event_with_callback->event().TimeStamp(),
+                                   event_with_callback->metrics());
     }
 
     if (event_with_callback) {
@@ -1592,7 +1598,8 @@ const cc::InputHandlerPointerResult InputHandlerProxy::HandlePointerMove(
       InjectScrollbarGestureScroll(WebInputEvent::Type::kGestureScrollUpdate,
                                    position, pointer_result,
                                    event_with_callback->latency_info(),
-                                   event_with_callback->event().TimeStamp());
+                                   event_with_callback->event().TimeStamp(),
+                                   event_with_callback->metrics());
     }
     if (event_with_callback) {
       event_with_callback->SetScrollbarManipulationHandledOnCompositorThread();
@@ -1611,7 +1618,8 @@ const cc::InputHandlerPointerResult InputHandlerProxy::HandlePointerUp(
     InjectScrollbarGestureScroll(WebInputEvent::Type::kGestureScrollEnd,
                                  position, pointer_result,
                                  event_with_callback->latency_info(),
-                                 event_with_callback->event().TimeStamp());
+                                 event_with_callback->event().TimeStamp(),
+                                 event_with_callback->metrics());
     if (event_with_callback) {
       event_with_callback->SetScrollbarManipulationHandledOnCompositorThread();
     }

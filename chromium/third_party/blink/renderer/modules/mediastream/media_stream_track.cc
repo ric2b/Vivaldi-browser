@@ -27,9 +27,7 @@
 
 #include <memory>
 
-#include "base/feature_list.h"
 #include "base/strings/stringprintf.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -181,8 +179,7 @@ void CloneNativeVideoMediaStreamTrack(MediaStreamComponent* original,
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);
-  MediaStreamVideoTrack* original_track =
-      MediaStreamVideoTrack::GetVideoTrack(WebMediaStreamTrack(original));
+  MediaStreamVideoTrack* original_track = MediaStreamVideoTrack::From(original);
   DCHECK(original_track);
   clone->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
       native_source, original_track->adapter_settings(),
@@ -250,7 +247,7 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
   component_->SetMuted(ready_state_ == MediaStreamSource::kReadyStateMuted);
 
   MediaStreamVideoTrack* const video_track =
-      MediaStreamVideoTrack::GetVideoTrack(WebMediaStreamTrack(Component()));
+      MediaStreamVideoTrack::From(Component());
   if (video_track && component_->Source() &&
       component_->Source()->GetType() == MediaStreamSource::kTypeVideo) {
     bool pan_tilt_zoom_allowed =
@@ -846,10 +843,7 @@ void MediaStreamTrack::EnsureFeatureHandleForScheduler() {
   feature_handle_for_scheduler_ =
       window->GetFrame()->GetFrameScheduler()->RegisterFeature(
           SchedulingPolicy::Feature::kWebRTC,
-          base::FeatureList::IsEnabled(features::kOptOutWebRTCFromAllThrottling)
-              ? SchedulingPolicy{SchedulingPolicy::DisableAllThrottling()}
-              : SchedulingPolicy{
-                    SchedulingPolicy::DisableAggressiveThrottling()});
+          SchedulingPolicy::DisableAggressiveThrottling());
 }
 
 }  // namespace blink

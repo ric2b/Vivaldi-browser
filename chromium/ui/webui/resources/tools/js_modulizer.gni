@@ -46,6 +46,8 @@ template("js_modulizer") {
           [ "$target_gen_dir/" + get_path_info(_input, "name") + ".m.js" ]
     }
 
+    data = outputs
+
     args = [
              "--in_folder",
              rebase_path(".", root_build_dir),
@@ -57,10 +59,6 @@ template("js_modulizer") {
     args += [ "--namespace_rewrites" ] + common_namespace_rewrites
     if (defined(invoker.namespace_rewrites)) {
       args += invoker.namespace_rewrites
-    }
-
-    if (defined(invoker.deps)) {
-      deps = invoker.deps
     }
   }
 }

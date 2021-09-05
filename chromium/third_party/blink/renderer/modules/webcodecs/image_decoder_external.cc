@@ -60,7 +60,8 @@ bool ImageDecoderExternal::canDecodeType(String type) {
 ImageDecoderExternal::ImageDecoderExternal(ScriptState* script_state,
                                            const ImageDecoderInit* init,
                                            ExceptionState& exception_state)
-    : script_state_(script_state) {
+    : ExecutionContextLifecycleObserver(ExecutionContext::From(script_state)),
+      script_state_(script_state) {
   UseCounter::Count(ExecutionContext::From(script_state),
                     WebFeature::kWebCodecs);
 
@@ -114,7 +115,7 @@ ImageDecoderExternal::ImageDecoderExternal(ScriptState* script_state,
     return;
   }
 
-  if (!buffer.ByteLengthAsSizeT()) {
+  if (!buffer.ByteLength()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kConstraintError,
                                       "No image data provided");
     return;
@@ -123,7 +124,7 @@ ImageDecoderExternal::ImageDecoderExternal(ScriptState* script_state,
   // Since data is owned by the caller who may be free to manipulate it, we must
   // check HasValidEncodedData() before attempting to access |decoder_|.
   segment_reader_ = SegmentReader::CreateFromSkData(
-      SkData::MakeWithoutCopy(buffer.Data(), buffer.ByteLengthAsSizeT()));
+      SkData::MakeWithoutCopy(buffer.Data(), buffer.ByteLength()));
   if (!segment_reader_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kConstraintError,
                                       "Failed to read image data");
@@ -261,6 +262,13 @@ void ImageDecoderExternal::Trace(Visitor* visitor) const {
   visitor->Trace(init_data_);
   visitor->Trace(options_);
   ScriptWrappable::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
+}
+
+void ImageDecoderExternal::ContextDestroyed() {}
+
+bool ImageDecoderExternal::HasPendingActivity() const {
+  return !pending_metadata_decodes_.IsEmpty() || !pending_decodes_.IsEmpty();
 }
 
 void ImageDecoderExternal::CreateImageDecoder() {
@@ -298,8 +306,7 @@ void ImageDecoderExternal::CreateImageDecoder() {
   DCHECK(canDecodeType(mime_type_));
   decoder_ = ImageDecoder::CreateByMimeType(
       mime_type_, segment_reader_, data_complete_, premultiply_alpha,
-      ImageDecoder::kHighBitDepthToHalfFloat, color_behavior,
-      ImageDecoder::OverrideAllowDecodeToYuv::kDeny, desired_size);
+      ImageDecoder::kHighBitDepthToHalfFloat, color_behavior, desired_size);
 
   // CreateByImageType() can't fail if we use a supported image type. Which we
   // DCHECK above via canDecodeType().
@@ -377,7 +384,8 @@ void ImageDecoderExternal::MaybeSatisfyPendingDecodes() {
         base::nullopt, options_));
     result->setDuration(
         decoder_->FrameDurationAtIndex(request->frame_index).InMicroseconds());
-    result->setOrientation(decoder_->Orientation().Orientation());
+    result->setOrientation(
+        static_cast<uint32_t>(decoder_->Orientation().Orientation()));
     result->setComplete(is_complete);
     request->result = result;
   }

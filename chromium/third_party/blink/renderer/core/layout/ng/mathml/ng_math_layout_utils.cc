@@ -25,7 +25,7 @@ NGConstraintSpace CreateConstraintSpaceForMathChild(
   const ComputedStyle& child_style = child.Style();
   DCHECK(child.CreatesNewFormattingContext());
   NGConstraintSpaceBuilder space_builder(parent_constraint_space,
-                                         child_style.GetWritingMode(),
+                                         child_style.GetWritingDirection(),
                                          true /* is_new_fc */);
   SetOrthogonalFallbackInlineSizeIfNeeded(parent_style, child, &space_builder);
 
@@ -37,7 +37,6 @@ NGConstraintSpace CreateConstraintSpaceForMathChild(
 
   // TODO(crbug.com/1124301): add target stretch sizes.
   // TODO(crbug.com/1125137): add ink metrics.
-  space_builder.SetTextDirection(child_style.Direction());
   space_builder.SetNeedsBaseline(true);
   return space_builder.ToConstraintSpace();
 }
@@ -209,6 +208,27 @@ bool IsUnderOverLaidOutAsSubSup(const NGBlockNode& node) {
   if (auto* element =
           DynamicTo<MathMLOperatorElement>(base.GetDOMNode())) {
     return element->HasBooleanProperty(MathMLOperatorElement::kMovableLimits);
+  }
+  return false;
+}
+
+bool IsOperatorWithSpecialShaping(const NGBlockNode& node) {
+  if (!node.IsBlock() || !node.IsMathML() || !node.FirstChild().IsInline())
+    return false;
+  // https://mathml-refresh.github.io/mathml-core/#layout-of-operators
+  if (auto* element = DynamicTo<MathMLOperatorElement>(node.GetDOMNode())) {
+    UChar32 base_code_point = element->GetOperatorContent().code_point;
+    if (base_code_point == kNonCharacter ||
+        !node.Style().GetFont().PrimaryFont() ||
+        !node.Style().GetFont().PrimaryFont()->GlyphForCharacter(
+            base_code_point))
+      return false;
+
+    // TODO(crbug.com/1124301) Implement stretchy operators.
+
+    if (element->HasBooleanProperty(MathMLOperatorElement::kLargeOp) &&
+        HasDisplayStyle(node.Style()))
+      return true;
   }
   return false;
 }

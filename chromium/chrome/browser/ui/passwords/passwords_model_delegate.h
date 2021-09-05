@@ -14,9 +14,6 @@
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 
-namespace autofill {
-struct PasswordForm;
-}
 namespace content {
 class WebContents;
 }
@@ -24,6 +21,7 @@ namespace password_manager {
 struct InteractionsStats;
 class PasswordFeatureManager;
 class PasswordFormMetricsRecorder;
+struct PasswordForm;
 namespace metrics_util {
 enum class CredentialSourceType;
 }  // namespace metrics_util
@@ -57,18 +55,18 @@ class PasswordsModelDelegate {
   // Returns the pending password in PENDING_PASSWORD_STATE and
   // PENDING_PASSWORD_UPDATE_STATE, the saved password in CONFIRMATION_STATE,
   // the returned credential in AUTO_SIGNIN_STATE.
-  virtual const autofill::PasswordForm& GetPendingPassword() const = 0;
+  virtual const password_manager::PasswordForm& GetPendingPassword() const = 0;
 
   // Returns unsynced credentials being deleted upon signout.
-  virtual const std::vector<autofill::PasswordForm>& GetUnsyncedCredentials()
-      const = 0;
+  virtual const std::vector<password_manager::PasswordForm>&
+  GetUnsyncedCredentials() const = 0;
 
   // Returns the source of the credential to be saved.
   virtual password_manager::metrics_util::CredentialSourceType
   GetCredentialSource() const = 0;
 
   // Returns current local forms for the current page.
-  virtual const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+  virtual const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
   GetCurrentForms() const = 0;
 
   // For PENDING_PASSWORD_STATE state returns the current statistics for
@@ -114,7 +112,8 @@ class PasswordsModelDelegate {
   // Called when the user chooses to save locally some of the unsynced
   // credentials that were deleted from the account store on signout.
   virtual void SaveUnsyncedCredentialsInProfileStore(
-      const std::vector<autofill::PasswordForm>& selected_credentials) = 0;
+      const std::vector<password_manager::PasswordForm>&
+          selected_credentials) = 0;
 
   // Called when the user chooses not to save locally the unsynced credentials
   // deleted from the account store on signout (the ones returned by
@@ -132,7 +131,7 @@ class PasswordsModelDelegate {
   // Called from the dialog controller when the user chooses a credential.
   // Controller can be destroyed inside the method.
   virtual void ChooseCredential(
-      const autofill::PasswordForm& form,
+      const password_manager::PasswordForm& form,
       password_manager::CredentialType credential_type) = 0;
 
   // Open a new tab, pointing to passwords.google.com.
@@ -146,8 +145,7 @@ class PasswordsModelDelegate {
       password_manager::PasswordCheckReferrer referrer) = 0;
   // Called by the view when the "Sign in to Chrome" button or the "Sync to"
   // button in the promo bubble are clicked.
-  virtual void EnableSync(const AccountInfo& account,
-                          bool is_default_promo_account) = 0;
+  virtual void EnableSync(const AccountInfo& account) = 0;
 
   // Called from the dialog controller when the dialog is hidden.
   virtual void OnDialogHidden() = 0;

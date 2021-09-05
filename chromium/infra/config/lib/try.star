@@ -17,8 +17,6 @@ corresponding attribute on `defaults` that is a `lucicfg.var` that can be used
 to set the default value. Can also be accessed through `try_.defaults`.
 """
 
-load("@stdlib//internal/graph.star", "graph")
-load("@stdlib//internal/luci/common.star", "keys")
 load("./args.star", "args")
 load("./branches.star", "branches")
 load("./builders.star", "builders")
@@ -32,138 +30,11 @@ DEFAULT_EXCLUDE_REGEXPS = [
 
 defaults = args.defaults(
     extends = builders.defaults,
-    add_to_list_view = False,
     cq_group = None,
-    list_view = args.COMPUTE,
     main_list_view = None,
     subproject_list_view = None,
+    resultdb_bigquery_exports = [],
 )
-
-def declare_bucket(milestone_vars, *, branch_selector = branches.MAIN_ONLY):
-    if not branches.matches(branch_selector):
-        return
-
-    luci.bucket(
-        name = milestone_vars.try_bucket,
-        acls = [
-            acl.entry(
-                roles = acl.BUILDBUCKET_READER,
-                groups = "all",
-            ),
-            acl.entry(
-                roles = acl.BUILDBUCKET_TRIGGERER,
-                users = [
-                    "findit-for-me@appspot.gserviceaccount.com",
-                    "tricium-prod@appspot.gserviceaccount.com",
-                ],
-                groups = [
-                    "project-chromium-tryjob-access",
-                    # Allow Pinpoint to trigger builds for bisection
-                    "service-account-chromeperf",
-                    "service-account-cq",
-                ],
-                projects = milestone_vars.try_triggering_projects,
-            ),
-            acl.entry(
-                roles = acl.BUILDBUCKET_OWNER,
-                groups = "service-account-chromium-tryserver",
-            ),
-        ],
-    )
-
-    luci.cq_group(
-        name = milestone_vars.cq_group,
-        retry_config = cq.RETRY_ALL_FAILURES,
-        tree_status_host = milestone_vars.tree_status_host,
-        watch = cq.refset(
-            repo = "https://chromium.googlesource.com/chromium/src",
-            refs = [milestone_vars.cq_ref_regexp],
-        ),
-        acls = [
-            acl.entry(
-                acl.CQ_COMMITTER,
-                groups = "project-chromium-committers",
-            ),
-            acl.entry(
-                acl.CQ_DRY_RUNNER,
-                groups = "project-chromium-tryjob-access",
-            ),
-        ],
-    )
-
-    try_.list_view(
-        name = milestone_vars.main_list_view_name,
-        branch_selector = branch_selector,
-        title = milestone_vars.main_list_view_title,
-    )
-
-def set_defaults(milestone_vars, **kwargs):
-    default_values = dict(
-        add_to_list_view = milestone_vars.is_master,
-        bucket = milestone_vars.try_bucket,
-        build_numbers = True,
-        caches = [
-            swarming.cache(
-                name = "win_toolchain",
-                path = "win_toolchain",
-            ),
-        ],
-        configure_kitchen = True,
-        cores = 8,
-        cpu = builders.cpu.X86_64,
-        cq_group = milestone_vars.cq_group,
-        executable = "recipe:chromium_trybot",
-        execution_timeout = 4 * time.hour,
-        # Max. pending time for builds. CQ considers builds pending >2h as timed
-        # out: http://shortn/_8PaHsdYmlq. Keep this in sync.
-        expiration_timeout = 2 * time.hour,
-        os = builders.os.LINUX_DEFAULT,
-        pool = "luci.chromium.try",
-        service_account = "chromium-try-builder@chops-service-accounts.iam.gserviceaccount.com",
-        swarming_tags = ["vpython:native-python-wrapper"],
-        task_template_canary_percentage = 5,
-    )
-    default_values.update(kwargs)
-    for k, v in default_values.items():
-        getattr(defaults, k).set(v)
-
-def _sorted_list_view_graph_key(console_name):
-    return graph.key("@chromium", "", "sorted_list_view", console_name)
-
-def _sorted_list_view_impl(ctx, *, console_name):
-    key = _sorted_list_view_graph_key(console_name)
-    graph.add_node(key)
-    graph.add_edge(keys.project(), key)
-    return graph.keyset(key)
-
-_sorted_list_view = lucicfg.rule(impl = _sorted_list_view_impl)
-
-def _sort_console_entries(ctx):
-    milo = ctx.output["luci-milo.cfg"]
-    consoles = []
-    for console in milo.consoles:
-        if not console.builders:
-            continue
-        graph_key = _sorted_list_view_graph_key(console.id)
-        node = graph.node(graph_key)
-        if node:
-            console.builders = sorted(console.builders, lambda b: b.name)
-        consoles.append(console)
-
-lucicfg.generator(_sort_console_entries)
-
-def list_view(*, name, branch_selector = branches.MAIN_ONLY, **kwargs):
-    if not branches.matches(branch_selector):
-        return
-
-    luci.list_view(
-        name = name,
-        **kwargs
-    )
-
-    _sorted_list_view(
-        console_name = name,
-    )
 
 def tryjob(
         *,
@@ -201,13 +72,14 @@ def tryjob(
 def try_builder(
         *,
         name,
-        branch_selector = branches.MAIN_ONLY,
-        add_to_list_view = args.DEFAULT,
+        branch_selector = branches.MAIN,
         cq_group = args.DEFAULT,
         list_view = args.DEFAULT,
         main_list_view = args.DEFAULT,
         subproject_list_view = args.DEFAULT,
         tryjob = None,
+        experiments = None,
+        resultdb_bigquery_exports = args.DEFAULT,
         **kwargs):
     """Define a try builder.
 
@@ -216,38 +88,76 @@ def try_builder(
       branch_selector - A branch selector value controlling whether the
         builder definition is executed. See branches.star for more
         information.
-      add_to_list_view - A bool indicating whether an entry should be
-        created for the builder in the console identified by
-        `list_view`. Supports a module-level default that defaults to
-        False.
       cq_group - The CQ group to add the builder to. If tryjob is None, it will
         be added as includable_only.
-      list_view - A string identifying the ID of the list view to
-        add an entry to. Supports a module-level default that defaults to
-        the group of the builder, if provided. An entry will be added
-        only if `add_to_list_view` is True.
+      list_view - A string or list of strings identifying the ID(s) of the list
+        view to add an entry to. Supports a module-level default that defaults
+        to the group of the builder, if provided.
       main_console_view - A string identifying the ID of the main list
         view to add an entry to. Supports a module-level default that
-        defaults to None. Note that `add_to_list_view` has no effect on
-        adding an entry to the main list view.
+        defaults to None.
       subproject_list_view - A string identifying the ID of the
         subproject list view to add an entry to. Suppoers a module-level
-        default that defaults to None. Not that `add_to_list_view` has
-        no effect on adding an entry to the subproject list view.
+        default that defaults to None.
       tryjob - A struct containing the details of the tryjob verifier for the
         builder, obtained by calling the `tryjob` function.
+      experiments - a dict of experiment name to the percentage chance (0-100)
+        that it will apply to builds generated from this builder.
+      resultdb_bigquery_exports - a list of resultdb.export_test_results(...)
+        specifying additional parameters for exporting test results to BigQuery.
+        Will always upload to the following tables in addition to any tables
+        specified by the list's elements:
+          luci-resultdb.chromium.try_test_results
+          luci-resultdb.chromium.gpu_try_test_results
     """
     if not branches.matches(branch_selector):
         return
+
+    # Enable "chromium.resultdb.result_sink" on try builders at 50%.
+    experiments = experiments or {}
+    experiments.setdefault("chromium.resultdb.result_sink", 50)
+
+    merged_resultdb_bigquery_exports = [
+        resultdb.export_test_results(
+            bq_table = "luci-resultdb.chromium.try_test_results",
+        ),
+        resultdb.export_test_results(
+            bq_table = "luci-resultdb.chromium.gpu_try_test_results",
+            predicate = resultdb.test_result_predicate(
+                # Only match the telemetry_gpu_integration_test and
+                # fuchsia_telemetry_gpu_integration_test targets.
+                test_id_regexp = "ninja://(chrome/test:|content/test:fuchsia_)telemetry_gpu_integration_test/.+",
+            ),
+        ),
+    ]
+    merged_resultdb_bigquery_exports.extend(
+        defaults.get_value(
+            "resultdb_bigquery_exports",
+            resultdb_bigquery_exports,
+        ),
+    )
+
+    list_view = defaults.get_value("list_view", list_view)
+    if list_view == args.COMPUTE:
+        list_view = defaults.get_value_from_kwargs("builder_group", kwargs)
+    if type(list_view) == type(""):
+        list_view = [list_view]
+    list_view = list(list_view or [])
+    main_list_view = defaults.get_value("main_list_view", main_list_view)
+    if main_list_view:
+        list_view.append(main_list_view)
+    subproject_list_view = defaults.get_value("subproject_list_view", subproject_list_view)
+    if subproject_list_view:
+        list_view.append(subproject_list_view)
 
     # Define the builder first so that any validation of luci.builder arguments
     # (e.g. bucket) occurs before we try to use it
     builders.builder(
         name = name,
         branch_selector = branch_selector,
-        resultdb_bigquery_exports = [resultdb.export_test_results(
-            bq_table = "luci-resultdb.chromium.try_test_results",
-        )],
+        list_view = list_view,
+        resultdb_bigquery_exports = merged_resultdb_bigquery_exports,
+        experiments = experiments,
         **kwargs
     )
 
@@ -270,37 +180,6 @@ def try_builder(
             builder = builder,
             cq_group = cq_group,
             includable_only = True,
-        )
-
-    add_to_list_view = defaults.get_value("add_to_list_view", add_to_list_view)
-    if add_to_list_view:
-        list_view = defaults.get_value("list_view", list_view)
-        if list_view == args.COMPUTE:
-            list_view = defaults.get_value_from_kwargs("builder_group", kwargs)
-
-        if list_view:
-            add_to_list_view = defaults.get_value(
-                "add_to_list_view",
-                add_to_list_view,
-            )
-
-            luci.list_view_entry(
-                builder = builder,
-                list_view = list_view,
-            )
-
-    main_list_view = defaults.get_value("main_list_view", main_list_view)
-    if main_list_view:
-        luci.list_view_entry(
-            builder = builder,
-            list_view = main_list_view,
-        )
-
-    subproject_list_view = defaults.get_value("subproject_list_view", subproject_list_view)
-    if subproject_list_view:
-        luci.list_view_entry(
-            builder = builder,
-            list_view = subproject_list_view,
         )
 
 def blink_builder(*, name, goma_backend = None, **kwargs):
@@ -404,26 +283,19 @@ def chromium_mac_builder(
 def chromium_mac_ios_builder(
         *,
         name,
-        caches = None,
         executable = "recipe:chromium_trybot",
         goma_backend = builders.goma.backend.RBE_PROD,
         os = builders.os.MAC_10_15,
-        properties = None,
+        xcode = builders.xcode.x12a7209,
         **kwargs):
-    caches = caches or [builders.xcode_cache.x12a7209]
-
-    properties = properties or {}
-    properties.setdefault("xcode_build_version", "12a7209")
-
     return try_builder(
         name = name,
         builder_group = "tryserver.chromium.mac",
-        caches = caches,
         cores = None,
         executable = executable,
         goma_backend = goma_backend,
         os = os,
-        properties = properties,
+        xcode = xcode,
         **kwargs
     )
 
@@ -525,12 +397,14 @@ def gpu_chromium_win_builder(*, name, os = builders.os.WINDOWS_ANY, **kwargs):
     )
 
 try_ = struct(
+    # Module-level defaults for try functions
     defaults = defaults,
+
+    # Functions for declaring try builders
     builder = try_builder,
-    declare_bucket = declare_bucket,
     job = tryjob,
-    list_view = list_view,
-    set_defaults = set_defaults,
+
+    # More specific builder wrapper functions
     blink_builder = blink_builder,
     blink_mac_builder = blink_mac_builder,
     chromium_builder = chromium_builder,

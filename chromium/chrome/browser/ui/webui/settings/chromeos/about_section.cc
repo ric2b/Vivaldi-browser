@@ -188,6 +188,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
     {"aboutProductTitle", IDS_PRODUCT_NAME},
 
     {"aboutEndOfLifeTitle", IDS_SETTINGS_ABOUT_PAGE_END_OF_LIFE_TITLE},
+    {"aboutDeviceName", IDS_SETTINGS_ABOUT_PAGE_DEVICE_NAME},
     {"aboutRelaunchAndPowerwash",
      IDS_SETTINGS_ABOUT_PAGE_RELAUNCH_AND_POWERWASH},
     {"aboutRollbackInProgress", IDS_SETTINGS_UPGRADE_ROLLBACK_IN_PROGRESS},
@@ -219,6 +220,12 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
     {"aboutChannelDialogBeta", IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_BETA},
     {"aboutChannelDialogDev", IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_DEV},
     {"aboutChannelDialogStable", IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_STABLE},
+
+    // About page, edit device name dialog.
+    {"aboutEditDeviceName", IDS_SETTINGS_ABOUT_PAGE_EDIT_DEVICE_NAME},
+    {"aboutDeviceNameInfo", IDS_SETTINGS_ABOUT_PAGE_DEVICE_NAME_INFO},
+    {"aboutDeviceNameConstraints",
+     IDS_SETTINGS_ABOUT_PAGE_DEVICE_NAME_CONSTRAINTS},
 
     // About page, update warning dialog.
     {"aboutUpdateWarningMessage",
@@ -309,6 +316,8 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean("aboutIsDeveloperMode",
                           base::CommandLine::ForCurrentProcess()->HasSwitch(
                               chromeos::switches::kSystemDevMode));
+  html_source->AddBoolean("isHostnameSettingEnabled",
+                          features::IsHostnameSettingEnabled());
 
   html_source->AddString("endOfLifeMessage",
                          l10n_util::GetStringFUTF16(

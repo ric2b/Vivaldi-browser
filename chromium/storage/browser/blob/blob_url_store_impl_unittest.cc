@@ -5,8 +5,8 @@
 #include "storage/browser/blob/blob_url_store_impl.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
-#include "base/test/bind_test_util.h"
+#include "base/callback_helpers.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/functions.h"

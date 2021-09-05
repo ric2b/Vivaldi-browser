@@ -12,6 +12,7 @@
 #include "media/base/media_util.h"
 #include "media/base/test_data_util.h"
 #include "media/base/video_bitrate_allocation.h"
+#include "media/base/video_codecs.h"
 #include "media/base/video_decoder_config.h"
 #include "media/gpu/buildflags.h"
 #include "media/gpu/test/video.h"
@@ -88,6 +89,10 @@ constexpr base::FilePath::CharType kDefaultTestVideoPath[] =
 constexpr size_t kNumFramesToEncodeForBitrateCheck = 300;
 // Tolerance factor for how encoded bitrate can differ from requested bitrate.
 constexpr double kBitrateTolerance = 0.1;
+// The event timeout used in bitrate check tests because encoding 2160p and
+// validating |kNumFramesToEncodeBitrateCheck| frames take much time.
+constexpr base::TimeDelta kBitrateCheckEventTimeout =
+    base::TimeDelta::FromSeconds(180);
 
 media::test::VideoEncoderTestEnvironment* g_env;
 
@@ -297,6 +302,9 @@ TEST_F(VideoEncoderTest, BitrateCheck) {
   auto config = GetDefaultConfig();
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
+  // Set longer event timeout than the default (30 sec) because encoding 2160p
+  // and validating the stream take much time.
+  encoder->SetEventWaitTimeout(kBitrateCheckEventTimeout);
 
   encoder->Encode();
   EXPECT_TRUE(encoder->WaitForFlushDone());
@@ -308,10 +316,13 @@ TEST_F(VideoEncoderTest, BitrateCheck) {
               kBitrateTolerance * config.bitrate);
 }
 
-TEST_F(VideoEncoderTest, DynamicBitrateChange) {
+TEST_F(VideoEncoderTest, BitrateCheck_DynamicBitrate) {
   auto config = GetDefaultConfig();
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck * 2;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
+  // Set longer event timeout than the default (30 sec) because encoding 2160p
+  // and validating the stream take much time.
+  encoder->SetEventWaitTimeout(kBitrateCheckEventTimeout);
 
   // Encode the video with the first bitrate.
   const uint32_t first_bitrate = config.bitrate;
@@ -336,10 +347,13 @@ TEST_F(VideoEncoderTest, DynamicBitrateChange) {
   EXPECT_TRUE(encoder->WaitForBitstreamProcessors());
 }
 
-TEST_F(VideoEncoderTest, DynamicFramerateChange) {
+TEST_F(VideoEncoderTest, BitrateCheck_DynamicFramerate) {
   auto config = GetDefaultConfig();
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck * 2;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
+  // Set longer event timeout than the default (30 sec) because encoding 2160p
+  // and validating the stream take much time.
+  encoder->SetEventWaitTimeout(kBitrateCheckEventTimeout);
 
   // Encode the video with the first framerate.
   const uint32_t first_framerate = config.framerate;

@@ -119,8 +119,10 @@
  * Skia consumers can provide their own definitions of these macros to
  * integrate with their histogram collection backend.
  */
-//#define SK_HISTOGRAM_BOOLEAN(name, value)
-//#define SK_HISTOGRAM_ENUMERATION(name, value, boundary_value)
+//#define SK_HISTOGRAM_BOOLEAN(name, sample)
+//#define SK_HISTOGRAM_EXACT_LINEAR(name, sample, value_max)
+//#define SK_HISTOGRAM_MEMORY_KB(name, sample)
+#include "skia/ext/skia_histogram.h"
 
 // ===== Begin Chrome-specific definitions =====
 
@@ -206,16 +208,14 @@ SK_API void SkDebugf_FileLine(const char* file,
 #define SK_DISABLE_LEGACY_CONTEXT_FACTORIES
 #endif
 
+#ifndef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+#define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+#endif
+
 // For now, Chrome should only attempt to reduce opList splitting when recording
 // DDLs
 #ifndef SK_DISABLE_REDUCE_OPLIST_SPLITTING
 #define SK_DISABLE_REDUCE_OPLIST_SPLITTING
-#endif
-
-// Many layout tests and unit tests need to updated/rebased to move to less
-// buggy GPU blur.
-#ifndef SK_USE_LEGACY_GPU_BLUR
-#define SK_USE_LEGACY_GPU_BLUR
 #endif
 
 // Max. verb count for paths rendered by the edge-AA tessellating path renderer.
@@ -223,6 +223,10 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 #ifndef SK_SUPPORT_LEGACY_AAA_CHOICE
 #define SK_SUPPORT_LEGACY_AAA_CHOICE
+#endif
+
+#ifndef GR_OP_ALLOCATE_USE_NEW
+#define GR_OP_ALLOCATE_USE_NEW
 #endif
 
 // Staging for lowp::bilerp_clamp_8888, and for planned misc. others.

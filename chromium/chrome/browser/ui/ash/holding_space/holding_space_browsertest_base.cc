@@ -12,12 +12,15 @@
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/public/cpp/holding_space/holding_space_test_api.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/files/file_util.h"
 #include "base/scoped_observer.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "components/session_manager/core/session_manager.h"
@@ -31,24 +34,6 @@ namespace ash {
 namespace {
 
 // Helpers ---------------------------------------------------------------------
-
-// Adds and returns a holding space item of the specified `type` backed by the
-// file at the specified `file_path`.
-HoldingSpaceItem* AddItem(Profile* profile,
-                          HoldingSpaceItem::Type type,
-                          const base::FilePath& file_path) {
-  auto item = HoldingSpaceItem::CreateFileBackedItem(
-      type, file_path,
-      holding_space_util::ResolveFileSystemUrl(profile, file_path),
-      /*image=*/
-      std::make_unique<HoldingSpaceImage>(
-          /*placeholder=*/gfx::ImageSkia(),
-          /*async_bitmap_resolver=*/base::DoNothing()));
-
-  auto* item_ptr = item.get();
-  HoldingSpaceController::Get()->model()->AddItem(std::move(item));
-  return item_ptr;
-}
 
 // Returns the path of the downloads mount point for the given `profile`.
 base::FilePath GetDownloadsPath(Profile* profile) {
@@ -143,6 +128,16 @@ HoldingSpaceBrowserTestBase::HoldingSpaceBrowserTestBase() {
 
 HoldingSpaceBrowserTestBase::~HoldingSpaceBrowserTestBase() = default;
 
+void HoldingSpaceBrowserTestBase::SetUpInProcessBrowserTestFixture() {
+  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+}
+
+void HoldingSpaceBrowserTestBase::SetUpOnMainThread() {
+  InProcessBrowserTest::SetUpOnMainThread();
+  test_api_ = std::make_unique<HoldingSpaceTestApi>();
+}
+
 // static
 aura::Window* HoldingSpaceBrowserTestBase::GetRootWindowForNewWindows() {
   return HoldingSpaceTestApi::GetRootWindowForNewWindows();
@@ -173,6 +168,11 @@ HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddDownloadFile() {
                  /*file_path=*/CreateTextFile(GetProfile()));
 }
 
+HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddNearbyShareFile() {
+  return AddItem(GetProfile(), HoldingSpaceItem::Type::kNearbyShare,
+                 /*file_path=*/CreateImageFile(GetProfile()));
+}
+
 HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddPinnedFile() {
   return AddItem(GetProfile(), HoldingSpaceItem::Type::kPinnedFile,
                  /*file_path=*/CreateTextFile(GetProfile()));
@@ -183,6 +183,39 @@ HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddScreenshotFile() {
                  /*file_path=*/CreateImageFile(GetProfile()));
 }
 
+HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddScreenRecordingFile() {
+  return AddItem(GetProfile(), HoldingSpaceItem::Type::kScreenRecording,
+                 /*file_path=*/CreateImageFile(GetProfile()));
+}
+
+HoldingSpaceItem* HoldingSpaceBrowserTestBase::AddItem(
+    Profile* profile,
+    HoldingSpaceItem::Type type,
+    const base::FilePath& file_path) {
+  auto item = HoldingSpaceItem::CreateFileBackedItem(
+      type, file_path,
+      holding_space_util::ResolveFileSystemUrl(profile, file_path),
+      /*image=*/
+      std::make_unique<HoldingSpaceImage>(
+          /*placeholder=*/gfx::ImageSkia(),
+          /*async_bitmap_resolver=*/base::DoNothing()));
+
+  auto* item_ptr = item.get();
+
+  // Add holding space items through the holding space keyed service so that the
+  // time of first add will be marked in preferences. The time of first add
+  // contributes to deciding when the holding space tray is visible.
+  HoldingSpaceKeyedServiceFactory::GetInstance()
+      ->GetService(GetProfile())
+      ->AddItem(std::move(item));
+
+  return item_ptr;
+}
+
+void HoldingSpaceBrowserTestBase::RemoveItem(const HoldingSpaceItem* item) {
+  HoldingSpaceController::Get()->model()->RemoveItem(item->id());
+}
+
 std::vector<views::View*> HoldingSpaceBrowserTestBase::GetDownloadChips() {
   return test_api_->GetDownloadChips();
 }
@@ -191,8 +224,12 @@ std::vector<views::View*> HoldingSpaceBrowserTestBase::GetPinnedFileChips() {
   return test_api_->GetPinnedFileChips();
 }
 
-std::vector<views::View*> HoldingSpaceBrowserTestBase::GetScreenshotViews() {
-  return test_api_->GetScreenshotViews();
+std::vector<views::View*> HoldingSpaceBrowserTestBase::GetScreenCaptureViews() {
+  return test_api_->GetScreenCaptureViews();
+}
+
+views::View* HoldingSpaceBrowserTestBase::GetTrayIcon() {
+  return test_api_->GetTrayIcon();
 }
 
 void HoldingSpaceBrowserTestBase::RequestAndAwaitLockScreen() {
@@ -201,16 +238,6 @@ void HoldingSpaceBrowserTestBase::RequestAndAwaitLockScreen() {
 
   chromeos::SessionManagerClient::Get()->RequestLockScreen();
   SessionStateWaiter().WaitFor(session_manager::SessionState::LOCKED);
-}
-
-void HoldingSpaceBrowserTestBase::SetUpInProcessBrowserTestFixture() {
-  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
-  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
-}
-
-void HoldingSpaceBrowserTestBase::SetUpOnMainThread() {
-  InProcessBrowserTest::SetUpOnMainThread();
-  test_api_ = std::make_unique<HoldingSpaceTestApi>();
 }
 
 }  // namespace ash

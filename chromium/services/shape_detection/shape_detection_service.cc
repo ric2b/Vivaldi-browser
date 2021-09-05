@@ -9,12 +9,17 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "build/branding_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #if defined(OS_WIN)
 #include "services/shape_detection/barcode_detection_provider_impl.h"
 #include "services/shape_detection/face_detection_provider_win.h"
 #elif defined(OS_MAC)
 #include "services/shape_detection/barcode_detection_provider_mac.h"
 #include "services/shape_detection/face_detection_provider_mac.h"
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_ASH)
+#include "services/shape_detection/barcode_detection_provider_barhopper.h"
+#include "services/shape_detection/face_detection_provider_impl.h"
 #else
 #include "services/shape_detection/barcode_detection_provider_impl.h"
 #include "services/shape_detection/face_detection_provider_impl.h"
@@ -43,6 +48,8 @@ void ShapeDetectionService::BindBarcodeDetectionProvider(
       receiver.PassPipe().release().value());
 #elif defined(OS_MAC)
   BarcodeDetectionProviderMac::Create(std::move(receiver));
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_ASH)
+  BarcodeDetectionProviderBarhopper::Create(std::move(receiver));
 #else
   BarcodeDetectionProviderImpl::Create(std::move(receiver));
 #endif

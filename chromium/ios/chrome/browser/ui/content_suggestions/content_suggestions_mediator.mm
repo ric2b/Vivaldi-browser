@@ -14,6 +14,7 @@
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 #include "components/ntp_tiles/ntp_tile.h"
+#import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/reading_list/core/reading_list_model.h"
@@ -21,6 +22,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_discover_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
@@ -159,6 +161,8 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
   if (self) {
     _contentSuggestionsEnabled =
         prefService->FindPreference(prefs::kArticlesForYouEnabled);
+    // TODO(crbug.com/1085419): Stop observing this Service once DiscoverFeed is
+    // launched.
     _suggestionBridge =
         std::make_unique<ContentSuggestionsServiceBridge>(self, contentService);
     _contentService = contentService;
@@ -207,6 +211,10 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
     }
   }
   return self;
+}
+
++ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
+  registry->RegisterInt64Pref(prefs::kIosDiscoverFeedLastRefreshTime, 0);
 }
 
 - (void)disconnect {
@@ -432,6 +440,11 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 - (void)contentSuggestionsService:
             (ntp_snippets::ContentSuggestionsService*)suggestionsService
          newSuggestionsInCategory:(ntp_snippets::Category)category {
+  // Ignore newSuggestionsInCategory if the DiscoverFeed is enabled, if not
+  // these might cause some unecessary section updates and crashes.
+  if (IsDiscoverFeedEnabled())
+    return;
+
   ContentSuggestionsCategoryWrapper* wrapper =
       [ContentSuggestionsCategoryWrapper wrapperWithCategory:category];
   if (!self.sectionInformationByCategory[wrapper]) {
@@ -456,8 +469,6 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
                   statusChangedTo:(ntp_snippets::CategoryStatus)status {
   // Ignore all ContentSuggestionsService if the DiscoverFeed is enabled, if not
   // these might cause some unecessary section updates and crashes.
-  // TODO(crbug.com/1105624): Stop observing this Service once DiscoverFeed is
-  // launched.
   if (IsDiscoverFeedEnabled())
     return;
 

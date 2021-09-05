@@ -9,11 +9,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "components/prefs/testing_pref_service.h"
@@ -21,12 +21,11 @@
 #include "components/sync/base/time.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/data_type_activation_request.h"
-#include "components/sync/model/data_type_error_handler_mock.h"
 #include "components/sync/model/entity_data.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
-#include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync/protocol/model_type_state.pb.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
+#include "components/sync/test/model/model_type_store_test_util.h"
 #include "components/sync/test/test_matchers.h"
 #include "components/sync_device_info/device_info_prefs.h"
 #include "components/sync_device_info/device_info_util.h"
@@ -493,7 +492,7 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
   void ForcePulse() { bridge()->ForcePulseForTest(); }
 
   void RefreshLocalDeviceInfo() {
-    bridge()->RefreshLocalDeviceInfo(base::OnceClosure());
+    bridge()->RefreshLocalDeviceInfo(base::DoNothing());
   }
 
   void CommitToStoreAndWait(std::unique_ptr<WriteBatch> batch) {

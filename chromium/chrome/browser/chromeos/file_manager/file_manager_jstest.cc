@@ -67,7 +67,7 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ExifParser) {
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ExternalMetadataProvider) {
   RunTestURL(
-      "foreground/js/metadata/external_metadata_provider_unittest_gen.html");
+      "foreground/js/metadata/external_metadata_provider_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileListModel) {
@@ -95,7 +95,7 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileOperationManagerTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesAppEntryTypes) {
-  RunTestURL("common/js/files_app_entry_types_unittest_gen.html");
+  RunTestURL("common/js/files_app_entry_types_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesDisplayPanel) {
@@ -120,7 +120,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesToolTip) {
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileSystemMetadataProvider) {
   RunTestURL(
-      "foreground/js/metadata/file_system_metadata_provider_unittest_gen.html");
+      "foreground/js/metadata/"
+      "file_system_metadata_provider_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileTableList) {
@@ -148,11 +149,11 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileTypeFiltersController) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileType) {
-  RunTestURL("common/js/file_type_unittest_gen.html");
+  RunTestURL("common/js/file_type_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(CanvasFileManagerJsTest, ImageOrientation) {
-  RunTestURL("foreground/js/metadata/image_orientation_unittest_gen.html");
+  RunTestURL("foreground/js/metadata/image_orientation_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ImportControllerTest) {
@@ -176,7 +177,7 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ListThumbnailLoader) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, LRUCacheTest) {
-  RunTestURL("common/js/lru_cache_unittest_gen.html");
+  RunTestURL("common/js/lru_cache_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, MediaImportHandlerTest) {
@@ -188,7 +189,7 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, MediaScannerTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, MetadataCacheItem) {
-  RunTestURL("foreground/js/metadata/metadata_cache_item_unittest_gen.html");
+  RunTestURL("foreground/js/metadata/metadata_cache_item_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, MetadataCacheSet) {
@@ -248,8 +249,12 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ThumbnailModel) {
   RunTestURL("foreground/js/metadata/thumbnail_model_unittest_gen.html");
 }
 
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, Trash) {
+  RunTestURL("background/js/trash_unittest_gen.html");
+}
+
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, UtilTest) {
-  RunTestURL("common/js/util_unittest_gen.html");
+  RunTestURL("common/js/util_unittest.m_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, VolumeManagerTest) {

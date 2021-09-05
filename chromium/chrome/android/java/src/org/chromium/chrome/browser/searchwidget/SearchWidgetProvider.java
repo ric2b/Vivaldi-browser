@@ -133,6 +133,12 @@ public class SearchWidgetProvider extends AppWidgetProvider {
     @SuppressLint("StaticFieldLeak")
     private static SearchWidgetProviderDelegate sDelegate;
 
+    /** Vivaldi */
+    static final String ACTION_VIVALDI_START_QR_CODE_SCAN =
+            "org.vivaldi.browser.searchwidget.START_QR_CODE_SCAN";
+    public static final String EXTRA_VIVALDI_START_QR_CODE_SCAN =
+            "org.vivaldi.browser.searchwidget.START_QR_CODE_SCAN";
+
     /**
      * Creates the singleton instance of the observer that will monitor for search engine changes.
      * The native library and the browser process must have been fully loaded before calling this.
@@ -199,6 +205,8 @@ public class SearchWidgetProvider extends AppWidgetProvider {
             startSearchActivity(intent, true);
         } else if (ACTION_UPDATE_ALL_WIDGETS.equals(action)) {
             performUpdate(null);
+        } else if (ACTION_VIVALDI_START_QR_CODE_SCAN.equals(action)) {
+            vivaldiStartQrCodeScan(intent);
         } else {
             assert false;
         }
@@ -273,6 +281,12 @@ public class SearchWidgetProvider extends AppWidgetProvider {
                 ? context.getString(R.string.search_widget_default)
                 : context.getString(R.string.search_with_product, engineName);
         views.setCharSequence(R.id.title, "setHint", text);
+
+        // Vivaldi
+        Intent qrIntent = createStartQueryIntent(context, ACTION_VIVALDI_START_QR_CODE_SCAN, id);
+        views.setOnClickPendingIntent(R.id.qrcode_icon,
+                PendingIntent.getBroadcast(
+                        context, 0, qrIntent, PendingIntent.FLAG_UPDATE_CURRENT));
 
         return views;
     }
@@ -410,5 +424,29 @@ public class SearchWidgetProvider extends AppWidgetProvider {
     static String getDefaultSearchEngineUrl() {
         // TODO(yusufo): Get rid of this.
         return sDefaultSearchEngineUrl;
+    }
+
+    /** Vivaldi */
+    public static void vivaldiStartQrCodeScan(Intent intent) {
+        Log.d(SearchActivity.TAG, "Launching SearchActivity with QR");
+        Context context = getDelegate().getContext();
+
+        // Abort if the user needs to go through First Run.
+        if (FirstRunFlowSequencer.launch(context, intent, true /* requiresBroadcast */,
+                false /* preferLightweightFre */)) {
+            return;
+        }
+
+        // Launch the SearchActivity.
+        Intent searchIntent = new Intent();
+        searchIntent.setClass(context, SearchActivity.class);
+        searchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        searchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        searchIntent.putExtra(EXTRA_VIVALDI_START_QR_CODE_SCAN, true);
+
+        Bundle optionsBundle =
+                ActivityOptionsCompat.makeCustomAnimation(context, R.anim.activity_open_enter, 0)
+                        .toBundle();
+        IntentUtils.safeStartActivity(context, searchIntent, optionsBundle);
     }
 }

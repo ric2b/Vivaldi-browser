@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "media/video/gpu_video_accelerator_factories.h"
+#include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -130,6 +131,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
              cc::PaintFlags& flags,
              int already_uploaded_id,
              VideoFrameUploadMetadata* out_metadata) override;
+  scoped_refptr<media::VideoFrame> GetCurrentFrame() override;
   media::PaintCanvasVideoRenderer* GetPaintCanvasVideoRenderer();
   void ResetCanvasCache();
 
@@ -242,7 +244,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
 
   base::WeakPtr<WebMediaPlayer> AsWeakPtr() override;
 
-  void OnDisplayTypeChanged(WebMediaPlayer::DisplayType) override;
+  void OnDisplayTypeChanged(DisplayType) override;
 
   void RequestVideoFrameCallback() override;
   std::unique_ptr<WebMediaPlayer::VideoFramePresentationMetadata>

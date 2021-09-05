@@ -189,7 +189,7 @@ class EventResultCB {
   EventResultCB() = default;
   bool success;
   std::string message;
-  EventResult createdEvent;
+  EventResult event;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventResultCB);
@@ -203,16 +203,6 @@ class CreateEventsResult {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CreateEventsResult);
-};
-
-class UpdateEventResult {
- public:
-  UpdateEventResult() = default;
-  bool success;
-  std::string message;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UpdateEventResult);
 };
 
 class DeleteEventResult {

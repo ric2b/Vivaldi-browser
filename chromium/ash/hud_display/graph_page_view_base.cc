@@ -9,12 +9,15 @@
 #include "ash/hud_display/hud_properties.h"
 #include "ash/hud_display/legend.h"
 #include "ash/hud_display/solid_source_background.h"
+#include "base/bind.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
 
 namespace ash {
@@ -30,12 +33,14 @@ class MinMaxButton : public views::ImageButton {
  public:
   METADATA_HEADER(MinMaxButton);
 
-  explicit MinMaxButton(views::ButtonListener* listener)
-      : views::ImageButton(listener) {
+  explicit MinMaxButton(views::Button::PressedCallback callback)
+      : views::ImageButton(callback) {
     SetBorder(views::CreateEmptyBorder(gfx::Insets(kMinMaxButtonBorder)));
     SetBackground(std::make_unique<SolidSourceBackground>(kHUDLegendBackground,
                                                           /*radius=*/0));
     SetProperty(kHUDClickHandler, HTCLIENT);
+
+    SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   }
 
   MinMaxButton(const MinMaxButton&) = delete;
@@ -108,8 +113,9 @@ GraphPageViewBase::GraphPageViewBase() {
       views::CreateEmptyBorder(gfx::Insets(kLegendPositionOffset)));
   legend_container_->SetVisible(false);
 
-  legend_min_max_button_ =
-      legend_container_->AddChildView(std::make_unique<MinMaxButton>(this));
+  legend_min_max_button_ = legend_container_->AddChildView(
+      std::make_unique<MinMaxButton>(base::BindRepeating(
+          &GraphPageViewBase::OnButtonPressed, base::Unretained(this))));
   SetMinimizeIconToButton(legend_min_max_button_);
 }
 
@@ -117,7 +123,7 @@ GraphPageViewBase::~GraphPageViewBase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(ui_sequence_checker_);
 }
 
-void GraphPageViewBase::ButtonPressed(views::Button*, ui::Event const&) {
+void GraphPageViewBase::OnButtonPressed() {
   if (legend_->GetVisible()) {
     legend_->SetVisible(false);
     SetRestoreIconToButton(legend_min_max_button_);
@@ -142,11 +148,12 @@ Grid* GraphPageViewBase::CreateGrid(float left,
                                     const base::string16& x_unit,
                                     const base::string16& y_unit,
                                     int horizontal_points_number,
-                                    int horizontal_ticks_interval) {
+                                    int horizontal_ticks_interval,
+                                    float vertical_ticks_interval) {
   DCHECK(grid_container_->children().empty());
   return grid_container_->AddChildView(std::make_unique<Grid>(
       left, top, right, bottom, x_unit, y_unit, horizontal_points_number,
-      horizontal_ticks_interval));
+      horizontal_ticks_interval, vertical_ticks_interval));
 }
 
 void GraphPageViewBase::RefreshLegendValues() {

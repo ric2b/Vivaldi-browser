@@ -32,6 +32,7 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "base/metrics/user_metrics.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/aura/window.h"
@@ -47,6 +48,9 @@
 namespace ash {
 
 namespace {
+
+using ::chromeos::kFrameRestoreLookKey;
+using ::chromeos::WindowStateType;
 
 constexpr double kMinHorizVelocityForWindowSwipe = 1100;
 constexpr double kMinVertVelocityForWindowMinimize = 1000;
@@ -326,7 +330,9 @@ int GetDraggingThreshold(const DragDetails& details) {
 
   // Snapped and maximized windows need to be dragged a certain amount before
   // bounds start changing.
-  return IsNormalWindowStateType(state) ? 0 : kResizeRestoreDragThresholdDp;
+  return chromeos::IsNormalWindowStateType(state)
+             ? 0
+             : kResizeRestoreDragThresholdDp;
 }
 
 void ResetFrameRestoreLookKey(WindowState* window_state) {

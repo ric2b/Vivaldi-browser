@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
+import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKey;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -69,17 +70,13 @@ public class OfflinePageBridgeTest {
     private OfflinePageBridge mOfflinePageBridge;
     private EmbeddedTestServer mTestServer;
     private String mTestPage;
+    private Profile mProfile;
 
-    private void initializeBridgeForProfile(final boolean incognitoProfile)
-            throws InterruptedException {
+    private void initializeBridgeForProfile() throws InterruptedException {
         final Semaphore semaphore = new Semaphore(0);
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            Profile profile = Profile.getLastUsedRegularProfile();
-            if (incognitoProfile) {
-                profile = profile.getOffTheRecordProfile();
-            }
             // Ensure we start in an offline state.
-            mOfflinePageBridge = OfflinePageBridge.getForProfile(profile);
+            mOfflinePageBridge = OfflinePageBridge.getForProfile(mProfile);
             if (mOfflinePageBridge == null || mOfflinePageBridge.isOfflinePageModelLoaded()) {
                 semaphore.release();
                 return;
@@ -93,19 +90,13 @@ public class OfflinePageBridgeTest {
             });
         });
         Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-        if (!incognitoProfile) Assert.assertNotNull(mOfflinePageBridge);
     }
 
-    private OfflinePageBridge getBridgeForProfileKey(final boolean incognitoProfile)
-            throws InterruptedException {
+    private OfflinePageBridge getBridgeForProfileKey() throws InterruptedException {
         final Semaphore semaphore = new Semaphore(0);
         AtomicReference<OfflinePageBridge> offlinePageBridgeRef = new AtomicReference<>();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            Profile profile = Profile.getLastUsedRegularProfile();
-            if (incognitoProfile) {
-                profile = profile.getOffTheRecordProfile();
-            }
-            ProfileKey profileKey = profile.getProfileKey();
+            ProfileKey profileKey = mProfile.getProfileKey();
             // Ensure we start in an offline state.
             OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfileKey(profileKey);
             offlinePageBridgeRef.set(offlinePageBridge);
@@ -122,7 +113,6 @@ public class OfflinePageBridgeTest {
             });
         });
         Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-        if (!incognitoProfile) Assert.assertNotNull(offlinePageBridgeRef.get());
         return offlinePageBridgeRef.get();
     }
 
@@ -138,7 +128,10 @@ public class OfflinePageBridgeTest {
             }
         });
 
-        initializeBridgeForProfile(false);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mProfile = Profile.getLastUsedRegularProfile(); });
+
+        initializeBridgeForProfile();
 
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mTestPage = mTestServer.getURL(TEST_PAGE);
@@ -152,7 +145,7 @@ public class OfflinePageBridgeTest {
     @Test
     @MediumTest
     public void testProfileAndKeyMapToSameOfflinePageBridge() throws Exception {
-        OfflinePageBridge offlinePageBridgeRetrievedByKey = getBridgeForProfileKey(false);
+        OfflinePageBridge offlinePageBridgeRetrievedByKey = getBridgeForProfileKey();
         Assert.assertSame(mOfflinePageBridge, offlinePageBridgeRetrievedByKey);
     }
 
@@ -201,15 +194,46 @@ public class OfflinePageBridgeTest {
 
     @Test
     @MediumTest
-    public void testOfflinePageBridgeDisabledInIncognito() throws Exception {
-        initializeBridgeForProfile(true);
+    public void testOfflinePageBridgeDisabled_InIncognitoTabbedActivity() throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mProfile = Profile.getLastUsedRegularProfile().getPrimaryOTRProfile(); });
+        initializeBridgeForProfile();
         Assert.assertEquals(null, mOfflinePageBridge);
     }
 
     @Test
     @MediumTest
-    public void testOfflinePageBridgeForProfileKeyDisabledInIncognito() throws Exception {
-        OfflinePageBridge offlinePageBridgeRetrievedByKey = getBridgeForProfileKey(true);
+    public void testOfflinePageBridgeForProfileKeyDisabled_InIncognitoTabbedActivity()
+            throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mProfile = Profile.getLastUsedRegularProfile().getPrimaryOTRProfile(); });
+        OfflinePageBridge offlinePageBridgeRetrievedByKey = getBridgeForProfileKey();
+        Assert.assertNull(offlinePageBridgeRetrievedByKey);
+    }
+
+    @Test
+    @MediumTest
+    public void testOfflinePageBridgeDisabled_InIncognitoCCT() throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            OTRProfileID otrProfileID = OTRProfileID.createUnique("CCT:Incognito");
+            mProfile = Profile.getLastUsedRegularProfile().getOffTheRecordProfile(otrProfileID);
+            Assert.assertTrue(mProfile.isOffTheRecord());
+            Assert.assertFalse(mProfile.isPrimaryOTRProfile());
+        });
+        initializeBridgeForProfile();
+        Assert.assertEquals(null, mOfflinePageBridge);
+    }
+
+    @Test
+    @MediumTest
+    public void testOfflinePageBridgeForProfileKeyDisabled_InIncognitoCCT() throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            OTRProfileID otrProfileID = OTRProfileID.createUnique("CCT:Incognito");
+            mProfile = Profile.getLastUsedRegularProfile().getOffTheRecordProfile(otrProfileID);
+            Assert.assertTrue(mProfile.isOffTheRecord());
+            Assert.assertFalse(mProfile.isPrimaryOTRProfile());
+        });
+        OfflinePageBridge offlinePageBridgeRetrievedByKey = getBridgeForProfileKey();
         Assert.assertNull(offlinePageBridgeRetrievedByKey);
     }
 

@@ -7,8 +7,7 @@
 #include <memory>
 
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/bind.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
@@ -24,11 +23,10 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -95,6 +93,10 @@ class AppBrowserControllerBrowserTest : public InProcessBrowserTest {
   AppBrowserControllerBrowserTest()
       : test_system_web_app_installation_(
             TestSystemWebAppInstallation::SetUpTabbedMultiWindowApp(false)) {}
+  AppBrowserControllerBrowserTest(const AppBrowserControllerBrowserTest&) =
+      delete;
+  AppBrowserControllerBrowserTest& operator=(
+      const AppBrowserControllerBrowserTest&) = delete;
 
  protected:
   void InstallAndLaunchMockApp() {
@@ -112,10 +114,11 @@ class AppBrowserControllerBrowserTest : public InProcessBrowserTest {
     auto params = web_app::CreateSystemWebAppLaunchParams(
         browser()->profile(), test_system_web_app_installation_->GetType(),
         display::kInvalidDisplayId);
+    EXPECT_TRUE(params.has_value());
     params->disposition = WindowOpenDisposition::NEW_POPUP;
     app_browser_ = web_app::LaunchSystemWebApp(
         browser()->profile(), test_system_web_app_installation_->GetType(),
-        test_system_web_app_installation_->GetAppUrl(), *params);
+        test_system_web_app_installation_->GetAppUrl(), std::move(*params));
   }
 
   GURL GetActiveTabURL() {
@@ -131,7 +134,6 @@ class AppBrowserControllerBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<TestSystemWebAppInstallation>
       test_system_web_app_installation_;
 
-  DISALLOW_COPY_AND_ASSIGN(AppBrowserControllerBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabsTest) {

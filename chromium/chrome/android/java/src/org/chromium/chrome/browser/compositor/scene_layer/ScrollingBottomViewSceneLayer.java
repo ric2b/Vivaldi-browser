@@ -9,14 +9,18 @@ import android.view.View;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
+import org.chromium.chrome.browser.layouts.EventFilter;
+import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
 import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
+
+// Vivaldi
+import android.content.res.Configuration;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -47,6 +51,9 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     /** The {@link ViewResourceFrameLayout} that this scene layer represents. */
     private ViewResourceFrameLayout mBottomView;
+
+    // Vivaldi
+    int mOrientation;
 
     /**
      * Build a composited bottom view layer.
@@ -109,11 +116,20 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     }
 
     @Override
-    public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
-            LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
+    public SceneOverlayLayer getUpdatedSceneOverlayTree(
+            RectF viewport, RectF visibleViewport, ResourceManager resourceManager, float yOffset) {
         // The composited shadow should be visible if the Android toolbar's isn't.
         boolean isShadowVisible = mBottomView.getVisibility() != View.VISIBLE;
 
+        // Note(david@vivaldi.com): Apply the height of bottom view as an offset to send scene off
+        // screen instead of making scene invisible. This will ensure that all scrolling offsets
+        // continue to work and we won't run in any UI glitches or freezes (see VAB-2956 &
+        // VAB-2947). This affects the landscape orientation which will be activated when rotating
+        // device or entering fullscreen mode. In landscape we won't show the bottom scene layer.
+        if (mOrientation == Configuration.ORIENTATION_LANDSCAPE || !mIsVisible) {
+            if (mCurrentYOffsetPx < mBottomView.getHeight())
+                mCurrentYOffsetPx += mBottomView.getHeight();
+        }
         ScrollingBottomViewSceneLayerJni.get().updateScrollingBottomViewLayer(mNativePtr,
                 ScrollingBottomViewSceneLayer.this, resourceManager, mResourceId,
                 mTopShadowHeightPx, mCurrentXOffsetPx, viewport.height() + mCurrentYOffsetPx,
@@ -124,8 +140,9 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     @Override
     public boolean isSceneOverlayTreeShowing() {
-        // (david@vivaldi.com) Fix for VB-53633.
-        if (ChromeApplication.isVivaldi() && mIsVisible) return true;
+        // (david@vivaldi.com) Fix for VB-53633. In any case the scene is always visible. If not,
+        // the viewport will not calculated properly which will mess up our UI.
+        if (ChromeApplication.isVivaldi()) return true;
         // If the offset is greater than the toolbar's height, don't draw the layer.
         return mIsVisible && mCurrentYOffsetPx < mBottomView.getHeight() - mTopShadowHeightPx;
     }
@@ -157,7 +174,10 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     @Override
     public void onSizeChanged(
-            float width, float height, float visibleViewportOffsetY, int orientation) {}
+            float width, float height, float visibleViewportOffsetY, int orientation) {
+        // Vivaldi
+        mOrientation = orientation;
+    }
 
     @Override
     public void getVirtualViews(List<VirtualView> views) {}

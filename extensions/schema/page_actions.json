@@ -1,0 +1,114 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "pageActions",
+    "compiler_options": {
+      "implemented_in": "extensions/api/page_actions/page_actions_api.h"
+    },
+    "description": "Controls the content injections provided by the page actions service",
+    "types": [
+      {
+        "id": "ScriptOverride",
+        "description": "Whether a script should be always enabled or disabled.",
+        "type": "string",
+        "enum": [ "no_override", "enabled", "disabled" ]
+      },
+      {
+        "id": "OverridenScript",
+        "description": "Used to report that a script is always enabled or disabled",
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string"
+          },
+          "override": {
+            "$ref": "ScriptOverride"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getScripts",
+        "type": "function",
+        "description": "Returns the full path to all known page action scripts.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name" : "scripts",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setScriptOverrideForTab",
+        "type": "function",
+        "description": "Permanently enables or disables a script for a given tab, or cancels the override",
+        "parameters": [
+          {
+            "name": "script",
+            "type": "string"
+          },
+          {
+            "name": "tab_id",
+            "type": "integer"
+          },
+          {
+            "name": "override",
+            "$ref": "ScriptOverride"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name" : "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getScriptOverridesForTab",
+        "type": "function",
+        "description": "Get which scripts have been permanently enabled or disabled for a given tab",
+        "parameters": [
+          {
+            "name": "tab_id",
+            "type": "integer"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name" : "result",
+                "type": "array",
+                "items": {
+                  "$ref": "OverridenScript"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onScriptsChanged",
+        "type": "function",
+        "description": "Fired when new scripts have been found in a page action directory or when some scripts were modified or deleted"
+      }
+    ]
+  }
+]

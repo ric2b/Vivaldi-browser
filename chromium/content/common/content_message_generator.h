@@ -6,11 +6,6 @@
 // NOLINT(build/header_guard)
 
 #include "build/build_config.h"
-#undef CONTENT_COMMON_DRAG_MESSAGES_H_
-#include "content/common/drag_messages.h"
-#ifndef CONTENT_COMMON_DRAG_MESSAGES_H_
-#error "Failed to include content/common/drag_messages.h"
-#endif
 #undef CONTENT_COMMON_FRAME_MESSAGES_H_
 #include "content/common/frame_messages.h"
 #ifndef CONTENT_COMMON_FRAME_MESSAGES_H_
@@ -26,11 +21,6 @@
 #ifndef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_DELEGATE_MESSAGES_H_
 #error "Failed to include content/common/media/media_player_delegate_messages.h"
 #endif
-#undef CONTENT_COMMON_PAGE_MESSAGES_H_
-#include "content/common/page_messages.h"
-#ifndef CONTENT_COMMON_PAGE_MESSAGES_H_
-#error "Failed to include content/common/page_messages.h"
-#endif
 #undef CONTENT_COMMON_RESOURCE_MESSAGES_H_
 #include "content/common/resource_messages.h"
 #ifndef CONTENT_COMMON_RESOURCE_MESSAGES_H_
@@ -40,16 +30,6 @@
 #include "content/common/unfreezable_frame_messages.h"
 #ifndef CONTENT_COMMON_UNFREEZABLE_FRAME_MESSAGES_H_
 #error "Failed to include content/common/unfreezable_frame_messages.h"
-#endif
-#undef CONTENT_COMMON_VIEW_MESSAGES_H_
-#include "content/common/view_messages.h"
-#ifndef CONTENT_COMMON_VIEW_MESSAGES_H_
-#error "Failed to include content/common/view_messages.h"
-#endif
-#undef CONTENT_COMMON_WIDGET_MESSAGES_H_
-#include "content/common/widget_messages.h"
-#ifndef CONTENT_COMMON_WIDGET_MESSAGES_H_
-#error "Failed to include content/common/widget_messages.h"
 #endif
 #include "media/media_buildflags.h"
 

@@ -56,8 +56,13 @@ math[display="block"] {
     outline: auto 1px -webkit-focus-ring-color;
 }
 
-mphantom {
-    visibility: hidden;
+mspace {
+    overflow: hidden !important;
+}
+
+/* <mrow>-like elements */
+semantics > :not(:first-child) {
+  display: none;
 }
 
 merror {
@@ -65,13 +70,18 @@ merror {
     background-color: lightYellow;
 }
 
-mspace {
-    overflow: hidden !important;
+mphantom {
+    visibility: hidden;
 }
 
 /* Token elements */
 mi {
   text-transform: math-auto;
+}
+
+/* Tables */
+mtable {
+  math-style: compact;
 }
 
 /* Fractions */
@@ -121,4 +131,3 @@ mover[accent="true" i] > :first-child,
 munderover[accent="true" i] > :first-child {
   math-shift: compact;
 }
-

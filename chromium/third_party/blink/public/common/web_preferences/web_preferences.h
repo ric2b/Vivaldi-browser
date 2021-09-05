@@ -14,12 +14,10 @@
 #include "build/build_config.h"
 #include "net/nqe/effective_connection_type.h"
 #include "third_party/blink/public/common/common_export.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/common/web_preferences/autoplay_policy.h"
-#include "third_party/blink/public/common/web_preferences/editing_behavior_types.h"
-#include "third_party/blink/public/common/web_preferences/image_animation_policy.h"
-#include "third_party/blink/public/common/web_preferences/viewport_style.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-shared.h"
+#include "third_party/blink/public/mojom/css/preferred_contrast.mojom-shared.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-forward.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-shared.h"
 #include "ui/base/pointer/pointer_device.h"
 #include "url/gurl.h"
 
@@ -41,7 +39,7 @@ BLINK_COMMON_EXPORT extern const char kCommonScript[];
 // A struct for managing blink's settings.
 //
 // Adding new values to this class probably involves updating
-// blink::WebSettings, content/common/view_messages.h,
+// blink::WebSettings,
 // browser/profiles/profile.cc, and
 // content/public/common/common_param_traits_macros.h
 struct BLINK_COMMON_EXPORT WebPreferences {
@@ -125,6 +123,7 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool should_print_backgrounds;
   bool should_clear_document_background;
   bool enable_scroll_animator;
+  bool threaded_scrolling_enabled;
   bool prefers_reduced_motion;
   bool touch_event_feature_detection_enabled;
   int pointer_events_max_touch_points;
@@ -135,8 +134,10 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool dont_send_key_events_to_javascript;
   bool barrel_button_for_drag_enabled = false;
   bool sync_xhr_in_documents_enabled;
+  // TODO(https://crbug.com/1163644): Remove once Chrome Apps are deprecated.
+  bool target_blank_implies_no_opener_enabled_will_be_removed = true;
   int number_of_cpu_cores;
-  EditingBehaviorType editing_behavior;
+  blink::mojom::EditingBehavior editing_behavior;
   bool supports_multiple_windows;
   bool viewport_enabled;
   bool viewport_meta_enabled;
@@ -146,7 +147,7 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // viewport_enabled is on.
   bool shrinks_viewport_contents_to_fit;
 
-  web_pref::ViewportStyle viewport_style;
+  blink::mojom::ViewportStyle viewport_style;
   bool always_show_context_menu_on_touch;
   bool smooth_scroll_for_find_enabled;
   bool main_frame_resizes_are_orientation_changes;
@@ -168,7 +169,8 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // Defaults to false.
   bool accelerated_video_decode_enabled;
 
-  ImageAnimationPolicy animation_policy;
+  blink::mojom::ImageAnimationPolicy animation_policy =
+      blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
 
   bool user_gesture_required_for_presentation;
 
@@ -255,9 +257,6 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool disable_features_depending_on_viz;
   // Don't accelerate small canvases to avoid crashes TODO(crbug.com/1004304)
   bool disable_accelerated_small_canvases;
-  // Re-enable Web Components v0 on Webview, temporarily. This should get
-  // removed when crbug.com/1021631 gets fixed.
-  bool reenable_web_components_v0;
 #endif  // defined(OS_ANDROID)
 
   // Enable forcibly modifying content rendering to result in a light on dark
@@ -286,13 +285,19 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool do_not_update_selection_on_mutating_selection_range;
 
   // Defines the current autoplay policy.
-  AutoplayPolicy autoplay_policy;
+  blink::mojom::AutoplayPolicy autoplay_policy =
+      blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
 
   // The preferred color scheme for the web content. The scheme is used to
   // evaluate the prefers-color-scheme media query and resolve UA color scheme
   // to be used based on the supported-color-schemes META tag and CSS property.
-  blink::PreferredColorScheme preferred_color_scheme =
-      blink::PreferredColorScheme::kLight;
+  blink::mojom::PreferredColorScheme preferred_color_scheme =
+      blink::mojom::PreferredColorScheme::kLight;
+
+  // The preferred contrast for the web content. The contrast is used to
+  // evaluate the prefers-contrast media query.
+  blink::mojom::PreferredContrast preferred_contrast =
+      blink::mojom::PreferredContrast::kNoPreference;
 
   // Network quality threshold below which resources from iframes are assigned
   // either kVeryLow or kVeryLow Blink priority.

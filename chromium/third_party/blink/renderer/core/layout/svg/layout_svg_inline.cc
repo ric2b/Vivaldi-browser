@@ -117,7 +117,7 @@ void LayoutSVGInline::AbsoluteQuads(Vector<FloatQuad>& quads,
 
 void LayoutSVGInline::WillBeDestroyed() {
   NOT_DESTROYED();
-  SVGResourcesCache::ClientDestroyed(*this);
+  SVGResourcesCache::RemoveResources(*this);
   SVGResources::ClearClipPathFilterMask(To<SVGElement>(*GetNode()), Style());
   SVGResources::ClearPaints(To<SVGElement>(*GetNode()), Style());
   LayoutInline::WillBeDestroyed();
@@ -126,36 +126,35 @@ void LayoutSVGInline::WillBeDestroyed() {
 void LayoutSVGInline::StyleDidChange(StyleDifference diff,
                                      const ComputedStyle* old_style) {
   NOT_DESTROYED();
-  // Since layout depends on the bounds of the filter, we need to force layout
-  // when the filter changes.
-  if (diff.FilterChanged())
-    SetNeedsLayout(layout_invalidation_reason::kStyleChange);
+  LayoutInline::StyleDidChange(diff, old_style);
 
   if (diff.NeedsFullLayout())
     SetNeedsBoundariesUpdate();
 
-  if (diff.CompositingReasonsChanged())
-    SVGLayoutSupport::NotifySVGRootOfChangedCompositingReasons(this);
-
-  LayoutInline::StyleDidChange(diff, old_style);
   SVGResources::UpdateClipPathFilterMask(To<SVGElement>(*GetNode()), old_style,
                                          StyleRef());
   SVGResources::UpdatePaints(To<SVGElement>(*GetNode()), old_style, StyleRef());
-  SVGResourcesCache::ClientStyleChanged(*this, diff, StyleRef());
+
+  if (!Parent())
+    return;
+  if (diff.CompositingReasonsChanged())
+    SVGLayoutSupport::NotifySVGRootOfChangedCompositingReasons(this);
+  if (diff.HasDifference()) {
+    SVGResourcesCache::UpdateResources(*this);
+    LayoutSVGResourceContainer::StyleDidChange(*this, diff);
+  }
 }
 
 void LayoutSVGInline::AddChild(LayoutObject* child,
                                LayoutObject* before_child) {
   NOT_DESTROYED();
   LayoutInline::AddChild(child, before_child);
-  SVGResourcesCache::ClientWasAddedToTree(*child);
   LayoutSVGText::NotifySubtreeStructureChanged(
       this, layout_invalidation_reason::kChildChanged);
 }
 
 void LayoutSVGInline::RemoveChild(LayoutObject* child) {
   NOT_DESTROYED();
-  SVGResourcesCache::ClientWillBeRemovedFromTree(*child);
   LayoutSVGText::NotifySubtreeStructureChanged(
       this, layout_invalidation_reason::kChildChanged);
   LayoutInline::RemoveChild(child);
@@ -164,6 +163,10 @@ void LayoutSVGInline::RemoveChild(LayoutObject* child) {
 void LayoutSVGInline::InsertedIntoTree() {
   NOT_DESTROYED();
   LayoutInline::InsertedIntoTree();
+  LayoutSVGResourceContainer::MarkForLayoutAndParentResourceInvalidation(*this,
+                                                                         false);
+  if (SVGResourcesCache::AddResources(*this))
+    SetNeedsPaintPropertyUpdate();
   if (CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(*this) !=
       CompositingReason::kNone) {
     SVGLayoutSupport::NotifySVGRootOfChangedCompositingReasons(this);
@@ -172,6 +175,10 @@ void LayoutSVGInline::InsertedIntoTree() {
 
 void LayoutSVGInline::WillBeRemovedFromTree() {
   NOT_DESTROYED();
+  LayoutSVGResourceContainer::MarkForLayoutAndParentResourceInvalidation(*this,
+                                                                         false);
+  if (SVGResourcesCache::RemoveResources(*this))
+    SetNeedsPaintPropertyUpdate();
   LayoutInline::WillBeRemovedFromTree();
   if (CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(*this) !=
       CompositingReason::kNone) {

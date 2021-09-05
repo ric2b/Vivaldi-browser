@@ -7,7 +7,7 @@
 
 class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
  public:
-  VivaldiContentBrowserClient(StartupData* startup_data = nullptr);
+  VivaldiContentBrowserClient();
 
   ~VivaldiContentBrowserClient() override;
 

@@ -6,8 +6,8 @@
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -18,9 +18,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/test/ssl_test_utils.h"
 #include "chrome/browser/web_applications/components/external_app_install_features.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/external_web_app_manager.h"
-#include "chrome/browser/web_applications/preinstalled_web_apps.h"
+#include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
@@ -92,6 +93,8 @@ class ExternalWebAppMigrationBrowserTest : public InProcessBrowserTest {
     SetUpExtensionTestExternalProvider();
 
     InProcessBrowserTest::SetUpOnMainThread();
+    os_hooks_suppress_ =
+        OsIntegrationManager::ScopedSuppressOsHooksForTesting();
   }
 
   std::unique_ptr<net::test_server::HttpResponse> RequestHandlerOverride(
@@ -167,8 +170,10 @@ class ExternalWebAppMigrationBrowserTest : public InProcessBrowserTest {
         [&](std::map<GURL, InstallResultCode> install_results,
             std::map<GURL, bool> uninstall_results) {
           if (expect_install) {
-            EXPECT_EQ(install_results.at(GetWebAppUrl()),
-                      InstallResultCode::kSuccessNewInstall);
+            InstallResultCode result = install_results.at(GetWebAppUrl());
+            EXPECT_TRUE(result == InstallResultCode::kSuccessNewInstall ||
+                        result ==
+                            InstallResultCode::kSuccessOfflineOnlyInstall);
           } else {
             EXPECT_EQ(install_results.find(GetWebAppUrl()),
                       install_results.end());
@@ -214,6 +219,7 @@ class ExternalWebAppMigrationBrowserTest : public InProcessBrowserTest {
  private:
   base::Optional<base::AutoReset<bool>> disable_scope_;
   std::unique_ptr<extensions::ExtensionCacheFake> test_extension_cache_;
+  ScopedOsHooksSuppress os_hooks_suppress_;
 };
 
 IN_PROC_BROWSER_TEST_F(ExternalWebAppMigrationBrowserTest,
@@ -421,10 +427,20 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppMigrationBrowserTest,
 IN_PROC_BROWSER_TEST_F(ExternalWebAppMigrationBrowserTest,
                        MigrateToPreinstalledWebApp) {
   ScopedTestingPreinstalledAppData preinstalled_apps;
-  preinstalled_apps.apps.push_back(
-      {GetWebAppUrl(), kMigrationFlag, kExtensionId});
-  EXPECT_EQ(1, GetPreinstalledWebApps().disabled_count);
-
+  ExternalInstallOptions options(GetWebAppUrl(), DisplayMode::kBrowser,
+                                 ExternalInstallSource::kExternalDefault);
+  options.gate_on_feature = kMigrationFlag;
+  options.user_type_allowlist = {"unmanaged"};
+  options.uninstall_and_replace.push_back(kExtensionId);
+  options.only_use_app_info_factory = true;
+  options.app_info_factory = base::BindLambdaForTesting([&]() {
+    auto info = std::make_unique<WebApplicationInfo>();
+    info->start_url = GetWebAppUrl();
+    info->title = base::UTF8ToUTF16("Test app");
+    return info;
+  });
+  preinstalled_apps.apps.push_back(std::move(options));
+  EXPECT_EQ(1u, GetPreinstalledWebApps().size());
   // Set up pre-migration state.
   {
     base::HistogramTester histograms;

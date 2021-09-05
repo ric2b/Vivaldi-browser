@@ -33,6 +33,11 @@ extern const base::Feature kSyncWifiConfigurations;
 extern const base::Feature kDecoupleSyncFromAndroidMasterSync;
 extern const base::Feature kFollowTrustedVaultKeyRotation;
 
+extern const base::Feature kSyncRequiresPoliciesLoaded;
+extern const base::FeatureParam<base::TimeDelta> kSyncPolicyLoadTimeout;
+
+extern const base::Feature kSyncSupportTrustedVaultPassphraseRecovery;
+
 }  // namespace switches
 
 #endif  // COMPONENTS_SYNC_DRIVER_SYNC_DRIVER_SWITCHES_H_

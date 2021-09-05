@@ -128,9 +128,9 @@ std::unique_ptr<views::Label> CreateAnnotationLabel(
 
 }  // namespace
 
-CandidateView::CandidateView(views::ButtonListener* listener,
+CandidateView::CandidateView(PressedCallback callback,
                              ui::CandidateWindow::Orientation orientation)
-    : views::Button(listener), orientation_(orientation) {
+    : views::Button(std::move(callback)), orientation_(orientation) {
   SetBorder(views::CreateEmptyBorder(1, 1, 1, 1));
 
   const ui::NativeTheme& theme = *GetNativeTheme();
@@ -144,6 +144,8 @@ CandidateView::CandidateView(views::ButtonListener* listener,
         theme.GetSystemColor(ui::NativeTheme::kColorId_FocusedBorderColor)));
     infolist_icon_ = AddChildView(std::move(infolist_icon));
   }
+
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 void CandidateView::GetPreferredWidths(int* shortcut_width,

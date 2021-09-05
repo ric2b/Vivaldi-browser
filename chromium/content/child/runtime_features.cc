@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
@@ -65,12 +66,6 @@ void SetRuntimeFeatureDefaultsForPlatform(
     WebRuntimeFeatures::EnableWebBluetooth(true);
     WebRuntimeFeatures::EnableWebBluetoothRemoteCharacteristicNewWriteValue(
         true);
-  }
-#endif
-
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-  if (command_line.HasSwitch(switches::kEnableWebGL2ComputeContext)) {
-    WebRuntimeFeatures::EnableWebGL2ComputeContext(true);
   }
 #endif
 
@@ -214,9 +209,10 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableWebXRAnchors, features::kWebXrIncubations},
     {wf::EnableWebXRCameraAccess, features::kWebXrIncubations},
     {wf::EnableWebXRDepth, features::kWebXrIncubations},
+    {wf::EnableWebXRImageTracking, features::kWebXrIncubations},
     {wf::EnableWebXRLightEstimation, features::kWebXrIncubations},
     {wf::EnableWebXRPlaneDetection, features::kWebXrIncubations},
-    {wf::EnableWebXRReflectionEstimation, features::kWebXrIncubations},
+    {wf::EnableWebXRViewportScale, features::kWebXrIncubations},
     {wf::EnableUserActivationSameOriginVisibility,
      features::kUserActivationSameOriginVisibility},
     {wf::EnableExpensiveBackgroundTimerThrottling,
@@ -255,6 +251,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      features::kEnableAccessibilityExposeDisplayNone},
     {wf::EnableAccessibilityExposeHTMLElement,
      features::kEnableAccessibilityExposeHTMLElement},
+    {wf::EnableAccessibilityExposeIgnoredNodes,
+     features::kEnableAccessibilityExposeIgnoredNodes},
     {wf::EnableAccessibilityUseAXPositionForDocumentMarkers,
      features::kUseAXPositionForDocumentMarkers},
     {wf::EnableAllowSyncXHRInPageDismissal,
@@ -262,20 +260,22 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableAutoplayIgnoresWebAudio, media::kAutoplayIgnoreWebAudio},
     {wf::EnablePortals, blink::features::kPortals, kSetOnlyIfOverridden},
     {wf::EnableImplicitRootScroller, blink::features::kImplicitRootScroller},
-    {wf::EnableCSSOMViewScrollCoordinates,
-     blink::features::kCSSOMViewScrollCoordinates},
     {wf::EnableTextFragmentAnchor, blink::features::kTextFragmentAnchor},
     {wf::EnableBackgroundFetch, features::kBackgroundFetch},
     {wf::EnableForcedColors, features::kForcedColors},
     {wf::EnableFractionalScrollOffsets, features::kFractionalScrollOffsets},
-    {wf::EnableGetDisplayMedia, blink::features::kRTCGetDisplayMedia},
+#if defined(OS_ANDROID)
+    {wf::EnableGetDisplayMedia, features::kUserMediaScreenCapturing},
+#endif
+    {wf::EnableGetCurrentBrowsingContextMedia,
+     blink::features::kRTCGetCurrentBrowsingContextMedia},
     {wf::EnableSignedExchangePrefetchCacheForNavigations,
      features::kSignedExchangePrefetchCacheForNavigations},
     {wf::EnableSignedExchangeSubresourcePrefetch,
      features::kSignedExchangeSubresourcePrefetch},
     {wf::EnableIdleDetection, features::kIdleDetection, kSetOnlyIfOverridden},
     {wf::EnableSkipTouchEventFilter, blink::features::kSkipTouchEventFilter},
-    {wf::EnableSmsReceiver, features::kSmsReceiver, kSetOnlyIfOverridden},
+    {wf::EnableWebOTP, features::kWebOTP, kSetOnlyIfOverridden},
     {wf::EnableClickPointerEvent, features::kClickPointerEvent},
     {wf::EnableConsolidatedMovementXY, features::kConsolidatedMovementXY},
     {wf::EnableCooperativeScheduling, features::kCooperativeScheduling},
@@ -287,14 +287,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      net::features::kSameSiteByDefaultCookies},
     {wf::EnableCookiesWithoutSameSiteMustBeSecure,
      net::features::kCookiesWithoutSameSiteMustBeSecure},
-    {wf::EnablePointerLockOptions, features::kPointerLockOptions},
+    {wf::EnablePointerLockOptions, features::kPointerLockOptions,
+     kSetOnlyIfOverridden},
     {wf::EnableDocumentPolicy, features::kDocumentPolicy},
     {wf::EnableDocumentPolicyNegotiation, features::kDocumentPolicyNegotiation},
     {wf::EnableScrollUnification, features::kScrollUnification},
     {wf::EnableNeverSlowMode, features::kNeverSlowMode},
-    {wf::EnableShadowDOMV0, blink::features::kWebComponentsV0},
-    {wf::EnableCustomElementsV0, blink::features::kWebComponentsV0},
-    {wf::EnableHTMLImports, blink::features::kWebComponentsV0},
     {wf::EnableVideoPlaybackQuality, features::kVideoPlaybackQuality},
     {wf::EnableBrowserVerifiedUserActivationKeyboard,
      features::kBrowserVerifiedUserActivationKeyboard},
@@ -316,6 +314,10 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      blink::features::kCompositingOptimizations},
     {wf::EnableConversionMeasurementInfraSupport,
      features::kConversionMeasurement},
+    {wf::EnableParseUrlProtocolHandler,
+     blink::features::kWebAppEnableProtocolHandlers},
+    {wf::EnableWebID, features::kWebID},
+    {wf::EnableWheelEventRegions, features::kWheelEventRegions},
   };
   for (const auto& mapping : blinkFeatureToBaseFeatureMapping) {
     SetRuntimeFeatureFromChromiumFeature(
@@ -342,7 +344,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            blink::features::kCSSReducedFontLoadingLayoutInvalidations},
           {"CSSMatchedPropertiesCacheDependencies",
            blink::features::kCSSMatchedPropertiesCacheDependencies},
-          {"CustomElementsV0", blink::features::kWebComponentsV0},
           {"FeaturePolicyForClientHints",
            features::kFeaturePolicyForClientHints},
           {"EditingNG", blink::features::kEditingNG},
@@ -351,14 +352,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"FontSrcLocalMatching", features::kFontSrcLocalMatching},
           {"ForceSynchronousHTMLParsing",
            blink::features::kForceSynchronousHTMLParsing},
-          {"HTMLImports", blink::features::kWebComponentsV0},
           {"IgnoreCrossOriginWindowWhenNamedAccessOnWindow",
            blink::features::kIgnoreCrossOriginWindowWhenNamedAccessOnWindow},
           {"LangClientHintHeader", features::kLangClientHintHeader},
           {"LayoutNG", blink::features::kLayoutNG},
           {"LayoutNGFieldset", blink::features::kLayoutNGFieldset},
           {"LayoutNGFragmentItem", blink::features::kFragmentItem},
-          {"LayoutNGRuby", blink::features::kLayoutNGRuby},
           {"LegacyWindowsDWriteFontFallback",
            features::kLegacyWindowsDWriteFontFallback},
           {"LinkDisabledNewSpecBehavior",
@@ -368,12 +367,15 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"ParentNodeReplaceChildren",
            blink::features::kParentNodeReplaceChildren},
           {"RawClipboard", blink::features::kRawClipboard},
-          {"ShadowDOMV0", blink::features::kWebComponentsV0},
           {"StorageAccessAPI", blink::features::kStorageAccessAPI},
+          {"TargetBlankImpliesNoOpener",
+           blink::features::kTargetBlankImpliesNoOpener},
           {"TrustedDOMTypes", features::kTrustedDOMTypes},
           {"UserAgentClientHint", features::kUserAgentClientHint},
           {"WebAppManifestDisplayOverride",
            features::kWebAppManifestDisplayOverride},
+          {"WebAppWindowControlsOverlay",
+           features::kWebAppWindowControlsOverlay},
           {"WebXRMultiGpu", blink::features::kWebXrMultiGpu},
       };
   for (const auto& mapping : runtimeFeatureNameToChromiumFeatureMapping) {
@@ -410,6 +412,8 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
       {wrf::EnablePresentationAPI, switches::kDisablePresentationAPI, false},
       {wrf::EnableRemotePlaybackAPI, switches::kDisableRemotePlaybackAPI,
        false},
+      {wrf::EnableTargetBlankImpliesNoOpener,
+       switches::kDisableTargetBlankImpliesNoOpener, false},
       {wrf::EnableTimerThrottlingForBackgroundTabs,
        switches::kDisableBackgroundTimerThrottling, false},
       // End of Stable Features
@@ -434,15 +438,9 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
       {wrf::EnablePreciseMemoryInfo, switches::kEnablePreciseMemoryInfo, true},
       {wrf::EnableNetInfoDownlinkMax,
        switches::kEnableNetworkInformationDownlinkMax, true},
-      {wrf::EnablePermissionsAPI, switches::kDisablePermissionsAPI, false},
       {wrf::EnableWebGPU, switches::kEnableUnsafeWebGPU, true},
-      {wrf::EnablePresentationAPI, switches::kDisablePresentationAPI, false},
       {wrf::EnableTextFragmentAnchor, switches::kDisableScrollToTextFragment,
        false},
-      {wrf::EnableRemotePlaybackAPI, switches::kDisableRemotePlaybackAPI,
-       false},
-      {wrf::EnableTimerThrottlingForBackgroundTabs,
-       switches::kDisableBackgroundTimerThrottling, false},
       {wrf::EnableAccessibilityObjectModel,
        switches::kEnableAccessibilityObjectModel, true},
       {wrf::EnableAllowSyncXHRInPageDismissal,
@@ -594,6 +592,19 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
   }
 }
 
+// Ensures that the various ways of enabling/disabling features do not produce
+// an invalid configuration.
+void ResolveInvalidConfigurations() {
+  // Portals cannot be enabled without the support of the browser process.
+  if (!base::FeatureList::IsEnabled(blink::features::kPortals)) {
+    LOG_IF(WARNING, WebRuntimeFeatures::IsPortalsEnabled())
+        << "Portals cannot be enabled in this configuration. Use --"
+        << switches::kEnableFeatures << "=" << blink::features::kPortals.name
+        << " instead.";
+    WebRuntimeFeatures::EnablePortals(false);
+  }
+}
+
 }  // namespace
 
 namespace content {
@@ -643,6 +654,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
        FeaturesFromSwitch(command_line, switches::kDisableBlinkFeatures)) {
     WebRuntimeFeatures::EnableFeatureFromString(feature, false);
   }
+
+  ResolveInvalidConfigurations();
 }
 
 }  // namespace content

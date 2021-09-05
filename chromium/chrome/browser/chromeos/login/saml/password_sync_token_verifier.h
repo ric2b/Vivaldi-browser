@@ -50,6 +50,9 @@ class PasswordSyncTokenVerifier : public KeyedService,
   // Cancel all pending check requests.
   void CancelPendingChecks();
 
+  // Record start of in-session token polling.
+  void RecordTokenPollingStart();
+
   // PasswordSyncTokenFetcher::Consumer
   void OnTokenCreated(const std::string& sync_token) override;
   void OnTokenFetched(const std::string& sync_token) override;
@@ -57,7 +60,7 @@ class PasswordSyncTokenVerifier : public KeyedService,
   void OnApiCallFailed(PasswordSyncTokenFetcher::ErrorType error_type) override;
 
  private:
-  // Recheck after given |delay|.
+  // Recheck after given `delay`.
   void RecheckAfter(base::TimeDelta delay);
   // Init sync token.
   void CreateTokenAsync();

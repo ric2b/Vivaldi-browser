@@ -514,7 +514,7 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
     scale = display.device_scale_factor();
   }
   capture_params.rect =
-      gfx::ToFlooredRectDeprecated(gfx::ConvertRectToPixels(rect, scale));
+      gfx::ToNearestRect(gfx::ConvertRectToPixels(rect, scale));
   capture_params.target_size = out_dimension;
 
   ::vivaldi::CapturePage::Capture(

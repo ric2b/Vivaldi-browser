@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
@@ -79,6 +79,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/redirect_util.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/request_destination.h"
@@ -206,16 +207,8 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   new_request->trusted_params->client_security_state =
       request_info->client_security_state.Clone();
   new_request->is_main_frame = request_info->is_main_frame;
-
-  net::RequestPriority net_priority = net::HIGHEST;
-  if (!request_info->is_main_frame &&
-      base::FeatureList::IsEnabled(features::kLowPriorityIframes)) {
-    net_priority = net::LOWEST;
-  }
-  new_request->priority = net_priority;
-
+  new_request->priority = net::HIGHEST;
   new_request->render_frame_id = frame_tree_node_id;
-
   new_request->request_initiator =
       request_info->common_params->initiator_origin;
   new_request->referrer = request_info->common_params->referrer->url;
@@ -419,7 +412,9 @@ void NavigationURLLoaderImpl::CreateInterceptors(
     std::unique_ptr<NavigationLoaderInterceptor>
         prefetched_signed_exchange_interceptor =
             prefetched_signed_exchange_cache->MaybeCreateInterceptor(
-                url_, frame_tree_node_id_);
+                url_, frame_tree_node_id_,
+                resource_request_->trusted_params->isolation_info
+                    .network_isolation_key());
     if (prefetched_signed_exchange_interceptor) {
       interceptors_.push_back(
           std::move(prefetched_signed_exchange_interceptor));
@@ -1153,7 +1148,7 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
         frame_tree_node->current_frame_host()->GetProcess()->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
         frame_tree_node->navigation_request()->GetNavigationId(),
-        base::UkmSourceId::FromInt64(
+        ukm::SourceIdObj::FromInt64(
             frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
         &factory_receiver, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
@@ -1177,9 +1172,8 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
         ->browser()
         ->RegisterNonNetworkNavigationURLLoaderFactories(
             frame_tree_node_id_,
-            base::UkmSourceId::FromInt64(frame_tree_node->navigation_request()
-                                             ->GetNextPageUkmSourceId()),
-            &non_network_uniquely_owned_factories_,
+            ukm::SourceIdObj::FromInt64(frame_tree_node->navigation_request()
+                                            ->GetNextPageUkmSourceId()),
             &non_network_url_loader_factories_);
 
     // The embedder may want to proxy all network-bound URLLoaderFactory
@@ -1194,7 +1188,7 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
         frame_tree_node->current_frame_host()->GetProcess()->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
         frame_tree_node->navigation_request()->GetNavigationId(),
-        base::UkmSourceId::FromInt64(
+        ukm::SourceIdObj::FromInt64(
             frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
         &factory_receiver, &header_client, &bypass_redirect_checks_,
         nullptr /* disable_secure_dns */, nullptr /* factory_override */);
@@ -1239,8 +1233,6 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
                                             ContentURLLoaderFactory::Create());
 #endif
 
-  for (auto& iter : non_network_uniquely_owned_factories_)
-    known_schemes_.insert(iter.first);
   for (auto& iter : non_network_url_loader_factories_)
     known_schemes_.insert(iter.first);
 
@@ -1350,18 +1342,12 @@ void NavigationURLLoaderImpl::CreateURLLoaderFactoryWithHeaderClient(
 void NavigationURLLoaderImpl::BindNonNetworkURLLoaderFactoryReceiver(
     const GURL& url,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver) {
-  auto it = non_network_uniquely_owned_factories_.find(url.scheme());
-  if (it != non_network_uniquely_owned_factories_.end()) {
-    it->second->Clone(std::move(factory_receiver));
-    return;
-  }
-
-  auto it2 = non_network_url_loader_factories_.find(url.scheme());
-  if (it2 != non_network_url_loader_factories_.end()) {
+  auto it = non_network_url_loader_factories_.find(url.scheme());
+  if (it != non_network_url_loader_factories_.end()) {
     mojo::Remote<network::mojom::URLLoaderFactory> remote(
-        std::move(it2->second));
+        std::move(it->second));
     remote->Clone(std::move(factory_receiver));
-    non_network_url_loader_factories_.erase(it2);
+    non_network_url_loader_factories_.erase(it);
     return;
   }
 
@@ -1384,7 +1370,7 @@ void NavigationURLLoaderImpl::
       frame->GetProcess()->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
       frame_tree_node->navigation_request()->GetNavigationId(),
-      base::UkmSourceId::FromInt64(
+      ukm::SourceIdObj::FromInt64(
           frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
       &factory_receiver, nullptr /* header_client */,
       nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,

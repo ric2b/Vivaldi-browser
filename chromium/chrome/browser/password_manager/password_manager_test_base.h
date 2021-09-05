@@ -16,11 +16,11 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-namespace autofill {
-struct PasswordForm;
-}
-
 class ManagePasswordsUIController;
+
+namespace password_manager {
+struct PasswordForm;
+}  // namespace password_manager
 
 class NavigationObserver : public content::WebContentsObserver {
  public:
@@ -147,14 +147,15 @@ class PasswordStoreResultsObserver
   ~PasswordStoreResultsObserver() override;
 
   // Waits for OnGetPasswordStoreResults() and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> WaitForResults();
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> WaitForResults();
 
  private:
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   base::RunLoop run_loop_;
-  std::vector<std::unique_ptr<autofill::PasswordForm>> results_;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> results_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStoreResultsObserver);
 };
@@ -166,6 +167,7 @@ class PasswordManagerBrowserTestBase : public CertVerifierBrowserTest {
 
   // InProcessBrowserTest:
   void SetUpInProcessBrowserTestFixture() override;
+  void SetUp() override;
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
 

@@ -120,6 +120,21 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         }
     }
 
+    /**
+     * TODO(crbug.com/1136111): Try to remove this method. ToolbarContainer's visibility should not
+     * be set outside this class. Please do not use this method without discussing with the owners.
+     *
+     * Sets the visibility of the toolbar_container view.
+     */
+    @Deprecated
+    void setToolbarContainerVisibility(int visibility) {
+        mToolbarContainer.setVisibility(visibility);
+        // Trigger a capture when toolbar container view is set visible.
+        if (mToolbarContainer.isReadyForCapture()) {
+            invalidateBitmap();
+        }
+    }
+
     @Override
     public boolean gatherTransparentRegion(Region region) {
         // Reset the translation on the control container before attempting to compute the
@@ -171,7 +186,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
         @Override
         protected boolean isReadyForCapture() {
-            return mReadyForBitmapCapture;
+            return mReadyForBitmapCapture && getVisibility() == VISIBLE;
         }
     }
 
@@ -257,7 +272,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         if (mSwipeHandler == null) return false;
 
         // Don't react on touch events if the toolbar container is not fully visible.
-        if (!isFullyVisible()) return true;
+        if (!isToolbarContainerFullyVisible()) return true;
 
         // Note(david@vivaldi.com): When |isInTabSwitcherMode| we don't eat the event.
         if (ChromeApplication.isVivaldi()) {
@@ -282,7 +297,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        if (!isFullyVisible()) return true;
+        if (!isToolbarContainerFullyVisible()) return true;
         if (mSwipeHandler == null || isOnTabStrip(event)) return false;
 
         return mSwipeRecognizer.onTouchEvent(event);
@@ -296,10 +311,11 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
     }
 
     /**
-     * @return Whether or not the control container is fully visible on screen.
+     * @return Whether or not the toolbar container is fully visible on screen.
      */
-    private boolean isFullyVisible() {
-        return Float.compare(0f, getTranslationY()) == 0;
+    private boolean isToolbarContainerFullyVisible() {
+        return Float.compare(0f, getTranslationY()) == 0
+                && mToolbarContainer.getVisibility() == VISIBLE;
     }
 
     private class SwipeRecognizerImpl extends SwipeRecognizer {

@@ -19,9 +19,9 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
-#include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
 #include "components/sync/model/data_type_activation_request.h"
+#include "components/sync/model/type_entities_count.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "notes/note_node.h"
@@ -523,25 +523,24 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     AppendNodeAndChildrenForDebugging(child.get(), i++, all_nodes);
 }
 
-void NoteModelTypeProcessor::GetStatusCountersForDebugging(
-    StatusCountersCallback callback) {
+void NoteModelTypeProcessor::GetTypeEntitiesCountForDebugging(
+    base::OnceCallback<void(const syncer::TypeEntitiesCount&)> callback) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  syncer::StatusCounters counters;
+  syncer::TypeEntitiesCount count(syncer::NOTES);
   if (note_tracker_) {
-    counters.num_entries = note_tracker_->TrackedNotesCountForDebugging();
-    counters.num_entries_and_tombstones =
-        counters.num_entries +
-        note_tracker_->TrackedUncommittedTombstonesCountForDebugging();
+    count.non_tombstone_entities = note_tracker_->TrackedNotesCount();
+    count.entities = count.non_tombstone_entities +
+                     note_tracker_->TrackedUncommittedTombstonesCount();
   }
-  std::move(callback).Run(syncer::NOTES, counters);
+  std::move(callback).Run(count);
 }
 
 void NoteModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   SyncRecordModelTypeMemoryHistogram(syncer::NOTES, EstimateMemoryUsage());
   if (note_tracker_) {
-    SyncRecordModelTypeCountHistogram(
-        syncer::NOTES, note_tracker_->TrackedNotesCountForDebugging());
+    SyncRecordModelTypeCountHistogram(syncer::NOTES,
+                                      note_tracker_->TrackedNotesCount());
   } else {
     SyncRecordModelTypeCountHistogram(syncer::NOTES, 0);
   }

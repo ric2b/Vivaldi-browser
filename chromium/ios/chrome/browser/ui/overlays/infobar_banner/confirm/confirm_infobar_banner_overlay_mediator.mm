@@ -55,10 +55,19 @@ using confirm_infobar_overlays::ConfirmBannerRequestConfig;
 
   [self.consumer
       setButtonText:base::SysUTF16ToNSString(config->button_label_text())];
-  if (!config->icon_image().IsEmpty())
+  if (!config->icon_image().IsEmpty()) {
     [self.consumer setIconImage:config->icon_image().ToUIImage()];
+    [self.consumer setUseIconBackgroundTint:config->use_icon_background_tint()];
+  }
   [self.consumer setPresentsModal:NO];
-  [self.consumer setTitleText:base::SysUTF16ToNSString(config->message_text())];
+  if (config->title_text().empty()) {
+    [self.consumer
+        setTitleText:base::SysUTF16ToNSString(config->message_text())];
+  } else {
+    [self.consumer setTitleText:base::SysUTF16ToNSString(config->title_text())];
+    [self.consumer
+        setSubtitleText:base::SysUTF16ToNSString(config->message_text())];
+  }
 }
 
 @end

@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/bits.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/common/checked_lock.h"
@@ -149,11 +149,10 @@ bool JobTaskSource::RunJoinTask() {
 }
 
 void JobTaskSource::Cancel(TaskSource::Transaction* transaction) {
-  CheckedAutoLock auto_lock(worker_lock_);
   // Sets the kCanceledMask bit on |state_| so that further calls to
-  // WillRunTask() never succeed. std::memory_order_relaxed is sufficient
-  // because this task source never needs to be re-enqueued after Cancel().
-  state_.Cancel();
+  // WillRunTask() never succeed. std::memory_order_relaxed without a lock is
+  // safe because this task source never needs to be re-enqueued after Cancel().
+  TS_UNCHECKED_READ(state_).Cancel();
 }
 
 // EXCLUSIVE_LOCK_REQUIRED(worker_lock_)
@@ -347,7 +346,11 @@ bool JobTaskSource::DidProcessTask(TaskSource::Transaction* /*transaction*/) {
          GetMaxConcurrency(state_before_sub.worker_count() - 1);
 }
 
-TaskSourceSortKey JobTaskSource::GetSortKey() const {
+TaskSourceSortKey JobTaskSource::GetSortKey(
+    bool disable_fair_scheduling) const {
+  if (disable_fair_scheduling) {
+    return TaskSourceSortKey(priority_racy(), ready_time_);
+  }
   return TaskSourceSortKey(priority_racy(), ready_time_,
                            TS_UNCHECKED_READ(state_).Load().worker_count());
 }

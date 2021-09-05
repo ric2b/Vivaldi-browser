@@ -28,12 +28,17 @@ android_library("java") {
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelFilterFactory.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelFilterProvider.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelObserver.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelOrderController.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelOrderControllerImpl.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelector.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorFactory.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorObserver.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabModelObserver.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabObserver.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelUtils.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabReparentingParams.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabSwitchMetrics.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabWindowManager.java",
   ]
   deps = [
     "//base:base_java",
@@ -48,5 +53,8 @@ android_library("java") {
 android_library_factory("factory_java") {
   deps = [ ":java" ]
 
-  sources = [ "internal/android/java/src/org/chromium/chrome/browser/tabmodel/AsyncTabParamsManagerFactory.java" ]
+  sources = [
+    "internal/android/java/src/org/chromium/chrome/browser/tabmodel/AsyncTabParamsManagerFactory.java",
+    "internal/android/java/src/org/chromium/chrome/browser/tabmodel/TabWindowManagerFactory.java",
+  ]
 }

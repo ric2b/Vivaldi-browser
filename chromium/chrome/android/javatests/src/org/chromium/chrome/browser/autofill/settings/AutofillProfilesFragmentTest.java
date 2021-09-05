@@ -18,14 +18,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 
@@ -47,20 +47,20 @@ public class AutofillProfilesFragmentTest {
     @Before
     public void setUp() throws TimeoutException {
         AutofillTestHelper helper = new AutofillTestHelper();
-        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Seb Doe", "Google",
-                "111 First St", "CA", "Los Angeles", "", "90291", "", "US", "650-253-0000",
-                "first@gmail.com", "en-US"));
-        helper.setProfile(new AutofillProfile("", "https://example.com", true, "John Doe", "Google",
-                "111 Second St", "CA", "Los Angeles", "", "90291", "", "US", "650-253-0000",
-                "second@gmail.com", "en-US"));
+        helper.setProfile(new AutofillProfile("", "https://example.com", true,
+                "" /* honorific prefix */, "Seb Doe", "Google", "111 First St", "CA", "Los Angeles",
+                "", "90291", "", "US", "650-253-0000", "first@gmail.com", "en-US"));
+        helper.setProfile(new AutofillProfile("", "https://example.com", true,
+                "" /* honorific prefix */, "John Doe", "Google", "111 Second St", "CA",
+                "Los Angeles", "", "90291", "", "US", "650-253-0000", "second@gmail.com", "en-US"));
         // Invalid state should not cause a crash on the state dropdown list.
-        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Bill Doe", "Google",
-                "111 Third St", "XXXYYY", "Los Angeles", "", "90291", "", "US", "650-253-0000",
-                "third@gmail.com", "en-US"));
+        helper.setProfile(new AutofillProfile("", "https://example.com", true,
+                "" /* honorific prefix */, "Bill Doe", "Google", "111 Third St", "XXXYYY",
+                "Los Angeles", "", "90291", "", "US", "650-253-0000", "third@gmail.com", "en-US"));
         // Full value for state should show up correctly on the dropdown list.
-        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Bob Doe", "Google",
-                "111 Fourth St", "California", "Los Angeles", "", "90291", "", "US", "650-253-0000",
-                "fourth@gmail.com", "en-US"));
+        helper.setProfile(new AutofillProfile("", "https://example.com", true,
+                "" /* honorific prefix */, "Bob Doe", "Google", "111 Fourth St", "California",
+                "Los Angeles", "", "90291", "", "US", "650-253-0000", "fourth@gmail.com", "en-US"));
     }
 
     @Test

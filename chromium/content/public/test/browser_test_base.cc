@@ -30,7 +30,7 @@
 #include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
@@ -86,6 +86,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/task_scheduler/post_task_android.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"  // nogncheck
+#include "content/app/content_main_runner_impl.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/app/service_manager_environment.h"
 #include "content/public/app/content_main_delegate.h"
@@ -94,7 +95,7 @@
 #include "ui/base/ui_base_paths.h"
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-#include "gin/v8_initializer.h"
+#include "gin/v8_initializer.h"  // nogncheck
 #endif
 #endif
 
@@ -523,6 +524,12 @@ void BrowserTestBase::SetUp() {
     InitializeBrowserMemoryInstrumentationClient();
   }
 
+  blink::TrialTokenValidator::SetOriginTrialPolicyGetter(
+      base::BindRepeating([]() -> blink::OriginTrialPolicy* {
+        ContentClient* client = GetContentClientForTesting();
+        return client ? client->GetOriginTrialPolicy() : nullptr;
+      }));
+
   // All FeatureList overrides should have been registered prior to browser test
   // SetUp().
   base::FeatureList::ScopedDisallowOverrides disallow_feature_overrides(
@@ -580,7 +587,6 @@ void BrowserTestBase::SetUp() {
     ShutDownNetworkService();
     service_manager_env.reset();
     discardable_shared_memory_manager.reset();
-    spawned_test_server_.reset();
   }
 
   base::PostTaskAndroid::SignalNativeSchedulerShutdownForTesting();
@@ -654,7 +660,7 @@ void BrowserTestBase::WaitUntilJavaIsReady(base::OnceClosure quit_closure) {
 
 namespace {
 
-std::string GetDefaultTraceFileneme() {
+std::string GetDefaultTraceFilename() {
   std::string test_suite_name = ::testing::UnitTest::GetInstance()
                                     ->current_test_info()
                                     ->test_suite_name();
@@ -769,10 +775,10 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     base::FilePath trace_file =
         base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
             switches::kEnableTracingOutput);
-    // If there was no file specified, put a hardcoded one in the current
-    // working directory.
-    if (trace_file.empty())
-      trace_file = base::FilePath().AppendASCII(GetDefaultTraceFileneme());
+    // If |trace_file| ends in a directory separator or is empty use a generated
+    // name in that directory (empty means current directory).
+    if (trace_file.empty() || trace_file.EndsWithSeparator())
+      trace_file = trace_file.AppendASCII(GetDefaultTraceFilename());
 
     // Wait for tracing to collect results from the renderers.
     base::RunLoop run_loop;
@@ -799,9 +805,6 @@ void BrowserTestBase::SetAllowNetworkAccessToHostResolutions() {
 }
 
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {
-  CHECK(!spawned_test_server_.get());
-  spawned_test_server_ = std::make_unique<net::SpawnedTestServer>(
-      net::SpawnedTestServer::TYPE_HTTP, test_server_base);
   embedded_test_server()->AddDefaultHandlers(test_server_base);
 }
 

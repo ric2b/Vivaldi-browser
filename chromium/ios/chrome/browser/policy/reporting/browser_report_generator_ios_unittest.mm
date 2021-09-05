@@ -8,12 +8,11 @@
 #error "This file requires ARC support."
 #endif
 
-namespace em = enterprise_management;
-
 #import <Foundation/Foundation.h>
 
+#include "base/files/file_path.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
@@ -21,6 +20,8 @@ namespace em = enterprise_management;
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
 #include "ios/chrome/test/testing_application_context.h"
 #include "testing/platform_test.h"
+
+namespace em = enterprise_management;
 
 namespace enterprise_reporting {
 
@@ -46,27 +47,29 @@ class BrowserReportGeneratorIOSTest : public PlatformTest {
 
   void GenerateAndVerify() {
     base::RunLoop run_loop;
-    generator_.Generate(base::BindLambdaForTesting(
-        [&run_loop](std::unique_ptr<em::BrowserReport> report) {
-          EXPECT_TRUE(report.get());
+    generator_.Generate(
+        ReportType::kFull,
+        base::BindLambdaForTesting(
+            [&run_loop](std::unique_ptr<em::BrowserReport> report) {
+              EXPECT_TRUE(report.get());
 
-          EXPECT_NE(std::string(), report->browser_version());
-          EXPECT_TRUE(report->has_channel());
+              EXPECT_NE(std::string(), report->browser_version());
+              EXPECT_TRUE(report->has_channel());
 
-          EXPECT_NE(std::string(), report->executable_path());
+              EXPECT_NE(std::string(), report->executable_path());
 
-          ASSERT_EQ(1, report->chrome_user_profile_infos_size());
-          em::ChromeUserProfileInfo profile =
-              report->chrome_user_profile_infos(0);
-          EXPECT_EQ(kProfilePath.AsUTF8Unsafe(), profile.id());
-          EXPECT_EQ(kProfilePath.BaseName().AsUTF8Unsafe(), profile.name());
+              ASSERT_EQ(1, report->chrome_user_profile_infos_size());
+              em::ChromeUserProfileInfo profile =
+                  report->chrome_user_profile_infos(0);
+              EXPECT_EQ(kProfilePath.AsUTF8Unsafe(), profile.id());
+              EXPECT_EQ(kProfilePath.BaseName().AsUTF8Unsafe(), profile.name());
 
-          EXPECT_FALSE(profile.is_full_report());
+              EXPECT_FALSE(profile.is_full_report());
 
-          EXPECT_EQ(0, report->plugins_size());
+              EXPECT_EQ(0, report->plugins_size());
 
-          run_loop.Quit();
-        }));
+              run_loop.Quit();
+            }));
     run_loop.Run();
   }
 

@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/run_loop.h"
@@ -109,8 +109,9 @@ class SoftwareRendererTest : public testing::Test {
         base::BindOnce(&SoftwareRendererTest::SaveBitmapResult,
                        base::Unretained(&bitmap_result), loop.QuitClosure())));
 
+    SurfaceDamageRectList surface_damage_rect_list;
     renderer()->DrawFrame(list, device_scale_factor, viewport_size,
-                          gfx::DisplayColorSpaces());
+                          gfx::DisplayColorSpaces(), &surface_damage_rect_list);
     loop.Run();
     return bitmap_result;
   }
@@ -152,7 +153,7 @@ TEST_F(SoftwareRendererTest, SolidColorQuad) {
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(gfx::Transform(), outer_rect, outer_rect,
-                            gfx::RRectF(), outer_rect, false, true, 1.0,
+                            gfx::MaskFilterInfo(), outer_rect, false, true, 1.0,
                             SkBlendMode::kSrcOver, 0);
   auto* inner_quad =
       root_render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -220,7 +221,7 @@ TEST_F(SoftwareRendererTest, TileQuad) {
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(gfx::Transform(), outer_rect, outer_rect,
-                            gfx::RRectF(), outer_rect, false, true, 1.0,
+                            gfx::MaskFilterInfo(), outer_rect, false, true, 1.0,
                             SkBlendMode::kSrcOver, 0);
   auto* inner_quad = root_render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
   inner_quad->SetNew(shared_quad_state, inner_rect, inner_rect, needs_blending,
@@ -282,7 +283,7 @@ TEST_F(SoftwareRendererTest, TileQuadVisibleRect) {
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(gfx::Transform(), tile_rect, tile_rect,
-                            gfx::RRectF(), tile_rect, false, true, 1.0,
+                            gfx::MaskFilterInfo(), tile_rect, false, true, 1.0,
                             SkBlendMode::kSrcOver, 0);
   auto* quad = root_render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
   quad->SetNew(shared_quad_state, tile_rect, tile_rect, needs_blending,
@@ -443,8 +444,8 @@ TEST_F(SoftwareRendererTest, ClipRoundRect) {
     SharedQuadState* shared_quad_state =
         root_pass->CreateAndAppendSharedQuadState();
     shared_quad_state->SetAll(gfx::Transform(), outer_rect, outer_rect,
-                              gfx::RRectF(), gfx::Rect(1, 1, 30, 30), true,
-                              true, 1.0, SkBlendMode::kSrcOver, 0);
+                              gfx::MaskFilterInfo(), gfx::Rect(1, 1, 30, 30),
+                              true, true, 1.0, SkBlendMode::kSrcOver, 0);
     auto* outer_quad = root_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
     outer_quad->SetNew(shared_quad_state, outer_rect, outer_rect, SK_ColorGREEN,
                        false);
@@ -457,10 +458,10 @@ TEST_F(SoftwareRendererTest, ClipRoundRect) {
 
     SharedQuadState* shared_quad_state =
         root_pass->CreateAndAppendSharedQuadState();
-    shared_quad_state->SetAll(gfx::Transform(), inner_rect, inner_rect,
-                              gfx::RRectF(gfx::RectF(5, 5, 10, 10), 2),
-                              inner_rect, false, true, 1.0,
-                              SkBlendMode::kSrcOver, 0);
+    shared_quad_state->SetAll(
+        gfx::Transform(), inner_rect, inner_rect,
+        gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(5, 5, 10, 10), 2)),
+        inner_rect, false, true, 1.0, SkBlendMode::kSrcOver, 0);
     auto* inner_quad = root_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
     inner_quad->SetNew(shared_quad_state, inner_rect, inner_rect, SK_ColorRED,
                        false);
@@ -529,6 +530,7 @@ TEST_F(SoftwareRendererTest, PartialSwap) {
     // tests.
     AggregatedRenderPassList list;
     AggregatedRenderPassId root_pass_id{1};
+    SurfaceDamageRectList surface_damage_rect_list;
     auto* root_pass =
         AddRenderPass(&list, root_pass_id, gfx::Rect(viewport_size),
                       gfx::Transform(), cc::FilterOperations());
@@ -540,11 +542,12 @@ TEST_F(SoftwareRendererTest, PartialSwap) {
 
     renderer()->DecideRenderPassAllocationsForFrame(list);
     renderer()->DrawFrame(&list, device_scale_factor, viewport_size,
-                          gfx::DisplayColorSpaces());
+                          gfx::DisplayColorSpaces(), &surface_damage_rect_list);
   }
   {
     AggregatedRenderPassList list;
     AggregatedRenderPassId root_pass_id{1};
+    SurfaceDamageRectList surface_damage_rect_list;
     auto* root_pass =
         AddRenderPass(&list, root_pass_id, gfx::Rect(viewport_size),
                       gfx::Transform(), cc::FilterOperations());
@@ -556,7 +559,7 @@ TEST_F(SoftwareRendererTest, PartialSwap) {
 
     renderer()->DecideRenderPassAllocationsForFrame(list);
     renderer()->DrawFrame(&list, device_scale_factor, viewport_size,
-                          gfx::DisplayColorSpaces());
+                          gfx::DisplayColorSpaces(), &surface_damage_rect_list);
 
     // The damage rect should be reported to the SoftwareOutputDevice.
     EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->damage_rect_at_start());

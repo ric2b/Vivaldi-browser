@@ -48,7 +48,8 @@ class ChromeNativeFileSystemPermissionContext
   // content::NativeFileSystemPermissionContext:
   void ConfirmSensitiveDirectoryAccess(
       const url::Origin& origin,
-      const std::vector<base::FilePath>& paths,
+      PathType path_type,
+      const base::FilePath& path,
       HandleType handle_type,
       content::GlobalFrameRoutingId frame_id,
       base::OnceCallback<void(SensitiveDirectoryResult)> callback) override;
@@ -58,6 +59,11 @@ class ChromeNativeFileSystemPermissionContext
       base::OnceCallback<void(AfterWriteCheckResult)> callback) override;
   bool CanObtainReadPermission(const url::Origin& origin) override;
   bool CanObtainWritePermission(const url::Origin& origin) override;
+
+  void SetLastPickedDirectory(const url::Origin& origin,
+                              const base::FilePath& path) override;
+  base::FilePath GetLastPickedDirectory(const url::Origin& origin) override;
+  base::FilePath GetDefaultDirectory() override;
 
   ContentSetting GetReadGuardContentSetting(const url::Origin& origin);
   ContentSetting GetWriteGuardContentSetting(const url::Origin& origin);
@@ -96,7 +102,7 @@ class ChromeNativeFileSystemPermissionContext
  private:
   void DidConfirmSensitiveDirectoryAccess(
       const url::Origin& origin,
-      const std::vector<base::FilePath>& paths,
+      const base::FilePath& path,
       HandleType handle_type,
       content::GlobalFrameRoutingId frame_id,
       base::OnceCallback<void(SensitiveDirectoryResult)> callback,

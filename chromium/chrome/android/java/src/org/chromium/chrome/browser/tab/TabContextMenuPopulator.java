@@ -4,15 +4,12 @@
 
 package org.chromium.chrome.browser.tab;
 
-import android.graphics.Bitmap;
-import android.net.Uri;
 import android.util.Pair;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.Callback;
 import org.chromium.base.ObserverList.RewindableIterator;
-import org.chromium.chrome.browser.contextmenu.ContextMenuImageFormat;
+import org.chromium.chrome.browser.contextmenu.ChipDelegate;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
@@ -38,15 +35,8 @@ public class TabContextMenuPopulator implements ContextMenuPopulator {
     }
 
     @Override
-    public void onDestroy() {
-        // |mPopulator| can be null for activities that do not use context menu. Following
-        // methods are not called, but |onDestroy| is.
-        if (mPopulator != null) mPopulator.onDestroy();
-    }
-
-    @Override
-    public List<Pair<Integer, ModelList>> buildContextMenu(boolean isShoppyImage) {
-        List<Pair<Integer, ModelList>> itemGroups = mPopulator.buildContextMenu(isShoppyImage);
+    public List<Pair<Integer, ModelList>> buildContextMenu() {
+        List<Pair<Integer, ModelList>> itemGroups = mPopulator.buildContextMenu();
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
             observers.next().onContextMenuShown(mTab);
@@ -60,16 +50,6 @@ public class TabContextMenuPopulator implements ContextMenuPopulator {
     }
 
     @Override
-    public void getThumbnail(final Callback<Bitmap> callback) {
-        mPopulator.getThumbnail(callback);
-    }
-
-    @Override
-    public void retrieveImage(@ContextMenuImageFormat int imageFormat, Callback<Uri> callback) {
-        mPopulator.retrieveImage(imageFormat, callback);
-    }
-
-    @Override
     public void onMenuClosed() {
         mPopulator.onMenuClosed();
     }
@@ -77,5 +57,15 @@ public class TabContextMenuPopulator implements ContextMenuPopulator {
     @Override
     public boolean isIncognito() {
         return mPopulator.isIncognito();
+    }
+
+    @Override
+    public String getPageTitle() {
+        return mPopulator.getPageTitle();
+    }
+
+    @Override
+    public @Nullable ChipDelegate getChipDelegate() {
+        return mPopulator.getChipDelegate();
     }
 }

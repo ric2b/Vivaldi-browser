@@ -2,9 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-function createSelectionModel(len, opt_dependentLeadItem) {
+// clang-format off
+// #import {assertEquals, assertArrayEquals} from '../../../chai_assert.js';
+// #import {ListSelectionModel} from 'chrome://resources/js/cr/ui/list_selection_model.m.js';
+// #import {adjust, range} from './list_selection_model_test_util.m.js';
+// clang-format on
+
+/**
+ * @param {number} len size of the selection model.
+ * @param {boolean=} dependentLeadItem inverse value for `independentLeadItem_`
+ *     defaults to true.
+ * @return {!cr.ui.ListSelectionModel}
+ */
+function createSelectionModel(len, dependentLeadItem) {
   var sm = new cr.ui.ListSelectionModel(len);
-  sm.independentLeadItem_ = !opt_dependentLeadItem;
+  sm.independentLeadItem_ = !dependentLeadItem;
   return sm;
 }
 
@@ -278,3 +290,27 @@ function testSelectAllOnEmptyList() {
   assertArrayEquals([], sm.selectedIndexes);
   assertEquals(null, changes);
 }
+
+Object.assign(window, {
+  testAdjust1,
+  testAdjust2,
+  testAdjust3,
+  testAdjust4,
+  testAdjust5,
+  testAdjust6,
+  testAdjust7,
+  testAdjust8,
+  testAdjust9,
+  testAdjust10,
+  testAdjust11,
+  testAdjust12,
+  testAdjust13,
+  testAdjust14,
+  testAdjust15,
+  testAdjust16,
+  testAdjust17,
+  testLeadAndAnchor1,
+  testLeadAndAnchor2,
+  testSelectAll,
+  testSelectAllOnEmptyList,
+});

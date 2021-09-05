@@ -50,6 +50,8 @@ class Tokenizer {
 
   static bool IsIdentifierContinuingChar(char c);
 
+  static Token::Type ClassifyToken(char next_char, char following_char);
+
  private:
   // InputFile must outlive the tokenizer and all generated tokens.
   Tokenizer(const InputFile* input_file,

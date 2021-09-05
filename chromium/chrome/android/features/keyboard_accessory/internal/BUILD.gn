@@ -5,12 +5,14 @@
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
+import("//tools/grit/grit_rule.gni")
 
 android_library("internal_java") {
   deps = [
     ":java_resources",
     "//base:base_java",
     "//base:jni_java",
+    "//components/favicon/android:java",
 
     # TODO(crbug/951695): Cyclic dependency. Depend on public only when ready.
     "//chrome/android:chrome_java",
@@ -52,6 +54,7 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetBridge.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetCoordinator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetMediator.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetMetricsRecorder.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetProperties.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetView.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetViewBinder.java",
@@ -111,7 +114,6 @@ android_resources("java_resources") {
     "java/res/drawable/ic_vpn_key_off.xml",
     "java/res/layout/address_accessory_sheet.xml",
     "java/res/layout/all_passwords_bottom_sheet.xml",
-    "java/res/layout/all_passwords_bottom_sheet_warning_dialog.xml",
     "java/res/layout/credit_card_accessory_sheet.xml",
     "java/res/layout/keyboard_accessory.xml",
     "java/res/layout/keyboard_accessory_action.xml",

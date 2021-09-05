@@ -136,6 +136,11 @@ void LaunchPluginVmAppImpl(Profile* profile,
 
 }  // namespace
 
+base::FilePath ChromeOSBaseDirectory() {
+  // Forward slashes are converted to backslash during path conversion.
+  return base::FilePath("//ChromeOS");
+}
+
 void EnsureDefaultSharedDirExists(
     Profile* profile,
     base::OnceCallback<void(const base::FilePath&, bool)> callback) {
@@ -161,8 +166,7 @@ void LaunchPluginVmApp(Profile* profile,
                                    "Could not get PluginVmManager");
   }
   auto* share_path = guest_os::GuestOsSharePath::GetForProfile(profile);
-  // Forward slashes are converted to backslash during path conversion.
-  base::FilePath vm_mount("//ChromeOS");
+  base::FilePath vm_mount = ChromeOSBaseDirectory();
 
   std::vector<std::string> launch_args;
   launch_args.reserve(args.size());
@@ -173,10 +177,12 @@ void LaunchPluginVmApp(Profile* profile,
     }
     const storage::FileSystemURL& url = absl::get<storage::FileSystemURL>(arg);
     base::FilePath file_path;
-    // Validate paths are already shared, and convert file paths.
-    if (!share_path->IsPathShared(kPluginVmName, url.path()) ||
+    // Validate paths in MyFiles/PvmDefault, or are already shared, and convert.
+    bool shared = GetDefaultSharedDir(profile).IsParent(url.path()) ||
+                  share_path->IsPathShared(kPluginVmName, url.path());
+    if (!shared ||
         !file_manager::util::ConvertFileSystemURLToPathInsideVM(
-            profile, url, vm_mount, &file_path)) {
+            profile, url, vm_mount, /*map_crostini_home=*/false, &file_path)) {
       return std::move(callback).Run(
           file_manager::util::GetMyFilesFolderForProfile(profile).IsParent(
               url.path())
